@@ -5,6 +5,7 @@
 import { api } from '../api';
 
 // Types
+export type PipelineEntityType = 'surrogate' | 'intended_parent';
 export type StageType = 'intake' | 'paused' | 'post_approval' | 'terminal';
 export type StageCapabilityKey =
     | 'counts_as_contacted'
@@ -109,6 +110,7 @@ export interface StageUpdate {
 
 export interface Pipeline {
     id: string;
+    entity_type: PipelineEntityType;
     name: string;
     is_default: boolean;
     stages: PipelineStage[];
@@ -127,6 +129,7 @@ export interface PipelineUpdate {
 
 export interface PipelineSemanticsSnapshot {
     pipeline_id: string;
+    entity_type: PipelineEntityType;
     version: number;
     feature_config?: PipelineFeatureConfig;
     stages: PipelineStage[];
@@ -168,6 +171,7 @@ export interface PipelineStageDependency {
 
 export interface PipelineDependencyGraph {
     pipeline_id: string;
+    entity_type: PipelineEntityType;
     version: number;
     stages: PipelineStageDependency[];
 }
@@ -244,58 +248,104 @@ export interface PipelineVersionsResponse {
 // ============================================================================
 
 export async function listPipelines(): Promise<Pipeline[]> {
-    return api.get<Pipeline[]>('/settings/pipelines');
+    return listPipelinesForEntity('surrogate');
 }
 
-export async function getDefaultPipeline(): Promise<Pipeline> {
-    return api.get<Pipeline>('/settings/pipelines/default');
+function withEntityType(path: string, entityType: PipelineEntityType): string {
+    const params = new URLSearchParams({ entity_type: entityType });
+    return `${path}?${params.toString()}`;
 }
 
-export async function getDefaultPipelineSemantics(): Promise<PipelineSemanticsSnapshot> {
-    return api.get<PipelineSemanticsSnapshot>('/settings/pipelines/default/semantics');
+function withOptionalEntityType(path: string, entityType?: PipelineEntityType): string {
+    return entityType ? withEntityType(path, entityType) : path;
 }
 
-export async function getPipeline(id: string): Promise<Pipeline> {
-    return api.get<Pipeline>(`/settings/pipelines/${id}`);
+export async function listPipelinesForEntity(entityType: PipelineEntityType): Promise<Pipeline[]> {
+    return api.get<Pipeline[]>(withEntityType('/settings/pipelines', entityType));
 }
 
-export async function getPipelineSemantics(id: string): Promise<PipelineSemanticsSnapshot> {
-    return api.get<PipelineSemanticsSnapshot>(`/settings/pipelines/${id}/semantics`);
+export async function getDefaultPipeline(entityType: PipelineEntityType = 'surrogate'): Promise<Pipeline> {
+    return api.get<Pipeline>(withEntityType('/settings/pipelines/default', entityType));
 }
 
-export async function getPipelineDependencyGraph(id: string): Promise<PipelineDependencyGraph> {
-    return api.get<PipelineDependencyGraph>(`/settings/pipelines/${id}/dependency-graph`);
+export async function getDefaultPipelineSemantics(
+    entityType: PipelineEntityType = 'surrogate'
+): Promise<PipelineSemanticsSnapshot> {
+    return api.get<PipelineSemanticsSnapshot>(withEntityType('/settings/pipelines/default/semantics', entityType));
 }
 
-export async function getRecommendedPipelineDraft(id: string): Promise<PipelineDraft> {
-    return api.get<PipelineDraft>(`/settings/pipelines/${id}/recommended-draft`);
+export async function getPipeline(id: string, entityType?: PipelineEntityType): Promise<Pipeline> {
+    return api.get<Pipeline>(withOptionalEntityType(`/settings/pipelines/${id}`, entityType));
+}
+
+export async function getPipelineSemantics(
+    id: string,
+    entityType?: PipelineEntityType,
+): Promise<PipelineSemanticsSnapshot> {
+    return api.get<PipelineSemanticsSnapshot>(
+        withOptionalEntityType(`/settings/pipelines/${id}/semantics`, entityType),
+    );
+}
+
+export async function getPipelineDependencyGraph(
+    id: string,
+    entityType?: PipelineEntityType,
+): Promise<PipelineDependencyGraph> {
+    return api.get<PipelineDependencyGraph>(
+        withOptionalEntityType(`/settings/pipelines/${id}/dependency-graph`, entityType),
+    );
+}
+
+export async function getRecommendedPipelineDraft(
+    id: string,
+    entityType?: PipelineEntityType,
+): Promise<PipelineDraft> {
+    return api.get<PipelineDraft>(
+        withOptionalEntityType(`/settings/pipelines/${id}/recommended-draft`, entityType),
+    );
 }
 
 export async function previewPipelineChanges(
     id: string,
-    data: PipelineDraft
+    data: PipelineDraft,
+    entityType?: PipelineEntityType,
 ): Promise<PipelineChangePreview> {
-    return api.post<PipelineChangePreview>(`/settings/pipelines/${id}/change-preview`, data);
+    return api.post<PipelineChangePreview>(
+        withOptionalEntityType(`/settings/pipelines/${id}/change-preview`, entityType),
+        data,
+    );
 }
 
-export async function applyPipelineDraft(id: string, data: PipelineDraft): Promise<Pipeline> {
-    return api.put<Pipeline>(`/settings/pipelines/${id}/apply-draft`, data);
+export async function applyPipelineDraft(
+    id: string,
+    data: PipelineDraft,
+    entityType?: PipelineEntityType,
+): Promise<Pipeline> {
+    return api.put<Pipeline>(
+        withOptionalEntityType(`/settings/pipelines/${id}/apply-draft`, entityType),
+        data,
+    );
 }
 
 export async function createPipeline(
     name: string,
+    entity_type: PipelineEntityType,
     stages?: StageCreate[],
     feature_config?: PipelineFeatureConfig,
 ): Promise<Pipeline> {
-    return api.post<Pipeline>('/settings/pipelines', { name, stages, feature_config });
+    return api.post<Pipeline>('/settings/pipelines', { name, entity_type, stages, feature_config });
 }
 
-export async function updatePipeline(id: string, data: PipelineUpdate): Promise<Pipeline> {
-    return api.patch<Pipeline>(`/settings/pipelines/${id}`, data);
+export async function updatePipeline(
+    id: string,
+    data: PipelineUpdate,
+    entityType?: PipelineEntityType,
+): Promise<Pipeline> {
+    return api.patch<Pipeline>(withOptionalEntityType(`/settings/pipelines/${id}`, entityType), data);
 }
 
-export async function deletePipeline(id: string): Promise<void> {
-    return api.delete(`/settings/pipelines/${id}`);
+export async function deletePipeline(id: string, entityType?: PipelineEntityType): Promise<void> {
+    return api.delete(withOptionalEntityType(`/settings/pipelines/${id}`, entityType));
 }
 
 // ============================================================================
@@ -344,11 +394,23 @@ export async function reorderStages(
 // Version History API
 // ============================================================================
 
-export async function getPipelineVersions(id: string): Promise<PipelineVersion[]> {
-    const response = await api.get<PipelineVersionsResponse>(`/settings/pipelines/${id}/versions`);
+export async function getPipelineVersions(
+    id: string,
+    entityType?: PipelineEntityType,
+): Promise<PipelineVersion[]> {
+    const response = await api.get<PipelineVersionsResponse>(
+        withOptionalEntityType(`/settings/pipelines/${id}/versions`, entityType),
+    );
     return response?.versions ?? [];
 }
 
-export async function rollbackPipeline(id: string, version: number): Promise<Pipeline> {
-    return api.post<Pipeline>(`/settings/pipelines/${id}/rollback`, { target_version: version });
+export async function rollbackPipeline(
+    id: string,
+    version: number,
+    entityType?: PipelineEntityType,
+): Promise<Pipeline> {
+    return api.post<Pipeline>(
+        withOptionalEntityType(`/settings/pipelines/${id}/rollback`, entityType),
+        { target_version: version },
+    );
 }

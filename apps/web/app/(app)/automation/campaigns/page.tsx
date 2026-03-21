@@ -69,10 +69,12 @@ import {
     usePreviewFilters,
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { useQuery } from "@tanstack/react-query"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 import { US_STATES } from "@/lib/constants/us-states"
+import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
 
 // Status badge styles
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
@@ -105,20 +107,10 @@ const toLocalDateTimeInput = (date: Date) => {
     return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
-const INTENDED_PARENT_STAGE_OPTIONS = [
-    { id: "new", label: "New", color: "#3B82F6" },
-    { id: "ready_to_match", label: "Ready to Match", color: "#F59E0B" },
-    { id: "matched", label: "Matched", color: "#10B981" },
-    { id: "delivered", label: "Delivered", color: "#14B8A6" },
-] as const
-
 const TOTAL_STEPS = 7
 const TERRITORY_CODES = new Set(["PR", "GU", "VI", "AS", "MP"])
 const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.value))
 const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
-
-const normalizeStageLabel = (label: string) =>
-    label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 
 export default function CampaignsPage() {
     const router = useRouter()
@@ -159,6 +151,7 @@ export default function CampaignsPage() {
     const cancelCampaign = useCancelCampaign()
     const sendCampaign = useSendCampaign()
     const previewFilters = usePreviewFilters()
+    const { data: intendedParentStatuses } = useIntendedParentStatuses()
 
     const buildFilterCriteria = () => {
         const stageFilters =
@@ -176,13 +169,24 @@ export default function CampaignsPage() {
 
     // Fetch pipeline stages for status filter
     const { data: pipeline } = useQuery({
-        queryKey: ["defaultPipeline"],
-        queryFn: getDefaultPipeline,
+        queryKey: ["defaultPipeline", "surrogate"],
+        queryFn: () => getDefaultPipeline("surrogate"),
     })
     const pipelineStages = pipeline?.stages || []
+    const intendedParentStageOptions = getIntendedParentStageOptions(
+        intendedParentStatuses?.statuses,
+    ).map((stage) => ({
+        id: stage.stage_slug,
+        label: stage.label,
+        color: stage.color,
+        stage_key: stage.stage_key,
+        category: stage.stage_type,
+        stage_type: stage.stage_type,
+        semantics: undefined,
+    }))
     const stageOptions =
         recipientType === "intended_parent"
-            ? INTENDED_PARENT_STAGE_OPTIONS
+            ? intendedParentStageOptions
             : pipelineStages.filter(stage => stage.is_active)
 
     const normalizedStateSearch = stateSearch.trim().toLowerCase()
@@ -209,7 +213,8 @@ export default function CampaignsPage() {
                       label: "New + Ready",
                       stageIds: stageOptions
                           .filter((stage) =>
-                              ["new", "ready to match"].includes(normalizeStageLabel(stage.label))
+                              "stage_key" in stage &&
+                              ["new", "ready_to_match"].includes(stage.stage_key)
                           )
                           .map((stage) => stage.id),
                   },
@@ -218,9 +223,8 @@ export default function CampaignsPage() {
                       label: "Active",
                       stageIds: stageOptions
                           .filter((stage) =>
-                              ["new", "ready to match", "matched"].includes(
-                                  normalizeStageLabel(stage.label)
-                              )
+                              "stage_key" in stage &&
+                              ["new", "ready_to_match", "matched"].includes(stage.stage_key)
                           )
                           .map((stage) => stage.id),
                   },
@@ -228,7 +232,7 @@ export default function CampaignsPage() {
                       key: "ip-delivered",
                       label: "Delivered",
                       stageIds: stageOptions
-                          .filter((stage) => normalizeStageLabel(stage.label) === "delivered")
+                          .filter((stage) => "stage_key" in stage && stage.stage_key === "delivered")
                           .map((stage) => stage.id),
                   },
               ]

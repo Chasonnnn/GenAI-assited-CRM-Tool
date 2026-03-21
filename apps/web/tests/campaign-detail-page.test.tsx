@@ -79,6 +79,25 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplates: () => ({ data: [] }),
 }))
 
+vi.mock("@/lib/hooks/use-metadata", () => ({
+    useIntendedParentStatuses: () => ({
+        data: {
+            statuses: [
+                {
+                    id: "stage-new",
+                    value: "new",
+                    label: "New",
+                    stage_key: "new",
+                    stage_slug: "new",
+                    stage_type: "intake",
+                    color: "#3B82F6",
+                    order: 1,
+                },
+            ],
+        },
+    }),
+}))
+
 describe("CampaignDetailPage", () => {
     beforeEach(() => {
         mockUseRunRecipients.mockReturnValue({ data: [] })

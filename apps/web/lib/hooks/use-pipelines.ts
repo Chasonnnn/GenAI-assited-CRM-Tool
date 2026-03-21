@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as pipelinesApi from '../api/pipelines';
 import type {
     PipelineDraft,
+    PipelineEntityType,
     PipelineFeatureConfig,
     PipelineUpdate,
     StageCreate,
@@ -15,15 +16,24 @@ import type {
 // Query keys
 export const pipelineKeys = {
     all: ['pipelines'] as const,
-    list: () => [...pipelineKeys.all, 'list'] as const,
-    detail: (id: string) => [...pipelineKeys.all, 'detail', id] as const,
-    semantics: (id: string) => [...pipelineKeys.all, 'semantics', id] as const,
-    dependencyGraph: (id: string) => [...pipelineKeys.all, 'dependency-graph', id] as const,
-    preview: (id: string, draftKey: string) => [...pipelineKeys.all, 'preview', id, draftKey] as const,
-    recommendedDraft: (id: string) => [...pipelineKeys.all, 'recommended-draft', id] as const,
-    versions: (id: string) => [...pipelineKeys.all, 'versions', id] as const,
-    default: () => [...pipelineKeys.all, 'default'] as const,
-    defaultSemantics: () => [...pipelineKeys.all, 'default-semantics'] as const,
+    list: (entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'list', entityType] as const,
+    detail: (id: string, entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'detail', entityType, id] as const,
+    semantics: (id: string, entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'semantics', entityType, id] as const,
+    dependencyGraph: (id: string, entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'dependency-graph', entityType, id] as const,
+    preview: (id: string, entityType: PipelineEntityType, draftKey: string) =>
+        [...pipelineKeys.all, 'preview', entityType, id, draftKey] as const,
+    recommendedDraft: (id: string, entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'recommended-draft', entityType, id] as const,
+    versions: (id: string, entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'versions', entityType, id] as const,
+    default: (entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'default', entityType] as const,
+    defaultSemantics: (entityType: PipelineEntityType = 'surrogate') =>
+        [...pipelineKeys.all, 'default-semantics', entityType] as const,
     stages: (id: string) => [...pipelineKeys.all, 'stages', id] as const,
 };
 
@@ -31,64 +41,71 @@ export const pipelineKeys = {
 // Queries
 // ============================================================================
 
-export function usePipelines() {
+export function usePipelines(entityType: PipelineEntityType = 'surrogate') {
     return useQuery({
-        queryKey: pipelineKeys.list(),
-        queryFn: pipelinesApi.listPipelines,
+        queryKey: pipelineKeys.list(entityType),
+        queryFn: () => pipelinesApi.listPipelinesForEntity(entityType),
     });
 }
 
-export function useDefaultPipeline() {
+export function useDefaultPipeline(entityType: PipelineEntityType = 'surrogate') {
     return useQuery({
-        queryKey: pipelineKeys.default(),
-        queryFn: pipelinesApi.getDefaultPipeline,
+        queryKey: pipelineKeys.default(entityType),
+        queryFn: () => pipelinesApi.getDefaultPipeline(entityType),
     });
 }
 
-export function useDefaultPipelineSemantics() {
+export function useDefaultPipelineSemantics(entityType: PipelineEntityType = 'surrogate') {
     return useQuery({
-        queryKey: pipelineKeys.defaultSemantics(),
-        queryFn: pipelinesApi.getDefaultPipelineSemantics,
+        queryKey: pipelineKeys.defaultSemantics(entityType),
+        queryFn: () => pipelinesApi.getDefaultPipelineSemantics(entityType),
     });
 }
 
-export function usePipeline(id: string | null) {
+export function usePipeline(id: string | null, entityType: PipelineEntityType = 'surrogate') {
     return useQuery({
-        queryKey: pipelineKeys.detail(id || ''),
-        queryFn: () => pipelinesApi.getPipeline(id!),
+        queryKey: pipelineKeys.detail(id || '', entityType),
+        queryFn: () => pipelinesApi.getPipeline(id!, entityType),
         enabled: !!id,
     });
 }
 
-export function usePipelineSemantics(id: string | null) {
+export function usePipelineSemantics(id: string | null, entityType: PipelineEntityType = 'surrogate') {
     return useQuery({
-        queryKey: pipelineKeys.semantics(id || ''),
-        queryFn: () => pipelinesApi.getPipelineSemantics(id!),
+        queryKey: pipelineKeys.semantics(id || '', entityType),
+        queryFn: () => pipelinesApi.getPipelineSemantics(id!, entityType),
         enabled: !!id,
     });
 }
 
-export function usePipelineDependencyGraph(id: string | null) {
+export function usePipelineDependencyGraph(
+    id: string | null,
+    entityType: PipelineEntityType = 'surrogate',
+) {
     return useQuery({
-        queryKey: pipelineKeys.dependencyGraph(id || ''),
-        queryFn: () => pipelinesApi.getPipelineDependencyGraph(id!),
+        queryKey: pipelineKeys.dependencyGraph(id || '', entityType),
+        queryFn: () => pipelinesApi.getPipelineDependencyGraph(id!, entityType),
         enabled: !!id,
     });
 }
 
-export function usePipelineChangePreview(id: string | null, draft: PipelineDraft | null) {
+export function usePipelineChangePreview(
+    id: string | null,
+    draft: PipelineDraft | null,
+    entityType: PipelineEntityType = 'surrogate',
+) {
     const draftKey = draft ? JSON.stringify(draft) : '';
     return useQuery({
-        queryKey: pipelineKeys.preview(id || '', draftKey),
-        queryFn: () => pipelinesApi.previewPipelineChanges(id!, draft!),
+        queryKey: pipelineKeys.preview(id || '', entityType, draftKey),
+        queryFn: () => pipelinesApi.previewPipelineChanges(id!, draft!, entityType),
         enabled: !!id && !!draft,
     });
 }
 
-export function usePipelineVersions(id: string | null) {
+export function usePipelineVersions(id: string | null, entityType: PipelineEntityType = 'surrogate') {
     return useQuery({
-        queryKey: pipelineKeys.versions(id || ''),
-        queryFn: () => pipelinesApi.getPipelineVersions(id!),
+        queryKey: pipelineKeys.versions(id || '', entityType),
+        queryFn: () => pipelinesApi.getPipelineVersions(id!, entityType),
         enabled: !!id,
     });
 }
@@ -103,13 +120,15 @@ export function useCreatePipeline() {
     return useMutation({
         mutationFn: ({
             name,
+            entity_type,
             stages,
             feature_config,
         }: {
             name: string;
+            entity_type: PipelineEntityType;
             stages?: StageCreate[];
             feature_config?: PipelineFeatureConfig;
-        }) => pipelinesApi.createPipeline(name, stages, feature_config),
+        }) => pipelinesApi.createPipeline(name, entity_type, stages, feature_config),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
         },
@@ -120,15 +139,22 @@ export function useUpdatePipeline() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: PipelineUpdate }) =>
-            pipelinesApi.updatePipeline(id, data),
-        onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+        mutationFn: ({
+            id,
+            data,
+            entityType = 'surrogate',
+        }: {
+            id: string;
+            data: PipelineUpdate;
+            entityType?: PipelineEntityType;
+        }) => pipelinesApi.updatePipeline(id, data, entityType),
+        onSuccess: (_, { id, entityType = 'surrogate' }) => {
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
         },
     });
 }
@@ -137,7 +163,8 @@ export function useDeletePipeline() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => pipelinesApi.deletePipeline(id),
+        mutationFn: ({ id, entityType = 'surrogate' }: { id: string; entityType?: PipelineEntityType }) =>
+            pipelinesApi.deletePipeline(id, entityType),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
         },
@@ -148,22 +175,35 @@ export function useRollbackPipeline() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, version }: { id: string; version: number }) =>
-            pipelinesApi.rollbackPipeline(id, version),
-        onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+        mutationFn: ({
+            id,
+            version,
+            entityType = 'surrogate',
+        }: {
+            id: string;
+            version: number;
+            entityType?: PipelineEntityType;
+        }) => pipelinesApi.rollbackPipeline(id, version, entityType),
+        onSuccess: (_, { id, entityType = 'surrogate' }) => {
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
         },
     });
 }
 
 export function useRecommendedPipelineDraft() {
     return useMutation({
-        mutationFn: (id: string) => pipelinesApi.getRecommendedPipelineDraft(id),
+        mutationFn: ({
+            id,
+            entityType = 'surrogate',
+        }: {
+            id: string;
+            entityType?: PipelineEntityType;
+        }) => pipelinesApi.getRecommendedPipelineDraft(id, entityType),
     });
 }
 
@@ -171,16 +211,23 @@ export function useApplyPipelineDraft() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: PipelineDraft }) =>
-            pipelinesApi.applyPipelineDraft(id, data),
-        onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.dependencyGraph(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+        mutationFn: ({
+            id,
+            data,
+            entityType = 'surrogate',
+        }: {
+            id: string;
+            data: PipelineDraft;
+            entityType?: PipelineEntityType;
+        }) => pipelinesApi.applyPipelineDraft(id, data, entityType),
+        onSuccess: (_, { id, entityType = 'surrogate' }) => {
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.dependencyGraph(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
         },
     });
 }

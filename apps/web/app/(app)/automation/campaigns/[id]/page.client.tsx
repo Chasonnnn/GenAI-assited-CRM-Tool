@@ -69,10 +69,12 @@ import {
     useRetryFailedCampaignRun,
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplate, useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
 import { useQuery } from "@tanstack/react-query"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 import { US_STATES } from "@/lib/constants/us-states"
+import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
 
 // Status styles
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
@@ -110,13 +112,6 @@ const toLocalDateTimeInput = (date: Date) => {
     const minutes = pad(date.getMinutes())
     return `${year}-${month}-${day}T${hours}:${minutes}`
 }
-
-const INTENDED_PARENT_STAGE_OPTIONS = [
-    { id: "new", label: "New", color: "#3B82F6" },
-    { id: "ready_to_match", label: "Ready to Match", color: "#F59E0B" },
-    { id: "matched", label: "Matched", color: "#10B981" },
-    { id: "delivered", label: "Delivered", color: "#14B8A6" },
-] as const
 
 export default function CampaignDetailPage() {
     const params = useParams()
@@ -170,15 +165,25 @@ export default function CampaignDetailPage() {
     const sendCampaign = useSendCampaign()
     const updateCampaign = useUpdateCampaign()
     const retryFailed = useRetryFailedCampaignRun()
+    const { data: intendedParentStatuses } = useIntendedParentStatuses()
 
     const { data: pipeline } = useQuery({
-        queryKey: ["defaultPipeline"],
-        queryFn: getDefaultPipeline,
+        queryKey: ["defaultPipeline", "surrogate"],
+        queryFn: () => getDefaultPipeline("surrogate"),
     })
     const pipelineStages = pipeline?.stages || []
+    const intendedParentStageOptions = getIntendedParentStageOptions(
+        intendedParentStatuses?.statuses,
+    ).map((stage) => ({
+        id: stage.stage_slug,
+        label: stage.label,
+        color: stage.color,
+        stage_key: stage.stage_key,
+        stage_type: stage.stage_type,
+    }))
     const editStageOptions =
         editRecipientType === "intended_parent"
-            ? INTENDED_PARENT_STAGE_OPTIONS
+            ? intendedParentStageOptions
             : pipelineStages.filter(stage => stage.is_active)
     const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
@@ -344,7 +349,9 @@ export default function CampaignDetailPage() {
         ? (Array.isArray(filterCriteria.stage_slugs) ? filterCriteria.stage_slugs : [])
         : (Array.isArray(filterCriteria.stage_ids) ? filterCriteria.stage_ids : [])
     const stageLabelsForFilter = campaign.recipient_type === "intended_parent"
-        ? INTENDED_PARENT_STAGE_OPTIONS.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
+        ? intendedParentStageOptions
+            .filter((stage) => rawStageFilters.includes(stage.id))
+            .map((stage) => stage.label)
         : pipelineStages.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
     const stateFilters = Array.isArray(filterCriteria.states) ? filterCriteria.states : []
     const stateLabelsForFilter = US_STATES.filter(state => stateFilters.includes(state.value)).map(state => state.label)

@@ -42,6 +42,7 @@ import type {
     PipelineChangePreview,
     PipelineDependencyGraph,
     PipelineDraft,
+    PipelineEntityType,
     PipelineFeatureConfig,
     PipelineRequiredRemap,
     PipelineStage,
@@ -60,11 +61,18 @@ import {
     useRecommendedPipelineDraft,
     useRollbackPipeline,
 } from "@/lib/hooks/use-pipelines"
-import { getStageSemantics } from "@/lib/surrogate-stage-context"
+import { getStageSemantics, normalizeStageKey } from "@/lib/surrogate-stage-context"
 
 type EditableStage = PipelineStage & {
     category: StageType
     semantics: StageSemantics
+}
+
+type StageSemanticInput = {
+    stage_key?: string | null
+    slug?: string | null
+    stage_type?: string | null
+    semantics?: Partial<StageSemantics> | null
 }
 
 type PipelineDraftState = {
@@ -79,14 +87,21 @@ type DeleteStageState = {
     targetStageKey: string
 }
 
+type ScopedEditorState<T> = {
+    contextKey: string
+    value: T
+}
+
 type ImpactArea =
     | "analytics"
+    | "campaigns"
     | "integrations"
     | "intelligent_suggestions"
     | "journey"
     | "role_mutation"
     | "role_visibility"
     | "ui_gating"
+    | "workflows"
 
 type BehaviorPreset =
     | "intake"
@@ -144,14 +159,33 @@ const CAPABILITY_LABELS: Array<{
     },
 ]
 
+const PIPELINE_ENTITY_OPTIONS: Array<{
+    value: PipelineEntityType
+    label: string
+    description: string
+}> = [
+    {
+        value: "surrogate",
+        label: "Surrogates",
+        description: "Full journey, analytics, and role-aware pipeline configuration.",
+    },
+    {
+        value: "intended_parent",
+        label: "Intended Parents",
+        description: "Stage behavior and matching semantics for intended parents.",
+    },
+]
+
 const IMPACT_LABELS: Record<ImpactArea, string> = {
     analytics: "Analytics and reports",
+    campaigns: "Campaign filters",
     integrations: "Integrations",
     intelligent_suggestions: "Intelligent suggestions",
     journey: "Journey milestones",
     role_mutation: "Role mutation rules",
     role_visibility: "Role visibility rules",
     ui_gating: "UI gating and actions",
+    workflows: "Workflow references",
 }
 
 const REMAP_REASON_LABELS: Record<string, string> = {
@@ -233,13 +267,85 @@ function createFallbackFeatureConfig(stages: PipelineStage[]): PipelineFeatureCo
     }
 }
 
-function normalizeEditableStage(stage: PipelineStage): EditableStage {
+function getVisibleCapabilityLabels(entityType: PipelineEntityType) {
+    if (entityType === "intended_parent") {
+        return CAPABILITY_LABELS.filter((capability) =>
+            [
+                "eligible_for_matching",
+                "locks_match_state",
+                "requires_delivery_details",
+            ].includes(capability.key),
+        )
+    }
+    return CAPABILITY_LABELS
+}
+
+function getEntityRecordLabel(entityType: PipelineEntityType, count: number) {
+    if (entityType === "intended_parent") {
+        return `${count} active record${count === 1 ? "" : "s"}`
+    }
+    return `${count} active surrogate${count === 1 ? "" : "s"}`
+}
+
+function getEntityDescription(entityType: PipelineEntityType) {
+    return PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.description
+}
+
+function getIntendedParentStageSemantics(stage: StageSemanticInput | null | undefined): StageSemantics {
+    const stageKey = normalizeStageKey(stage?.stage_key ?? stage?.slug ?? null)
+    const isMatchedStage = stageKey === "matched" || stageKey === "delivered"
+
+    return {
+        capabilities: {
+            counts_as_contacted: false,
+            eligible_for_matching: stageKey === "ready_to_match",
+            locks_match_state: isMatchedStage,
+            shows_pregnancy_tracking: false,
+            requires_delivery_details: stageKey === "delivered",
+            tracks_interview_outcome: false,
+        },
+        pause_behavior: stageKey === "on_hold" ? "resume_previous_stage" : "none",
+        terminal_outcome:
+            stageKey === "lost"
+                ? "lost"
+                : stageKey === "disqualified"
+                    ? "disqualified"
+                    : "none",
+        integration_bucket: "none",
+        analytics_bucket: null,
+        suggestion_profile_key: null,
+        requires_reason_on_enter: stageKey === "on_hold",
+    }
+}
+
+function getStageSemanticsForEntity(
+    entityType: PipelineEntityType,
+    stage: StageSemanticInput | null | undefined,
+): StageSemantics {
+    if (entityType === "surrogate") {
+        return getStageSemantics(stage)
+    }
+    const base = getIntendedParentStageSemantics(stage)
+    return {
+        ...base,
+        ...stage?.semantics,
+        capabilities: {
+            ...base.capabilities,
+            ...(stage?.semantics?.capabilities ?? {}),
+        },
+    }
+}
+
+function normalizeEditableStage(
+    stage: PipelineStage,
+    entityType: PipelineEntityType,
+): EditableStage {
     const category = stage.category ?? stage.stage_type
     return {
         ...stage,
         category,
         stage_type: category,
-        semantics: deepClone(getStageSemantics(stage)),
+        semantics: deepClone(getStageSemanticsForEntity(entityType, stage)),
     }
 }
 
@@ -252,11 +358,12 @@ function buildDraft(
         }
         | null
         | undefined,
+    entityType: PipelineEntityType,
 ): PipelineDraftState | null {
     if (!pipeline) return null
     return {
         name: pipeline.name,
-        stages: pipeline.stages.map(normalizeEditableStage),
+        stages: pipeline.stages.map((stage) => normalizeEditableStage(stage, entityType)),
         featureConfig: deepClone(
             pipeline.feature_config ?? createFallbackFeatureConfig(pipeline.stages),
         ),
@@ -287,21 +394,32 @@ function stringifyDraft(draft: PipelineDraftState): string {
     return JSON.stringify(buildApiDraft(draft))
 }
 
-function getBehaviorPreset(stage: EditableStage): BehaviorPreset {
+function getBehaviorPreset(
+    stage: EditableStage,
+    entityType: PipelineEntityType,
+): BehaviorPreset {
     const semantics = stage.semantics
     if (semantics.pause_behavior === "resume_previous_stage") return "pause"
     if (semantics.terminal_outcome === "lost") return "terminal_lost"
     if (semantics.terminal_outcome === "disqualified") return "terminal_disqualified"
     if (semantics.capabilities.requires_delivery_details) return "delivery"
-    if (semantics.capabilities.shows_pregnancy_tracking) return "pregnancy_milestone"
     if (semantics.capabilities.eligible_for_matching) return "match_candidate"
     if (semantics.capabilities.locks_match_state) return "matched"
-    if (semantics.capabilities.counts_as_contacted) return "contacted"
+    if (entityType === "surrogate" && semantics.capabilities.shows_pregnancy_tracking) {
+        return "pregnancy_milestone"
+    }
+    if (entityType === "surrogate" && semantics.capabilities.counts_as_contacted) {
+        return "contacted"
+    }
     return stage.category === "intake" ? "intake" : "custom"
 }
 
-function buildPresetSemantics(stage: EditableStage, preset: BehaviorPreset): StageSemantics {
-    const base = deepClone(getStageSemantics(stage))
+function buildPresetSemantics(
+    stage: EditableStage,
+    preset: BehaviorPreset,
+    entityType: PipelineEntityType,
+): StageSemantics {
+    const base = deepClone(getStageSemanticsForEntity(entityType, stage))
     const reset: StageSemantics = {
         ...base,
         capabilities: {
@@ -314,10 +432,61 @@ function buildPresetSemantics(stage: EditableStage, preset: BehaviorPreset): Sta
         },
         pause_behavior: "none",
         terminal_outcome: "none",
-        integration_bucket: "none",
+        integration_bucket: entityType === "surrogate" ? "none" : "none",
         analytics_bucket: null,
         suggestion_profile_key: null,
         requires_reason_on_enter: false,
+    }
+
+    if (entityType === "intended_parent") {
+        switch (preset) {
+            case "intake":
+                return reset
+            case "match_candidate":
+                return {
+                    ...reset,
+                    capabilities: {
+                        ...reset.capabilities,
+                        eligible_for_matching: true,
+                    },
+                }
+            case "matched":
+                return {
+                    ...reset,
+                    capabilities: {
+                        ...reset.capabilities,
+                        locks_match_state: true,
+                    },
+                }
+            case "delivery":
+                return {
+                    ...reset,
+                    capabilities: {
+                        ...reset.capabilities,
+                        locks_match_state: true,
+                        requires_delivery_details: true,
+                    },
+                }
+            case "pause":
+                return {
+                    ...reset,
+                    pause_behavior: "resume_previous_stage",
+                    requires_reason_on_enter: true,
+                }
+            case "terminal_lost":
+                return {
+                    ...reset,
+                    terminal_outcome: "lost",
+                }
+            case "terminal_disqualified":
+                return {
+                    ...reset,
+                    terminal_outcome: "disqualified",
+                }
+            case "custom":
+            default:
+                return deepClone(stage.semantics)
+        }
     }
 
     switch (preset) {
@@ -398,7 +567,10 @@ function buildPresetSemantics(stage: EditableStage, preset: BehaviorPreset): Sta
     }
 }
 
-function getPresetOptions(stage: EditableStage): Array<{ value: BehaviorPreset; label: string }> {
+function getPresetOptions(
+    stage: EditableStage,
+    entityType: PipelineEntityType,
+): Array<{ value: BehaviorPreset; label: string }> {
     if (stage.category === "paused") {
         return [
             { value: "pause", label: "Pause" },
@@ -412,12 +584,26 @@ function getPresetOptions(stage: EditableStage): Array<{ value: BehaviorPreset; 
             { value: "custom", label: "Custom" },
         ]
     }
+    if (entityType === "intended_parent" && stage.category === "post_approval") {
+        return [
+            { value: "match_candidate", label: "Ready to match" },
+            { value: "matched", label: "Matched" },
+            { value: "delivery", label: "Delivered" },
+            { value: "custom", label: "Custom" },
+        ]
+    }
     if (stage.category === "post_approval") {
         return [
             { value: "match_candidate", label: "Match candidate" },
             { value: "matched", label: "Matched" },
             { value: "pregnancy_milestone", label: "Pregnancy milestone" },
             { value: "delivery", label: "Delivery" },
+            { value: "custom", label: "Custom" },
+        ]
+    }
+    if (entityType === "intended_parent") {
+        return [
+            { value: "intake", label: "Intake" },
             { value: "custom", label: "Custom" },
         ]
     }
@@ -474,7 +660,10 @@ function applyLocalFeatureConfigRemap(
     return next
 }
 
-function buildNewStage(draft: PipelineDraftState): EditableStage {
+function buildNewStage(
+    draft: PipelineDraftState,
+    entityType: PipelineEntityType,
+): EditableStage {
     const existingKeys = new Set(draft.stages.map((stage) => stage.stage_key))
     const existingSlugs = new Set(draft.stages.map((stage) => stage.slug))
     const stageKey = ensureUniqueIdentifier("custom_stage", existingKeys)
@@ -489,7 +678,7 @@ function buildNewStage(draft: PipelineDraftState): EditableStage {
         category: "intake",
         stage_type: "intake",
         is_active: true,
-        semantics: getStageSemantics({
+        semantics: getStageSemanticsForEntity(entityType, {
             stage_key: stageKey,
             slug,
             stage_type: "intake",
@@ -523,12 +712,13 @@ function getDependencyByStageKey(
 function getDeleteRequirements(
     dependencyGraph: PipelineDependencyGraph | null | undefined,
     stageKey: string,
+    entityType: PipelineEntityType,
 ): string[] {
     const dependency = getDependencyByStageKey(dependencyGraph, stageKey)
     if (!dependency) return []
     const requirements: string[] = []
     if (dependency.surrogate_count > 0) {
-        requirements.push(`${dependency.surrogate_count} active surrogate${dependency.surrogate_count === 1 ? "" : "s"}`)
+        requirements.push(getEntityRecordLabel(entityType, dependency.surrogate_count))
     }
     if (dependency.intelligent_suggestion_rules.length > 0) {
         requirements.push("intelligent suggestions")
@@ -547,14 +737,16 @@ function getDeleteRequirements(
 
 function VersionHistory({
     pipelineId,
+    entityType,
     onRollback,
     canRollback,
 }: {
     pipelineId: string
+    entityType: PipelineEntityType
     onRollback: (version: number) => void
     canRollback: boolean
 }) {
-    const { data: versions, isLoading, isError } = usePipelineVersions(pipelineId)
+    const { data: versions, isLoading, isError } = usePipelineVersions(pipelineId, entityType)
 
     if (isLoading) {
         return (
@@ -618,6 +810,7 @@ function VersionHistory({
 }
 
 function StageEditor({
+    entityType,
     stages,
     dependencyGraph,
     onChange,
@@ -625,6 +818,7 @@ function StageEditor({
     onDuplicateStage,
     onRequestDeleteStage,
 }: {
+    entityType: PipelineEntityType
     stages: EditableStage[]
     dependencyGraph: PipelineDependencyGraph | null | undefined
     onChange: (stages: EditableStage[]) => void
@@ -821,18 +1015,18 @@ function StageEditor({
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {dependency.surrogate_count > 0 ? (
                                     <Badge variant="outline">
-                                        {dependency.surrogate_count} active surrogate{dependency.surrogate_count === 1 ? "" : "s"}
+                                        {getEntityRecordLabel(entityType, dependency.surrogate_count)}
                                     </Badge>
                                 ) : null}
-                                {dependency.journey_milestone_slugs.length > 0 ? (
+                                {entityType === "surrogate" && dependency.journey_milestone_slugs.length > 0 ? (
                                     <Badge variant="outline">
                                         Journey: {dependency.journey_milestone_slugs.join(", ")}
                                     </Badge>
                                 ) : null}
-                                {dependency.analytics_funnel ? (
+                                {entityType === "surrogate" && dependency.analytics_funnel ? (
                                     <Badge variant="outline">Analytics funnel</Badge>
                                 ) : null}
-                                {dependency.integration_refs.length > 0 ? (
+                                {entityType === "surrogate" && dependency.integration_refs.length > 0 ? (
                                     <Badge variant="outline">
                                         Integrations: {dependency.integration_refs.join(", ")}
                                     </Badge>
@@ -867,49 +1061,55 @@ function StageEditor({
                                     <label className="space-y-2 text-sm">
                                         <span className="font-medium">Behavior preset</span>
                                         <select
-                                            value={getBehaviorPreset(stage)}
+                                            value={getBehaviorPreset(stage, entityType)}
                                             onChange={(event) => {
                                                 const preset = event.target.value as BehaviorPreset
                                                 updateStage(index, (current) => ({
                                                     ...current,
-                                                    semantics: buildPresetSemantics(current, preset),
+                                                    semantics: buildPresetSemantics(
+                                                        current,
+                                                        preset,
+                                                        entityType,
+                                                    ),
                                                 }))
                                             }}
                                             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                                             aria-label={`Behavior preset for ${stage.label}`}
                                         >
-                                            {getPresetOptions(stage).map((option) => (
+                                            {getPresetOptions(stage, entityType).map((option) => (
                                                 <option key={option.value} value={option.value}>
                                                     {option.label}
                                                 </option>
                                             ))}
                                         </select>
                                     </label>
-                                    <label className="space-y-2 text-sm">
-                                        <span className="font-medium">Integration bucket</span>
-                                        <select
-                                            value={stage.semantics.integration_bucket}
-                                            onChange={(event) =>
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: {
-                                                        ...current.semantics,
-                                                        integration_bucket:
-                                                            event.target.value as StageSemantics["integration_bucket"],
-                                                    },
-                                                }))
-                                            }
-                                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                            aria-label={`Integration bucket for ${stage.label}`}
-                                        >
-                                            <option value="none">Not tracked</option>
-                                            <option value="intake">Intake</option>
-                                            <option value="qualified">Qualified</option>
-                                            <option value="converted">Converted</option>
-                                            <option value="lost">Lost</option>
-                                            <option value="not_qualified">Not qualified</option>
-                                        </select>
-                                    </label>
+                                    {entityType === "surrogate" ? (
+                                        <label className="space-y-2 text-sm">
+                                            <span className="font-medium">Integration bucket</span>
+                                            <select
+                                                value={stage.semantics.integration_bucket}
+                                                onChange={(event) =>
+                                                    updateStage(index, (current) => ({
+                                                        ...current,
+                                                        semantics: {
+                                                            ...current.semantics,
+                                                            integration_bucket:
+                                                                event.target.value as StageSemantics["integration_bucket"],
+                                                        },
+                                                    }))
+                                                }
+                                                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                                                aria-label={`Integration bucket for ${stage.label}`}
+                                            >
+                                                <option value="none">Not tracked</option>
+                                                <option value="intake">Intake</option>
+                                                <option value="qualified">Qualified</option>
+                                                <option value="converted">Converted</option>
+                                                <option value="lost">Lost</option>
+                                                <option value="not_qualified">Not qualified</option>
+                                            </select>
+                                        </label>
+                                    ) : null}
                                     <label className="space-y-2 text-sm">
                                         <span className="font-medium">Pause behavior</span>
                                         <select
@@ -955,56 +1155,60 @@ function StageEditor({
                                             <option value="disqualified">Disqualified</option>
                                         </select>
                                     </label>
-                                    <label className="space-y-2 text-sm">
-                                        <span className="font-medium">Suggestion profile</span>
-                                        <select
-                                            value={stage.semantics.suggestion_profile_key ?? ""}
-                                            onChange={(event) =>
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: {
-                                                        ...current.semantics,
-                                                        suggestion_profile_key: event.target.value || null,
-                                                    },
-                                                }))
-                                            }
-                                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                            aria-label={`Suggestion profile for ${stage.label}`}
-                                        >
-                                            {SUGGESTION_PROFILE_OPTIONS.map((option) => (
-                                                <option key={option || "none"} value={option}>
-                                                    {option || "None"}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label
-                                        className="space-y-2 text-sm"
-                                        htmlFor={`analytics-bucket-${stage.id}`}
-                                    >
-                                        <span className="font-medium">Analytics bucket</span>
-                                        <Input
-                                            id={`analytics-bucket-${stage.id}`}
-                                            value={stage.semantics.analytics_bucket ?? ""}
-                                            onChange={(event) =>
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: {
-                                                        ...current.semantics,
-                                                        analytics_bucket:
-                                                            event.target.value.trim() || null,
-                                                    },
-                                                }))
-                                            }
-                                            placeholder="analytics bucket"
-                                            className="h-9"
-                                            aria-label={`Analytics bucket for ${stage.label}`}
-                                        />
-                                    </label>
+                                    {entityType === "surrogate" ? (
+                                        <>
+                                            <label className="space-y-2 text-sm">
+                                                <span className="font-medium">Suggestion profile</span>
+                                                <select
+                                                    value={stage.semantics.suggestion_profile_key ?? ""}
+                                                    onChange={(event) =>
+                                                        updateStage(index, (current) => ({
+                                                            ...current,
+                                                            semantics: {
+                                                                ...current.semantics,
+                                                                suggestion_profile_key: event.target.value || null,
+                                                            },
+                                                        }))
+                                                    }
+                                                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                                                    aria-label={`Suggestion profile for ${stage.label}`}
+                                                >
+                                                    {SUGGESTION_PROFILE_OPTIONS.map((option) => (
+                                                        <option key={option || "none"} value={option}>
+                                                            {option || "None"}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+                                            <label
+                                                className="space-y-2 text-sm"
+                                                htmlFor={`analytics-bucket-${stage.id}`}
+                                            >
+                                                <span className="font-medium">Analytics bucket</span>
+                                                <Input
+                                                    id={`analytics-bucket-${stage.id}`}
+                                                    value={stage.semantics.analytics_bucket ?? ""}
+                                                    onChange={(event) =>
+                                                        updateStage(index, (current) => ({
+                                                            ...current,
+                                                            semantics: {
+                                                                ...current.semantics,
+                                                                analytics_bucket:
+                                                                    event.target.value.trim() || null,
+                                                            },
+                                                        }))
+                                                    }
+                                                    placeholder="analytics bucket"
+                                                    className="h-9"
+                                                    aria-label={`Analytics bucket for ${stage.label}`}
+                                                />
+                                            </label>
+                                        </>
+                                    ) : null}
                                 </div>
 
                                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                    {CAPABILITY_LABELS.map((capability) => (
+                                    {getVisibleCapabilityLabels(entityType).map((capability) => (
                                         <label
                                             key={capability.key}
                                             className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm"
@@ -1069,8 +1273,8 @@ function StageEditor({
                 <InfoIcon className="size-4" aria-hidden="true" />
                 <AlertDescription>
                     Drag stages to reorder. Slugs remain editable, stage keys stay immutable, and
-                    workflows, analytics, suggestions, and integrations follow stage semantics and
-                    stage key instead of the slug.
+                    downstream behaviors resolve from stage semantics and stage key instead of the
+                    slug.
                 </AlertDescription>
             </Alert>
         </div>
@@ -1286,6 +1490,7 @@ function AnalyticsFunnelEditor({
 }
 
 function DeleteStageDialog({
+    entityType,
     stage,
     stages,
     dependencyGraph,
@@ -1295,6 +1500,7 @@ function DeleteStageDialog({
     onStateChange,
     onConfirm,
 }: {
+    entityType: PipelineEntityType
     stage: EditableStage | undefined
     stages: EditableStage[]
     dependencyGraph: PipelineDependencyGraph | null | undefined
@@ -1306,7 +1512,7 @@ function DeleteStageDialog({
 }) {
     if (!stage || !state) return null
     const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
-    const requirements = getDeleteRequirements(dependencyGraph, stage.stage_key)
+    const requirements = getDeleteRequirements(dependencyGraph, stage.stage_key, entityType)
     const targetOptions = stages.filter((candidate) => candidate.stage_key !== stage.stage_key)
 
     return (
@@ -1315,8 +1521,9 @@ function DeleteStageDialog({
                 <DialogHeader>
                     <DialogTitle>Remove {stage.label}?</DialogTitle>
                     <DialogDescription>
-                        Remove this stage from the draft and optionally remap existing surrogates
-                        and connected feature references to another stage.
+                        Remove this stage from the draft and optionally remap existing{" "}
+                        {entityType === "surrogate" ? "surrogates" : "records"} and connected
+                        feature references to another stage.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -1329,7 +1536,7 @@ function DeleteStageDialog({
                             </AlertDescription>
                         </Alert>
                     ) : null}
-                    {dependency?.journey_milestone_slugs.length ? (
+                    {entityType === "surrogate" && dependency?.journey_milestone_slugs.length ? (
                         <Alert>
                             <InfoIcon className="size-4" aria-hidden="true" />
                             <AlertDescription>
@@ -1378,20 +1585,28 @@ function DeleteStageDialog({
 export default function PipelinesSettingsPage() {
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
+    const [entityType, setEntityType] = useState<PipelineEntityType>("surrogate")
 
-    const { data: pipelines, isLoading: pipelinesLoading } = usePipelines()
+    const { data: pipelines, isLoading: pipelinesLoading } = usePipelines(entityType)
     const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default)
-    const { data: pipeline, isLoading: pipelineLoading } = usePipeline(defaultPipeline?.id || null)
-    const dependencyGraphQuery = usePipelineDependencyGraph(defaultPipeline?.id || null)
+    const { data: pipeline, isLoading: pipelineLoading } = usePipeline(
+        defaultPipeline?.id || null,
+        entityType,
+    )
+    const dependencyGraphQuery = usePipelineDependencyGraph(defaultPipeline?.id || null, entityType)
     const applyDraft = useApplyPipelineDraft()
     const rollbackPipeline = useRollbackPipeline()
     const recommendedDraft = useRecommendedPipelineDraft()
+    const editorContextKey = `${entityType}:${defaultPipeline?.id ?? "none"}:${pipeline?.current_version ?? 0}`
 
-    const [draft, setDraft] = useState<PipelineDraftState | null>(null)
-    const [deleteStageState, setDeleteStageState] = useState<DeleteStageState | null>(null)
+    const [draftOverride, setDraftOverride] = useState<ScopedEditorState<PipelineDraftState> | null>(null)
+    const [deleteStageOverride, setDeleteStageOverride] = useState<ScopedEditorState<DeleteStageState> | null>(null)
 
     const isLoading = pipelinesLoading || pipelineLoading
-    const baselineDraft = useMemo(() => buildDraft(pipeline), [pipeline])
+    const baselineDraft = useMemo(() => buildDraft(pipeline, entityType), [entityType, pipeline])
+    const draft = draftOverride?.contextKey === editorContextKey ? draftOverride.value : null
+    const deleteStageState =
+        deleteStageOverride?.contextKey === editorContextKey ? deleteStageOverride.value : null
     const currentDraft = draft ?? baselineDraft
     const hasChanges = useMemo(() => {
         if (!baselineDraft || !currentDraft) return false
@@ -1406,21 +1621,24 @@ export default function PipelinesSettingsPage() {
                 : {}),
         }
     }, [currentDraft, hasChanges, pipeline?.current_version])
-    const previewQuery = usePipelineChangePreview(defaultPipeline?.id || null, previewDraft)
+    const previewQuery = usePipelineChangePreview(defaultPipeline?.id || null, previewDraft, entityType)
     const preview: PipelineChangePreview | null = previewQuery.data ?? null
     const dependencyGraph = preview?.dependency_graph ?? dependencyGraphQuery.data ?? null
 
-    useEffect(() => {
-        setDraft(null)
-        setDeleteStageState(null)
-    }, [pipeline?.id, pipeline?.current_version])
-
     const currentStages = currentDraft?.stages ?? []
     const currentFeatureConfig = currentDraft?.featureConfig
+    const setScopedDraft = (value: PipelineDraftState | null) => {
+        setDraftOverride(value ? { contextKey: editorContextKey, value } : null)
+    }
+    const setScopedDeleteStageState = (value: DeleteStageState | null) => {
+        setDeleteStageOverride(value ? { contextKey: editorContextKey, value } : null)
+    }
 
     const updateDraft = (updater: (current: PipelineDraftState) => PipelineDraftState) => {
-        setDraft((previous) => {
-            const base = previous
+        setDraftOverride((previous) => {
+            const scopedPrevious =
+                previous?.contextKey === editorContextKey ? previous.value : null
+            const base = scopedPrevious
                 ?? baselineDraft
                 ?? {
                     name: pipeline?.name ?? "Default Pipeline",
@@ -1428,7 +1646,10 @@ export default function PipelinesSettingsPage() {
                     featureConfig: createFallbackFeatureConfig([]),
                     remaps: [],
                 }
-            return updater(deepClone(base))
+            return {
+                contextKey: editorContextKey,
+                value: updater(deepClone(base)),
+            }
         })
     }
 
@@ -1450,7 +1671,7 @@ export default function PipelinesSettingsPage() {
         if (!currentDraft) return
         updateDraft((current) => ({
             ...current,
-            stages: [...current.stages, buildNewStage(current)],
+            stages: [...current.stages, buildNewStage(current, entityType)],
         }))
     }
 
@@ -1467,7 +1688,7 @@ export default function PipelinesSettingsPage() {
     const handleRequestDeleteStage = (stageKey: string) => {
         const stage = currentStages.find((item) => item.stage_key === stageKey)
         if (!stage) return
-        setDeleteStageState({ stageKey, targetStageKey: "" })
+        setScopedDeleteStageState({ stageKey, targetStageKey: "" })
     }
 
     const handleConfirmDeleteStage = () => {
@@ -1496,24 +1717,27 @@ export default function PipelinesSettingsPage() {
                     : []),
             ],
         }))
-        setDeleteStageState(null)
+        setScopedDeleteStageState(null)
     }
 
     const handleReset = () => {
-        setDraft(null)
-        setDeleteStageState(null)
+        setScopedDraft(null)
+        setScopedDeleteStageState(null)
     }
 
     const handleResetToRecommended = async () => {
         if (!pipeline) return
         try {
-            const recommended = await recommendedDraft.mutateAsync(pipeline.id)
-            setDraft(
+            const recommended = await recommendedDraft.mutateAsync({
+                id: pipeline.id,
+                entityType,
+            })
+            setScopedDraft(
                 buildDraft({
                     name: recommended.name,
                     stages: recommended.stages as PipelineStage[],
                     feature_config: recommended.feature_config,
-                }),
+                }, entityType),
             )
         } catch {
             // Hook toasts surface the error.
@@ -1535,9 +1759,10 @@ export default function PipelinesSettingsPage() {
                     expected_version: pipeline.current_version,
                     comment: "Applied pipeline draft",
                 },
+                entityType,
             })
-            setDraft(null)
-            setDeleteStageState(null)
+            setScopedDraft(null)
+            setScopedDeleteStageState(null)
         } catch {
             // Hook toasts surface the error.
         }
@@ -1546,9 +1771,9 @@ export default function PipelinesSettingsPage() {
     const handleRollback = async (version: number) => {
         if (!pipeline) return
         try {
-            await rollbackPipeline.mutateAsync({ id: pipeline.id, version })
-            setDraft(null)
-            setDeleteStageState(null)
+            await rollbackPipeline.mutateAsync({ id: pipeline.id, version, entityType })
+            setScopedDraft(null)
+            setScopedDeleteStageState(null)
         } catch {
             // Hook toasts surface the error.
         }
@@ -1569,27 +1794,52 @@ export default function PipelinesSettingsPage() {
     const validationErrors = preview?.validation_errors ?? []
     const blockingIssues = preview?.blocking_issues ?? []
     const requiredRemaps = preview?.required_remaps ?? []
+    const entityLabel = PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.label
+    const entityDescription = getEntityDescription(entityType)
+    const showSurrogateEditors = entityType === "surrogate"
 
     return (
         <div className="mx-auto flex max-w-6xl flex-1 flex-col gap-6 p-6">
-            <div>
-                <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
-                <p className="text-sm text-muted-foreground">
-                    Configure per-org stage identity, category, behavior, journey mappings, and
-                    analytics funnel from one versioned draft.
-                </p>
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                    <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
+                    <p className="text-sm text-muted-foreground">
+                        {showSurrogateEditors
+                            ? "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
+                            : "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."}
+                    </p>
+                </div>
+                <label className="space-y-2 text-sm">
+                    <span className="font-medium">Entity</span>
+                    <select
+                        value={entityType}
+                        onChange={(event) => setEntityType(event.target.value as PipelineEntityType)}
+                        className="h-10 min-w-[220px] rounded-md border bg-background px-3 text-sm"
+                        aria-label="Pipeline entity"
+                    >
+                        {PIPELINE_ENTITY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    {entityDescription ? (
+                        <p className="text-xs text-muted-foreground">{entityDescription}</p>
+                    ) : null}
+                </label>
             </div>
 
             <DeleteStageDialog
+                entityType={entityType}
                 stage={selectedDeleteStage}
                 stages={currentStages}
                 dependencyGraph={dependencyGraph}
                 open={Boolean(deleteStageState)}
                 state={deleteStageState}
                 onOpenChange={(open) => {
-                    if (!open) setDeleteStageState(null)
+                    if (!open) setScopedDeleteStageState(null)
                 }}
-                onStateChange={setDeleteStageState}
+                onStateChange={setScopedDeleteStageState}
                 onConfirm={handleConfirmDeleteStage}
             />
 
@@ -1602,11 +1852,12 @@ export default function PipelinesSettingsPage() {
                                     <CardTitle className="flex items-center gap-2 text-lg">
                                         {pipeline?.name || "Default Pipeline"}
                                         <Badge variant="outline">v{pipeline?.current_version || 1}</Badge>
+                                        {entityLabel ? <Badge variant="secondary">{entityLabel}</Badge> : null}
                                     </CardTitle>
                                     <CardDescription>
-                                        Stage keys are immutable. Slugs, category, order, and
-                                        semantics stay org-configurable, and downstream features
-                                        refresh from the pipeline snapshot.
+                                        {showSurrogateEditors
+                                            ? "Stage keys are immutable. Slugs, category, order, and semantics stay org-configurable, and downstream features refresh from the pipeline snapshot."
+                                            : "Stage keys are immutable. Slugs, category, order, and stage semantics stay org-configurable, and downstream match and campaign behavior refresh from the pipeline snapshot."}
                                     </CardDescription>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
@@ -1633,6 +1884,7 @@ export default function PipelinesSettingsPage() {
                         </CardHeader>
                         <CardContent>
                             <StageEditor
+                                entityType={entityType}
                                 stages={currentStages}
                                 dependencyGraph={dependencyGraph}
                                 onChange={updateDraftStages}
@@ -1643,7 +1895,7 @@ export default function PipelinesSettingsPage() {
                         </CardContent>
                     </Card>
 
-                    {currentFeatureConfig ? (
+                    {showSurrogateEditors && currentFeatureConfig ? (
                         <>
                             <Card>
                                 <CardHeader>
@@ -1800,6 +2052,7 @@ export default function PipelinesSettingsPage() {
                             {pipeline ? (
                                 <VersionHistory
                                     pipelineId={pipeline.id}
+                                    entityType={entityType}
                                     onRollback={handleRollback}
                                     canRollback={isDeveloper}
                                 />
