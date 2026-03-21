@@ -6,7 +6,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.stage_definitions import canonicalize_stage_key
+from app.core.stage_definitions import (
+    INTENDED_PARENT_PIPELINE_ENTITY,
+    SURROGATE_PIPELINE_ENTITY,
+    canonicalize_stage_key,
+    normalize_pipeline_entity_type,
+)
 from app.utils.presentation import humanize_identifier
 
 StageCapabilityKey = Literal[
@@ -234,8 +239,24 @@ _SUGGESTION_PROFILE_BY_STAGE_KEY = {
 }
 
 
-def default_stage_semantics(stage_key: str, stage_type: str) -> dict[str, Any]:
+def default_stage_semantics(
+    stage_key: str,
+    stage_type: str,
+    entity_type: str | None = None,
+) -> dict[str, Any]:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
     normalized_key = canonicalize_stage_key(stage_key)
+    if normalized_entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        capabilities = StageCapabilities(
+            eligible_for_matching=normalized_key == "ready_to_match",
+            locks_match_state=normalized_key in {"matched", "delivered"},
+            requires_delivery_details=normalized_key == "delivered",
+        )
+        return StageSemantics(
+            capabilities=capabilities,
+            analytics_bucket=normalized_key if stage_type != "paused" else None,
+        ).model_dump(mode="json")
+
     capabilities = StageCapabilities(
         counts_as_contacted=normalized_key
         in {
@@ -318,7 +339,11 @@ def default_stage_semantics(stage_key: str, stage_type: str) -> dict[str, Any]:
     ).model_dump(mode="json")
 
 
-def default_pipeline_feature_config() -> dict[str, Any]:
+def default_pipeline_feature_config(entity_type: str | None = None) -> dict[str, Any]:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    if normalized_entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        return PipelineFeatureConfig().model_dump(mode="json")
+
     return PipelineFeatureConfig(
         journey=JourneyFeatureConfig(
             phases=[phase.model_copy(deep=True) for phase in DEFAULT_JOURNEY_PHASES],
@@ -353,14 +378,21 @@ def normalize_stage_semantics(
     stage_key: str,
     stage_type: str,
     semantics: dict[str, Any] | None,
+    entity_type: str | None = None,
 ) -> StageSemantics:
-    default_payload = default_stage_semantics(stage_key, stage_type)
+    default_payload = default_stage_semantics(stage_key, stage_type, entity_type)
     payload = deep_merge_dicts(default_payload, semantics or {})
     return StageSemantics.model_validate(payload)
 
 
-def normalize_feature_config(feature_config: dict[str, Any] | None) -> PipelineFeatureConfig:
-    payload = deep_merge_dicts(default_pipeline_feature_config(), feature_config or {})
+def normalize_feature_config(
+    feature_config: dict[str, Any] | None,
+    entity_type: str | None = None,
+) -> PipelineFeatureConfig:
+    payload = deep_merge_dicts(
+        default_pipeline_feature_config(entity_type),
+        feature_config or {},
+    )
     return PipelineFeatureConfig.model_validate(payload)
 
 

@@ -875,6 +875,7 @@ def _create_ip_status_history(
     actor_user_id: UUID,
     created_at: datetime,
     target_status: str,
+    stage_ids_by_key: dict[str, UUID],
 ) -> None:
     now = datetime.now(timezone.utc)
     path = _build_ip_status_path(target_status)
@@ -888,6 +889,8 @@ def _create_ip_status_history(
             IntendedParentStatusHistory(
                 intended_parent_id=intended_parent.id,
                 changed_by_user_id=actor_user_id,
+                old_stage_id=stage_ids_by_key.get(previous) if previous else None,
+                new_stage_id=stage_ids_by_key.get(status),
                 old_status=previous,
                 new_status=status,
                 reason="Seeded status progression",
@@ -915,6 +918,18 @@ def create_intended_parents(
 
     users_by_role = users_by_role or {}
     fallback_user = db.query(User).filter(User.id == owner_id).first()
+    ip_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        org_id,
+        owner_id,
+        entity_type="intended_parent",
+    )
+    ip_stage_ids_by_key = {
+        stage.stage_key: stage.id
+        for stage in db.query(PipelineStage)
+        .filter(PipelineStage.pipeline_id == ip_pipeline.id, PipelineStage.is_active.is_(True))
+        .all()
+    }
     targets = _build_ip_targets(count)
     next_number = get_next_intended_parent_number(db, org_id)
     created_ips: list[IntendedParent] = []
@@ -949,6 +964,7 @@ def create_intended_parents(
             + f"Looking to start journey {random.choice(['immediately', 'within 3 months', 'within 6 months'])}. "
             + f"Preference for {random.choice(['experienced', 'first-time', 'no preference'])} surrogate.",
             # Status & workflow
+            stage_id=ip_stage_ids_by_key[target_status],
             status=target_status,
             owner_type="user",
             owner_id=owner_user.id,
@@ -967,6 +983,7 @@ def create_intended_parents(
             actor_user_id=owner_user.id,
             created_at=created_at,
             target_status=target_status,
+            stage_ids_by_key=ip_stage_ids_by_key,
         )
         created_ips.append(intended_parent)
 

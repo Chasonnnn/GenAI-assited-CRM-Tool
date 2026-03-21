@@ -1,4 +1,4 @@
-"""Intended parent status change helpers (apply + request + history + notifications)."""
+"""Intended parent stage change helpers (apply + request + history + notifications)."""
 
 from datetime import datetime, time, timedelta, timezone
 from typing import TypedDict
@@ -9,34 +9,27 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.enums import IntendedParentStatus
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.models import (
     IntendedParent,
     IntendedParentStatusHistory,
     Organization,
+    PipelineStage,
     StatusChangeRequest,
     User,
 )
-from app.utils.presentation import humanize_identifier
 
 
 class StatusChangeResult(TypedDict):
     """Result of a status change operation."""
 
-    status: str  # 'applied' or 'pending_approval'
+    status: str  # "applied" or "pending_approval"
     intended_parent: IntendedParent | None
     request_id: UUID | None
     message: str | None
 
 
 UNDO_GRACE_PERIOD = timedelta(minutes=5)
-
-IP_STATUS_ORDER = {
-    IntendedParentStatus.NEW.value: 0,
-    IntendedParentStatus.READY_TO_MATCH.value: 1,
-    IntendedParentStatus.MATCHED.value: 2,
-    IntendedParentStatus.DELIVERED.value: 3,
-}
 
 
 def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | None:
@@ -48,20 +41,7 @@ def _get_org_user(db: Session, org_id: UUID, user_id: UUID | None) -> User | Non
     return membership.user if membership else None
 
 
-def _format_status_label(status: str | None) -> str:
-    if not status:
-        return "Unknown"
-    return humanize_identifier(status)
-
-
-def _status_order(status: str) -> int:
-    if status not in IP_STATUS_ORDER:
-        raise ValueError(f"Unknown intended parent status: {status}")
-    return IP_STATUS_ORDER[status]
-
-
 def _get_org_timezone(db: Session, org_id: UUID) -> str:
-    """Get organization timezone string."""
     result = db.execute(
         select(Organization.timezone).where(Organization.id == org_id)
     ).scalar_one_or_none()
@@ -72,15 +52,6 @@ def _normalize_effective_at(
     effective_at: datetime | None,
     org_timezone_str: str,
 ) -> datetime:
-    """
-    Normalize effective_at to UTC datetime.
-
-    Rules:
-    - None: return now (UTC)
-    - Today with time 00:00:00: return now (UTC) - effective now
-    - Past date with time 00:00:00: default to 12:00 PM in org timezone
-    - Otherwise: use as-is (assume UTC if no timezone)
-    """
     now = datetime.now(timezone.utc)
 
     if effective_at is None:
@@ -106,35 +77,66 @@ def _normalize_effective_at(
     return effective_at.astimezone(timezone.utc)
 
 
-# =============================================================================
-# Status Management
-# =============================================================================
+def get_default_pipeline_stage(
+    db: Session,
+    org_id: UUID,
+    stage_id: UUID,
+) -> PipelineStage:
+    from app.services import pipeline_service
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        org_id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    stage = pipeline_service.get_stage_by_id(db, stage_id)
+    if not stage or stage.pipeline_id != pipeline.id or not stage.is_active:
+        raise ValueError("Target stage not found")
+    return stage
+
+
+def get_current_stage(db: Session, ip: IntendedParent) -> PipelineStage:
+    from app.services import pipeline_service
+
+    if ip.stage and ip.stage.is_active:
+        return ip.stage
+    if ip.stage_id:
+        stage = pipeline_service.get_stage_by_id(db, ip.stage_id)
+        if stage and stage.is_active:
+            return stage
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        ip.organization_id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    stage = pipeline_service.get_stage_by_key(db, pipeline.id, ip.status)
+    if not stage:
+        raise ValueError("Current intended parent stage not found")
+    ip.stage_id = stage.id
+    ip.status = stage.stage_key
+    return stage
 
 
 def change_status(
     db: Session,
     ip: IntendedParent,
-    new_status: str,
+    new_stage: PipelineStage,
     user_id: UUID,
     reason: str | None = None,
     effective_at: datetime | None = None,
 ) -> StatusChangeResult:
-    """
-    Change intended parent status with backdating and regression support.
-
-    - Backdating (past date): Requires reason, applies immediately
-    - Regression (earlier status): Requires reason + admin approval
-    - Undo within 5-min grace period: Bypasses admin approval
-    """
-    if new_status == ip.status:
-        raise ValueError("Target status is same as current status")
+    """Change intended parent stage with backdating and regression support."""
+    current_stage = get_current_stage(db, ip)
+    if new_stage.id == current_stage.id:
+        raise ValueError("Target stage is same as current stage")
 
     now = datetime.now(timezone.utc)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
     normalized_effective_at = _normalize_effective_at(effective_at, org_tz_str)
 
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
-    is_regression = _status_order(new_status) < _status_order(ip.status)
+    is_regression = new_stage.order < current_stage.order
 
     if (normalized_effective_at - now).total_seconds() > 1:
         raise ValueError("Cannot set future date for status change")
@@ -155,16 +157,16 @@ def change_status(
             and last_history.changed_by_user_id == user_id
             and last_history.recorded_at
             and (now - last_history.recorded_at) <= UNDO_GRACE_PERIOD
-            and last_history.old_status == new_status
-            and last_history.new_status == ip.status
+            and last_history.old_stage_id == new_stage.id
+            and last_history.new_stage_id == current_stage.id
         )
 
         if within_grace_period:
             return apply_status_change(
                 db=db,
                 ip=ip,
-                new_status=new_status,
-                old_status=ip.status,
+                old_stage=current_stage,
+                new_stage=new_stage,
                 user_id=user_id,
                 reason=reason,
                 effective_at=normalized_effective_at,
@@ -180,7 +182,7 @@ def change_status(
             organization_id=ip.organization_id,
             entity_type="intended_parent",
             entity_id=ip.id,
-            target_status=new_status,
+            target_stage_id=new_stage.id,
             effective_at=normalized_effective_at,
             reason=reason or "",
             requested_by_user_id=user_id,
@@ -193,7 +195,7 @@ def change_status(
         except IntegrityError:
             db.rollback()
             raise ValueError(
-                "A pending regression request already exists for this status and date."
+                "A pending regression request already exists for this stage and date."
             )
         db.refresh(request)
 
@@ -204,8 +206,8 @@ def change_status(
             db=db,
             request=request,
             intended_parent=ip,
-            target_status_label=_format_status_label(new_status),
-            current_status_label=_format_status_label(ip.status),
+            target_status_label=new_stage.label,
+            current_status_label=current_stage.label,
             requester_name=requester.display_name if requester else "Someone",
         )
 
@@ -219,8 +221,8 @@ def change_status(
     return apply_status_change(
         db=db,
         ip=ip,
-        new_status=new_status,
-        old_status=ip.status,
+        old_stage=current_stage,
+        new_stage=new_stage,
         user_id=user_id,
         reason=reason,
         effective_at=normalized_effective_at,
@@ -232,8 +234,8 @@ def change_status(
 def apply_status_change(
     db: Session,
     ip: IntendedParent,
-    new_status: str,
-    old_status: str,
+    old_stage: PipelineStage,
+    new_stage: PipelineStage,
     user_id: UUID | None,
     reason: str | None,
     effective_at: datetime,
@@ -244,16 +246,19 @@ def apply_status_change(
     approved_at: datetime | None = None,
     requested_at: datetime | None = None,
 ) -> StatusChangeResult:
-    """Apply a status change to an intended parent."""
-    ip.status = new_status
+    """Apply a stage change to an intended parent."""
+    ip.stage_id = new_stage.id
+    ip.status = new_stage.stage_key
     ip.last_activity = datetime.now(timezone.utc)
     ip.updated_at = datetime.now(timezone.utc)
 
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
-        old_status=old_status,
-        new_status=new_status,
+        old_stage_id=old_stage.id if old_stage else None,
+        new_stage_id=new_stage.id,
+        old_status=old_stage.stage_key if old_stage else None,
+        new_status=new_stage.stage_key,
         reason=reason,
         changed_at=effective_at,
         effective_at=effective_at,

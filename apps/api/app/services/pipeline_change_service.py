@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.stage_definitions import canonicalize_stage_key
+from app.core.stage_definitions import (
+    INTENDED_PARENT_PIPELINE_ENTITY,
+    SURROGATE_PIPELINE_ENTITY,
+    canonicalize_stage_key,
+    get_required_semantic_stage_keys,
+    normalize_pipeline_entity_type,
+)
 from app.schemas.pipeline_semantics import PipelineFeatureConfig
 from app.services import pipeline_semantics_service
 
@@ -104,6 +110,7 @@ def normalize_stage_drafts(
     stages: list[dict[str, Any]],
     *,
     existing_stage_by_id: dict[str, Any] | None = None,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
     existing_stage_by_id = existing_stage_by_id or {}
     errors: list[str] = []
@@ -168,6 +175,7 @@ def normalize_stage_drafts(
                 "is_active": bool(raw_stage.get("is_active", True)),
                 "semantics": pipeline_semantics_service.get_stage_semantics(
                     {
+                        "entity_type": entity_type,
                         "stage_key": stage_key,
                         "slug": raw_slug,
                         "stage_type": category,
@@ -183,7 +191,9 @@ def normalize_stage_drafts(
 def validate_guarded_invariants(
     stages: list[dict[str, Any]],
     feature_config: PipelineFeatureConfig,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
 ) -> None:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
     pause_stage_keys = [
         stage["stage_key"]
         for stage in stages
@@ -191,7 +201,7 @@ def validate_guarded_invariants(
         and pipeline_semantics_service.get_stage_semantics(stage).pause_behavior
         == "resume_previous_stage"
     ]
-    if len(pause_stage_keys) != 1:
+    if normalized_entity_type == SURROGATE_PIPELINE_ENTITY and len(pause_stage_keys) != 1:
         raise ValueError("Exactly one active pause stage must use resume_previous_stage")
 
     delivery_stage_keys = [
@@ -225,6 +235,15 @@ def validate_guarded_invariants(
             raise ValueError("A delivery stage cannot also be a terminal lost/disqualified stage")
 
     active_stage_keys = {stage["stage_key"] for stage in stages if stage.get("is_active", True)}
+    if normalized_entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        missing_required_keys = sorted(
+            get_required_semantic_stage_keys(INTENDED_PARENT_PIPELINE_ENTITY) - active_stage_keys
+        )
+        if missing_required_keys:
+            raise ValueError(
+                "Intended parent pipelines must keep these semantic stages active: "
+                + ", ".join(missing_required_keys)
+            )
     for milestone in feature_config.journey.milestones:
         missing_keys = [stage_key for stage_key in milestone.mapped_stage_keys if stage_key not in active_stage_keys]
         if missing_keys:
@@ -266,8 +285,10 @@ def build_impact_report(
     after_stages: list[dict[str, Any]],
     before_feature_config: PipelineFeatureConfig,
     after_feature_config: PipelineFeatureConfig,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
 ) -> list[str]:
     impact: set[str] = set()
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
     before_by_key = {stage["stage_key"]: stage for stage in before_stages}
     after_by_key = {stage["stage_key"]: stage for stage in after_stages}
 
@@ -276,16 +297,19 @@ def build_impact_report(
         before = before_by_key.get(stage_key)
         after = after_by_key.get(stage_key)
         if before is None or after is None:
-            impact.update(
-                {
-                    "journey",
-                    "analytics",
-                    "integrations",
-                    "intelligent_suggestions",
-                    "campaigns",
-                    "workflows",
-                }
-            )
+            if normalized_entity_type == SURROGATE_PIPELINE_ENTITY:
+                impact.update(
+                    {
+                        "journey",
+                        "analytics",
+                        "integrations",
+                        "intelligent_suggestions",
+                        "campaigns",
+                        "workflows",
+                    }
+                )
+            else:
+                impact.update({"ui_gating", "campaigns", "workflows"})
             continue
         if before.get("order") != after.get("order"):
             impact.update({"ui_gating", "analytics"})
@@ -326,6 +350,7 @@ def build_pipeline_change_preview(
     after_stages: list[dict[str, Any]],
     before_feature_config: PipelineFeatureConfig,
     after_feature_config: PipelineFeatureConfig,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
     remaps: list[dict[str, Any]] | None = None,
     normalization_errors: list[str] | None = None,
     safe_auto_fixes: list[str] | None = None,
@@ -339,7 +364,7 @@ def build_pipeline_change_preview(
     }
     validation_errors = list(normalization_errors or [])
     try:
-        validate_guarded_invariants(after_stages, after_feature_config)
+        validate_guarded_invariants(after_stages, after_feature_config, entity_type)
     except ValueError as exc:
         validation_errors.append(str(exc))
 
@@ -365,7 +390,12 @@ def build_pipeline_change_preview(
         dependency = dependency_by_key.get(stage_key, {})
         reasons: list[str] = []
         if int(dependency.get("surrogate_count") or 0) > 0:
-            reasons.append("active_surrogates")
+            reasons.append(
+                "active_records"
+                if normalize_pipeline_entity_type(dependency_graph.get("entity_type"))
+                == INTENDED_PARENT_PIPELINE_ENTITY
+                else "active_surrogates"
+            )
         if dependency.get("intelligent_suggestion_rules"):
             reasons.append("intelligent_suggestions")
         if dependency.get("integration_refs"):
@@ -405,6 +435,7 @@ def build_pipeline_change_preview(
             after_stages,
             before_feature_config,
             after_feature_config,
+            entity_type,
         ),
         "validation_errors": list(dict.fromkeys(validation_errors)),
         "blocking_issues": list(dict.fromkeys(blocking_issues)),

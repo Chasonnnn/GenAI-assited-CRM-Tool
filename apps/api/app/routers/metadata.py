@@ -5,11 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.match_status_definitions import MATCH_STATUS_DEFINITIONS
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.deps import get_current_session, get_db
-from app.db.enums import SurrogateSource, TaskType, IntendedParentStatus, Role
+from app.db.enums import SurrogateSource, TaskType, Role
 from app.services import pipeline_service
 from app.schemas.auth import UserSession
-from app.utils.presentation import humanize_identifier
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 
@@ -89,26 +90,39 @@ def list_task_types(
 @router.get("/intended-parent-statuses")
 def list_intended_parent_statuses(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """
-    Get all intended parent statuses.
+    Get intended-parent stage metadata from the scoped default pipeline.
 
-    Returns list of {value, label} for populating dropdowns.
+    Returns list of {id, value, label, stage_key, stage_slug, stage_type, color, order}.
     """
-    statuses = []
-    for status in IntendedParentStatus:
-        # Skip pseudo-statuses used for history only
-        if status.value in ("archived", "restored"):
-            continue
-
-        statuses.append(
-            {
-                "value": status.value,
-                "label": humanize_identifier(status.value),
-            }
-        )
-
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+        session.user_id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    statuses = [
+        {
+            "id": str(stage.id),
+            "value": stage.stage_key,
+            "label": stage.label,
+            "stage_key": stage.stage_key,
+            "stage_slug": stage.slug,
+            "stage_type": stage.stage_type,
+            "color": stage.color,
+            "order": stage.order,
+        }
+        for stage in pipeline_service.get_stages(db, pipeline.id, include_inactive=False)
+    ]
     return {"statuses": statuses}
+
+
+@router.get("/match-statuses")
+def list_match_statuses() -> object:
+    """Get shared fixed match lifecycle metadata."""
+    return {"statuses": MATCH_STATUS_DEFINITIONS}
 
 
 @router.get("/roles")

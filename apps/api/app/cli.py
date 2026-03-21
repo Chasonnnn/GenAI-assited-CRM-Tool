@@ -466,10 +466,11 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
         python -m app.cli repair-matched-without-match --org-slug acme
         python -m app.cli repair-matched-without-match --org-slug acme --apply
     """
-    from sqlalchemy import and_
+    from sqlalchemy import and_, or_
     from sqlalchemy.orm import aliased
 
-    from app.db.enums import IntendedParentStatus, MatchStatus
+    from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
+    from app.db.enums import MatchStatus
     from app.db.models import (
         IntendedParent,
         IntendedParentStatusHistory,
@@ -508,7 +509,7 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
                 ),
             )
             .filter(
-                PipelineStage.slug == "matched",
+                PipelineStage.stage_key == "matched",
                 Surrogate.is_archived.is_(False),
                 accepted_surrogate_match.id.is_(None),
             )
@@ -529,8 +530,12 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
                     accepted_ip_match.status == MatchStatus.ACCEPTED.value,
                 ),
             )
+            .outerjoin(PipelineStage, IntendedParent.stage_id == PipelineStage.id)
             .filter(
-                IntendedParent.status == IntendedParentStatus.MATCHED.value,
+                or_(
+                    PipelineStage.stage_key == "matched",
+                    IntendedParent.status == "matched",
+                ),
                 IntendedParent.is_archived.is_(False),
                 accepted_ip_match.id.is_(None),
             )
@@ -608,16 +613,36 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
             repaired_surrogates += 1
 
         for intended_parent in orphaned_intended_parents:
-            old_status = intended_parent.status
-            intended_parent.status = IntendedParentStatus.READY_TO_MATCH.value
+            ip_pipeline = pipeline_service.get_or_create_default_pipeline(
+                db,
+                intended_parent.organization_id,
+                entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+            )
+            ready_stage = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "ready_to_match")
+            matched_stage = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "matched")
+            current_stage = pipeline_service.get_stage_by_id(db, intended_parent.stage_id)
+            if not current_stage or not pipeline_service.stage_matches_key(current_stage, "matched"):
+                current_stage = matched_stage or current_stage
+            if not ready_stage or not current_stage:
+                click.echo(
+                    f"[WARN] Missing intended-parent ready_to_match stage for "
+                    f"{intended_parent.intended_parent_number}; skipped"
+                )
+                continue
+
+            old_status = intended_parent.status or current_stage.stage_key
+            intended_parent.stage_id = ready_stage.id
+            intended_parent.status = ready_stage.stage_key
             intended_parent.last_activity = now
             intended_parent.updated_at = now
             db.add(
                 IntendedParentStatusHistory(
                     intended_parent_id=intended_parent.id,
                     changed_by_user_id=None,
+                    old_stage_id=current_stage.id,
+                    new_stage_id=ready_stage.id,
                     old_status=old_status,
-                    new_status=IntendedParentStatus.READY_TO_MATCH.value,
+                    new_status=ready_stage.stage_key,
                     reason=repair_reason,
                     changed_at=now,
                     effective_at=now,

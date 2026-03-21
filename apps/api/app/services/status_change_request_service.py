@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.enums import IntendedParentStatus, MatchStatus, Role, SurrogateActivityType
+from app.db.enums import MatchStatus, Role, SurrogateActivityType
 from app.db.models import (
     StatusChangeRequest,
     Surrogate,
@@ -170,15 +170,17 @@ def approve_request(
         )
         if not intended_parent:
             raise ValueError("Intended parent not found")
-        if not request.target_status:
-            raise ValueError("Target status not found")
-
-        old_status = intended_parent.status
+        if not request.target_stage_id:
+            raise ValueError("Target stage not found")
+        target_stage = pipeline_service.get_stage_by_id(db, request.target_stage_id)
+        if not target_stage:
+            raise ValueError("Target stage not found")
+        old_stage = intended_parent_status_service.get_current_stage(db, intended_parent)
         intended_parent_status_service.apply_status_change(
             db=db,
             ip=intended_parent,
-            new_status=request.target_status,
-            old_status=old_status,
+            old_stage=old_stage,
+            new_stage=target_stage,
             user_id=request.requested_by_user_id,
             reason=request.reason,
             effective_at=request.effective_at,
@@ -236,11 +238,24 @@ def approve_request(
             requested_at=request.requested_at,
         )
 
+        ready_ip_stage = pipeline_service.get_stage_by_key(
+            db,
+            pipeline_service.get_or_create_default_pipeline(
+                db,
+                org_id,
+                admin_user_id,
+                entity_type="intended_parent",
+            ).id,
+            "ready_to_match",
+        )
+        if not ready_ip_stage:
+            raise ValueError("Ready to match stage not found")
+
         intended_parent_status_service.apply_status_change(
             db=db,
             ip=intended_parent,
-            new_status=IntendedParentStatus.READY_TO_MATCH.value,
-            old_status=intended_parent.status,
+            old_stage=intended_parent_status_service.get_current_stage(db, intended_parent),
+            new_stage=ready_ip_stage,
             user_id=request.requested_by_user_id,
             reason=request.reason,
             effective_at=request.effective_at,
@@ -574,9 +589,11 @@ def get_request_with_details(
         if intended_parent:
             result["entity_name"] = intended_parent.full_name
             result["entity_number"] = intended_parent.intended_parent_number
-            result["current_stage_label"] = _format_status_label(intended_parent.status)
-            if request.target_status:
-                result["target_stage_label"] = _format_status_label(request.target_status)
+            result["current_stage_label"] = intended_parent.status_label
+            if request.target_stage_id:
+                target_stage = pipeline_service.get_stage_by_id(db, request.target_stage_id)
+                if target_stage:
+                    result["target_stage_label"] = target_stage.label
     elif request.entity_type == "match":
         match = (
             db.query(Match)

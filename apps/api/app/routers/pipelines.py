@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY, normalize_pipeline_entity_type
 from app.core.deps import (
     get_current_session,
     get_db,
@@ -45,6 +46,7 @@ class PipelineRead(BaseModel):
     """Pipeline response with version info."""
 
     id: UUID
+    entity_type: str
     name: str
     is_default: bool
     stages: list["StageRead"]
@@ -60,6 +62,7 @@ class PipelineCreate(BaseModel):
     """Request to create a new pipeline."""
 
     name: str = Field(min_length=1, max_length=100)
+    entity_type: str = Field(default=SURROGATE_PIPELINE_ENTITY)
     stages: list["StageCreate"] | None = None  # Uses defaults if not provided
     feature_config: PipelineFeatureConfig | None = None
 
@@ -149,6 +152,7 @@ class StageReorder(BaseModel):
 
 class PipelineSemanticsSnapshotRead(BaseModel):
     pipeline_id: UUID
+    entity_type: str
     version: int
     feature_config: PipelineFeatureConfig
     stages: list[StageRead]
@@ -175,6 +179,7 @@ class PipelineStageDependencyRead(BaseModel):
 
 class PipelineDependencyGraphRead(BaseModel):
     pipeline_id: UUID
+    entity_type: str
     version: int
     stages: list[PipelineStageDependencyRead]
 
@@ -235,6 +240,7 @@ class PipelineChangePreviewRead(BaseModel):
 
 @router.get("", response_model=list[PipelineRead], dependencies=[MANAGE_PIPELINES_DEP])
 def list_pipelines(
+    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -245,13 +251,20 @@ def list_pipelines(
     Requires: Manager+ role
     """
     # Ensure default exists
-    pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+        session.user_id,
+        entity_type=normalized_entity_type,
+    )
 
-    pipelines = pipeline_service.list_pipelines(db, session.org_id)
+    pipelines = pipeline_service.list_pipelines(db, session.org_id, normalized_entity_type)
 
     return [
         PipelineRead(
             id=p.id,
+            entity_type=p.entity_type,
             name=p.name,
             is_default=p.is_default,
             stages=pipeline_service.get_stages(db, p.id),
@@ -266,6 +279,7 @@ def list_pipelines(
 
 @router.get("/default", response_model=PipelineRead)
 def get_default_pipeline(
+    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -274,10 +288,16 @@ def get_default_pipeline(
 
     Requires: Authenticated user
     """
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+        session.user_id,
+        entity_type=normalize_pipeline_entity_type(entity_type),
+    )
 
     return PipelineRead(
         id=pipeline.id,
+        entity_type=pipeline.entity_type,
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
@@ -290,10 +310,16 @@ def get_default_pipeline(
 
 @router.get("/default/semantics", response_model=PipelineSemanticsSnapshotRead)
 def get_default_pipeline_semantics(
+    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+        session.user_id,
+        entity_type=normalize_pipeline_entity_type(entity_type),
+    )
     snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
     return PipelineSemanticsSnapshotRead(**pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot))
 
@@ -301,16 +327,18 @@ def get_default_pipeline_semantics(
 @router.get("/{pipeline_id}", response_model=PipelineRead, dependencies=[MANAGE_PIPELINES_DEP])
 def get_pipeline(
     pipeline_id: UUID,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get a specific pipeline by ID."""
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
     return PipelineRead(
         id=pipeline.id,
+        entity_type=pipeline.entity_type,
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
@@ -328,10 +356,11 @@ def get_pipeline(
 )
 def get_pipeline_semantics(
     pipeline_id: UUID,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
     snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
@@ -345,12 +374,13 @@ def get_pipeline_semantics(
 )
 def get_pipeline_dependency_graph(
     pipeline_id: UUID,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     from app.services import pipeline_dependency_service
 
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
     return PipelineDependencyGraphRead(**pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline))
@@ -363,10 +393,11 @@ def get_pipeline_dependency_graph(
 )
 def get_recommended_pipeline_draft(
     pipeline_id: UUID,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
     draft = pipeline_service.build_recommended_pipeline_draft(pipeline)
@@ -385,10 +416,11 @@ def get_recommended_pipeline_draft(
 def preview_pipeline_changes(
     pipeline_id: UUID,
     data: PipelineDraftRequest,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
     if data.expected_version is not None:
@@ -425,10 +457,11 @@ def preview_pipeline_changes(
 def apply_pipeline_draft(
     pipeline_id: UUID,
     data: PipelineDraftRequest,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
     if data.expected_version is not None:
@@ -454,6 +487,7 @@ def apply_pipeline_draft(
         raise HTTPException(400, str(exc))
     return PipelineRead(
         id=updated.id,
+        entity_type=updated.entity_type,
         name=updated.name,
         is_default=updated.is_default,
         stages=pipeline_service.get_stages(db, updated.id, include_inactive=True),
@@ -489,6 +523,7 @@ def create_pipeline(
         org_id=session.org_id,
         user_id=session.user_id,
         name=data.name,
+        entity_type=normalize_pipeline_entity_type(data.entity_type),
         stages=stages,
         feature_config=(
             data.feature_config.model_dump(mode="json") if data.feature_config is not None else None
@@ -497,6 +532,7 @@ def create_pipeline(
 
     return PipelineRead(
         id=pipeline.id,
+        entity_type=pipeline.entity_type,
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
@@ -512,6 +548,7 @@ def create_pipeline(
     dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
 )
 def sync_default_pipeline_stages(
+    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> object:
@@ -522,7 +559,12 @@ def sync_default_pipeline_stages(
     Useful when the stage definitions have been expanded.
     Requires: Manager+ role
     """
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+        session.user_id,
+        entity_type=normalize_pipeline_entity_type(entity_type),
+    )
     added_count = pipeline_service.sync_missing_stages(db, pipeline, session.user_id)
 
     return {
@@ -540,6 +582,7 @@ def sync_default_pipeline_stages(
 def update_pipeline(
     pipeline_id: UUID,
     data: PipelineUpdate,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -550,7 +593,7 @@ def update_pipeline(
     Supports optimistic locking via expected_version (returns 409 on conflict).
     Requires: Manager+ role
     """
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
@@ -586,6 +629,7 @@ def update_pipeline(
 
     return PipelineRead(
         id=pipeline.id,
+        entity_type=pipeline.entity_type,
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
@@ -603,6 +647,7 @@ def update_pipeline(
 )
 def delete_pipeline(
     pipeline_id: UUID,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> Response:
@@ -613,7 +658,7 @@ def delete_pipeline(
     Version history is retained for audit.
     Requires: Manager+ role
     """
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
@@ -637,6 +682,7 @@ def delete_pipeline(
 def get_pipeline_versions(
     pipeline_id: UUID,
     limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -646,7 +692,7 @@ def get_pipeline_versions(
     Returns versions newest first.
     Requires: Developer role
     """
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
@@ -672,6 +718,7 @@ def get_pipeline_versions(
 def rollback_pipeline(
     pipeline_id: UUID,
     data: RollbackRequest,
+    entity_type: str | None = Query(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -682,7 +729,7 @@ def rollback_pipeline(
     Emits audit event with before/after version links.
     Requires: Developer role
     """
-    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
@@ -716,6 +763,7 @@ def rollback_pipeline(
 
     return PipelineRead(
         id=updated.id,
+        entity_type=updated.entity_type,
         name=updated.name,
         is_default=updated.is_default,
         stages=pipeline_service.get_stages(db, updated.id, include_inactive=True),

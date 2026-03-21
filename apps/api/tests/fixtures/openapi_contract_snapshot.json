@@ -2190,6 +2190,11 @@
       "200"
     ]
   },
+  "/metadata/match-statuses": {
+    "GET": [
+      "200"
+    ]
+  },
   "/metadata/roles": {
     "GET": [
       "200"
@@ -2894,7 +2899,8 @@
   },
   "/settings/pipelines": {
     "GET": [
-      "200"
+      "200",
+      "422"
     ],
     "POST": [
       "201",
@@ -2903,17 +2909,20 @@
   },
   "/settings/pipelines/default": {
     "GET": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/settings/pipelines/default/semantics": {
     "GET": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/settings/pipelines/default/sync-stages": {
     "POST": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/settings/pipelines/{pipeline_id}": {

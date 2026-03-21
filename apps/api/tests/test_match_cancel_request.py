@@ -227,12 +227,21 @@ async def test_renamed_matched_stage_still_requires_accepted_match(authed_client
 @pytest.mark.asyncio
 async def test_intended_parent_cannot_be_manually_set_to_matched_without_accepted_match(
     authed_client,
+    db,
+    test_auth,
 ):
     intended_parent = await _create_intended_parent(authed_client)
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_auth.org.id,
+        entity_type="intended_parent",
+    )
+    matched_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "matched")
+    assert matched_stage is not None
 
     response = await authed_client.patch(
         f"/intended-parents/{intended_parent['id']}/status",
-        json={"status": IntendedParentStatus.MATCHED.value},
+        json={"stage_id": str(matched_stage.id)},
     )
 
     assert response.status_code == 403

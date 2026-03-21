@@ -141,7 +141,7 @@ class IntendedParentUpdate(BaseModel):
 class IntendedParentStatusUpdate(BaseModel):
     """Schema for changing status."""
 
-    status: str = Field(min_length=1)
+    stage_id: UUID
     reason: str | None = Field(None, max_length=500)
     effective_at: datetime | None = Field(
         None, description="When the change actually occurred (optional, defaults to now)"
@@ -168,6 +168,10 @@ class IntendedParentRead(BaseModel):
     budget: Decimal | None
     notes_internal: str | None
     status: str
+    stage_id: UUID | None = None
+    stage_key: str | None = None
+    stage_slug: str | None = None
+    status_label: str | None = None
     owner_type: str | None
     owner_id: UUID | None
     owner_name: str | None = None  # Resolved from user/queue
@@ -217,6 +221,10 @@ class IntendedParentListItem(BaseModel):
     state: str | None
     budget: Decimal | None
     status: str
+    stage_id: UUID | None = None
+    stage_key: str | None = None
+    stage_slug: str | None = None
+    status_label: str | None = None
     owner_type: str | None
     owner_id: UUID | None
     owner_name: str | None = None
@@ -232,6 +240,8 @@ class IntendedParentStatusHistoryItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    old_stage_id: UUID | None = None
+    new_stage_id: UUID | None = None
     old_status: str | None
     new_status: str
     reason: str | None

@@ -28,7 +28,7 @@ from app.db.enums import (
 from app.db.types import EncryptedString, EncryptedText
 
 if TYPE_CHECKING:
-    from app.db.models import Organization
+    from app.db.models import Organization, PipelineStage
 
 
 class IntendedParent(Base):
@@ -41,6 +41,7 @@ class IntendedParent(Base):
     __tablename__ = "intended_parents"
     __table_args__ = (
         Index("idx_ip_org_status", "organization_id", "status"),
+        Index("idx_ip_org_stage", "organization_id", "stage_id"),
         Index("idx_ip_org_created", "organization_id", "created_at"),
         Index("idx_ip_org_updated", "organization_id", "updated_at"),
         Index("idx_ip_org_owner", "organization_id", "owner_type", "owner_id"),
@@ -151,6 +152,11 @@ class IntendedParent(Base):
     notes_internal: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
 
     # Status & workflow
+    stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_stages.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(
         String(50), server_default=text(f"'{DEFAULT_IP_STATUS.value}'"), nullable=False
     )
@@ -179,9 +185,29 @@ class IntendedParent(Base):
 
     # Relationships
     organization: Mapped["Organization"] = relationship()
+    stage: Mapped["PipelineStage | None"] = relationship(foreign_keys=[stage_id])
     status_history: Mapped[list["IntendedParentStatusHistory"]] = relationship(
         back_populates="intended_parent", cascade="all, delete-orphan"
     )
+
+    @property
+    def stage_key(self) -> str | None:
+        if self.stage and self.stage.stage_key:
+            return self.stage.stage_key
+        return self.status
+
+    @property
+    def stage_slug(self) -> str | None:
+        if self.stage:
+            return self.stage.slug
+        return self.status
+
+    @property
+    def status_label(self) -> str:
+        if self.stage:
+            return self.stage.label
+        normalized = (self.status or "").replace("_", " ").strip()
+        return normalized.title() if normalized else "Unknown"
 
 
 class IntendedParentStatusHistory(Base):
@@ -200,6 +226,12 @@ class IntendedParentStatusHistory(Base):
     )
     changed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    old_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
+    )
+    new_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
     )
     old_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     new_status: Mapped[str] = mapped_column(String(50), nullable=False)

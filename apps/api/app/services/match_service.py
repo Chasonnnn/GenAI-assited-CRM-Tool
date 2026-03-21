@@ -6,14 +6,13 @@ from uuid import UUID
 from sqlalchemy import asc, desc, func, and_, or_, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.enums import AuditEventType, MatchStatus, IntendedParentStatus, SurrogateActivityType
+from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
 from app.db.models import (
     Surrogate,
     IntendedParent,
     Match,
     MatchEvent,
     StatusChangeRequest,
-    IntendedParentStatusHistory,
 )
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 from sqlalchemy.exc import IntegrityError
@@ -63,7 +62,7 @@ def get_intended_parent(
     filters = [IntendedParent.id == intended_parent_id]
     if org_id:
         filters.append(IntendedParent.organization_id == org_id)
-    return db.query(IntendedParent).filter(*filters).first()
+    return db.query(IntendedParent).options(joinedload(IntendedParent.stage)).filter(*filters).first()
 
 
 def get_match(
@@ -483,20 +482,24 @@ def accept_match(
     match.updated_at = datetime.now(timezone.utc)
 
     ip = get_intended_parent(db, match.intended_parent_id, org_id)
-    if ip and ip.status != IntendedParentStatus.MATCHED.value:
-        old_status = ip.status
-        ip.status = IntendedParentStatus.MATCHED.value
-        ip.last_activity = datetime.now(timezone.utc)
-        ip.updated_at = datetime.now(timezone.utc)
-        db.add(
-            IntendedParentStatusHistory(
-                intended_parent_id=ip.id,
-                changed_by_user_id=actor_user_id,
-                old_status=old_status,
-                new_status=IntendedParentStatus.MATCHED.value,
-                reason="Match accepted",
-            )
-        )
+    if ip:
+        from app.services import intended_parent_status_service
+
+        current_ip_stage = intended_parent_status_service.get_current_stage(db, ip)
+        if current_ip_stage.stage_key != "matched":
+            ip_pipeline_id = current_ip_stage.pipeline_id
+            matched_ip_stage = pipeline_service.get_stage_by_key(db, ip_pipeline_id, "matched")
+            if matched_ip_stage:
+                intended_parent_status_service.apply_status_change(
+                    db=db,
+                    ip=ip,
+                    old_stage=current_ip_stage,
+                    new_stage=matched_ip_stage,
+                    user_id=actor_user_id,
+                    reason="Match accepted",
+                    effective_at=datetime.now(timezone.utc),
+                    recorded_at=datetime.now(timezone.utc),
+                )
 
     other_matches = list_pending_matches_for_surrogate(
         db=db,

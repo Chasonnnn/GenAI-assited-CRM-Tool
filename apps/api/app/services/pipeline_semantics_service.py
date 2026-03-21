@@ -37,6 +37,7 @@ class PipelineSemanticsStageSnapshot:
 @dataclass(frozen=True)
 class PipelineSemanticsSnapshot:
     pipeline_id: UUID
+    entity_type: str
     version: int
     feature_config: PipelineFeatureConfig
     stages: list[PipelineSemanticsStageSnapshot]
@@ -53,21 +54,29 @@ def get_stage_semantics(stage: PipelineStage | dict[str, Any] | None) -> StageSe
         )
         stage_type = str(stage.get("stage_type") or "intake")
         semantics = stage.get("semantics")
-        return normalize_stage_semantics(stage_key, stage_type, semantics if isinstance(semantics, dict) else None)
+        return normalize_stage_semantics(
+            stage_key,
+            stage_type,
+            semantics if isinstance(semantics, dict) else None,
+            stage.get("entity_type"),
+        )
 
     return normalize_stage_semantics(
         stage.stage_key or stage.slug,
         stage.stage_type,
         stage.semantics if isinstance(stage.semantics, dict) else None,
+        getattr(getattr(stage, "pipeline", None), "entity_type", None),
     )
 
 
 def get_pipeline_feature_config(pipeline: Pipeline | dict[str, Any]) -> PipelineFeatureConfig:
     if isinstance(pipeline, dict):
         payload = pipeline.get("feature_config")
+        entity_type = pipeline.get("entity_type")
     else:
         payload = pipeline.feature_config
-    return normalize_feature_config(payload if isinstance(payload, dict) else None)
+        entity_type = pipeline.entity_type
+    return normalize_feature_config(payload if isinstance(payload, dict) else None, entity_type)
 
 
 def stage_has_capability(
@@ -131,6 +140,7 @@ def get_pipeline_semantics_snapshot(
     ]
     return PipelineSemanticsSnapshot(
         pipeline_id=pipeline.id,
+        entity_type=pipeline.entity_type,
         version=pipeline.current_version,
         feature_config=feature_config,
         stages=stages,
@@ -192,6 +202,7 @@ def serialize_stage_snapshot(stage: PipelineSemanticsStageSnapshot) -> dict[str,
 def serialize_pipeline_semantics_snapshot(snapshot: PipelineSemanticsSnapshot) -> dict[str, Any]:
     return {
         "pipeline_id": snapshot.pipeline_id,
+        "entity_type": snapshot.entity_type,
         "version": snapshot.version,
         "feature_config": snapshot.feature_config.model_dump(mode="json"),
         "stages": [serialize_stage_snapshot(stage) for stage in snapshot.stages],

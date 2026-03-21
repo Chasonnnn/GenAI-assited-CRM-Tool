@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from app.utils.presentation import humanize_identifier
 
+SURROGATE_PIPELINE_ENTITY = "surrogate"
+INTENDED_PARENT_PIPELINE_ENTITY = "intended_parent"
+VALID_PIPELINE_ENTITY_TYPES = {
+    SURROGATE_PIPELINE_ENTITY,
+    INTENDED_PARENT_PIPELINE_ENTITY,
+}
+
 
 # Default stage colors (matching Surrogacy Force conventions)
-DEFAULT_COLORS = {
+SURROGATE_DEFAULT_COLORS = {
     # Stage A: Intake Pipeline (blues/greens)
     "new_unread": "#3B82F6",  # Blue
     "contacted": "#06B6D4",  # Cyan
@@ -31,7 +38,14 @@ DEFAULT_COLORS = {
     "delivered": "#16A34A",  # Green (success)
 }
 
-STAGE_TYPE_MAP = {
+INTENDED_PARENT_DEFAULT_COLORS = {
+    "new": "#3B82F6",
+    "ready_to_match": "#F59E0B",
+    "matched": "#10B981",
+    "delivered": "#14B8A6",
+}
+
+SURROGATE_STAGE_TYPE_MAP = {
     "new_unread": "intake",
     "contacted": "intake",
     "pre_qualified": "intake",
@@ -54,7 +68,14 @@ STAGE_TYPE_MAP = {
     "disqualified": "terminal",
 }
 
-LABEL_OVERRIDES = {
+INTENDED_PARENT_STAGE_TYPE_MAP = {
+    "new": "intake",
+    "ready_to_match": "post_approval",
+    "matched": "post_approval",
+    "delivered": "post_approval",
+}
+
+SURROGATE_LABEL_OVERRIDES = {
     "on_hold": "On-Hold",
     "pre_qualified": "Pre-Qualified",
     "second_hcg_confirmed": "Second hCG confirmed",
@@ -63,34 +84,71 @@ LABEL_OVERRIDES = {
     "ob_care_established": "OB Care Established",
 }
 
+INTENDED_PARENT_LABEL_OVERRIDES = {
+    "ready_to_match": "Ready to Match",
+}
+
+# Backward-compatible aggregate used by integrations/export code paths that only
+# need a friendly label lookup and do not care about pipeline entity scoping.
+LABEL_OVERRIDES = {
+    **SURROGATE_LABEL_OVERRIDES,
+    **INTENDED_PARENT_LABEL_OVERRIDES,
+}
+
 LEGACY_STAGE_KEY_ALIASES = {
     "qualified": "pre_qualified",
 }
 
-REQUIRED_SYSTEM_STAGE_KEYS = {"on_hold"}
+REQUIRED_SYSTEM_STAGE_KEYS_BY_ENTITY = {
+    SURROGATE_PIPELINE_ENTITY: {"on_hold"},
+    INTENDED_PARENT_PIPELINE_ENTITY: set(),
+}
 
-DEFAULT_STAGE_ORDER = [
-    "new_unread",
-    "contacted",
-    "pre_qualified",
-    "application_submitted",
-    "interview_scheduled",
-    "under_review",
-    "approved",
-    "ready_to_match",
-    "matched",
-    "medical_clearance_passed",
-    "legal_clearance_passed",
-    "transfer_cycle",
-    "second_hcg_confirmed",
-    "heartbeat_confirmed",
-    "ob_care_established",
-    "anatomy_scanned",
-    "delivered",
-    "on_hold",
-    "lost",
-    "disqualified",
-]
+DEFAULT_STAGE_ORDER_BY_ENTITY = {
+    SURROGATE_PIPELINE_ENTITY: [
+        "new_unread",
+        "contacted",
+        "pre_qualified",
+        "application_submitted",
+        "interview_scheduled",
+        "under_review",
+        "approved",
+        "ready_to_match",
+        "matched",
+        "medical_clearance_passed",
+        "legal_clearance_passed",
+        "transfer_cycle",
+        "second_hcg_confirmed",
+        "heartbeat_confirmed",
+        "ob_care_established",
+        "anatomy_scanned",
+        "delivered",
+        "on_hold",
+        "lost",
+        "disqualified",
+    ],
+    INTENDED_PARENT_PIPELINE_ENTITY: [
+        "new",
+        "ready_to_match",
+        "matched",
+        "delivered",
+    ],
+}
+
+
+def normalize_pipeline_entity_type(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in VALID_PIPELINE_ENTITY_TYPES:
+        return normalized
+    return SURROGATE_PIPELINE_ENTITY
+
+
+def get_required_semantic_stage_keys(entity_type: str | None = None) -> set[str]:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    return {
+        canonicalize_stage_key(stage_key)
+        for stage_key in DEFAULT_STAGE_ORDER_BY_ENTITY[normalized_entity_type]
+    }
 
 
 def canonicalize_stage_key(value: str | None) -> str:
@@ -99,24 +157,40 @@ def canonicalize_stage_key(value: str | None) -> str:
     return LEGACY_STAGE_KEY_ALIASES.get(normalized, normalized)
 
 
-def is_required_system_stage(stage_key_or_slug: str | None) -> bool:
+def is_required_system_stage(
+    stage_key_or_slug: str | None,
+    entity_type: str | None = None,
+) -> bool:
     """Return whether a stage key/slug is reserved for system workflows."""
-    return canonicalize_stage_key(stage_key_or_slug) in REQUIRED_SYSTEM_STAGE_KEYS
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    required_stage_keys = REQUIRED_SYSTEM_STAGE_KEYS_BY_ENTITY[normalized_entity_type]
+    return canonicalize_stage_key(stage_key_or_slug) in required_stage_keys
 
 
-def get_default_stage_defs() -> list[dict[str, object]]:
+def get_default_stage_defs(entity_type: str | None = None) -> list[dict[str, object]]:
     """Generate default pipeline stage definitions."""
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    stage_order = DEFAULT_STAGE_ORDER_BY_ENTITY[normalized_entity_type]
+    if normalized_entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        colors = INTENDED_PARENT_DEFAULT_COLORS
+        stage_type_map = INTENDED_PARENT_STAGE_TYPE_MAP
+        label_overrides = INTENDED_PARENT_LABEL_OVERRIDES
+    else:
+        colors = SURROGATE_DEFAULT_COLORS
+        stage_type_map = SURROGATE_STAGE_TYPE_MAP
+        label_overrides = SURROGATE_LABEL_OVERRIDES
+
     stages: list[dict[str, object]] = []
-    for order, slug in enumerate(DEFAULT_STAGE_ORDER, start=1):
+    for order, slug in enumerate(stage_order, start=1):
         stage_key = canonicalize_stage_key(slug)
         stages.append(
             {
                 "slug": slug,
                 "stage_key": stage_key,
-                "label": LABEL_OVERRIDES.get(slug, humanize_identifier(slug)),
-                "color": DEFAULT_COLORS.get(slug, "#6B7280"),
+                "label": label_overrides.get(slug, humanize_identifier(slug)),
+                "color": colors.get(slug, "#6B7280"),
                 "order": order,
-                "stage_type": STAGE_TYPE_MAP.get(slug, "intake"),
+                "stage_type": stage_type_map.get(slug, "intake"),
             }
         )
     return stages

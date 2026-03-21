@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -46,7 +47,17 @@ class Pipeline(Base):
     """
 
     __tablename__ = "pipelines"
-    __table_args__ = (Index("idx_pipelines_org", "organization_id"),)
+    __table_args__ = (
+        Index("idx_pipelines_org", "organization_id"),
+        Index("idx_pipelines_org_entity", "organization_id", "entity_type"),
+        Index(
+            "uq_pipelines_default_per_entity",
+            "organization_id",
+            "entity_type",
+            unique=True,
+            postgresql_where=text("is_default = TRUE"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -55,6 +66,12 @@ class Pipeline(Base):
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    entity_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=SURROGATE_PIPELINE_ENTITY,
+        server_default=text(f"'{SURROGATE_PIPELINE_ENTITY}'"),
     )
 
     name: Mapped[str] = mapped_column(String(100), default="Default", nullable=False)

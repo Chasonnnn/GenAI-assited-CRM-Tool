@@ -43,7 +43,7 @@ class StatusChangeRequest(Base):
             "idx_pending_ip_requests",
             "organization_id",
             "entity_id",
-            "target_status",
+            "target_stage_id",
             "effective_at",
             unique=True,
             postgresql_where=text("entity_type = 'intended_parent' AND status = 'pending'"),
@@ -62,10 +62,10 @@ class StatusChangeRequest(Base):
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     target_stage_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
-    )  # For surrogates
+    )  # For surrogates and intended parents
     target_status: Mapped[str | None] = mapped_column(
         String(50), nullable=True
-    )  # For intended parents
+    )  # For fixed-lifecycle entities like matches
     effective_at: Mapped[datetime] = mapped_column(nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
 

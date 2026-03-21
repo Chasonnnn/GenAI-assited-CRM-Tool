@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY, SURROGATE_PIPELINE_ENTITY
 from app.db.models import (
     Campaign,
     CampaignRun,
@@ -59,7 +60,7 @@ def normalize_filter_criteria(
     )
     normalized = FilterCriteria.model_validate(payload).model_dump(mode="json", exclude_none=True)
 
-    if recipient_type != "case":
+    if recipient_type not in {"case", "intended_parent"}:
         return normalized
 
     from app.services import pipeline_service
@@ -79,10 +80,14 @@ def normalize_filter_criteria(
         *[str(value) for value in normalized.get("stage_keys") or []],
         *[str(value) for value in normalized.get("stage_slugs") or []],
     ]
+    pipeline_entity_type = (
+        SURROGATE_PIPELINE_ENTITY if recipient_type == "case" else INTENDED_PARENT_PIPELINE_ENTITY
+    )
     default_pipeline_id = (
         db.query(Pipeline.id)
         .filter(
             Pipeline.organization_id == org_id,
+            Pipeline.entity_type == pipeline_entity_type,
             Pipeline.is_default.is_(True),
         )
         .scalar()
@@ -92,6 +97,7 @@ def normalize_filter_criteria(
         org_id,
         stage_refs,
         pipeline_id=default_pipeline_id,
+        entity_type=pipeline_entity_type,
     )
     for stage_id in resolved_ids:
         if stage_id not in stage_ids:
@@ -115,7 +121,7 @@ def remap_campaign_stage_references(
     campaign: Campaign,
     remap_by_key: dict[str, str | None],
 ) -> None:
-    if campaign.recipient_type != "case":
+    if campaign.recipient_type not in {"case", "intended_parent"}:
         return
 
     from app.services import pipeline_service
@@ -449,8 +455,25 @@ def _build_recipient_query(db: Session, org_id: UUID, recipient_type: str, filte
             IntendedParent.is_archived.is_(False),  # Exclude archived IPs
         )
 
+        if criteria.stage_ids:
+            query = query.filter(IntendedParent.stage_id.in_(criteria.stage_ids))
+
+        stage_refs = []
+        if criteria.stage_keys:
+            stage_refs.extend(criteria.stage_keys)
         if criteria.stage_slugs:
-            query = query.filter(IntendedParent.status.in_(criteria.stage_slugs))
+            stage_refs.extend(criteria.stage_slugs)
+
+        if stage_refs:
+            from app.services import pipeline_service
+
+            resolved_stage_ids = pipeline_service.get_stage_ids_by_keys_or_slugs(
+                db,
+                org_id,
+                stage_refs,
+                entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+            )
+            query = query.filter(IntendedParent.stage_id.in_(resolved_stage_ids))
 
         if criteria.created_after:
             query = query.filter(IntendedParent.created_at >= criteria.created_after)
@@ -519,7 +542,7 @@ def preview_recipients(
     suppressed = {row[0].lower() for row in suppression_rows if row[0]}
 
     stage_labels: dict[UUID, str] = {}
-    if recipient_type == "case":
+    if recipient_type in {"case", "intended_parent"}:
         stage_ids = {entity.stage_id for entity in entities if entity.stage_id}
         if stage_ids:
             stage_rows = (
@@ -552,7 +575,7 @@ def preview_recipients(
                     entity_id=entity.id,
                     email=entity.email,
                     name=entity.full_name,
-                    stage=None,
+                    stage=stage_labels.get(entity.stage_id),
                 )
             )
 

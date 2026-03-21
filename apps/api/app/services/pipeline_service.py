@@ -1,14 +1,21 @@
-"""Pipeline service - manage org-configurable case pipelines."""
+"""Pipeline service - manage org-configurable stage pipelines."""
 
 from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.stage_definitions import canonicalize_stage_key, get_default_stage_defs
+from app.core.stage_definitions import (
+    INTENDED_PARENT_PIPELINE_ENTITY,
+    SURROGATE_PIPELINE_ENTITY,
+    canonicalize_stage_key,
+    get_default_stage_defs,
+    normalize_pipeline_entity_type,
+)
 from app.db.models import (
     AutomationWorkflow,
     Campaign,
+    IntendedParent,
     MetaCrmDatasetSettings,
     OrgIntelligentSuggestionRule,
     Pipeline,
@@ -35,6 +42,10 @@ def _normalize_stage_key(value: str | None) -> str:
     return canonicalize_stage_key(value)
 
 
+def _normalize_pipeline_entity_type(value: str | None) -> str:
+    return normalize_pipeline_entity_type(value)
+
+
 def get_stage_semantic_key(stage: PipelineStage | None) -> str | None:
     """Return the canonical stage key for a stage instance."""
     if not stage:
@@ -56,7 +67,7 @@ def stage_matches_key(stage: PipelineStage | None, stage_key: str | None) -> boo
     return get_stage_semantic_key(stage) == normalized_target
 
 
-def _merge_required_stage_defs(stage_defs: list[dict]) -> list[dict]:
+def _merge_required_stage_defs(stage_defs: list[dict], entity_type: str) -> list[dict]:
     """Ensure required system stages exist in a sensible order."""
     normalized_defs = [dict(stage) for stage in stage_defs]
     existing_keys = {
@@ -64,9 +75,11 @@ def _merge_required_stage_defs(stage_defs: list[dict]) -> list[dict]:
         for stage in normalized_defs
     }
 
-    if "on_hold" not in existing_keys:
+    if entity_type == SURROGATE_PIPELINE_ENTITY and "on_hold" not in existing_keys:
         on_hold_def = next(
-            stage for stage in get_default_stage_defs() if stage["stage_key"] == "on_hold"
+            stage
+            for stage in get_default_stage_defs(entity_type)
+            if stage["stage_key"] == "on_hold"
         )
         insert_at = next(
             (
@@ -116,6 +129,7 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
     """Extract versionable payload from pipeline."""
     return {
         "name": pipeline.name,
+        "entity_type": pipeline.entity_type,
         "is_default": pipeline.is_default,
         "feature_config": pipeline_semantics_service.get_pipeline_feature_config(pipeline).model_dump(
             mode="json"
@@ -178,7 +192,7 @@ def _derive_stage_category(stage: PipelineStage) -> str:
 def _ensure_pipeline_semantics_defaults(db: Session, pipeline: Pipeline) -> bool:
     dirty = False
     if not isinstance(pipeline.feature_config, dict) or not pipeline.feature_config:
-        pipeline.feature_config = default_pipeline_feature_config()
+        pipeline.feature_config = default_pipeline_feature_config(pipeline.entity_type)
         dirty = True
     else:
         normalized_feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
@@ -212,10 +226,16 @@ def _ensure_pipeline_semantics_defaults(db: Session, pipeline: Pipeline) -> bool
     return dirty
 
 
-def _build_default_feature_config_for_stages(stage_defs: list[dict]) -> dict:
+def _build_default_feature_config_for_stages(
+    stage_defs: list[dict],
+    entity_type: str,
+) -> dict:
     """Prune default feature config to the semantic stage keys present in a pipeline."""
     feature_config = pipeline_semantics_service.get_pipeline_feature_config(
-        {"feature_config": default_pipeline_feature_config()}
+        {
+            "entity_type": entity_type,
+            "feature_config": default_pipeline_feature_config(entity_type),
+        }
     )
     active_stage_keys = {
         _normalize_stage_key(stage.get("stage_key") or stage.get("slug"))
@@ -291,6 +311,7 @@ def _validate_pipeline_configuration(db: Session, pipeline: Pipeline) -> None:
     pipeline_change_service.validate_guarded_invariants(
         [_serialize_stage(stage) for stage in active_stages],
         feature_config,
+        pipeline.entity_type,
     )
 
 
@@ -298,6 +319,7 @@ def get_or_create_default_pipeline(
     db: Session,
     org_id: UUID,
     user_id: UUID | None = None,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
 ) -> Pipeline:
     """
     Get the default pipeline for an org, creating if not exists.
@@ -305,10 +327,12 @@ def get_or_create_default_pipeline(
     Called on first access to ensure every org has a pipeline.
     Creates initial version snapshot.
     """
+    normalized_entity_type = _normalize_pipeline_entity_type(entity_type)
     pipeline = (
         db.query(Pipeline)
         .filter(
             Pipeline.organization_id == org_id,
+            Pipeline.entity_type == normalized_entity_type,
             Pipeline.is_default.is_(True),
         )
         .first()
@@ -317,16 +341,17 @@ def get_or_create_default_pipeline(
     if not pipeline:
         pipeline = Pipeline(
             organization_id=org_id,
+            entity_type=normalized_entity_type,
             name="Default",
             is_default=True,
             current_version=1,
-            feature_config=default_pipeline_feature_config(),
+            feature_config=default_pipeline_feature_config(normalized_entity_type),
         )
         db.add(pipeline)
         db.flush()
 
         # Create default stage rows
-        stage_defs = get_default_stage_defs()
+        stage_defs = get_default_stage_defs(normalized_entity_type)
         db.add_all(
             [
                 PipelineStage(
@@ -340,6 +365,7 @@ def get_or_create_default_pipeline(
                     semantics=default_stage_semantics(
                         _normalize_stage_key(stage.get("stage_key") or stage["slug"]),
                         stage["stage_type"],
+                        normalized_entity_type,
                     ),
                     is_intake_stage=stage["stage_type"] == "intake",
                     is_active=True,
@@ -372,7 +398,7 @@ def get_or_create_default_pipeline(
     }
     required_stage_keys = {
         _normalize_stage_key(stage.get("stage_key") or stage["slug"])
-        for stage in get_default_stage_defs()
+        for stage in get_default_stage_defs(pipeline.entity_type)
     }
     if required_stage_keys - existing_stage_keys:
         sync_missing_stages(db, pipeline, user_id)
@@ -385,24 +411,33 @@ def get_or_create_default_pipeline(
     return pipeline
 
 
-def get_pipeline(db: Session, org_id: UUID, pipeline_id: UUID) -> Pipeline | None:
+def get_pipeline(
+    db: Session,
+    org_id: UUID,
+    pipeline_id: UUID,
+    entity_type: str | None = None,
+) -> Pipeline | None:
     """Get pipeline by ID (org-scoped)."""
-    return (
-        db.query(Pipeline)
-        .filter(
-            Pipeline.id == pipeline_id,
-            Pipeline.organization_id == org_id,
-        )
-        .first()
+    query = db.query(Pipeline).filter(
+        Pipeline.id == pipeline_id,
+        Pipeline.organization_id == org_id,
     )
+    if entity_type:
+        query = query.filter(Pipeline.entity_type == _normalize_pipeline_entity_type(entity_type))
+    return query.first()
 
 
-def list_pipelines(db: Session, org_id: UUID) -> list[Pipeline]:
+def list_pipelines(
+    db: Session,
+    org_id: UUID,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
+) -> list[Pipeline]:
     """List all pipelines for an org."""
     return (
         db.query(Pipeline)
         .filter(
             Pipeline.organization_id == org_id,
+            Pipeline.entity_type == _normalize_pipeline_entity_type(entity_type),
         )
         .order_by(Pipeline.is_default.desc(), Pipeline.name)
         .all()
@@ -424,7 +459,7 @@ def sync_missing_stages(
     existing_stage_keys = {s.stage_key for s in active_stages}
 
     # Find missing stage keys
-    default_defs = get_default_stage_defs()
+    default_defs = get_default_stage_defs(pipeline.entity_type)
     missing = [
         d
         for d in default_defs
@@ -454,6 +489,7 @@ def sync_missing_stages(
                 semantics=default_stage_semantics(
                     _normalize_stage_key(item.get("stage_key") or item["slug"]),
                     item["stage_type"],
+                    pipeline.entity_type,
                 ),
                 is_intake_stage=item["stage_type"] == "intake",
                 is_active=True,
@@ -512,7 +548,7 @@ def update_pipeline_feature_config(
 ) -> Pipeline:
     """Update pipeline-level feature configuration with version control."""
     pipeline.feature_config = pipeline_semantics_service.get_pipeline_feature_config(
-        {"feature_config": feature_config}
+        {"entity_type": pipeline.entity_type, "feature_config": feature_config}
     ).model_dump(mode="json")
     _validate_pipeline_configuration(db, pipeline)
     _bump_pipeline_version(db, pipeline, user_id, comment or "Updated pipeline behavior")
@@ -526,6 +562,7 @@ def create_pipeline(
     org_id: UUID,
     user_id: UUID,
     name: str,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
     stages: list[dict] | None = None,
     feature_config: dict | None = None,
 ) -> Pipeline:
@@ -534,13 +571,19 @@ def create_pipeline(
 
     Uses default stages if not provided.
     """
-    stage_defs = _merge_required_stage_defs(stages or get_default_stage_defs())
+    normalized_entity_type = _normalize_pipeline_entity_type(entity_type)
+    stage_defs = _merge_required_stage_defs(
+        stages or get_default_stage_defs(normalized_entity_type),
+        normalized_entity_type,
+    )
     pipeline = Pipeline(
         organization_id=org_id,
+        entity_type=normalized_entity_type,
         name=name,
         is_default=False,
         current_version=1,
-        feature_config=feature_config or _build_default_feature_config_for_stages(stage_defs),
+        feature_config=feature_config
+        or _build_default_feature_config_for_stages(stage_defs, normalized_entity_type),
     )
     db.add(pipeline)
     db.flush()
@@ -557,6 +600,7 @@ def create_pipeline(
                 stage_type=stage.get("category") or stage.get("stage_type", "intake"),
                 semantics=pipeline_semantics_service.get_stage_semantics(
                     {
+                        "entity_type": normalized_entity_type,
                         "stage_key": _normalize_stage_key(stage.get("stage_key") or stage["slug"]),
                         "slug": stage["slug"],
                         "stage_type": stage.get("category") or stage.get("stage_type", "intake"),
@@ -891,13 +935,14 @@ def get_stage_ids_by_keys_or_slugs(
     org_id: UUID,
     refs: list[str],
     pipeline_id: UUID | None = None,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
 ) -> list[UUID]:
     """Resolve a mixed list of stage keys/slugs into stage IDs for an org pipeline."""
     if not refs:
         return []
 
     if pipeline_id is None:
-        pipeline = get_or_create_default_pipeline(db, org_id)
+        pipeline = get_or_create_default_pipeline(db, org_id, entity_type=entity_type)
         pipeline_id = pipeline.id
 
     stage_ids: list[UUID] = []
@@ -948,6 +993,9 @@ def create_stage(
     Slug and category remain editable via update_stage.
     Raises ValueError if slug/stage_key already exists or stage_type is invalid.
     """
+    pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+    pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
+
     normalized_slug = _normalize_slug(slug)
     stage_key = _normalize_stage_key(normalized_slug)
     if not normalized_slug:
@@ -988,6 +1036,7 @@ def create_stage(
         order=order,
         semantics=pipeline_semantics_service.get_stage_semantics(
             {
+                "entity_type": pipeline_entity_type,
                 "stage_key": stage_key,
                 "slug": normalized_slug,
                 "stage_type": stage_type,
@@ -999,7 +1048,6 @@ def create_stage(
     )
     db.add(stage)
     db.flush()
-    pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
     if pipeline:
         pipeline.stages.append(stage)
         _ensure_pipeline_semantics_defaults(db, pipeline)
@@ -1027,6 +1075,9 @@ def update_stage(
     stage_key is immutable. stage_type/category is editable.
     Syncs case status_label when label changes.
     """
+    pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
+    pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
+
     label_changed = False
 
     if slug is not None:
@@ -1057,6 +1108,7 @@ def update_stage(
     if semantics is not None:
         stage.semantics = pipeline_semantics_service.get_stage_semantics(
             {
+                "entity_type": pipeline_entity_type,
                 "stage_key": stage.stage_key,
                 "slug": stage.slug,
                 "stage_type": stage.stage_type,
@@ -1065,7 +1117,6 @@ def update_stage(
         ).model_dump(mode="json")
 
     stage.updated_at = datetime.now(timezone.utc)
-    pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
@@ -1074,7 +1125,7 @@ def update_stage(
     db.refresh(stage)
 
     # Sync case labels if label changed
-    if label_changed:
+    if label_changed and pipeline and pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
         sync_surrogate_labels(db, stage.id, stage.label)
 
     return stage
@@ -1104,24 +1155,36 @@ def delete_stage(
     if target.pipeline_id != stage.pipeline_id:
         raise ValueError("Target stage must be in the same pipeline")
 
-    # Migrate cases
-    migrated = (
-        db.query(Surrogate)
-        .filter(Surrogate.stage_id == stage.id)
-        .update(
-            {
-                Surrogate.stage_id: migrate_to_stage_id,
-                Surrogate.status_label: target.label,
-            }
+    pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
+    migrated = 0
+    if pipeline and pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        migrated = (
+            db.query(IntendedParent)
+            .filter(IntendedParent.stage_id == stage.id)
+            .update(
+                {
+                    IntendedParent.stage_id: migrate_to_stage_id,
+                    IntendedParent.status: target.stage_key,
+                }
+            )
         )
-    )
+    else:
+        migrated = (
+            db.query(Surrogate)
+            .filter(Surrogate.stage_id == stage.id)
+            .update(
+                {
+                    Surrogate.stage_id: migrate_to_stage_id,
+                    Surrogate.status_label: target.label,
+                }
+            )
+        )
 
     # Soft-delete stage
     stage.is_active = False
     stage.deleted_at = datetime.now(timezone.utc)
     stage.updated_at = datetime.now(timezone.utc)
 
-    pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
@@ -1166,7 +1229,7 @@ def reorder_stages(
 
 
 def build_recommended_pipeline_draft(pipeline: Pipeline) -> dict[str, object]:
-    stage_defs = get_default_stage_defs()
+    stage_defs = get_default_stage_defs(pipeline.entity_type)
     stages = []
     for index, stage in enumerate(stage_defs, start=1):
         stage_type = stage.get("stage_type", "intake")
@@ -1183,17 +1246,22 @@ def build_recommended_pipeline_draft(pipeline: Pipeline) -> dict[str, object]:
                 "is_active": True,
                 "semantics": pipeline_semantics_service.get_stage_semantics(
                     {
+                        "entity_type": pipeline.entity_type,
                         "stage_key": stage_key,
                         "slug": stage["slug"],
                         "stage_type": stage_type,
-                        "semantics": default_stage_semantics(stage_key, stage_type),
+                        "semantics": default_stage_semantics(
+                            stage_key,
+                            stage_type,
+                            pipeline.entity_type,
+                        ),
                     }
                 ).model_dump(mode="json"),
             }
         )
     return {
         "name": pipeline.name,
-        "feature_config": default_pipeline_feature_config(),
+        "feature_config": default_pipeline_feature_config(pipeline.entity_type),
         "stages": stages,
     }
 
@@ -1214,6 +1282,7 @@ def build_pipeline_draft_preview(
         pipeline_change_service.normalize_stage_drafts(
             stages,
             existing_stage_by_id=existing_stage_by_id,
+            entity_type=pipeline.entity_type,
         )
     )
     remap_by_key = {
@@ -1224,7 +1293,10 @@ def build_pipeline_draft_preview(
         if normalize_stage_ref(item.get("removed_stage_key"))
     }
     after_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
-        {"feature_config": feature_config or pipeline.feature_config}
+        {
+            "entity_type": pipeline.entity_type,
+            "feature_config": feature_config or pipeline.feature_config,
+        }
     )
     after_feature_config = pipeline_change_service.apply_feature_config_stage_remaps(
         after_feature_config,
@@ -1238,6 +1310,7 @@ def build_pipeline_draft_preview(
         after_stages=normalized_stages,
         before_feature_config=pipeline_semantics_service.get_pipeline_feature_config(pipeline),
         after_feature_config=after_feature_config,
+        entity_type=pipeline.entity_type,
         remaps=remaps,
         normalization_errors=normalization_errors,
         safe_auto_fixes=safe_auto_fixes,
@@ -1263,67 +1336,69 @@ def _apply_external_stage_remaps(
     if not remap_by_key:
         return
 
-    rules = (
-        db.query(OrgIntelligentSuggestionRule)
-        .filter(OrgIntelligentSuggestionRule.organization_id == pipeline.organization_id)
-        .all()
-    )
-    for rule in rules:
-        normalized_rule_key = normalize_stage_ref(rule.stage_slug)
-        if normalized_rule_key in remap_by_key:
-            rule.stage_slug = remap_by_key[normalized_rule_key]
-
-    zapier_settings = (
-        db.query(ZapierWebhookSettings)
-        .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
-        .first()
-    )
-    if zapier_settings and isinstance(zapier_settings.outbound_event_mapping, list):
-        remapped = []
-        for item in zapier_settings.outbound_event_mapping:
-            if not isinstance(item, dict):
-                continue
-            normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
-            if normalized_key in remap_by_key:
-                target_key = remap_by_key[normalized_key]
-                if not target_key:
-                    continue
-                item = {**item, "stage_key": target_key}
-                item.pop("stage_slug", None)
-            remapped.append(item)
-        zapier_settings.outbound_event_mapping = zapier_settings_service.normalize_event_mapping(
-            remapped,
-            db=db,
-            organization_id=pipeline.organization_id,
+    if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
+        rules = (
+            db.query(OrgIntelligentSuggestionRule)
+            .filter(OrgIntelligentSuggestionRule.organization_id == pipeline.organization_id)
+            .all()
         )
+        for rule in rules:
+            normalized_rule_key = normalize_stage_ref(rule.stage_slug)
+            if normalized_rule_key in remap_by_key:
+                rule.stage_slug = remap_by_key[normalized_rule_key]
 
-    meta_settings = (
-        db.query(MetaCrmDatasetSettings)
-        .filter(MetaCrmDatasetSettings.organization_id == pipeline.organization_id)
-        .first()
-    )
-    if meta_settings and isinstance(meta_settings.event_mapping, list):
-        remapped = []
-        for item in meta_settings.event_mapping:
-            if not isinstance(item, dict):
-                continue
-            normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
-            if normalized_key in remap_by_key:
-                target_key = remap_by_key[normalized_key]
-                if not target_key:
-                    continue
-                item = {**item, "stage_key": target_key}
-                item.pop("stage_slug", None)
-            remapped.append(item)
-        meta_settings.event_mapping = meta_crm_dataset_settings_service.normalize_event_mapping(
-            remapped
+        zapier_settings = (
+            db.query(ZapierWebhookSettings)
+            .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
+            .first()
         )
+        if zapier_settings and isinstance(zapier_settings.outbound_event_mapping, list):
+            remapped = []
+            for item in zapier_settings.outbound_event_mapping:
+                if not isinstance(item, dict):
+                    continue
+                normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
+                if normalized_key in remap_by_key:
+                    target_key = remap_by_key[normalized_key]
+                    if not target_key:
+                        continue
+                    item = {**item, "stage_key": target_key}
+                    item.pop("stage_slug", None)
+                remapped.append(item)
+            zapier_settings.outbound_event_mapping = zapier_settings_service.normalize_event_mapping(
+                remapped,
+                db=db,
+                organization_id=pipeline.organization_id,
+            )
+
+        meta_settings = (
+            db.query(MetaCrmDatasetSettings)
+            .filter(MetaCrmDatasetSettings.organization_id == pipeline.organization_id)
+            .first()
+        )
+        if meta_settings and isinstance(meta_settings.event_mapping, list):
+            remapped = []
+            for item in meta_settings.event_mapping:
+                if not isinstance(item, dict):
+                    continue
+                normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
+                if normalized_key in remap_by_key:
+                    target_key = remap_by_key[normalized_key]
+                    if not target_key:
+                        continue
+                    item = {**item, "stage_key": target_key}
+                    item.pop("stage_slug", None)
+                remapped.append(item)
+            meta_settings.event_mapping = meta_crm_dataset_settings_service.normalize_event_mapping(
+                remapped
+            )
 
     campaigns = (
         db.query(Campaign)
         .filter(
             Campaign.organization_id == pipeline.organization_id,
-            Campaign.recipient_type == "case",
+            Campaign.recipient_type
+            == ("case" if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY else "intended_parent"),
             Campaign.status.in_(("draft", "scheduled")),
         )
         .all()
@@ -1375,7 +1450,10 @@ def apply_pipeline_draft(
 
     draft_stages = list(preview["normalized_stages"])
     next_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
-        {"feature_config": preview["normalized_feature_config"]}
+        {
+            "entity_type": pipeline.entity_type,
+            "feature_config": preview["normalized_feature_config"],
+        }
     )
     remap_by_key = {
         normalize_stage_ref(item.get("removed_stage_key")): normalize_stage_ref(
@@ -1443,34 +1521,61 @@ def apply_pipeline_draft(
     for stage in removed_stages:
         target_stage_key = remap_by_key.get(stage.stage_key)
         target_stage = target_stage_by_key.get(target_stage_key) if target_stage_key else None
-        surrogate_count = (
-            db.query(Surrogate)
-            .filter(
-                Surrogate.organization_id == pipeline.organization_id,
-                Surrogate.stage_id == stage.id,
-                Surrogate.is_archived.is_(False),
+        if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+            entity_count = (
+                db.query(IntendedParent)
+                .filter(
+                    IntendedParent.organization_id == pipeline.organization_id,
+                    IntendedParent.stage_id == stage.id,
+                    IntendedParent.is_archived.is_(False),
+                )
+                .count()
             )
-            .count()
-        )
-        if surrogate_count > 0 and target_stage is None:
-            raise ValueError(
-                f"Stage '{stage.label}' still has active surrogates and needs a remap target."
-            )
-        if surrogate_count > 0 and target_stage is not None:
-            (
+        else:
+            entity_count = (
                 db.query(Surrogate)
                 .filter(
                     Surrogate.organization_id == pipeline.organization_id,
                     Surrogate.stage_id == stage.id,
                     Surrogate.is_archived.is_(False),
                 )
-                .update(
-                    {
-                        Surrogate.stage_id: target_stage.id,
-                        Surrogate.status_label: target_stage.label,
-                    }
-                )
+                .count()
             )
+        if entity_count > 0 and target_stage is None:
+            raise ValueError(
+                f"Stage '{stage.label}' still has active records and needs a remap target."
+            )
+        if entity_count > 0 and target_stage is not None:
+            if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+                (
+                    db.query(IntendedParent)
+                    .filter(
+                        IntendedParent.organization_id == pipeline.organization_id,
+                        IntendedParent.stage_id == stage.id,
+                        IntendedParent.is_archived.is_(False),
+                    )
+                    .update(
+                        {
+                            IntendedParent.stage_id: target_stage.id,
+                            IntendedParent.status: target_stage.stage_key,
+                        }
+                    )
+                )
+            else:
+                (
+                    db.query(Surrogate)
+                    .filter(
+                        Surrogate.organization_id == pipeline.organization_id,
+                        Surrogate.stage_id == stage.id,
+                        Surrogate.is_archived.is_(False),
+                    )
+                    .update(
+                        {
+                            Surrogate.stage_id: target_stage.id,
+                            Surrogate.status_label: target_stage.label,
+                        }
+                    )
+                )
 
         stage.is_active = False
         stage.deleted_at = datetime.now(timezone.utc)

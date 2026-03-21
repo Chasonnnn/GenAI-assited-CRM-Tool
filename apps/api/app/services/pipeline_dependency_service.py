@@ -12,6 +12,7 @@ from app.core.stage_definitions import canonicalize_stage_key
 from app.db.models import (
     AutomationWorkflow,
     Campaign,
+    IntendedParent,
     MetaCrmDatasetSettings,
     OrgIntelligentSuggestionRule,
     Pipeline,
@@ -132,16 +133,28 @@ def build_pipeline_dependency_graph(
         if stage.stage_key
     }
 
-    surrogate_counts = dict(
-        db.query(Surrogate.stage_id, func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == pipeline.organization_id,
-            Surrogate.is_archived.is_(False),
-            Surrogate.stage_id.is_not(None),
+    if pipeline.entity_type == "intended_parent":
+        surrogate_counts = dict(
+            db.query(IntendedParent.stage_id, func.count(IntendedParent.id))
+            .filter(
+                IntendedParent.organization_id == pipeline.organization_id,
+                IntendedParent.is_archived.is_(False),
+                IntendedParent.stage_id.is_not(None),
+            )
+            .group_by(IntendedParent.stage_id)
+            .all()
         )
-        .group_by(Surrogate.stage_id)
-        .all()
-    )
+    else:
+        surrogate_counts = dict(
+            db.query(Surrogate.stage_id, func.count(Surrogate.id))
+            .filter(
+                Surrogate.organization_id == pipeline.organization_id,
+                Surrogate.is_archived.is_(False),
+                Surrogate.stage_id.is_not(None),
+            )
+            .group_by(Surrogate.stage_id)
+            .all()
+        )
     for stage in stages:
         if stage.stage_key in stage_map:
             stage_map[stage.stage_key]["surrogate_count"] = int(surrogate_counts.get(stage.id, 0))
@@ -169,49 +182,51 @@ def build_pipeline_dependency_graph(
             if normalized in stage_map:
                 stage_map[normalized]["role_mutation_roles"].append(role)
 
-    rules = (
-        db.query(OrgIntelligentSuggestionRule)
-        .filter(OrgIntelligentSuggestionRule.organization_id == pipeline.organization_id)
-        .all()
-    )
-    for rule in rules:
-        stage = pipeline_service.resolve_stage(db, pipeline.id, rule.stage_slug)
-        normalized = stage.stage_key if stage else _normalize_stage_key(rule.stage_slug)
-        if normalized in stage_map:
-            stage_map[normalized]["intelligent_suggestion_rules"].append(
-                {
-                    "id": str(rule.id),
-                    "name": rule.name,
-                    "enabled": bool(rule.enabled),
-                }
-            )
+    if pipeline.entity_type == "surrogate":
+        rules = (
+            db.query(OrgIntelligentSuggestionRule)
+            .filter(OrgIntelligentSuggestionRule.organization_id == pipeline.organization_id)
+            .all()
+        )
+        for rule in rules:
+            stage = pipeline_service.resolve_stage(db, pipeline.id, rule.stage_slug)
+            normalized = stage.stage_key if stage else _normalize_stage_key(rule.stage_slug)
+            if normalized in stage_map:
+                stage_map[normalized]["intelligent_suggestion_rules"].append(
+                    {
+                        "id": str(rule.id),
+                        "name": rule.name,
+                        "enabled": bool(rule.enabled),
+                    }
+                )
 
     integration_refs: dict[str, set[str]] = defaultdict(set)
-    zapier_settings = (
-        db.query(ZapierWebhookSettings)
-        .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
-        .first()
-    )
-    if zapier_settings and isinstance(zapier_settings.outbound_event_mapping, list):
-        for item in zapier_settings.outbound_event_mapping:
-            if not isinstance(item, dict):
-                continue
-            normalized = _normalize_stage_key(item.get("stage_key") or item.get("stage_slug"))
-            if normalized:
-                integration_refs[normalized].add("zapier_outbound")
+    if pipeline.entity_type == "surrogate":
+        zapier_settings = (
+            db.query(ZapierWebhookSettings)
+            .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
+            .first()
+        )
+        if zapier_settings and isinstance(zapier_settings.outbound_event_mapping, list):
+            for item in zapier_settings.outbound_event_mapping:
+                if not isinstance(item, dict):
+                    continue
+                normalized = _normalize_stage_key(item.get("stage_key") or item.get("stage_slug"))
+                if normalized:
+                    integration_refs[normalized].add("zapier_outbound")
 
-    meta_settings = (
-        db.query(MetaCrmDatasetSettings)
-        .filter(MetaCrmDatasetSettings.organization_id == pipeline.organization_id)
-        .first()
-    )
-    if meta_settings and isinstance(meta_settings.event_mapping, list):
-        for item in meta_settings.event_mapping:
-            if not isinstance(item, dict):
-                continue
-            normalized = _normalize_stage_key(item.get("stage_key") or item.get("stage_slug"))
-            if normalized:
-                integration_refs[normalized].add("meta_crm_dataset")
+        meta_settings = (
+            db.query(MetaCrmDatasetSettings)
+            .filter(MetaCrmDatasetSettings.organization_id == pipeline.organization_id)
+            .first()
+        )
+        if meta_settings and isinstance(meta_settings.event_mapping, list):
+            for item in meta_settings.event_mapping:
+                if not isinstance(item, dict):
+                    continue
+                normalized = _normalize_stage_key(item.get("stage_key") or item.get("stage_slug"))
+                if normalized:
+                    integration_refs[normalized].add("meta_crm_dataset")
 
     for stage_key, refs in integration_refs.items():
         if stage_key in stage_map:
@@ -221,7 +236,8 @@ def build_pipeline_dependency_graph(
         db.query(Campaign)
         .filter(
             Campaign.organization_id == pipeline.organization_id,
-            Campaign.recipient_type == "case",
+            Campaign.recipient_type
+            == ("case" if pipeline.entity_type == "surrogate" else "intended_parent"),
             Campaign.status.in_(("draft", "scheduled")),
         )
         .all()
@@ -269,6 +285,7 @@ def build_pipeline_dependency_graph(
     ]
     return {
         "pipeline_id": pipeline.id,
+        "entity_type": pipeline.entity_type,
         "version": pipeline.current_version,
         "stages": ordered_entries,
     }

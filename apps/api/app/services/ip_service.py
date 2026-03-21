@@ -8,8 +8,9 @@ import logging
 
 from fastapi import Request
 from sqlalchemy import func, or_, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParent, IntendedParentStatusHistory
@@ -59,7 +60,11 @@ def _build_intended_parent_query(
     created_after: str | None = None,
     created_before: str | None = None,
 ):
-    query = db.query(IntendedParent).filter(IntendedParent.organization_id == org_id)
+    query = (
+        db.query(IntendedParent)
+        .options(selectinload(IntendedParent.stage))
+        .filter(IntendedParent.organization_id == org_id)
+    )
 
     # Archive filter
     if not include_archived:
@@ -224,7 +229,14 @@ def list_intended_parents(
         "created_at": IntendedParent.created_at,
     }
 
-    if sort_by and sort_by in sortable_columns:
+    if sort_by == "status":
+        from app.db.models import PipelineStage
+
+        query = query.join(PipelineStage, IntendedParent.stage_id == PipelineStage.id).order_by(
+            order_func(PipelineStage.order),
+            order_func(IntendedParent.created_at),
+        )
+    elif sort_by and sort_by in sortable_columns:
         query = query.order_by(order_func(sortable_columns[sort_by]))
     else:
         query = query.order_by(IntendedParent.created_at.desc())
@@ -349,6 +361,7 @@ def get_intended_parent(db: Session, ip_id: UUID, org_id: UUID) -> IntendedParen
     """Get a single intended parent by ID, scoped to organization."""
     return (
         db.query(IntendedParent)
+        .options(selectinload(IntendedParent.stage))
         .filter(IntendedParent.id == ip_id, IntendedParent.organization_id == org_id)
         .first()
     )
@@ -386,6 +399,8 @@ def create_intended_parent(
     ip_clinic_email: str | None = None,
 ) -> IntendedParent:
     """Create a new intended parent and record initial status."""
+    from app.services import pipeline_service
+
     now = datetime.now(timezone.utc)
     normalized_email = normalize_email(email)
     normalized_phone = normalize_phone(phone) if phone else None
@@ -397,6 +412,15 @@ def create_intended_parent(
     # Hash partner email if provided
     normalized_partner_email = normalize_email(partner_email) if partner_email else None
     partner_email_hash = hash_email(normalized_partner_email) if normalized_partner_email else None
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        org_id,
+        user_id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    default_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
+    if not default_stage:
+        raise RuntimeError("Default intended parent stage 'new' not found")
 
     ip = IntendedParent(
         intended_parent_number=intended_parent_number,
@@ -413,6 +437,8 @@ def create_intended_parent(
         state=state,
         budget=budget,
         notes_internal=notes_internal,
+        stage_id=default_stage.id,
+        status=default_stage.stage_key,
         owner_type=owner_type,
         owner_id=owner_id,
         # New fields
@@ -442,8 +468,10 @@ def create_intended_parent(
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
+        old_stage_id=None,
+        new_stage_id=default_stage.id,
         old_status=None,
-        new_status=ip.status,
+        new_status=default_stage.stage_key,
         reason="Initial creation",
         effective_at=now,
         recorded_at=now,
@@ -572,7 +600,7 @@ def update_intended_parent(
 def change_status(
     db: Session,
     ip: IntendedParent,
-    new_status: str,
+    new_stage,
     user_id: UUID,
     reason: str | None = None,
     effective_at: datetime | None = None,
@@ -589,7 +617,7 @@ def change_status(
     return intended_parent_status_service.change_status(
         db=db,
         ip=ip,
-        new_status=new_status,
+        new_stage=new_stage,
         user_id=user_id,
         reason=reason,
         effective_at=effective_at,
@@ -616,19 +644,22 @@ def archive_intended_parent(
     ip: IntendedParent,
     user_id: UUID,
 ) -> IntendedParent:
-    """Soft delete (archive) an intended parent. Sets status to 'archived'."""
+    """Soft delete (archive) an intended parent without mutating its live pipeline stage."""
+    from app.services import intended_parent_status_service
+
     now = datetime.now(timezone.utc)
-    old_status = ip.status
+    current_stage = intended_parent_status_service.get_current_stage(db, ip)
     ip.is_archived = True
     ip.archived_at = now
-    ip.status = IntendedParentStatus.ARCHIVED.value  # Actually change the status
     ip.last_activity = now
 
     # Record in history
     history = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
-        old_status=old_status,
+        old_stage_id=current_stage.id,
+        new_stage_id=current_stage.id,
+        old_status=current_stage.stage_key,
         new_status=IntendedParentStatus.ARCHIVED.value,
         reason="Archived",
         effective_at=now,
@@ -645,34 +676,23 @@ def restore_intended_parent(
     ip: IntendedParent,
     user_id: UUID,
 ) -> IntendedParent:
-    """Restore an archived intended parent. Restores to previous status before archive."""
-    now = datetime.now(timezone.utc)
-    # Get the status before archiving from history
-    history = (
-        db.query(IntendedParentStatusHistory)
-        .filter(
-            IntendedParentStatusHistory.intended_parent_id == ip.id,
-            IntendedParentStatusHistory.new_status == IntendedParentStatus.ARCHIVED.value,
-        )
-        .order_by(IntendedParentStatusHistory.changed_at.desc())
-        .first()
-    )
+    """Restore an archived intended parent without changing its live pipeline stage."""
+    from app.services import intended_parent_status_service
 
-    # Restore to previous status, or default to 'new' if not found
-    previous_status = (
-        history.old_status if history and history.old_status else IntendedParentStatus.NEW.value
-    )
+    now = datetime.now(timezone.utc)
+    current_stage = intended_parent_status_service.get_current_stage(db, ip)
 
     ip.is_archived = False
     ip.archived_at = None
-    ip.status = previous_status
     ip.last_activity = now
 
     history_entry = IntendedParentStatusHistory(
         intended_parent_id=ip.id,
         changed_by_user_id=user_id,
+        old_stage_id=current_stage.id,
+        new_stage_id=current_stage.id,
         old_status=IntendedParentStatus.ARCHIVED.value,
-        new_status=previous_status,
+        new_status=current_stage.stage_key,
         reason="Restored from archive",
         effective_at=now,
         recorded_at=now,

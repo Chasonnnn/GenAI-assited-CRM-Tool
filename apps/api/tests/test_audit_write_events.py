@@ -20,7 +20,7 @@ from app.db.models import (
     WorkflowExecution,
 )
 from app.main import app
-from app.services import session_service
+from app.services import pipeline_service, session_service
 
 
 def _latest_event(
@@ -446,10 +446,17 @@ async def test_intended_parent_write_routes_emit_semantic_audit_events(
         target_id=ip_id,
         actor_user_id=test_auth.user.id,
     )
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_auth.org.id,
+        entity_type="intended_parent",
+    )
+    ready_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "ready_to_match")
+    assert ready_stage is not None
 
     status_response = await authed_client.patch(
         f"/intended-parents/{ip_id}/status",
-        json={"status": "ready_to_match", "reason": "ready"},
+        json={"stage_id": str(ready_stage.id), "reason": "ready"},
     )
     assert status_response.status_code == 200, status_response.text
     assert _latest_event(

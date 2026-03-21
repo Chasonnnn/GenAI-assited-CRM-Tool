@@ -257,10 +257,23 @@ def test_campaign_service_update_rejects_past_scheduled_at(db, test_org, test_us
 def test_campaign_preview_filters_intended_parent_status(db, test_org):
     from app.db.enums import IntendedParentStatus
     from app.db.models import IntendedParent
-    from app.services import campaign_service
+    from app.services import campaign_service, pipeline_service
 
     email_new = normalize_email("ip.new@example.com")
     email_matched = normalize_email("ip.matched@example.com")
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        entity_type="intended_parent",
+    )
+    new_stage = pipeline_service.get_stage_by_key(db, pipeline.id, IntendedParentStatus.NEW.value)
+    matched_stage = pipeline_service.get_stage_by_key(
+        db,
+        pipeline.id,
+        IntendedParentStatus.MATCHED.value,
+    )
+    assert new_stage is not None
+    assert matched_stage is not None
 
     ip_new = IntendedParent(
         id=uuid4(),
@@ -269,6 +282,7 @@ def test_campaign_preview_filters_intended_parent_status(db, test_org):
         full_name="IP New",
         email=email_new,
         email_hash=hash_email(email_new),
+        stage_id=new_stage.id,
         status=IntendedParentStatus.NEW.value,
     )
     ip_matched = IntendedParent(
@@ -278,6 +292,7 @@ def test_campaign_preview_filters_intended_parent_status(db, test_org):
         full_name="IP Matched",
         email=email_matched,
         email_hash=hash_email(email_matched),
+        stage_id=matched_stage.id,
         status=IntendedParentStatus.MATCHED.value,
     )
     db.add_all([ip_new, ip_matched])

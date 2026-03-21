@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from app.core.encryption import hash_email
 from app.db.models import Surrogate, IntendedParent, Match
+from app.services import pipeline_service
 from app.utils.normalization import normalize_email
 
 
@@ -36,6 +37,13 @@ def _create_case(db, org_id, user_id, stage):
 def _create_intended_parent(db, org_id):
     email = f"ip-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        org_id,
+        entity_type="intended_parent",
+    )
+    stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
+    assert stage is not None
     ip = IntendedParent(
         id=uuid.uuid4(),
         organization_id=org_id,
@@ -43,6 +51,8 @@ def _create_intended_parent(db, org_id):
         full_name="Test IP",
         email=normalized_email,
         email_hash=hash_email(normalized_email),
+        stage_id=stage.id,
+        status=stage.stage_key,
     )
     db.add(ip)
     db.flush()

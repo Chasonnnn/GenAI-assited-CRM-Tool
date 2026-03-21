@@ -6,8 +6,7 @@ import pytest
 
 from app.db.enums import IntendedParentStatus
 from app.db.models import IntendedParentStatusHistory, StatusChangeRequest
-from app.services import ip_service
-from app.services import intended_parent_status_service
+from app.services import intended_parent_status_service, ip_service, pipeline_service
 
 
 def _create_ip(db, org_id, user_id):
@@ -20,6 +19,17 @@ def _create_ip(db, org_id, user_id):
     )
 
 
+def _get_ip_stage(db, org_id, stage_key: str):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        org_id,
+        entity_type="intended_parent",
+    )
+    stage = pipeline_service.get_stage_by_key(db, pipeline.id, stage_key)
+    assert stage is not None
+    return stage
+
+
 def test_ip_status_backdate_requires_reason(db, test_org, test_user):
     ip = _create_ip(db, test_org.id, test_user.id)
     ip.created_at = datetime.now(timezone.utc) - timedelta(days=7)
@@ -28,12 +38,13 @@ def test_ip_status_backdate_requires_reason(db, test_org, test_user):
     org_now = datetime.now(ZoneInfo("America/Los_Angeles"))
     yesterday = org_now.date() - timedelta(days=1)
     effective_at = datetime.combine(yesterday, time(0, 0))
+    ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
 
     with pytest.raises(ValueError, match="Reason required"):
         intended_parent_status_service.change_status(
             db=db,
             ip=ip,
-            new_status=IntendedParentStatus.READY_TO_MATCH.value,
+            new_stage=ready_stage,
             user_id=test_user.id,
             effective_at=effective_at,
         )
@@ -41,11 +52,13 @@ def test_ip_status_backdate_requires_reason(db, test_org, test_user):
 
 def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
     ip = _create_ip(db, test_org.id, test_user.id)
+    ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
+    new_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.NEW.value)
 
     applied = intended_parent_status_service.change_status(
         db=db,
         ip=ip,
-        new_status=IntendedParentStatus.READY_TO_MATCH.value,
+        new_stage=ready_stage,
         user_id=test_user.id,
     )
     assert applied["status"] == "applied"
@@ -63,7 +76,7 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
     regression = intended_parent_status_service.change_status(
         db=db,
         ip=ip,
-        new_status=IntendedParentStatus.NEW.value,
+        new_stage=new_stage,
         user_id=test_user.id,
         reason="Requested correction",
     )
@@ -82,16 +95,18 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
     )
     assert request is not None
     assert request.status == "pending"
-    assert request.target_status == IntendedParentStatus.NEW.value
+    assert request.target_stage_id == new_stage.id
 
 
 def test_ip_status_undo_within_grace_period_applies(db, test_org, test_user):
     ip = _create_ip(db, test_org.id, test_user.id)
+    ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
+    new_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.NEW.value)
 
     applied = intended_parent_status_service.change_status(
         db=db,
         ip=ip,
-        new_status=IntendedParentStatus.READY_TO_MATCH.value,
+        new_stage=ready_stage,
         user_id=test_user.id,
     )
     assert applied["status"] == "applied"
@@ -99,7 +114,7 @@ def test_ip_status_undo_within_grace_period_applies(db, test_org, test_user):
     undo = intended_parent_status_service.change_status(
         db=db,
         ip=ip,
-        new_status=IntendedParentStatus.NEW.value,
+        new_stage=new_stage,
         user_id=test_user.id,
         reason="Undoing mistake",
     )

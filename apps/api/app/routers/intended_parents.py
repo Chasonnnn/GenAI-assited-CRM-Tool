@@ -16,7 +16,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
-from app.db.enums import AuditEventType, IntendedParentStatus, EntityType, Role
+from app.db.enums import AuditEventType, EntityType, Role
 from app.schemas.auth import UserSession
 from app.schemas.intended_parent import (
     IntendedParentCreate,
@@ -332,15 +332,22 @@ def update_status(
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
     # Validate status
-    valid_statuses = [
-        s.value
-        for s in IntendedParentStatus
-        if s not in (IntendedParentStatus.ARCHIVED, IntendedParentStatus.RESTORED)
-    ]
-    if data.status not in valid_statuses:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}"
-        )
+    from app.services import pipeline_service
+
+    try:
+        target_stage = pipeline_service.get_stage_by_id(db, data.stage_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not target_stage:
+        raise HTTPException(status_code=400, detail="Target stage not found")
+    default_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+        session.user_id,
+        entity_type="intended_parent",
+    )
+    if target_stage.pipeline_id != default_pipeline.id or not target_stage.is_active:
+        raise HTTPException(status_code=400, detail="Target stage not found")
 
     if ip.is_archived:
         raise HTTPException(
@@ -348,7 +355,7 @@ def update_status(
         )
 
     # Disallow setting Matched directly unless there is an accepted Match row
-    if data.status == IntendedParentStatus.MATCHED.value:
+    if pipeline_service.stage_matches_key(target_stage, "matched"):
         from app.services import match_service
 
         accepted = match_service.get_accepted_match_for_intended_parent(
@@ -367,7 +374,7 @@ def update_status(
         result = ip_service.change_status(
             db=db,
             ip=ip,
-            new_status=data.status,
+            new_stage=target_stage,
             user_id=session.user_id,
             reason=data.reason,
             effective_at=data.effective_at,
@@ -384,7 +391,8 @@ def update_status(
         target_id=ip.id,
         details={
             "from_status": previous_status,
-            "requested_status": data.status,
+            "requested_stage_id": str(target_stage.id),
+            "requested_stage_key": target_stage.stage_key,
             "result": result["status"],
             "request_id": str(result.get("request_id")) if result.get("request_id") else None,
         },
@@ -550,6 +558,8 @@ def get_status_history(
         result.append(
             IntendedParentStatusHistoryItem(
                 id=h.id,
+                old_stage_id=h.old_stage_id,
+                new_stage_id=h.new_stage_id,
                 old_status=h.old_status,
                 new_status=h.new_status,
                 reason=h.reason,
