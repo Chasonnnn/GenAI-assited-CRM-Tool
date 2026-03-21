@@ -194,9 +194,7 @@ def change_status(
             db.commit()
         except IntegrityError:
             db.rollback()
-            raise ValueError(
-                "A pending regression request already exists for this stage and date."
-            )
+            raise ValueError("A pending regression request already exists for this stage and date.")
         db.refresh(request)
 
         from app.services import notification_facade

@@ -140,9 +140,13 @@ def normalize_stage_drafts(
                 )
             stage_key = existing_stage_key or stage_key
 
-        category = normalize_stage_category(raw_stage.get("category") or raw_stage.get("stage_type"))
+        category = normalize_stage_category(
+            raw_stage.get("category") or raw_stage.get("stage_type")
+        )
         if category not in VALID_STAGE_CATEGORIES:
-            errors.append(f"Invalid stage category '{category}' for stage '{raw_slug or stage_key or index}'.")
+            errors.append(
+                f"Invalid stage category '{category}' for stage '{raw_slug or stage_key or index}'."
+            )
 
         if not raw_slug:
             errors.append(f"Stage {index} is missing a slug.")
@@ -245,7 +249,11 @@ def validate_guarded_invariants(
                 + ", ".join(missing_required_keys)
             )
     for milestone in feature_config.journey.milestones:
-        missing_keys = [stage_key for stage_key in milestone.mapped_stage_keys if stage_key not in active_stage_keys]
+        missing_keys = [
+            stage_key
+            for stage_key in milestone.mapped_stage_keys
+            if stage_key not in active_stage_keys
+        ]
         if missing_keys:
             raise ValueError(
                 f"Journey milestone '{milestone.slug}' references missing stages: {', '.join(missing_keys)}"
@@ -381,7 +389,9 @@ def build_pipeline_change_preview(
     removed_stage_keys = sorted(before_stage_keys - after_stage_keys)
 
     dependency_by_key = {
-        stage["stage_key"]: stage for stage in dependency_graph.get("stages", []) if stage.get("stage_key")
+        stage["stage_key"]: stage
+        for stage in dependency_graph.get("stages", [])
+        if stage.get("stage_key")
     }
     required_remaps: list[dict[str, Any]] = []
     blocking_issues: list[str] = []

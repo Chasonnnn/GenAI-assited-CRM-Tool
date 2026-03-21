@@ -131,9 +131,9 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
         "name": pipeline.name,
         "entity_type": pipeline.entity_type,
         "is_default": pipeline.is_default,
-        "feature_config": pipeline_semantics_service.get_pipeline_feature_config(pipeline).model_dump(
-            mode="json"
-        ),
+        "feature_config": pipeline_semantics_service.get_pipeline_feature_config(
+            pipeline
+        ).model_dump(mode="json"),
         "stages": [
             {
                 "stage_key": stage.stage_key,
@@ -265,7 +265,10 @@ def _build_default_feature_config_for_stages(
         for stage_key in feature_config.analytics.performance_stage_keys
         if _normalize_stage_key(stage_key) in active_stage_keys
     ]
-    if _normalize_stage_key(feature_config.analytics.qualification_stage_key) not in active_stage_keys:
+    if (
+        _normalize_stage_key(feature_config.analytics.qualification_stage_key)
+        not in active_stage_keys
+    ):
         feature_config.analytics.qualification_stage_key = (
             feature_config.analytics.performance_stage_keys[0]
             if feature_config.analytics.performance_stage_keys
@@ -1357,7 +1360,9 @@ def _apply_external_stage_remaps(
             for item in zapier_settings.outbound_event_mapping:
                 if not isinstance(item, dict):
                     continue
-                normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
+                normalized_key = normalize_stage_ref(
+                    item.get("stage_key") or item.get("stage_slug")
+                )
                 if normalized_key in remap_by_key:
                     target_key = remap_by_key[normalized_key]
                     if not target_key:
@@ -1365,10 +1370,12 @@ def _apply_external_stage_remaps(
                     item = {**item, "stage_key": target_key}
                     item.pop("stage_slug", None)
                 remapped.append(item)
-            zapier_settings.outbound_event_mapping = zapier_settings_service.normalize_event_mapping(
-                remapped,
-                db=db,
-                organization_id=pipeline.organization_id,
+            zapier_settings.outbound_event_mapping = (
+                zapier_settings_service.normalize_event_mapping(
+                    remapped,
+                    db=db,
+                    organization_id=pipeline.organization_id,
+                )
             )
 
         meta_settings = (
@@ -1381,7 +1388,9 @@ def _apply_external_stage_remaps(
             for item in meta_settings.event_mapping:
                 if not isinstance(item, dict):
                     continue
-                normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
+                normalized_key = normalize_stage_ref(
+                    item.get("stage_key") or item.get("stage_slug")
+                )
                 if normalized_key in remap_by_key:
                     target_key = remap_by_key[normalized_key]
                     if not target_key:

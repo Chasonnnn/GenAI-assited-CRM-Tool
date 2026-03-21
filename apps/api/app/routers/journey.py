@@ -15,7 +15,12 @@ from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import Role
 from app.schemas.auth import UserSession
-from app.services import journey_service, pipeline_semantics_service, pipeline_service, surrogate_service
+from app.services import (
+    journey_service,
+    pipeline_semantics_service,
+    pipeline_service,
+    surrogate_service,
+)
 
 csrf_header_dependency = require_csrf_header
 

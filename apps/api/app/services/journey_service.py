@@ -395,8 +395,12 @@ def get_journey(
     milestones, phases_defs, milestone_by_slug, milestone_index_by_slug, stage_to_milestone = (
         _build_journey_definitions(feature_config)
     )
-    pipeline_stages: dict[str, int] = {stage.stage_key: stage.order for stage in pipeline_snapshot.stages}
-    stage_id_to_key: dict[UUID, str] = {stage.id: stage.stage_key for stage in pipeline_snapshot.stages}
+    pipeline_stages: dict[str, int] = {
+        stage.stage_key: stage.order for stage in pipeline_snapshot.stages
+    }
+    stage_id_to_key: dict[UUID, str] = {
+        stage.id: stage.stage_key for stage in pipeline_snapshot.stages
+    }
     terminal_stage_keys = {
         stage.stage_key
         for stage in pipeline_snapshot.stages

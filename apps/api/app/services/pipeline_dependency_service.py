@@ -66,21 +66,27 @@ def _workflow_values_reference_stage(stage: PipelineStage, value: Any) -> bool:
 def _workflow_reference_paths(workflow: AutomationWorkflow, stage: PipelineStage) -> list[str]:
     refs: set[str] = set()
     trigger_config = workflow.trigger_config if isinstance(workflow.trigger_config, dict) else {}
-    if _stage_ref_matches(stage, trigger_config.get("from_stage_id")) or _stage_ref_matches(
-        stage, trigger_config.get("from_stage_key")
-    ) or _stage_ref_matches(stage, trigger_config.get("from_status")):
+    if (
+        _stage_ref_matches(stage, trigger_config.get("from_stage_id"))
+        or _stage_ref_matches(stage, trigger_config.get("from_stage_key"))
+        or _stage_ref_matches(stage, trigger_config.get("from_status"))
+    ):
         refs.add("trigger.from_stage")
-    if _stage_ref_matches(stage, trigger_config.get("to_stage_id")) or _stage_ref_matches(
-        stage, trigger_config.get("to_stage_key")
-    ) or _stage_ref_matches(stage, trigger_config.get("to_status")):
+    if (
+        _stage_ref_matches(stage, trigger_config.get("to_stage_id"))
+        or _stage_ref_matches(stage, trigger_config.get("to_stage_key"))
+        or _stage_ref_matches(stage, trigger_config.get("to_status"))
+    ):
         refs.add("trigger.to_stage")
 
     for condition in workflow.conditions or []:
         if not isinstance(condition, dict) or condition.get("field") != "stage_id":
             continue
-        if _workflow_values_reference_stage(stage, condition.get("value")) or _workflow_values_reference_stage(
-            stage, condition.get("stage_key")
-        ) or _workflow_values_reference_stage(stage, condition.get("stage_keys")):
+        if (
+            _workflow_values_reference_stage(stage, condition.get("value"))
+            or _workflow_values_reference_stage(stage, condition.get("stage_key"))
+            or _workflow_values_reference_stage(stage, condition.get("stage_keys"))
+        ):
             refs.add("condition.stage_id")
 
     for action in workflow.actions or []:
@@ -128,9 +134,7 @@ def build_pipeline_dependency_graph(
     feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
     stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
     stage_map = {
-        stage.stage_key: _empty_dependency_entry(stage)
-        for stage in stages
-        if stage.stage_key
+        stage.stage_key: _empty_dependency_entry(stage) for stage in stages if stage.stage_key
     }
 
     if pipeline.entity_type == "intended_parent":

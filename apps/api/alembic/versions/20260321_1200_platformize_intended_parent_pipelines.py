@@ -408,9 +408,7 @@ def upgrade() -> None:
         "status_change_requests",
         ["organization_id", "entity_id", "target_stage_id", "effective_at"],
         unique=True,
-        postgresql_where=sa.text(
-            "entity_type = 'intended_parent' AND status = 'pending'"
-        ),
+        postgresql_where=sa.text("entity_type = 'intended_parent' AND status = 'pending'"),
     )
 
 
@@ -439,9 +437,7 @@ def downgrade() -> None:
         "status_change_requests",
         ["organization_id", "entity_id", "target_status", "effective_at"],
         unique=True,
-        postgresql_where=sa.text(
-            "entity_type = 'intended_parent' AND status = 'pending'"
-        ),
+        postgresql_where=sa.text("entity_type = 'intended_parent' AND status = 'pending'"),
     )
 
     conn.execute(

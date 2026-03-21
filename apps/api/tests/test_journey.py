@@ -228,7 +228,12 @@ async def test_journey_uses_pipeline_feature_config_for_milestone_membership(
     feature_config = dict(pipeline.feature_config)
     milestones = [dict(milestone) for milestone in feature_config["journey"]["milestones"]]
     milestones[0]["mapped_stage_keys"] = ["contacted"]
-    milestones[1]["mapped_stage_keys"] = ["new_unread", "under_review", "interview_scheduled", "approved"]
+    milestones[1]["mapped_stage_keys"] = [
+        "new_unread",
+        "under_review",
+        "interview_scheduled",
+        "approved",
+    ]
     feature_config["journey"] = {
         **feature_config["journey"],
         "milestones": milestones,

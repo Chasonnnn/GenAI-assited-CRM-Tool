@@ -621,7 +621,9 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
             ready_stage = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "ready_to_match")
             matched_stage = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "matched")
             current_stage = pipeline_service.get_stage_by_id(db, intended_parent.stage_id)
-            if not current_stage or not pipeline_service.stage_matches_key(current_stage, "matched"):
+            if not current_stage or not pipeline_service.stage_matches_key(
+                current_stage, "matched"
+            ):
                 current_stage = matched_stage or current_stage
             if not ready_stage or not current_stage:
                 click.echo(

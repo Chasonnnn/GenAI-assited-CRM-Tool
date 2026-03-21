@@ -36,7 +36,9 @@ from app.db.enums import WorkflowTriggerType
 from app.utils.normalization import normalize_email
 
 
-def _create_surrogate_for_stage(db, *, org_id: UUID, user_id: UUID, stage: PipelineStage) -> Surrogate:
+def _create_surrogate_for_stage(
+    db, *, org_id: UUID, user_id: UUID, stage: PipelineStage
+) -> Surrogate:
     email = f"pipeline-stage-{uuid.uuid4().hex[:8]}@example.com"
     normalized_email = normalize_email(email)
     surrogate = Surrogate(
@@ -108,12 +110,8 @@ async def test_recommended_pipeline_draft_matches_platform_default_stage_order(
     data = response.json()
     expected_defs = get_default_stage_defs()
 
-    assert [
-        (stage["stage_key"], stage["label"], stage["order"])
-        for stage in data["stages"]
-    ] == [
-        (stage["stage_key"], stage["label"], stage["order"])
-        for stage in expected_defs
+    assert [(stage["stage_key"], stage["label"], stage["order"]) for stage in data["stages"]] == [
+        (stage["stage_key"], stage["label"], stage["order"]) for stage in expected_defs
     ]
 
 
@@ -427,7 +425,9 @@ async def test_update_stage_accepts_category_alias(authed_client: AsyncClient):
     assert default_response.status_code == 200, default_response.text
     pipeline = default_response.json()
 
-    contacted_stage = next(stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted")
+    contacted_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted"
+    )
 
     response = await authed_client.put(
         f"/settings/pipelines/{pipeline['id']}/stages/{contacted_stage['id']}",
@@ -647,8 +647,7 @@ async def test_apply_pipeline_draft_adds_stage_reclassifies_stage_and_deletes_wi
     for rules_key in ("role_visibility", "role_mutation"):
         for rule in feature_config[rules_key].values():
             rule["stage_keys"] = [
-                "matching_review" if key == "ready_to_match" else key
-                for key in rule["stage_keys"]
+                "matching_review" if key == "ready_to_match" else key for key in rule["stage_keys"]
             ]
 
     draft_stages = []
@@ -715,12 +714,17 @@ async def test_apply_pipeline_draft_adds_stage_reclassifies_stage_and_deletes_wi
     assert any(stage["stage_key"] == "matching_review" for stage in payload["stages"])
     contacted = next(stage for stage in payload["stages"] if stage["stage_key"] == "contacted")
     assert contacted["category"] == "post_approval"
-    assert all(stage["stage_key"] != "ready_to_match" or not stage["is_active"] for stage in payload["stages"])
+    assert all(
+        stage["stage_key"] != "ready_to_match" or not stage["is_active"]
+        for stage in payload["stages"]
+    )
 
     db.refresh(surrogate)
     db.refresh(campaign)
     db.refresh(workflow)
-    matching_review_stage = pipeline_service.get_stage_by_key(db, UUID(payload["id"]), "matching_review")
+    matching_review_stage = pipeline_service.get_stage_by_key(
+        db, UUID(payload["id"]), "matching_review"
+    )
     assert matching_review_stage is not None
     assert surrogate.stage_id == matching_review_stage.id
     assert surrogate.status_label == matching_review_stage.label
