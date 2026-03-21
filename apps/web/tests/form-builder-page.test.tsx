@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
@@ -68,18 +68,24 @@ describe("FormBuilderPage", () => {
         mockPush.mockReset()
     })
 
-    it("uses design-system tab controls for workspace and settings sections", () => {
+    it("uses design-system tab controls for workspace sections and a dedicated settings tab", () => {
         render(<FormBuilderPage />)
 
         expect(
             screen.getByRole("tablist", { name: /workspace sections/i }),
         ).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: /^builder$/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^settings$/i })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: /^submissions$/i })).toBeInTheDocument()
         expect(
-            screen.getByRole("tablist", { name: /builder settings/i }),
-        ).toBeInTheDocument()
-        expect(screen.getByRole("tab", { name: /form settings/i })).toBeInTheDocument()
+            screen.queryByRole("tablist", { name: /builder settings/i }),
+        ).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
+
+        expect(screen.getByText("Form Settings")).toBeInTheDocument()
+        expect(screen.getByLabelText("Form Name")).toBeInTheDocument()
+        expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
     })
 
     it("stacks the builder workspace into responsive regions", () => {
@@ -103,5 +109,24 @@ describe("FormBuilderPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Add Repeating Table field" }))
         expect(await screen.findByRole("button", { name: "Remove column Column 1" })).toBeInTheDocument()
+    })
+
+    it("groups preset surrogate questions and shows answer previews on field cards", async () => {
+        render(<FormBuilderPage />)
+
+        expect(screen.getByText("Contacts")).toBeInTheDocument()
+        expect(screen.getByText("Demographics")).toBeInTheDocument()
+        expect(screen.getByText("Eligibility")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Date of Birth field" }))
+
+        const fullNamePreview = await screen.findByLabelText("Preview answer for Full Name")
+        expect(within(fullNamePreview).getByPlaceholderText("Enter full name")).toBeInTheDocument()
+
+        const dobPreview = screen.getByLabelText("Preview answer for Date of Birth")
+        expect(within(dobPreview).getByText("Month")).toBeInTheDocument()
+        expect(within(dobPreview).getByText("Day")).toBeInTheDocument()
+        expect(within(dobPreview).getByText("Year")).toBeInTheDocument()
     })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page.client"
 
@@ -168,13 +168,21 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getAllByDisplayValue("Name").length).toBeGreaterThan(0)
     })
 
-    it("uses design-system tab controls for page navigation and settings", async () => {
+    it("uses design-system tab controls for workspace navigation and a dedicated settings tab", async () => {
         render(<PlatformFormTemplatePage />)
 
+        expect(await screen.findByRole("tablist", { name: /workspace sections/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^builder$/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^settings$/i })).toBeInTheDocument()
         expect(await screen.findByRole("tablist", { name: /form pages/i })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: /page 1/i })).toBeInTheDocument()
-        expect(screen.getByRole("tablist", { name: /builder settings/i })).toBeInTheDocument()
-        expect(screen.getByRole("tab", { name: /form settings/i })).toBeInTheDocument()
+        expect(screen.queryByRole("tablist", { name: /builder settings/i })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
+
+        expect(screen.getByText("Form Settings")).toBeInTheDocument()
+        expect(screen.getByLabelText("Form Name")).toBeInTheDocument()
+        expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
     })
 
     it("uses responsive builder regions instead of fixed desktop-only panes", async () => {
@@ -198,6 +206,25 @@ describe("PlatformFormTemplatePage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Add Repeating Table field" }))
         expect(await screen.findByRole("button", { name: "Remove column Column 1" })).toBeInTheDocument()
+    })
+
+    it("groups preset surrogate questions and shows answer previews on template field cards", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        expect(screen.getByText("Contacts")).toBeInTheDocument()
+        expect(screen.getByText("Demographics")).toBeInTheDocument()
+        expect(screen.getByText("Eligibility")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Date of Birth field" }))
+
+        const fullNamePreview = await screen.findByLabelText("Preview answer for Full Name")
+        expect(within(fullNamePreview).getByPlaceholderText("Enter full name")).toBeInTheDocument()
+
+        const dobPreview = screen.getByLabelText("Preview answer for Date of Birth")
+        expect(within(dobPreview).getByText("Month")).toBeInTheDocument()
+        expect(within(dobPreview).getByText("Day")).toBeInTheDocument()
+        expect(within(dobPreview).getByText("Year")).toBeInTheDocument()
     })
 
 })

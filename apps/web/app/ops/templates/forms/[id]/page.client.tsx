@@ -26,14 +26,6 @@ import {
     ArrowLeftIcon,
     EyeIcon,
     GripVerticalIcon,
-    MailIcon,
-    PhoneIcon,
-    CalendarIcon,
-    HashIcon,
-    ListIcon,
-    CheckSquareIcon,
-    FileIcon,
-    HomeIcon,
     TypeIcon,
     PlusIcon,
     XIcon,
@@ -43,6 +35,7 @@ import {
     SmartphoneIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { FormBuilderFieldPreview } from "@/components/forms/FormBuilderFieldPreview"
 import {
     useCreatePlatformFormTemplate,
     useDeletePlatformFormTemplate,
@@ -51,6 +44,13 @@ import {
     useUpdatePlatformFormTemplate,
 } from "@/lib/hooks/use-platform-templates"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
+import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
+import {
+    CUSTOM_FIELD_GROUPS,
+    PRESET_FIELD_GROUPS,
+    getBuilderFieldIcon,
+    type BuilderPaletteField,
+} from "@/lib/forms/form-builder-library"
 import type {
     FieldType,
     FormSchema,
@@ -60,52 +60,7 @@ import type {
 import type { PlatformFormTemplate } from "@/lib/api/platform"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 
-// Field type definitions
-type FieldTypeOption = {
-    id: FieldType
-    label: string
-    icon: typeof TypeIcon
-}
-
-const fieldTypes: { basic: FieldTypeOption[]; advanced: FieldTypeOption[] } = {
-    basic: [
-        { id: "text", label: "Name", icon: TypeIcon },
-        { id: "textarea", label: "Long Text", icon: TypeIcon },
-        { id: "email", label: "Email", icon: MailIcon },
-        { id: "phone", label: "Phone", icon: PhoneIcon },
-        { id: "date", label: "Date", icon: CalendarIcon },
-        { id: "number", label: "Number", icon: HashIcon },
-    ],
-    advanced: [
-        { id: "select", label: "Select", icon: ListIcon },
-        { id: "multiselect", label: "Multi-Select", icon: CheckSquareIcon },
-        { id: "radio", label: "Radio", icon: CheckSquareIcon },
-        { id: "checkbox", label: "Checkbox", icon: CheckSquareIcon },
-        { id: "file", label: "File Upload", icon: FileIcon },
-        { id: "address", label: "Address", icon: HomeIcon },
-        { id: "repeatable_table", label: "Repeating Table", icon: ListIcon },
-    ],
-}
-
-// Surrogate field mappings matching backend SURROGATE_FIELD_TYPES
-const surrogateFieldMappings = [
-    { value: "full_name", label: "Full Name" },
-    { value: "email", label: "Email" },
-    { value: "phone", label: "Phone" },
-    { value: "state", label: "State" },
-    { value: "date_of_birth", label: "Date of Birth" },
-    { value: "race", label: "Race" },
-    { value: "height_ft", label: "Height (ft)" },
-    { value: "weight_lb", label: "Weight (lb)" },
-    { value: "is_age_eligible", label: "Age Eligible" },
-    { value: "is_citizen_or_pr", label: "US Citizen/PR" },
-    { value: "has_child", label: "Has Child" },
-    { value: "is_non_smoker", label: "Non-Smoker" },
-    { value: "has_surrogate_experience", label: "Surrogate Experience" },
-    { value: "num_deliveries", label: "Number of Deliveries" },
-    { value: "num_csections", label: "Number of C-Sections" },
-    { value: "is_priority", label: "Priority" },
-]
+const surrogateFieldMappings = DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
 
 type FormField = {
     id: string
@@ -305,6 +260,7 @@ export default function FormBuilderPage() {
     const [maxFileSizeMb, setMaxFileSizeMb] = useState(10)
     const [maxFileCount, setMaxFileCount] = useState(10)
     const [allowedMimeTypesText, setAllowedMimeTypesText] = useState("")
+    const [workspaceTab, setWorkspaceTab] = useState<"builder" | "settings">("builder")
     const [isPublished, setIsPublished] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
@@ -320,10 +276,7 @@ export default function FormBuilderPage() {
     const [pages, setPages] = useState<FormPage[]>([{ id: 1, name: "Page 1", fields: [] }])
     const [activePage, setActivePage] = useState(1)
     const [selectedField, setSelectedField] = useState<string | null>(null)
-    const [draggedField, setDraggedField] = useState<{
-        type: FieldType
-        label: string
-    } | null>(null)
+    const [draggedField, setDraggedField] = useState<BuilderPaletteField | null>(null)
     const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
     const [dropIndicatorId, setDropIndicatorId] = useState<string | "end" | null>(null)
 
@@ -333,10 +286,8 @@ export default function FormBuilderPage() {
     const [showDeletePageDialog, setShowDeletePageDialog] = useState(false)
     const [pageToDelete, setPageToDelete] = useState<number | null>(null)
 
-    const [rightSidebarTab, setRightSidebarTab] = useState<"field" | "form">("form")
     const selectField = useCallback((fieldId: string | null) => {
         setSelectedField(fieldId)
-        setRightSidebarTab(fieldId ? "field" : "form")
     }, [])
 
     useEffect(() => {
@@ -346,6 +297,7 @@ export default function FormBuilderPage() {
         hydratedFormRef.current = null
         currentVersionRef.current = null
         templateIdRef.current = isNewForm ? null : id
+        setWorkspaceTab("builder")
         setIsMobilePreview(false)
         setMaxFileSizeMb(10)
         setMaxFileCount(10)
@@ -458,8 +410,8 @@ export default function FormBuilderPage() {
     }, [hasHydrated, isNewForm, formId, debouncedFingerprint, templateData?.updated_at])
 
     // Drag and drop handlers
-    const handleDragStart = (type: FieldType, label: string) => {
-        setDraggedField({ type, label })
+    const handleDragStart = (field: BuilderPaletteField) => {
+        setDraggedField(field)
         setDraggedFieldId(null)
     }
 
@@ -494,21 +446,24 @@ export default function FormBuilderPage() {
         return `field-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     }
 
-    const createField = (type: FieldType, label: string): FormField => {
+    const createField = (template: BuilderPaletteField): FormField => {
         const fieldId = generateFieldId()
 
         const baseField: FormField = {
             id: fieldId,
-            type,
-            label,
-            helperText: "",
-            required: false,
-            surrogateFieldMapping: "",
+            type: template.type,
+            label: template.label,
+            helperText: template.helperText ?? "",
+            required: template.required ?? false,
+            surrogateFieldMapping: template.surrogateFieldMapping ?? "",
         }
-        if (["select", "multiselect", "radio"].includes(type)) {
+        if (template.options && template.options.length > 0) {
+            return { ...baseField, options: [...template.options] }
+        }
+        if (["select", "multiselect", "radio"].includes(template.type)) {
             return { ...baseField, options: ["Option 1", "Option 2", "Option 3"] }
         }
-        if (type === "repeatable_table") {
+        if (template.type === "repeatable_table") {
             return {
                 ...baseField,
                 label: "Repeating Table",
@@ -535,11 +490,11 @@ export default function FormBuilderPage() {
 
     const buildNewField = (): FormField | null => {
         if (!draggedField) return null
-        return createField(draggedField.type, draggedField.label)
+        return createField(draggedField)
     }
 
-    const handleInsertField = (type: FieldType, label: string) => {
-        const newField = createField(type, label)
+    const handleInsertField = (field: BuilderPaletteField) => {
+        const newField = createField(field)
 
         setPages((prev) =>
             prev.map((page) =>
@@ -1070,9 +1025,7 @@ export default function FormBuilderPage() {
     }, [pages, selectedField])
 
     // Get field icon by type
-    const getFieldIcon = (type: string) => {
-        return [...fieldTypes.basic, ...fieldTypes.advanced].find((f) => f.id === type)?.icon || TypeIcon
-    }
+    const getFieldIcon = (type: string) => getBuilderFieldIcon(type)
 
     const isDragging = Boolean(draggedField || draggedFieldId)
     const canvasWidthClass = isMobilePreview ? "max-w-sm" : "max-w-4xl"
@@ -1099,6 +1052,146 @@ export default function FormBuilderPage() {
         }
         return "Autosave on"
     }, [autoSaveStatus, hasHydrated, isDirty, isSaving, lastSavedAt])
+
+    const formSettingsPanel = (
+        <div className="mx-auto max-w-5xl">
+            <div className="rounded-[28px] border border-border/80 bg-card p-6 shadow-sm sm:p-8">
+                <div className="mb-8 flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-6">
+                    <div className="space-y-1">
+                        <h2 className="text-xl font-semibold tracking-tight">Form Settings</h2>
+                        <p className="max-w-2xl text-sm text-muted-foreground">
+                            Configure the shared template identity, privacy copy, and upload defaults outside the field editor.
+                        </p>
+                    </div>
+                    <Badge variant="outline">Template-level</Badge>
+                </div>
+
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <Label htmlFor="settings-form-name">Form Name</Label>
+                        <Input
+                            id="settings-form-name"
+                            value={formName}
+                            onChange={(e) => setFormName(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="settings-form-description">Description</Label>
+                        <Textarea
+                            id="settings-form-description"
+                            value={formDescription}
+                            onChange={(e) => setFormDescription(e.target.value)}
+                            rows={3}
+                            placeholder="Describe the purpose of this form"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="settings-public-title">Public Title</Label>
+                        <Input
+                            id="settings-public-title"
+                            value={publicTitle}
+                            onChange={(e) => setPublicTitle(e.target.value)}
+                            placeholder="Business or program title shown to applicants"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="settings-logo-url">Logo URL</Label>
+                        <Input
+                            id="settings-logo-url"
+                            value={logoUrl}
+                            onChange={(e) => handleLogoUrlChange(e.target.value)}
+                            placeholder="https://example.com/logo.png"
+                        />
+                        {logoUrl && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleLogoUrlChange("")}
+                            >
+                                Remove
+                            </Button>
+                        )}
+                        {logoUrl && (
+                            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                                <NextImage
+                                    src={resolvedLogoUrl}
+                                    alt="Form logo preview"
+                                    width={224}
+                                    height={56}
+                                    unoptimized
+                                    className="h-14 w-auto rounded-md object-contain"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="settings-privacy-notice">Privacy Notice</Label>
+                        <Textarea
+                            id="settings-privacy-notice"
+                            value={privacyNotice}
+                            onChange={(e) => setPrivacyNotice(e.target.value)}
+                            rows={4}
+                            placeholder="Describe how applicant data is protected or paste a privacy policy URL"
+                        />
+                    </div>
+
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold">Upload Rules</h4>
+                            <Badge variant="outline">Files</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="settings-max-file-size">Max file size (MB)</Label>
+                                <Input
+                                    id="settings-max-file-size"
+                                    inputMode="numeric"
+                                    value={maxFileSizeMb}
+                                    onChange={(e) =>
+                                        setMaxFileSizeMb(
+                                            Number.parseFloat(e.target.value || "0") || 1,
+                                        )
+                                    }
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="settings-max-file-count">Max files total</Label>
+                                <Input
+                                    id="settings-max-file-count"
+                                    inputMode="numeric"
+                                    value={maxFileCount}
+                                    onChange={(e) =>
+                                        setMaxFileCount(
+                                            Number.parseInt(e.target.value || "0", 10) || 0,
+                                        )
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="settings-allowed-mime-types">
+                                Allowed MIME types (comma separated)
+                            </Label>
+                            <Input
+                                id="settings-allowed-mime-types"
+                                value={allowedMimeTypesText}
+                                onChange={(e) => setAllowedMimeTypesText(e.target.value)}
+                                placeholder="image/*,application/pdf"
+                            />
+                            <p className="text-xs text-stone-500">
+                                Leave blank to allow any file types. Per-field uploads are still capped at 5 files.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
 
     if (!isNewForm && isFormLoading) {
         return (
@@ -1218,8 +1311,31 @@ export default function FormBuilderPage() {
                 </div>
             </div>
 
-            {/* Page Tabs */}
             <div className="border-b border-border bg-background/95 px-4 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
+                <Tabs
+                    value={workspaceTab}
+                    onValueChange={(value) => setWorkspaceTab(value as typeof workspaceTab)}
+                    className="gap-0"
+                >
+                    <TabsList aria-label="Workspace sections" className="h-auto flex-wrap bg-muted/70">
+                        <TabsTrigger value="builder" className="flex-none">
+                            Builder
+                        </TabsTrigger>
+                        <TabsTrigger value="settings" className="flex-none">
+                            Settings
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
+
+            {/* Page Tabs */}
+            <div
+                className={
+                    workspaceTab === "builder"
+                        ? "border-b border-border bg-background/95 px-4 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6"
+                        : "hidden"
+                }
+            >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <Tabs
                         value={String(activePage)}
@@ -1259,7 +1375,11 @@ export default function FormBuilderPage() {
 
             <div
                 data-testid="form-builder-workspace"
-                className="flex flex-1 flex-col overflow-y-auto xl:flex-row xl:overflow-hidden"
+                className={
+                    workspaceTab === "builder"
+                        ? "flex flex-1 flex-col overflow-y-auto xl:flex-row xl:overflow-hidden"
+                        : "hidden"
+                }
             >
                 {/* Left Sidebar - Field Buttons */}
                 <div
@@ -1268,59 +1388,76 @@ export default function FormBuilderPage() {
                     className="w-full shrink-0 border-b border-border bg-card p-4 xl:w-[220px] xl:overflow-y-auto xl:border-r xl:border-b-0"
                 >
                     <div className="space-y-6">
-                        {/* Basic Fields */}
-                        <div>
-                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                Basic
-                            </h3>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                                {fieldTypes.basic.map((field) => {
-                                    const IconComponent = field.icon
-                                    return (
-                                        <button
-                                            key={field.id}
-                                            type="button"
-                                            draggable
-                                            onClick={() => handleInsertField(field.id, field.label)}
-                                            onDragStart={() => handleDragStart(field.id, field.label)}
-                                            onDragEnd={handleDragEnd}
-                                            aria-label={`Add ${field.label} field`}
-                                            className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-border bg-background p-3 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing"
-                                        >
-                                            <IconComponent className="size-5 text-muted-foreground" aria-hidden="true" />
-                                            <span className="min-w-0 flex-1 break-words">{field.label}</span>
-                                            <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
-                                        </button>
-                                    )
-                                })}
+                        <div className="space-y-4">
+                            <div>
+                                <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                    Preset Fields
+                                </h3>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Common surrogate intake questions, grouped by topic.
+                                </p>
                             </div>
+                            {PRESET_FIELD_GROUPS.map((group) => (
+                                <div key={group.id} className="space-y-2">
+                                    <h4 className="text-sm font-semibold text-foreground">{group.label}</h4>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {group.fields.map((field) => {
+                                            const IconComponent = field.icon
+                                            return (
+                                                <button
+                                                    key={`${group.id}-${field.key}`}
+                                                    type="button"
+                                                    draggable
+                                                    onClick={() => handleInsertField(field)}
+                                                    onDragStart={() => handleDragStart(field)}
+                                                    onDragEnd={handleDragEnd}
+                                                    aria-label={`Add preset ${field.label} field`}
+                                                    className="flex w-full cursor-grab items-center gap-3 rounded-xl border border-border/70 bg-background p-3 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing"
+                                                >
+                                                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary">
+                                                        <IconComponent className="size-4" aria-hidden="true" />
+                                                    </span>
+                                                    <span className="min-w-0 flex-1 break-words">{field.label}</span>
+                                                    <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
-                        {/* Advanced Fields */}
                         <div>
-                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                Advanced
+                            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                Custom Fields
                             </h3>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                                {fieldTypes.advanced.map((field) => {
-                                    const IconComponent = field.icon
-                                    return (
-                                        <button
-                                            key={field.id}
-                                            type="button"
-                                            draggable
-                                            onClick={() => handleInsertField(field.id, field.label)}
-                                            onDragStart={() => handleDragStart(field.id, field.label)}
-                                            onDragEnd={handleDragEnd}
-                                            aria-label={`Add ${field.label} field`}
-                                            className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-border bg-background p-3 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing"
-                                        >
-                                            <IconComponent className="size-5 text-muted-foreground" aria-hidden="true" />
-                                            <span className="min-w-0 flex-1 break-words">{field.label}</span>
-                                            <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
-                                        </button>
-                                    )
-                                })}
+                            <div className="space-y-4">
+                                {CUSTOM_FIELD_GROUPS.map((group) => (
+                                    <div key={group.id} className="space-y-2">
+                                        <h4 className="text-sm font-semibold text-foreground">{group.label}</h4>
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                                            {group.fields.map((field) => {
+                                                const IconComponent = field.icon
+                                                return (
+                                                    <button
+                                                        key={field.key}
+                                                        type="button"
+                                                        draggable
+                                                        onClick={() => handleInsertField(field)}
+                                                        onDragStart={() => handleDragStart(field)}
+                                                        onDragEnd={handleDragEnd}
+                                                        aria-label={`Add ${field.label} field`}
+                                                        className="flex w-full cursor-grab items-center gap-3 rounded-lg border border-border bg-background p-3 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing"
+                                                    >
+                                                        <IconComponent className="size-5 text-muted-foreground" aria-hidden="true" />
+                                                        <span className="min-w-0 flex-1 break-words">{field.label}</span>
+                                                        <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
@@ -1379,20 +1516,33 @@ export default function FormBuilderPage() {
                                                     <GripVerticalIcon className="mt-1 size-5 cursor-grab text-muted-foreground/70" />
                                                     <IconComponent className="mt-1 size-5 text-primary" />
                                                     <div className="flex-1">
-                                                        <div className="flex items-start justify-between">
-                                                            <div className="flex-1">
-                                                                <Input
-                                                                    draggable={false}
-                                                                    value={field.label}
-                                                                    onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
-                                                                    className="mb-1 h-auto border-none bg-transparent p-0 text-base font-medium focus-visible:ring-0"
-                                                                    onClick={(e) => e.stopPropagation()}
+                                                        <div className="flex items-start justify-between gap-4">
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-start gap-2">
+                                                                    <Input
+                                                                        draggable={false}
+                                                                        value={field.label}
+                                                                        onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                                                                        className="h-auto border-none bg-transparent p-0 text-base font-medium focus-visible:ring-0"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                    />
+                                                                    {field.required && (
+                                                                        <span className="pt-0.5 text-red-500">*</span>
+                                                                    )}
+                                                                </div>
+                                                                <FormBuilderFieldPreview
+                                                                    label={field.label}
+                                                                    type={field.type}
+                                                                    surrogateFieldMapping={field.surrogateFieldMapping}
+                                                                    options={field.options}
+                                                                    columns={field.columns}
                                                                 />
                                                                 {field.helperText && (
-                                                                    <p className="text-sm text-muted-foreground">{field.helperText}</p>
+                                                                    <p className="mt-2 text-sm text-muted-foreground">
+                                                                        {field.helperText}
+                                                                    </p>
                                                                 )}
                                                             </div>
-                                                            {field.required && <span className="ml-2 text-red-500">*</span>}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-1">
@@ -1434,27 +1584,13 @@ export default function FormBuilderPage() {
                     </div>
                 </div>
 
-                {/* Right Sidebar - Settings */}
+                {/* Right Sidebar - Field Settings */}
                 <div
                     data-testid="form-builder-settings"
                     aria-label="Form builder settings"
                     className="w-full shrink-0 border-t border-border bg-card p-4 xl:w-[280px] xl:overflow-y-auto xl:border-l xl:border-t-0"
                 >
-                    <Tabs
-                        value={rightSidebarTab}
-                        onValueChange={(value) => setRightSidebarTab(value as typeof rightSidebarTab)}
-                        className="mb-4 gap-0"
-                    >
-                        <TabsList aria-label="Builder settings" className="grid w-full grid-cols-2 bg-muted/70">
-                            <TabsTrigger value="field" disabled={!selectedFieldData}>
-                                Field Settings
-                            </TabsTrigger>
-                            <TabsTrigger value="form">Form Settings</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-
-                    {rightSidebarTab === "field" ? (
-                        selectedFieldData ? (
+                    {selectedFieldData ? (
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="mb-4 text-sm font-semibold">Field Settings</h3>
@@ -1911,145 +2047,22 @@ export default function FormBuilderPage() {
                         ) : (
                             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
                                 <p className="text-xs text-stone-600 dark:text-stone-400">
-                                    Select a field from the canvas to edit its settings
+                                    Select a field from the canvas to edit its settings, or use the Settings tab for form-wide controls.
                                 </p>
                             </div>
                         )
-                    ) : (
-                        <div className="space-y-6">
-                            <div>
-                                <h3 className="mb-4 text-sm font-semibold">Form Settings</h3>
-
-                                {/* Form Name */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="form-name">Form Name</Label>
-                                    <Input
-                                        id="form-name"
-                                        value={formName}
-                                        onChange={(e) => setFormName(e.target.value)}
-                                    />
-                                </div>
-
-                                {/* Form Description */}
-                                <div className="mt-4 space-y-2">
-                                    <Label htmlFor="form-description">Description</Label>
-                                    <Textarea
-                                        id="form-description"
-                                        value={formDescription}
-                                        onChange={(e) => setFormDescription(e.target.value)}
-                                        rows={3}
-                                        placeholder="Describe the purpose of this form"
-                                    />
-                                </div>
-
-                                {/* Public Title */}
-                                <div className="mt-4 space-y-2">
-                                    <Label htmlFor="public-title">Public Title</Label>
-                                    <Input
-                                        id="public-title"
-                                        value={publicTitle}
-                                        onChange={(e) => setPublicTitle(e.target.value)}
-                                        placeholder="Business or program title shown to applicants"
-                                    />
-                                </div>
-
-                                {/* Logo URL */}
-                                <div className="mt-4 space-y-2">
-                                    <Label htmlFor="logo-url">Logo URL</Label>
-                                    <Input
-                                        id="logo-url"
-                                        value={logoUrl}
-                                        onChange={(e) => handleLogoUrlChange(e.target.value)}
-                                        placeholder="https://example.com/logo.png"
-                                    />
-                                    {logoUrl && (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleLogoUrlChange("")}
-                                        >
-                                            Remove
-                                        </Button>
-                                    )}
-                                    {logoUrl && (
-                                        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-                                            <NextImage
-                                                src={resolvedLogoUrl}
-                                                alt="Form logo preview"
-                                                width={224}
-                                                height={56}
-                                                unoptimized
-                                                className="h-14 w-auto rounded-md object-contain"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Privacy Notice */}
-                                <div className="mt-4 space-y-2">
-                                    <Label htmlFor="privacy-notice">Privacy Notice</Label>
-                                    <Textarea
-                                        id="privacy-notice"
-                                        value={privacyNotice}
-                                        onChange={(e) => setPrivacyNotice(e.target.value)}
-                                        rows={4}
-                                        placeholder="Describe how applicant data is protected or paste a privacy policy URL"
-                                    />
-                                </div>
-
-                                <div className="mt-6 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-semibold">Upload Rules</h4>
-                                        <Badge variant="outline">Files</Badge>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="max-file-size">Max file size (MB)</Label>
-                                            <Input
-                                                id="max-file-size"
-                                                inputMode="numeric"
-                                                value={maxFileSizeMb}
-                                                onChange={(e) =>
-                                                    setMaxFileSizeMb(
-                                                        Number.parseFloat(e.target.value || "0") || 1,
-                                                    )
-                                                }
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="max-file-count">Max files total</Label>
-                                            <Input
-                                                id="max-file-count"
-                                                inputMode="numeric"
-                                                value={maxFileCount}
-                                                onChange={(e) =>
-                                                    setMaxFileCount(
-                                                        Number.parseInt(e.target.value || "0", 10) || 0,
-                                                    )
-                                                }
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="allowed-mime-types">
-                                            Allowed MIME types (comma separated)
-                                        </Label>
-                                        <Input
-                                            id="allowed-mime-types"
-                                            value={allowedMimeTypesText}
-                                            onChange={(e) => setAllowedMimeTypesText(e.target.value)}
-                                            placeholder="image/*,application/pdf"
-                                        />
-                                        <p className="text-xs text-stone-500">
-                                            Leave blank to allow any file types. Per-field uploads are still capped at 5 files.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    }
                 </div>
+            </div>
+
+            <div
+                className={
+                    workspaceTab === "settings"
+                        ? "flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6 xl:p-8"
+                        : "hidden"
+                }
+            >
+                {formSettingsPanel}
             </div>
 
             {/* Publish Dialog */}
