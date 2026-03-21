@@ -169,7 +169,7 @@ const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
     intelligent_meeting_outcome_missing: "Meeting Outcome Missing",
     intelligent_stuck_preapproval: "Pre-approval Stuck Cases",
     attention_unreached: "Attention Needed: Unreached Leads",
-    attention_stuck: "Attention Needed: Stuck Leads",
+    attention_stuck: "Attention Needed: Stuck Surrogates",
 }
 
 const SOURCE_LABELS: Record<string, string> = {

@@ -511,6 +511,19 @@ describe('SurrogatesPage', () => {
         )
     })
 
+    it('renders the stuck attention chip with the surrogate label', () => {
+        mockSearchParams.set('dynamic_filter', 'attention_stuck')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByText('Attention Needed: Stuck Surrogates')).toBeInTheDocument()
+    })
+
     it('shows intelligent unavailable copy when intelligent dynamic filter has no results', () => {
         mockSearchParams.set('dynamic_filter', 'intelligent_any')
         mockUseSurrogates.mockReturnValue({
@@ -615,7 +628,7 @@ describe('SurrogatesPage', () => {
         expect(screen.queryByText('Meeting Outcome Missing')).not.toBeInTheDocument()
         expect(screen.queryByText('Pre-approval Stuck Cases')).not.toBeInTheDocument()
         expect(screen.getByText('Attention Needed: Unreached Leads')).toBeInTheDocument()
-        expect(screen.getByText('Attention Needed: Stuck Leads')).toBeInTheDocument()
+        expect(screen.getByText('Attention Needed: Stuck Surrogates')).toBeInTheDocument()
     })
 
     it('applies priority-only immediately from More Filters', () => {
