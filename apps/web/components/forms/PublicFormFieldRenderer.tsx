@@ -149,85 +149,85 @@ function FixedTableFieldInput({
                             key={rowKey || rowLabel}
                             role="group"
                             aria-label={`${rowLabel} row`}
-                            className="rounded-2xl border border-stone-200 bg-white p-4"
+                            className="rounded-2xl border border-stone-200 bg-white p-4 @container/table-row @xl/table-row:grid @xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)] @xl/table-row:items-start @xl/table-row:gap-4"
                         >
-                            <div className="mb-3">
+                            <div className="mb-4 space-y-1 @xl/table-row:mb-0 @xl/table-row:pr-2">
                                 <div className="text-base font-semibold text-stone-900">{rowLabel}</div>
                                 {rowHelpText ? <p className="mt-1 text-xs text-stone-500">{rowHelpText}</p> : null}
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-2">
-                                {columns.map((column) => {
-                                    const cellValue = row[column.key]
-                                    const normalizedValue =
-                                        cellValue === null || cellValue === undefined ? "" : String(cellValue)
-                                    const options =
-                                        column.options && column.options.length > 0
-                                            ? column.options
-                                            : column.type === "radio"
-                                                ? [
-                                                      { label: "No", value: "no" },
-                                                      { label: "Yes", value: "yes" },
-                                                  ]
-                                                : []
+                            {columns.map((column) => {
+                                const cellValue = row[column.key]
+                                const normalizedValue =
+                                    cellValue === null || cellValue === undefined ? "" : String(cellValue)
+                                const options =
+                                    column.options && column.options.length > 0
+                                        ? column.options
+                                        : column.type === "radio"
+                                            ? [
+                                                  { label: "No", value: "no" },
+                                                  { label: "Yes", value: "yes" },
+                                              ]
+                                            : []
 
-                                    return (
-                                        <div key={column.key} className="space-y-2">
-                                            <Label className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-                                                {column.label}
-                                                {column.required ? <span className="text-red-500"> *</span> : null}
-                                            </Label>
+                                return (
+                                    <div key={column.key} className="space-y-2 @xl/table-row:min-w-0">
+                                        <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">
+                                            {column.label}
+                                            {column.required ? <span className="text-red-500"> *</span> : null}
+                                        </Label>
 
-                                            {column.type === "radio" ? (
-                                                <div className="grid gap-2 sm:grid-cols-2">
-                                                    {options.map((option) => (
-                                                        <OptionCard
-                                                            key={option.value}
-                                                            selected={normalizedValue === option.value}
-                                                            onClick={() => updateCell(rowKey, column.key, option.value)}
-                                                            label={option.label}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            ) : column.type === "select" ? (
-                                                <select
-                                                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
-                                                    value={normalizedValue}
-                                                    onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
-                                                >
-                                                    <option value="">Select...</option>
-                                                    {options.map((option) => (
-                                                        <option key={option.value} value={option.value}>
-                                                            {option.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            ) : column.type === "textarea" ? (
-                                                <Textarea
-                                                    value={normalizedValue}
-                                                    onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
-                                                    placeholder={column.label}
-                                                    className="min-h-24 rounded-xl border-stone-200 bg-white shadow-none"
-                                                />
-                                            ) : (
-                                                <Input
-                                                    type={
-                                                        column.type === "number"
-                                                            ? "number"
-                                                            : column.type === "date"
-                                                                ? "date"
-                                                                : "text"
-                                                    }
-                                                    value={normalizedValue}
-                                                    onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
-                                                    placeholder={column.label}
-                                                    className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
-                                                />
-                                            )}
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                                        {column.type === "radio" ? (
+                                            <div className="grid gap-2 sm:grid-cols-2">
+                                                {options.map((option) => (
+                                                    <OptionCard
+                                                        key={option.value}
+                                                        selected={normalizedValue === option.value}
+                                                        onClick={() => updateCell(rowKey, column.key, option.value)}
+                                                        label={option.label}
+                                                        size="compact"
+                                                    />
+                                                ))}
+                                            </div>
+                                        ) : column.type === "select" ? (
+                                            <select
+                                                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                                                value={normalizedValue}
+                                                onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
+                                            >
+                                                <option value="">Select...</option>
+                                                {options.map((option) => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : column.type === "textarea" ? (
+                                            <Input
+                                                type="text"
+                                                value={normalizedValue}
+                                                onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
+                                                placeholder={column.label}
+                                                className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                                            />
+                                        ) : (
+                                            <Input
+                                                type={
+                                                    column.type === "number"
+                                                        ? "number"
+                                                        : column.type === "date"
+                                                            ? "date"
+                                                            : "text"
+                                                }
+                                                value={normalizedValue}
+                                                onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
+                                                placeholder={column.label}
+                                                className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                                            />
+                                        )}
+                                    </div>
+                                )
+                            })}
                         </div>
                     )
                 })}
@@ -334,11 +334,13 @@ function OptionCard({
     onClick,
     label,
     selectionRole = "radio",
+    size = "default",
 }: {
     selected: boolean
     onClick: () => void
     label: string
     selectionRole?: "radio" | "checkbox"
+    size?: "default" | "compact"
 }) {
     return (
         <button
@@ -347,7 +349,8 @@ function OptionCard({
             aria-checked={selected}
             onClick={onClick}
             className={cn(
-                "w-full rounded-2xl border border-stone-200 bg-white p-4 text-left transition-all",
+                "w-full border border-stone-200 bg-white text-left transition-all",
+                size === "compact" ? "rounded-xl px-3 py-2.5" : "rounded-2xl p-4",
                 "hover:border-primary/60 hover:bg-primary/5",
                 "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
                 selected ? "border-primary bg-primary/10" : "border-stone-200",
@@ -356,13 +359,16 @@ function OptionCard({
             <div className="flex items-center gap-3">
                 <div
                     className={cn(
-                        "flex size-6 items-center justify-center rounded-full border-2 transition-all",
+                        "flex items-center justify-center rounded-full border-2 transition-all",
+                        size === "compact" ? "size-5" : "size-6",
                         selected ? "border-primary bg-primary" : "border-stone-300 bg-white",
                     )}
                 >
-                    {selected && <CheckIcon className="size-4 text-white" />}
+                    {selected && <CheckIcon className={cn("text-white", size === "compact" ? "size-3.5" : "size-4")} />}
                 </div>
-                <div className="text-sm font-medium text-stone-900">{label}</div>
+                <div className={cn("font-medium text-stone-900", size === "compact" ? "text-[15px]" : "text-sm")}>
+                    {label}
+                </div>
             </div>
         </button>
     )

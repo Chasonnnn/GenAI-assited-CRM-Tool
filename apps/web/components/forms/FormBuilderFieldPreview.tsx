@@ -218,10 +218,11 @@ export function FormBuilderFieldPreview({
                                                     ))}
                                             </div>
                                         ) : column.type === "textarea" ? (
-                                            <Textarea
+                                            <Input
                                                 disabled
+                                                type="text"
                                                 placeholder="Add details"
-                                                className="min-h-20 resize-none rounded-xl border-border/70 bg-background/85 shadow-none"
+                                                className="h-11 rounded-xl border-border/70 bg-background/85 shadow-none"
                                             />
                                         ) : column.type === "select" ? (
                                             <PreviewBox className="justify-between">
