@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.1...surrogacy-crm-platform-v0.91.2) (2026-03-21)
+
+
+### Bug Fixes
+
+* exclude terminal cases from stuck filters ([a1d3669](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a1d3669e2b14d753c47a2ae66d4f17417f9c9410))
+* improve lead warning tooltip contrast ([0f196a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0f196a4086d093ea05573104dc71f1da9d3b16d8))
+* skip release please labeling ([fb8aebc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fb8aebc15fb08d3f7bd6eb3a2df54d2223d91540))
+* stabilize date range filter width ([5a5b925](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5a5b92504d0e8ccd59f1c55f64858f53ca824af0))
+
 ## [0.91.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.0...surrogacy-crm-platform-v0.91.1) (2026-03-21)
 
 
