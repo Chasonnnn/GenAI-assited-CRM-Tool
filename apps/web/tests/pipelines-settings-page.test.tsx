@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import PipelinesSettingsPage from "../app/(app)/settings/pipelines/page"
 
 const mockUseAuth = vi.fn()
@@ -442,6 +442,28 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.getByLabelText("Stage key")).toBeDisabled()
     })
 
+    it("keeps the stage action buttons centered inside their action box", () => {
+        render(<PipelinesSettingsPage />)
+
+        const toggleDetailsButton = screen.getByRole("button", { name: /edit details for new unread/i })
+        const actionGroup = toggleDetailsButton.parentElement
+        const actionBox = actionGroup?.parentElement
+        const editorGrid = actionBox?.parentElement
+
+        expect(actionGroup).toHaveClass("items-center", "justify-center")
+        expect(actionBox).toHaveClass("justify-center", "overflow-hidden")
+        expect(editorGrid?.className).toContain("lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto]")
+    })
+
+    it("stacks the entity selector with version history in the sidebar column", () => {
+        render(<PipelinesSettingsPage />)
+
+        const sidebar = screen.getByTestId("pipelines-sidebar")
+
+        expect(within(sidebar).getByRole("combobox", { name: "Entity" })).toBeInTheDocument()
+        expect(within(sidebar).getByText("Version History")).toBeInTheDocument()
+    })
+
     it("hides stage details by default and expands them on demand", () => {
         render(<PipelinesSettingsPage />)
 
@@ -592,12 +614,16 @@ describe("PipelinesSettingsPage", () => {
         })
     })
 
-    it("switches to intended-parent scope and hides surrogate-only editors", () => {
+    it("switches to intended-parent scope from the shared entity dropdown and hides surrogate-only editors", async () => {
         render(<PipelinesSettingsPage />)
 
-        fireEvent.change(screen.getByLabelText("Pipeline entity"), {
-            target: { value: "intended_parent" },
-        })
+        const entitySelect = screen.getByRole("combobox", { name: "Entity" })
+        expect(entitySelect.tagName).toBe("BUTTON")
+
+        fireEvent.mouseDown(entitySelect)
+        const intendedParentOption = await screen.findByRole("option", { name: "Intended Parents" })
+        fireEvent.mouseMove(intendedParentOption)
+        fireEvent.click(intendedParentOption)
 
         expect(mockUsePipelines).toHaveBeenLastCalledWith("intended_parent")
         expect(screen.queryByText("Journey Mapping")).not.toBeInTheDocument()

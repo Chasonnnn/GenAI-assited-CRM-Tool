@@ -20,6 +20,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     ChevronDownIcon,
     ChevronUpIcon,
@@ -285,6 +287,10 @@ function getEntityRecordLabel(entityType: PipelineEntityType, count: number) {
         return `${count} active record${count === 1 ? "" : "s"}`
     }
     return `${count} active surrogate${count === 1 ? "" : "s"}`
+}
+
+function getEntityLabel(entityType: string | null | undefined) {
+    return PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.label ?? "Select entity"
 }
 
 function getEntityDescription(entityType: PipelineEntityType) {
@@ -917,7 +923,7 @@ function StageEditor({
                                 />
                             </div>
 
-                            <div className="grid flex-1 gap-3 lg:grid-cols-4">
+                            <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
                                 <Input
                                     value={stage.label}
                                     onChange={(event) =>
@@ -967,15 +973,16 @@ function StageEditor({
                                         ))}
                                     </select>
                                 </label>
-                                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                                    <div className="flex gap-1">
-                                        <Badge variant="outline" className="tabular-nums">
+                                <div className="flex min-h-9 items-center justify-center overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs">
+                                    <div className="flex min-w-0 items-center justify-center gap-0.5 sm:gap-1">
+                                        <Badge variant="outline" className="shrink-0 tabular-nums">
                                             #{index + 1}
                                         </Badge>
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="icon-sm"
+                                            className="size-7 shrink-0 sm:size-8"
                                             onClick={() => toggleStageDetails(stage.id)}
                                             aria-expanded={isExpanded}
                                             aria-controls={`stage-details-${stage.id}`}
@@ -992,6 +999,7 @@ function StageEditor({
                                             type="button"
                                             variant="ghost"
                                             size="icon-sm"
+                                            className="size-7 shrink-0 sm:size-8"
                                             onClick={() => onDuplicateStage(stage.stage_key)}
                                             aria-label={`Duplicate ${stage.label}`}
                                         >
@@ -1001,6 +1009,7 @@ function StageEditor({
                                             type="button"
                                             variant="ghost"
                                             size="icon-sm"
+                                            className="size-7 shrink-0 sm:size-8"
                                             onClick={() => onRequestDeleteStage(stage.stage_key)}
                                             aria-label={`Remove ${stage.label}`}
                                         >
@@ -1794,39 +1803,19 @@ export default function PipelinesSettingsPage() {
     const validationErrors = preview?.validation_errors ?? []
     const blockingIssues = preview?.blocking_issues ?? []
     const requiredRemaps = preview?.required_remaps ?? []
-    const entityLabel = PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.label
+    const entityLabel = getEntityLabel(entityType)
     const entityDescription = getEntityDescription(entityType)
     const showSurrogateEditors = entityType === "surrogate"
 
     return (
         <div className="mx-auto flex max-w-6xl flex-1 flex-col gap-6 p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
-                    <p className="text-sm text-muted-foreground">
-                        {showSurrogateEditors
-                            ? "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
-                            : "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."}
-                    </p>
-                </div>
-                <label className="space-y-2 text-sm">
-                    <span className="font-medium">Entity</span>
-                    <select
-                        value={entityType}
-                        onChange={(event) => setEntityType(event.target.value as PipelineEntityType)}
-                        className="h-10 min-w-[220px] rounded-md border bg-background px-3 text-sm"
-                        aria-label="Pipeline entity"
-                    >
-                        {PIPELINE_ENTITY_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                    {entityDescription ? (
-                        <p className="text-xs text-muted-foreground">{entityDescription}</p>
-                    ) : null}
-                </label>
+            <div className="max-w-3xl">
+                <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
+                <p className="text-sm text-muted-foreground">
+                    {showSurrogateEditors
+                        ? "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
+                        : "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."}
+                </p>
             </div>
 
             <DeleteStageDialog
@@ -2040,7 +2029,34 @@ export default function PipelinesSettingsPage() {
                     ) : null}
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-6" data-testid="pipelines-sidebar">
+                    <div className="space-y-2">
+                        <Label htmlFor="pipeline-entity">Entity</Label>
+                        <Select
+                            value={entityType}
+                            onValueChange={(value) => {
+                                if (!value) return
+                                setEntityType(value as PipelineEntityType)
+                            }}
+                        >
+                            <SelectTrigger id="pipeline-entity" className="w-full">
+                                <SelectValue placeholder="Select entity">
+                                    {(value: string | null) => getEntityLabel(value)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PIPELINE_ENTITY_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {entityDescription ? (
+                            <p className="text-xs text-muted-foreground">{entityDescription}</p>
+                        ) : null}
+                    </div>
+
                     <Card>
                         <CardHeader className="pb-3">
                             <CardTitle className="flex items-center gap-2 text-base">
