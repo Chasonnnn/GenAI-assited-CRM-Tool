@@ -62,6 +62,12 @@ class Pipeline(Base):
 
     # Version control
     current_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    feature_config: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
@@ -81,7 +87,7 @@ class PipelineStage(Base):
 
     - stage_key: Immutable semantic key, unique per pipeline
     - slug: Editable external identifier, unique per pipeline
-    - stage_type: Immutable, controls role access (intake/post_approval/paused/terminal)
+    - stage_type/category: Editable classification for role access and workflow grouping
     - Soft-delete via is_active + deleted_at
     - Surrogates reference stage_id (FK)
     """
@@ -121,6 +127,12 @@ class PipelineStage(Base):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     color: Mapped[str] = mapped_column(String(7), nullable=False)  # hex #RRGGBB
     order: Mapped[int] = mapped_column(Integer, nullable=False)
+    semantics: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
 
     # Soft-delete
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
@@ -143,6 +155,14 @@ class PipelineStage(Base):
 
     # Relationships
     pipeline: Mapped["Pipeline"] = relationship(back_populates="stages")
+
+    @property
+    def category(self) -> str:
+        return self.stage_type
+
+    @category.setter
+    def category(self, value: str) -> None:
+        self.stage_type = value
 
 
 # =============================================================================

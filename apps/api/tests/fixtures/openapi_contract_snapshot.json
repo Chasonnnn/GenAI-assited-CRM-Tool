@@ -2906,6 +2906,11 @@
       "200"
     ]
   },
+  "/settings/pipelines/default/semantics": {
+    "GET": [
+      "200"
+    ]
+  },
   "/settings/pipelines/default/sync-stages": {
     "POST": [
       "200"
@@ -2925,8 +2930,38 @@
       "422"
     ]
   },
+  "/settings/pipelines/{pipeline_id}/apply-draft": {
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/change-preview": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/dependency-graph": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/recommended-draft": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/settings/pipelines/{pipeline_id}/rollback": {
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/settings/pipelines/{pipeline_id}/semantics": {
+    "GET": [
       "200",
       "422"
     ]

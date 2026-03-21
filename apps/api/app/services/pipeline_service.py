@@ -6,13 +6,23 @@ from uuid import UUID
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.stage_definitions import canonicalize_stage_key, get_default_stage_defs
-from app.db.models import Pipeline, PipelineStage, Surrogate
-from app.services import version_service
+from app.db.models import (
+    MetaCrmDatasetSettings,
+    OrgIntelligentSuggestionRule,
+    Pipeline,
+    PipelineStage,
+    Surrogate,
+    ZapierWebhookSettings,
+)
+from app.schemas.pipeline_semantics import (
+    default_pipeline_feature_config,
+    default_stage_semantics,
+)
+from app.services import pipeline_change_service, pipeline_semantics_service, version_service
 from app.utils.presentation import humanize_identifier
 
 ENTITY_TYPE = "pipeline"
 VALID_STAGE_TYPES = {"intake", "post_approval", "paused", "terminal"}
-REQUIRED_SYSTEM_STAGE_KEYS = {"on_hold"}
 
 
 def _normalize_slug(value: str | None) -> str:
@@ -21,10 +31,6 @@ def _normalize_slug(value: str | None) -> str:
 
 def _normalize_stage_key(value: str | None) -> str:
     return canonicalize_stage_key(value)
-
-
-def _is_required_system_stage(stage_key: str | None) -> bool:
-    return _normalize_stage_key(stage_key) in REQUIRED_SYSTEM_STAGE_KEYS
 
 
 def get_stage_semantic_key(stage: PipelineStage | None) -> str | None:
@@ -109,6 +115,9 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
     return {
         "name": pipeline.name,
         "is_default": pipeline.is_default,
+        "feature_config": pipeline_semantics_service.get_pipeline_feature_config(pipeline).model_dump(
+            mode="json"
+        ),
         "stages": [
             {
                 "stage_key": stage.stage_key,
@@ -118,10 +127,152 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
                 "order": stage.order,
                 "stage_type": stage.stage_type,
                 "is_active": stage.is_active,
+                "semantics": pipeline_semantics_service.get_stage_semantics(stage).model_dump(
+                    mode="json"
+                ),
             }
             for stage in pipeline.stages
         ],
     }
+
+
+def _serialize_stage(stage: PipelineStage) -> dict[str, object]:
+    return {
+        "id": stage.id,
+        "stage_key": _normalize_stage_key(stage.stage_key or stage.slug),
+        "slug": stage.slug,
+        "label": stage.label,
+        "color": stage.color,
+        "order": stage.order,
+        "category": stage.stage_type,
+        "stage_type": stage.stage_type,
+        "is_active": stage.is_active,
+        "semantics": pipeline_semantics_service.get_stage_semantics(stage).model_dump(mode="json"),
+    }
+
+
+def _derive_stage_category(stage: PipelineStage) -> str:
+    normalized_stage_type = pipeline_change_service.normalize_stage_category(stage.stage_type)
+    semantics = pipeline_semantics_service.get_stage_semantics(stage)
+
+    if semantics.pause_behavior != "none":
+        return "paused"
+    if semantics.terminal_outcome != "none":
+        return "terminal"
+    if normalized_stage_type in VALID_STAGE_TYPES:
+        return normalized_stage_type
+    if stage.is_intake_stage:
+        return "intake"
+    if (
+        semantics.capabilities.eligible_for_matching
+        or semantics.capabilities.locks_match_state
+        or semantics.capabilities.shows_pregnancy_tracking
+        or semantics.capabilities.requires_delivery_details
+    ):
+        return "post_approval"
+    return "intake"
+
+
+def _ensure_pipeline_semantics_defaults(db: Session, pipeline: Pipeline) -> bool:
+    dirty = False
+    if not isinstance(pipeline.feature_config, dict) or not pipeline.feature_config:
+        pipeline.feature_config = default_pipeline_feature_config()
+        dirty = True
+    else:
+        normalized_feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
+        normalized_payload = normalized_feature_config.model_dump(mode="json")
+        if normalized_payload != pipeline.feature_config:
+            pipeline.feature_config = normalized_payload
+            dirty = True
+
+    for stage in pipeline.stages:
+        normalized_stage_key = _normalize_stage_key(stage.stage_key or stage.slug)
+        if stage.stage_key != normalized_stage_key:
+            stage.stage_key = normalized_stage_key
+            dirty = True
+        normalized_stage_type = _derive_stage_category(stage)
+        if stage.stage_type != normalized_stage_type:
+            stage.stage_type = normalized_stage_type
+            dirty = True
+        expected_is_intake_stage = stage.stage_type == "intake"
+        if stage.is_intake_stage != expected_is_intake_stage:
+            stage.is_intake_stage = expected_is_intake_stage
+            dirty = True
+        normalized_semantics = pipeline_semantics_service.get_stage_semantics(stage).model_dump(
+            mode="json"
+        )
+        if stage.semantics != normalized_semantics:
+            stage.semantics = normalized_semantics
+            dirty = True
+
+    if dirty:
+        db.flush()
+    return dirty
+
+
+def _build_default_feature_config_for_stages(stage_defs: list[dict]) -> dict:
+    """Prune default feature config to the semantic stage keys present in a pipeline."""
+    feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+        {"feature_config": default_pipeline_feature_config()}
+    )
+    active_stage_keys = {
+        _normalize_stage_key(stage.get("stage_key") or stage.get("slug"))
+        for stage in stage_defs
+        if stage.get("is_active", True)
+    }
+
+    feature_config.journey.milestones = [
+        milestone.model_copy(
+            update={
+                "mapped_stage_keys": [
+                    stage_key
+                    for stage_key in milestone.mapped_stage_keys
+                    if _normalize_stage_key(stage_key) in active_stage_keys
+                ]
+            }
+        )
+        for milestone in feature_config.journey.milestones
+    ]
+    feature_config.analytics.funnel_stage_keys = [
+        stage_key
+        for stage_key in feature_config.analytics.funnel_stage_keys
+        if _normalize_stage_key(stage_key) in active_stage_keys
+    ]
+    feature_config.role_visibility = {
+        role: rule.model_copy(
+            update={
+                "stage_keys": [
+                    stage_key
+                    for stage_key in rule.stage_keys
+                    if _normalize_stage_key(stage_key) in active_stage_keys
+                ]
+            }
+        )
+        for role, rule in feature_config.role_visibility.items()
+    }
+    feature_config.role_mutation = {
+        role: rule.model_copy(
+            update={
+                "stage_keys": [
+                    stage_key
+                    for stage_key in rule.stage_keys
+                    if _normalize_stage_key(stage_key) in active_stage_keys
+                ]
+            }
+        )
+        for role, rule in feature_config.role_mutation.items()
+    }
+    return feature_config.model_dump(mode="json")
+
+
+def _validate_pipeline_configuration(db: Session, pipeline: Pipeline) -> None:
+    db.flush()
+    active_stages = [stage for stage in pipeline.stages if stage.is_active]
+    feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
+    pipeline_change_service.validate_guarded_invariants(
+        [_serialize_stage(stage) for stage in active_stages],
+        feature_config,
+    )
 
 
 def get_or_create_default_pipeline(
@@ -150,6 +301,7 @@ def get_or_create_default_pipeline(
             name="Default",
             is_default=True,
             current_version=1,
+            feature_config=default_pipeline_feature_config(),
         )
         db.add(pipeline)
         db.flush()
@@ -166,6 +318,10 @@ def get_or_create_default_pipeline(
                     color=stage["color"],
                     order=stage["order"],
                     stage_type=stage["stage_type"],
+                    semantics=default_stage_semantics(
+                        _normalize_stage_key(stage.get("stage_key") or stage["slug"]),
+                        stage["stage_type"],
+                    ),
                     is_intake_stage=stage["stage_type"] == "intake",
                     is_active=True,
                 )
@@ -173,6 +329,7 @@ def get_or_create_default_pipeline(
             ]
         )
         db.flush()
+        _validate_pipeline_configuration(db, pipeline)
 
         # Create initial version snapshot
         version_service.create_version(
@@ -188,7 +345,24 @@ def get_or_create_default_pipeline(
         db.refresh(pipeline)
         return pipeline
 
-    sync_missing_stages(db, pipeline, user_id)
+    changed = _ensure_pipeline_semantics_defaults(db, pipeline)
+    existing_stage_keys = {
+        _normalize_stage_key(stage.stage_key or stage.slug)
+        for stage in pipeline.stages
+        if not stage.deleted_at
+    }
+    required_stage_keys = {
+        _normalize_stage_key(stage.get("stage_key") or stage["slug"])
+        for stage in get_default_stage_defs()
+    }
+    if required_stage_keys - existing_stage_keys:
+        sync_missing_stages(db, pipeline, user_id)
+        db.refresh(pipeline)
+        return pipeline
+
+    if changed:
+        db.commit()
+        db.refresh(pipeline)
     return pipeline
 
 
@@ -258,12 +432,19 @@ def sync_missing_stages(
                 color=item["color"],
                 order=index,
                 stage_type=item["stage_type"],
+                semantics=default_stage_semantics(
+                    _normalize_stage_key(item.get("stage_key") or item["slug"]),
+                    item["stage_type"],
+                ),
                 is_intake_stage=item["stage_type"] == "intake",
                 is_active=True,
             )
         )
 
     db.flush()
+    db.refresh(pipeline)
+    _ensure_pipeline_semantics_defaults(db, pipeline)
+    _validate_pipeline_configuration(db, pipeline)
     _bump_pipeline_version(db, pipeline, user_id, f"Added {len(missing)} missing stages")
 
     db.commit()
@@ -303,28 +484,48 @@ def update_pipeline_name(
     return pipeline
 
 
+def update_pipeline_feature_config(
+    db: Session,
+    pipeline: Pipeline,
+    feature_config: dict,
+    user_id: UUID,
+    comment: str | None = None,
+) -> Pipeline:
+    """Update pipeline-level feature configuration with version control."""
+    pipeline.feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+        {"feature_config": feature_config}
+    ).model_dump(mode="json")
+    _validate_pipeline_configuration(db, pipeline)
+    _bump_pipeline_version(db, pipeline, user_id, comment or "Updated pipeline behavior")
+    db.commit()
+    db.refresh(pipeline)
+    return pipeline
+
+
 def create_pipeline(
     db: Session,
     org_id: UUID,
     user_id: UUID,
     name: str,
     stages: list[dict] | None = None,
+    feature_config: dict | None = None,
 ) -> Pipeline:
     """
     Create a new non-default pipeline with initial version.
 
     Uses default stages if not provided.
     """
+    stage_defs = _merge_required_stage_defs(stages or get_default_stage_defs())
     pipeline = Pipeline(
         organization_id=org_id,
         name=name,
         is_default=False,
         current_version=1,
+        feature_config=feature_config or _build_default_feature_config_for_stages(stage_defs),
     )
     db.add(pipeline)
     db.flush()
 
-    stage_defs = _merge_required_stage_defs(stages or get_default_stage_defs())
     db.add_all(
         [
             PipelineStage(
@@ -334,9 +535,18 @@ def create_pipeline(
                 label=stage["label"],
                 color=stage["color"],
                 order=stage.get("order", i + 1),
-                stage_type=stage.get("stage_type", "intake"),
+                stage_type=stage.get("category") or stage.get("stage_type", "intake"),
+                semantics=pipeline_semantics_service.get_stage_semantics(
+                    {
+                        "stage_key": _normalize_stage_key(stage.get("stage_key") or stage["slug"]),
+                        "slug": stage["slug"],
+                        "stage_type": stage.get("category") or stage.get("stage_type", "intake"),
+                        "semantics": stage.get("semantics"),
+                    }
+                ).model_dump(mode="json"),
                 is_intake_stage=stage.get(
-                    "is_intake_stage", stage.get("stage_type", "intake") == "intake"
+                    "is_intake_stage",
+                    (stage.get("category") or stage.get("stage_type", "intake")) == "intake",
                 ),
                 is_active=stage.get("is_active", True),
             )
@@ -344,6 +554,8 @@ def create_pipeline(
         ]
     )
     db.flush()
+    _ensure_pipeline_semantics_defaults(db, pipeline)
+    _validate_pipeline_configuration(db, pipeline)
 
     # Create initial version snapshot
     version_service.create_version(
@@ -459,6 +671,9 @@ def rollback_pipeline(
     payload = version_service.decrypt_payload(new_version.payload_encrypted)
 
     pipeline.name = payload.get("name", pipeline.name)
+    pipeline.feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+        {"feature_config": payload.get("feature_config")}
+    ).model_dump(mode="json")
     pipeline.current_version = new_version.version
     pipeline.updated_at = datetime.now(timezone.utc)
 
@@ -482,7 +697,21 @@ def rollback_pipeline(
             stage.label = stage_data.get("label", stage.label)
             stage.color = stage_data.get("color", stage.color)
             stage.order = stage_data.get("order", stage.order)
-            stage.stage_type = stage_data.get("stage_type", stage.stage_type)
+            stage.stage_type = stage_data.get(
+                "category",
+                stage_data.get("stage_type", stage.stage_type),
+            )
+            stage.semantics = pipeline_semantics_service.get_stage_semantics(
+                {
+                    "stage_key": stage_key,
+                    "slug": slug,
+                    "stage_type": stage_data.get(
+                        "category",
+                        stage_data.get("stage_type", stage.stage_type),
+                    ),
+                    "semantics": stage_data.get("semantics"),
+                }
+            ).model_dump(mode="json")
             stage.is_intake_stage = stage.stage_type == "intake"
             stage.is_active = stage_data.get("is_active", stage.is_active)
             stage.updated_at = datetime.now(timezone.utc)
@@ -496,8 +725,23 @@ def rollback_pipeline(
                 label=stage_data.get("label", humanize_identifier(slug)),
                 color=stage_data.get("color", "#6B7280"),
                 order=stage_data.get("order", len(existing_by_key) + 1),
-                stage_type=stage_data.get("stage_type", "intake"),
-                is_intake_stage=stage_data.get("stage_type", "intake") == "intake",
+                stage_type=stage_data.get("category", stage_data.get("stage_type", "intake")),
+                semantics=pipeline_semantics_service.get_stage_semantics(
+                    {
+                        "stage_key": stage_key,
+                        "slug": slug,
+                        "stage_type": stage_data.get(
+                            "category",
+                            stage_data.get("stage_type", "intake"),
+                        ),
+                        "semantics": stage_data.get("semantics"),
+                    }
+                ).model_dump(mode="json"),
+                is_intake_stage=stage_data.get(
+                    "category",
+                    stage_data.get("stage_type", "intake"),
+                )
+                == "intake",
                 is_active=stage_data.get("is_active", True),
             )
             db.add(stage)
@@ -508,6 +752,9 @@ def rollback_pipeline(
             stage.is_active = False
             stage.deleted_at = datetime.now(timezone.utc)
             stage.updated_at = datetime.now(timezone.utc)
+
+    _ensure_pipeline_semantics_defaults(db, pipeline)
+    _validate_pipeline_configuration(db, pipeline)
 
     db.commit()
     db.refresh(pipeline)
@@ -546,8 +793,10 @@ def get_stage_by_key(db: Session, pipeline_id: UUID, stage_key: str) -> Pipeline
         db.query(PipelineStage)
         .filter(
             PipelineStage.pipeline_id == pipeline_id,
-            PipelineStage.stage_key == normalized_key,
+            (PipelineStage.stage_key == normalized_key)
+            | ((PipelineStage.stage_key.is_(None)) & (PipelineStage.slug == normalized_key)),
         )
+        .order_by((PipelineStage.stage_key == normalized_key).desc())
         .first()
     )
 
@@ -670,13 +919,14 @@ def create_stage(
     color: str,
     stage_type: str,
     order: int | None = None,
+    semantics: dict | None = None,
     user_id: UUID | None = None,
 ) -> PipelineStage:
     """
     Create a new pipeline stage.
 
-    stage_key and stage_type are immutable after creation.
-    Slug is editable via update_stage.
+    stage_key is immutable after creation.
+    Slug and category remain editable via update_stage.
     Raises ValueError if slug/stage_key already exists or stage_type is invalid.
     """
     normalized_slug = _normalize_slug(slug)
@@ -685,6 +935,7 @@ def create_stage(
         raise ValueError("Slug cannot be empty")
 
     # Validate stage_type
+    stage_type = pipeline_change_service.normalize_stage_category(stage_type)
     if stage_type not in VALID_STAGE_TYPES:
         raise ValueError(f"Invalid stage_type: {stage_type}")
 
@@ -716,6 +967,14 @@ def create_stage(
         color=color,
         stage_type=stage_type,
         order=order,
+        semantics=pipeline_semantics_service.get_stage_semantics(
+            {
+                "stage_key": stage_key,
+                "slug": normalized_slug,
+                "stage_type": stage_type,
+                "semantics": semantics,
+            }
+        ).model_dump(mode="json"),
         is_intake_stage=stage_type == "intake",
         is_active=True,
     )
@@ -724,6 +983,8 @@ def create_stage(
     pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
     if pipeline:
         pipeline.stages.append(stage)
+        _ensure_pipeline_semantics_defaults(db, pipeline)
+        _validate_pipeline_configuration(db, pipeline)
         _bump_pipeline_version(db, pipeline, user_id, f"Added stage {normalized_slug}")
     db.commit()
     db.refresh(stage)
@@ -737,12 +998,14 @@ def update_stage(
     label: str | None = None,
     color: str | None = None,
     order: int | None = None,
+    stage_type: str | None = None,
+    semantics: dict | None = None,
     user_id: UUID | None = None,
 ) -> PipelineStage:
     """
     Update stage slug, label, color, or order.
 
-    stage_key and stage_type are immutable.
+    stage_key is immutable. stage_type/category is editable.
     Syncs case status_label when label changes.
     """
     label_changed = False
@@ -765,9 +1028,28 @@ def update_stage(
     if order is not None:
         stage.order = order
 
+    if stage_type is not None:
+        normalized_stage_type = pipeline_change_service.normalize_stage_category(stage_type)
+        if normalized_stage_type not in VALID_STAGE_TYPES:
+            raise ValueError(f"Invalid stage_type: {normalized_stage_type}")
+        stage.stage_type = normalized_stage_type
+        stage.is_intake_stage = normalized_stage_type == "intake"
+
+    if semantics is not None:
+        stage.semantics = pipeline_semantics_service.get_stage_semantics(
+            {
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "stage_type": stage.stage_type,
+                "semantics": semantics,
+            }
+        ).model_dump(mode="json")
+
     stage.updated_at = datetime.now(timezone.utc)
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     if pipeline:
+        _ensure_pipeline_semantics_defaults(db, pipeline)
+        _validate_pipeline_configuration(db, pipeline)
         _bump_pipeline_version(db, pipeline, user_id, f"Updated stage {stage.stage_key}")
     db.commit()
     db.refresh(stage)
@@ -791,9 +1073,6 @@ def delete_stage(
     Returns the number of cases migrated.
     Raises ValueError if migrate_to is invalid or same stage.
     """
-    if _is_required_system_stage(stage.stage_key):
-        raise ValueError(f"{stage.label} is a required system stage and cannot be deleted")
-
     if stage.id == migrate_to_stage_id:
         raise ValueError("Cannot migrate cases to the same stage")
 
@@ -825,6 +1104,8 @@ def delete_stage(
 
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     if pipeline:
+        _ensure_pipeline_semantics_defaults(db, pipeline)
+        _validate_pipeline_configuration(db, pipeline)
         _bump_pipeline_version(db, pipeline, user_id, f"Deleted stage {stage.slug}")
 
     db.commit()
@@ -858,9 +1139,292 @@ def reorder_stages(
 
     pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
     if pipeline:
+        _ensure_pipeline_semantics_defaults(db, pipeline)
+        _validate_pipeline_configuration(db, pipeline)
         _bump_pipeline_version(db, pipeline, user_id, "Reordered stages")
     db.commit()
     return get_stages(db, pipeline_id)
+
+
+def build_recommended_pipeline_draft(pipeline: Pipeline) -> dict[str, object]:
+    stage_defs = get_default_stage_defs()
+    stages = []
+    for index, stage in enumerate(stage_defs, start=1):
+        stage_type = stage.get("stage_type", "intake")
+        stage_key = _normalize_stage_key(stage.get("stage_key") or stage["slug"])
+        stages.append(
+            {
+                "stage_key": stage_key,
+                "slug": stage["slug"],
+                "label": stage["label"],
+                "color": stage["color"],
+                "order": index,
+                "category": stage_type,
+                "stage_type": stage_type,
+                "is_active": True,
+                "semantics": pipeline_semantics_service.get_stage_semantics(
+                    {
+                        "stage_key": stage_key,
+                        "slug": stage["slug"],
+                        "stage_type": stage_type,
+                        "semantics": default_stage_semantics(stage_key, stage_type),
+                    }
+                ).model_dump(mode="json"),
+            }
+        )
+    return {
+        "name": pipeline.name,
+        "feature_config": default_pipeline_feature_config(),
+        "stages": stages,
+    }
+
+
+def build_pipeline_draft_preview(
+    db: Session,
+    pipeline: Pipeline,
+    *,
+    name: str | None,
+    stages: list[dict[str, object]],
+    feature_config: dict[str, object] | None,
+    remaps: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    from app.services import pipeline_dependency_service
+
+    existing_stage_by_id = {str(stage.id): stage for stage in pipeline.stages}
+    normalized_stages, normalization_errors, safe_auto_fixes = (
+        pipeline_change_service.normalize_stage_drafts(
+            stages,
+            existing_stage_by_id=existing_stage_by_id,
+        )
+    )
+    after_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+        {"feature_config": feature_config or pipeline.feature_config}
+    )
+    before_stages = [_serialize_stage(stage) for stage in pipeline.stages if stage.is_active]
+    dependency_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
+    preview = pipeline_change_service.build_pipeline_change_preview(
+        dependency_graph=dependency_graph,
+        before_stages=before_stages,
+        after_stages=normalized_stages,
+        before_feature_config=pipeline_semantics_service.get_pipeline_feature_config(pipeline),
+        after_feature_config=after_feature_config,
+        remaps=remaps,
+        normalization_errors=normalization_errors,
+        safe_auto_fixes=safe_auto_fixes,
+    )
+    preview["draft_name"] = name or pipeline.name
+    preview["normalized_stages"] = normalized_stages
+    preview["normalized_feature_config"] = after_feature_config.model_dump(mode="json")
+    return preview
+
+
+def _apply_external_stage_remaps(
+    db: Session,
+    pipeline: Pipeline,
+    remap_by_key: dict[str, str | None],
+) -> None:
+    from app.services import meta_crm_dataset_settings_service, zapier_settings_service
+
+    if not remap_by_key:
+        return
+
+    rules = (
+        db.query(OrgIntelligentSuggestionRule)
+        .filter(OrgIntelligentSuggestionRule.organization_id == pipeline.organization_id)
+        .all()
+    )
+    for rule in rules:
+        normalized_rule_key = normalize_stage_ref(rule.stage_slug)
+        if normalized_rule_key in remap_by_key:
+            rule.stage_slug = remap_by_key[normalized_rule_key]
+
+    zapier_settings = (
+        db.query(ZapierWebhookSettings)
+        .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
+        .first()
+    )
+    if zapier_settings and isinstance(zapier_settings.outbound_event_mapping, list):
+        remapped = []
+        for item in zapier_settings.outbound_event_mapping:
+            if not isinstance(item, dict):
+                continue
+            normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
+            if normalized_key in remap_by_key:
+                target_key = remap_by_key[normalized_key]
+                if not target_key:
+                    continue
+                item = {**item, "stage_key": target_key}
+                item.pop("stage_slug", None)
+            remapped.append(item)
+        zapier_settings.outbound_event_mapping = zapier_settings_service.normalize_event_mapping(
+            remapped,
+            db=db,
+            organization_id=pipeline.organization_id,
+        )
+
+    meta_settings = (
+        db.query(MetaCrmDatasetSettings)
+        .filter(MetaCrmDatasetSettings.organization_id == pipeline.organization_id)
+        .first()
+    )
+    if meta_settings and isinstance(meta_settings.event_mapping, list):
+        remapped = []
+        for item in meta_settings.event_mapping:
+            if not isinstance(item, dict):
+                continue
+            normalized_key = normalize_stage_ref(item.get("stage_key") or item.get("stage_slug"))
+            if normalized_key in remap_by_key:
+                target_key = remap_by_key[normalized_key]
+                if not target_key:
+                    continue
+                item = {**item, "stage_key": target_key}
+                item.pop("stage_slug", None)
+            remapped.append(item)
+        meta_settings.event_mapping = meta_crm_dataset_settings_service.normalize_event_mapping(
+            remapped
+        )
+
+
+def apply_pipeline_draft(
+    db: Session,
+    pipeline: Pipeline,
+    *,
+    name: str | None,
+    stages: list[dict[str, object]],
+    feature_config: dict[str, object] | None,
+    remaps: list[dict[str, object]] | None,
+    user_id: UUID | None,
+    comment: str | None = None,
+) -> Pipeline:
+    preview = build_pipeline_draft_preview(
+        db,
+        pipeline,
+        name=name,
+        stages=stages,
+        feature_config=feature_config,
+        remaps=remaps,
+    )
+    errors = list(preview["validation_errors"]) + list(preview["blocking_issues"])
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    draft_stages = list(preview["normalized_stages"])
+    next_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+        {"feature_config": preview["normalized_feature_config"]}
+    )
+    remap_by_key = {
+        normalize_stage_ref(item.get("removed_stage_key")): normalize_stage_ref(
+            item.get("target_stage_key")
+        )
+        for item in remaps or []
+        if normalize_stage_ref(item.get("removed_stage_key"))
+    }
+
+    existing_stages = get_stages(db, pipeline.id, include_inactive=True)
+    existing_by_id = {str(stage.id): stage for stage in existing_stages}
+    existing_by_key = {stage.stage_key: stage for stage in existing_stages if stage.stage_key}
+    kept_stage_keys: set[str] = set()
+
+    for draft_stage in draft_stages:
+        stage_id = str(draft_stage.get("id") or "").strip() or None
+        stage_key = str(draft_stage["stage_key"])
+        stage = existing_by_id.get(stage_id) if stage_id else None
+        if stage is None:
+            stage = existing_by_key.get(stage_key)
+
+        if stage is None:
+            stage = PipelineStage(
+                pipeline_id=pipeline.id,
+                stage_key=stage_key,
+                slug=str(draft_stage["slug"]),
+                label=str(draft_stage["label"]),
+                color=str(draft_stage["color"]),
+                order=int(draft_stage["order"]),
+                stage_type=str(draft_stage["category"]),
+                semantics=dict(draft_stage["semantics"]),
+                is_intake_stage=str(draft_stage["category"]) == "intake",
+                is_active=bool(draft_stage.get("is_active", True)),
+            )
+            db.add(stage)
+            db.flush()
+            pipeline.stages.append(stage)
+            existing_by_id[str(stage.id)] = stage
+            existing_by_key[stage_key] = stage
+        else:
+            stage.slug = str(draft_stage["slug"])
+            stage.label = str(draft_stage["label"])
+            stage.color = str(draft_stage["color"])
+            stage.order = int(draft_stage["order"])
+            stage.stage_type = str(draft_stage["category"])
+            stage.semantics = dict(draft_stage["semantics"])
+            stage.is_intake_stage = stage.stage_type == "intake"
+            stage.is_active = bool(draft_stage.get("is_active", True))
+            stage.deleted_at = None if stage.is_active else datetime.now(timezone.utc)
+            stage.updated_at = datetime.now(timezone.utc)
+
+        kept_stage_keys.add(stage_key)
+
+    removed_stages = [
+        stage
+        for stage in existing_stages
+        if stage.is_active and stage.stage_key not in kept_stage_keys
+    ]
+    target_stage_by_key = {
+        stage.stage_key: stage
+        for stage in existing_by_key.values()
+        if stage.stage_key in kept_stage_keys and stage.is_active
+    }
+
+    for stage in removed_stages:
+        target_stage_key = remap_by_key.get(stage.stage_key)
+        target_stage = target_stage_by_key.get(target_stage_key) if target_stage_key else None
+        surrogate_count = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.organization_id == pipeline.organization_id,
+                Surrogate.stage_id == stage.id,
+                Surrogate.is_archived.is_(False),
+            )
+            .count()
+        )
+        if surrogate_count > 0 and target_stage is None:
+            raise ValueError(
+                f"Stage '{stage.label}' still has active surrogates and needs a remap target."
+            )
+        if surrogate_count > 0 and target_stage is not None:
+            (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.organization_id == pipeline.organization_id,
+                    Surrogate.stage_id == stage.id,
+                    Surrogate.is_archived.is_(False),
+                )
+                .update(
+                    {
+                        Surrogate.stage_id: target_stage.id,
+                        Surrogate.status_label: target_stage.label,
+                    }
+                )
+            )
+
+        stage.is_active = False
+        stage.deleted_at = datetime.now(timezone.utc)
+        stage.updated_at = datetime.now(timezone.utc)
+
+    pipeline.name = name or pipeline.name
+    pipeline.feature_config = pipeline_change_service.apply_feature_config_stage_remaps(
+        next_feature_config,
+        remap_by_key,
+    ).model_dump(mode="json")
+
+    _apply_external_stage_remaps(db, pipeline, remap_by_key)
+    _ensure_pipeline_semantics_defaults(db, pipeline)
+    _validate_pipeline_configuration(db, pipeline)
+    _bump_pipeline_version(db, pipeline, user_id, comment or "Applied pipeline draft")
+
+    db.commit()
+    db.refresh(pipeline)
+    return pipeline
 
 
 def sync_surrogate_labels(db: Session, stage_id: UUID, new_label: str) -> int:

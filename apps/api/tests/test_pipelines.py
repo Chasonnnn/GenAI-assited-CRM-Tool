@@ -1,6 +1,7 @@
 """Tests for Pipelines API with versioning."""
 
 import uuid
+from copy import deepcopy
 from uuid import UUID
 
 import pytest
@@ -9,11 +10,56 @@ from httpx import ASGITransport, AsyncClient
 from app.core.stage_definitions import get_default_stage_defs
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, Pipeline, PipelineStage, User
+from app.db.models import (
+    Membership,
+    OrgIntelligentSuggestionRule,
+    Pipeline,
+    PipelineStage,
+    Surrogate,
+    User,
+)
 from app.main import app
-from app.services import pipeline_service, session_service
+from app.services import pipeline_service, session_service, zapier_settings_service
+from app.utils.normalization import normalize_email
+
+
+def _create_surrogate_for_stage(db, *, org_id: UUID, user_id: UUID, stage: PipelineStage) -> Surrogate:
+    email = f"pipeline-stage-{uuid.uuid4().hex[:8]}@example.com"
+    normalized_email = normalize_email(email)
+    surrogate = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        stage_id=stage.id,
+        status_label=stage.label,
+        owner_type="user",
+        owner_id=user_id,
+        created_by_user_id=user_id,
+        full_name="Pipeline Stage Surrogate",
+        email=normalized_email,
+        email_hash=hash_email(normalized_email),
+    )
+    db.add(surrogate)
+    db.flush()
+    return surrogate
+
+
+def _remove_stage_key_refs(feature_config: dict, stage_key: str) -> dict:
+    next_config = deepcopy(feature_config)
+    for milestone in next_config["journey"]["milestones"]:
+        milestone["mapped_stage_keys"] = [
+            key for key in milestone["mapped_stage_keys"] if key != stage_key
+        ]
+    next_config["analytics"]["funnel_stage_keys"] = [
+        key for key in next_config["analytics"]["funnel_stage_keys"] if key != stage_key
+    ]
+    for rules_key in ("role_visibility", "role_mutation"):
+        for rule in next_config[rules_key].values():
+            rule["stage_keys"] = [key for key in rule["stage_keys"] if key != stage_key]
+    return next_config
 
 
 @pytest.mark.asyncio
@@ -22,6 +68,29 @@ async def test_list_pipelines_authed(authed_client: AsyncClient):
     response = await authed_client.get("/settings/pipelines")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+@pytest.mark.asyncio
+async def test_recommended_pipeline_draft_matches_platform_default_stage_order(
+    authed_client: AsyncClient,
+):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200
+    pipeline_id = default_response.json()["id"]
+
+    response = await authed_client.get(f"/settings/pipelines/{pipeline_id}/recommended-draft")
+    assert response.status_code == 200
+
+    data = response.json()
+    expected_defs = get_default_stage_defs()
+
+    assert [
+        (stage["stage_key"], stage["label"], stage["order"])
+        for stage in data["stages"]
+    ] == [
+        (stage["stage_key"], stage["label"], stage["order"])
+        for stage in expected_defs
+    ]
 
 
 @pytest.mark.asyncio
@@ -60,8 +129,10 @@ async def test_create_pipeline(authed_client: AsyncClient):
     data = response.json()
     assert data["name"] == "Test Pipeline"
     assert data["current_version"] == 1
+    assert data["feature_config"]["schema_version"] == 1
     assert len(data["stages"]) == 4
     assert any(stage["slug"] == "on_hold" for stage in data["stages"])
+    assert all("semantics" in stage for stage in data["stages"])
 
 
 @pytest.mark.asyncio
@@ -268,8 +339,48 @@ def test_sync_missing_stages_inserts_on_hold_before_terminal_stages(db, test_org
     assert slugs.index("on_hold") < slugs.index("disqualified")
 
 
+def test_get_or_create_default_pipeline_normalizes_legacy_stage_categories(db, test_org, test_user):
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Legacy Categories",
+        is_default=True,
+        current_version=1,
+    )
+    db.add(pipeline)
+    db.flush()
+
+    for stage_def in get_default_stage_defs():
+        stage_type = stage_def["stage_type"]
+        if stage_def["stage_key"] in {"on_hold", "lost", "disqualified"}:
+            stage_type = "intake"
+        db.add(
+            PipelineStage(
+                id=uuid.uuid4(),
+                pipeline_id=pipeline.id,
+                stage_key=stage_def["stage_key"],
+                slug=stage_def["slug"],
+                label=stage_def["label"],
+                color=stage_def["color"],
+                stage_type=stage_type,
+                order=stage_def["order"],
+                is_active=True,
+                is_intake_stage=stage_type == "intake",
+            )
+        )
+    db.commit()
+
+    normalized = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+    stage_by_key = {stage.stage_key: stage for stage in normalized.stages}
+
+    assert stage_by_key["on_hold"].stage_type == "paused"
+    assert stage_by_key["on_hold"].is_intake_stage is False
+    assert stage_by_key["lost"].stage_type == "terminal"
+    assert stage_by_key["disqualified"].stage_type == "terminal"
+
+
 @pytest.mark.asyncio
-async def test_required_on_hold_stage_cannot_be_deleted(authed_client):
+async def test_required_pause_stage_cannot_be_deleted(authed_client):
     default_response = await authed_client.get("/settings/pipelines/default")
     assert default_response.status_code == 200, default_response.text
     pipeline = default_response.json()
@@ -283,4 +394,229 @@ async def test_required_on_hold_stage_cannot_be_deleted(authed_client):
         json={"migrate_to_stage_id": lost_stage["id"]},
     )
     assert response.status_code == 400
-    assert "required system stage" in response.json()["detail"].lower()
+    assert "resume_previous_stage" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_stage_accepts_category_alias(authed_client: AsyncClient):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    contacted_stage = next(stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted")
+
+    response = await authed_client.put(
+        f"/settings/pipelines/{pipeline['id']}/stages/{contacted_stage['id']}",
+        json={
+            "category": "post_approval",
+            "expected_version": pipeline["current_version"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["category"] == "post_approval"
+    assert payload["stage_type"] == "post_approval"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_change_preview_requires_remap_for_removed_stage_dependencies(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    ready_to_match_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "ready_to_match"
+    )
+    ready_to_match_db = pipeline_service.get_stage_by_id(db, UUID(ready_to_match_stage["id"]))
+    assert ready_to_match_db is not None
+    _create_surrogate_for_stage(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=ready_to_match_db,
+    )
+
+    db.add(
+        OrgIntelligentSuggestionRule(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            template_key="ready_to_match_stale",
+            name="Ready to Match stale",
+            rule_kind="stage_inactivity",
+            stage_slug="ready_to_match",
+            business_days=3,
+            enabled=True,
+            sort_order=1,
+        )
+    )
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_event_mapping = [
+        {
+            "stage_key": "ready_to_match",
+            "event_name": "Converted",
+            "enabled": True,
+            "bucket": "converted",
+        }
+    ]
+    db.commit()
+
+    preview_payload = {
+        "name": pipeline["name"],
+        "stages": [
+            {
+                "id": stage["id"],
+                "stage_key": stage["stage_key"],
+                "slug": stage["slug"],
+                "label": stage["label"],
+                "color": stage["color"],
+                "order": index + 1,
+                "category": stage["stage_type"],
+                "is_active": stage["is_active"],
+                "semantics": stage["semantics"],
+            }
+            for index, stage in enumerate(pipeline["stages"])
+            if stage["stage_key"] != "ready_to_match"
+        ],
+        "feature_config": _remove_stage_key_refs(
+            pipeline["feature_config"],
+            "ready_to_match",
+        ),
+        "expected_version": pipeline["current_version"],
+        "remaps": [],
+    }
+
+    response = await authed_client.post(
+        f"/settings/pipelines/{pipeline['id']}/change-preview",
+        json=preview_payload,
+    )
+
+    assert response.status_code == 200, response.text
+    preview = response.json()
+    required_remap = next(
+        item for item in preview["required_remaps"] if item["stage_key"] == "ready_to_match"
+    )
+    assert required_remap["surrogate_count"] == 1
+    assert "active_surrogates" in required_remap["reasons"]
+    assert "intelligent_suggestions" in required_remap["reasons"]
+    assert "integrations" in required_remap["reasons"]
+
+
+@pytest.mark.asyncio
+async def test_apply_pipeline_draft_adds_stage_reclassifies_stage_and_deletes_with_remap(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    ready_to_match_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "ready_to_match"
+    )
+    ready_to_match_db = pipeline_service.get_stage_by_id(db, UUID(ready_to_match_stage["id"]))
+    assert ready_to_match_db is not None
+    surrogate = _create_surrogate_for_stage(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=ready_to_match_db,
+    )
+    db.commit()
+
+    feature_config = deepcopy(pipeline["feature_config"])
+    for milestone in feature_config["journey"]["milestones"]:
+        if "ready_to_match" in milestone["mapped_stage_keys"]:
+            milestone["mapped_stage_keys"] = [
+                "matching_review" if key == "ready_to_match" else key
+                for key in milestone["mapped_stage_keys"]
+            ]
+    feature_config["analytics"]["funnel_stage_keys"] = [
+        "matching_review" if key == "ready_to_match" else key
+        for key in feature_config["analytics"]["funnel_stage_keys"]
+    ]
+    for rules_key in ("role_visibility", "role_mutation"):
+        for rule in feature_config[rules_key].values():
+            rule["stage_keys"] = [
+                "matching_review" if key == "ready_to_match" else key
+                for key in rule["stage_keys"]
+            ]
+
+    draft_stages = []
+    insert_order = ready_to_match_stage["order"]
+    for stage in pipeline["stages"]:
+        if stage["stage_key"] == "ready_to_match":
+            draft_stages.append(
+                {
+                    "stage_key": "matching_review",
+                    "slug": "matching_review",
+                    "label": "Matching Review",
+                    "color": "#8b5cf6",
+                    "order": insert_order,
+                    "category": "post_approval",
+                    "is_active": True,
+                    "semantics": {
+                        **stage["semantics"],
+                        "capabilities": {
+                            **stage["semantics"]["capabilities"],
+                            "eligible_for_matching": True,
+                        },
+                        "integration_bucket": "converted",
+                        "analytics_bucket": "matching_review",
+                        "suggestion_profile_key": "ready_to_match_followup",
+                    },
+                }
+            )
+            continue
+
+        next_stage = {
+            "id": stage["id"],
+            "stage_key": stage["stage_key"],
+            "slug": stage["slug"],
+            "label": stage["label"],
+            "color": stage["color"],
+            "order": stage["order"] + (1 if stage["order"] > insert_order else 0),
+            "category": "post_approval"
+            if stage["stage_key"] == "contacted"
+            else stage["stage_type"],
+            "is_active": stage["is_active"],
+            "semantics": stage["semantics"],
+        }
+        draft_stages.append(next_stage)
+
+    response = await authed_client.put(
+        f"/settings/pipelines/{pipeline['id']}/apply-draft",
+        json={
+            "name": pipeline["name"],
+            "stages": draft_stages,
+            "feature_config": feature_config,
+            "expected_version": pipeline["current_version"],
+            "comment": "Applied per-org pipeline draft",
+            "remaps": [
+                {
+                    "removed_stage_key": "ready_to_match",
+                    "target_stage_key": "matching_review",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert any(stage["stage_key"] == "matching_review" for stage in payload["stages"])
+    contacted = next(stage for stage in payload["stages"] if stage["stage_key"] == "contacted")
+    assert contacted["category"] == "post_approval"
+    assert all(stage["stage_key"] != "ready_to_match" or not stage["is_active"] for stage in payload["stages"])
+
+    db.refresh(surrogate)
+    matching_review_stage = pipeline_service.get_stage_by_key(db, UUID(payload["id"]), "matching_review")
+    assert matching_review_stage is not None
+    assert surrogate.stage_id == matching_review_stage.id
+    assert surrogate.status_label == matching_review_stage.label

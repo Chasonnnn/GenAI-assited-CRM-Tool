@@ -22,3 +22,32 @@ def test_on_hold_stage_uses_paused_type_and_muted_brick_color() -> None:
 
     assert stage_defs["on_hold"]["stage_type"] == "paused"
     assert stage_defs["on_hold"]["color"] == "#B4536A"
+
+
+def test_default_stage_defs_match_recommended_platform_labels() -> None:
+    expected_stages = [
+        ("new_unread", "New Unread"),
+        ("contacted", "Contacted"),
+        ("pre_qualified", "Pre-Qualified"),
+        ("application_submitted", "Application Submitted"),
+        ("interview_scheduled", "Interview Scheduled"),
+        ("under_review", "Under Review"),
+        ("approved", "Approved"),
+        ("ready_to_match", "Ready to Match"),
+        ("matched", "Matched"),
+        ("medical_clearance_passed", "Medical Clearance Passed"),
+        ("legal_clearance_passed", "Legal Clearance Passed"),
+        ("transfer_cycle", "Transfer Cycle Initiated"),
+        ("second_hcg_confirmed", "Second hCG confirmed"),
+        ("heartbeat_confirmed", "Heartbeat Confirmed"),
+        ("ob_care_established", "OB Care Established"),
+        ("anatomy_scanned", "Anatomy Scanned"),
+        ("delivered", "Delivered"),
+        ("on_hold", "On-Hold"),
+        ("lost", "Lost"),
+        ("disqualified", "Disqualified"),
+    ]
+
+    stage_defs = get_default_stage_defs()
+
+    assert [(stage["stage_key"], stage["label"]) for stage in stage_defs] == expected_stages

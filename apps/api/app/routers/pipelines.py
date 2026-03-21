@@ -24,7 +24,8 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 
 from app.schemas.auth import UserSession
-from app.services import pipeline_service, version_service
+from app.schemas.pipeline_semantics import PipelineFeatureConfig, StageSemantics
+from app.services import pipeline_semantics_service, pipeline_service, version_service
 
 csrf_header_dependency = require_csrf_header
 
@@ -47,6 +48,7 @@ class PipelineRead(BaseModel):
     name: str
     is_default: bool
     stages: list["StageRead"]
+    feature_config: PipelineFeatureConfig
     current_version: int
     created_at: str
     updated_at: str
@@ -59,12 +61,14 @@ class PipelineCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     stages: list["StageCreate"] | None = None  # Uses defaults if not provided
+    feature_config: PipelineFeatureConfig | None = None
 
 
 class PipelineUpdate(BaseModel):
     """Request to update pipeline name."""
 
     name: str | None = Field(None, min_length=1, max_length=100)
+    feature_config: PipelineFeatureConfig | None = None
     expected_version: int | None = None  # For optimistic locking
     comment: str | None = None  # Version comment
 
@@ -95,8 +99,10 @@ class StageRead(BaseModel):
     label: str
     color: str
     order: int
+    category: str
     stage_type: str
     is_active: bool
+    semantics: StageSemantics
 
     model_config = {"from_attributes": True}
 
@@ -107,18 +113,23 @@ class StageCreate(BaseModel):
     slug: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
     label: str = Field(min_length=1, max_length=100)
     color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
-    stage_type: str = Field(pattern=r"^(intake|post_approval|paused|terminal)$")
+    category: str | None = Field(None, pattern=r"^(intake|post_approval|paused|terminal)$")
+    stage_type: str | None = Field(None, pattern=r"^(intake|post_approval|paused|terminal)$")
+    semantics: StageSemantics | None = None
     order: int | None = None  # Auto-calculated if not provided
     expected_version: int | None = None  # Optional optimistic locking
 
 
 class StageUpdate(BaseModel):
-    """Request to update a stage (stage_key/stage_type immutable)."""
+    """Request to update a stage (stage_key immutable)."""
 
     slug: str | None = Field(None, min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
     label: str | None = Field(None, min_length=1, max_length=100)
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
     order: int | None = None
+    category: str | None = Field(None, pattern=r"^(intake|post_approval|paused|terminal)$")
+    stage_type: str | None = Field(None, pattern=r"^(intake|post_approval|paused|terminal)$")
+    semantics: StageSemantics | None = None
     expected_version: int | None = None  # Optional optimistic locking
 
 
@@ -134,6 +145,85 @@ class StageReorder(BaseModel):
 
     ordered_stage_ids: list[UUID]
     expected_version: int | None = None  # Optional optimistic locking
+
+
+class PipelineSemanticsSnapshotRead(BaseModel):
+    pipeline_id: UUID
+    version: int
+    feature_config: PipelineFeatureConfig
+    stages: list[StageRead]
+
+
+class PipelineStageDependencyRead(BaseModel):
+    stage_id: UUID
+    stage_key: str
+    slug: str
+    label: str
+    category: str
+    stage_type: str
+    is_active: bool
+    surrogate_count: int
+    journey_milestone_slugs: list[str]
+    analytics_funnel: bool
+    intelligent_suggestion_rules: list[dict[str, object]]
+    integration_refs: list[str]
+    role_visibility_roles: list[str]
+    role_mutation_roles: list[str]
+
+
+class PipelineDependencyGraphRead(BaseModel):
+    pipeline_id: UUID
+    version: int
+    stages: list[PipelineStageDependencyRead]
+
+
+class PipelineDraftStage(BaseModel):
+    id: UUID | None = None
+    stage_key: str | None = None
+    slug: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
+    label: str = Field(min_length=1, max_length=100)
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    order: int | None = None
+    category: str | None = Field(None, pattern=r"^(intake|post_approval|paused|terminal)$")
+    stage_type: str | None = Field(None, pattern=r"^(intake|post_approval|paused|terminal)$")
+    is_active: bool = True
+    semantics: StageSemantics | None = None
+
+
+class PipelineStageRemap(BaseModel):
+    removed_stage_key: str = Field(min_length=1, max_length=50)
+    target_stage_key: str | None = Field(default=None, min_length=1, max_length=50)
+
+
+class PipelineDraftRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    stages: list[PipelineDraftStage]
+    feature_config: PipelineFeatureConfig
+    remaps: list[PipelineStageRemap] = Field(default_factory=list)
+    expected_version: int | None = None
+    comment: str | None = None
+
+
+class PipelineDraftRead(BaseModel):
+    name: str
+    stages: list[PipelineDraftStage]
+    feature_config: PipelineFeatureConfig
+
+
+class PipelineRequiredRemapRead(BaseModel):
+    stage_key: str
+    label: str
+    surrogate_count: int
+    reasons: list[str]
+
+
+class PipelineChangePreviewRead(BaseModel):
+    impact_areas: list[str]
+    validation_errors: list[str]
+    blocking_issues: list[str]
+    required_remaps: list[PipelineRequiredRemapRead]
+    safe_auto_fixes: list[str]
+    dependency_graph: PipelineDependencyGraphRead
 
 
 # =============================================================================
@@ -163,6 +253,7 @@ def list_pipelines(
             name=p.name,
             is_default=p.is_default,
             stages=pipeline_service.get_stages(db, p.id),
+            feature_config=pipeline_semantics_service.get_pipeline_feature_config(p),
             current_version=p.current_version,
             created_at=p.created_at.isoformat(),
             updated_at=p.updated_at.isoformat(),
@@ -188,10 +279,21 @@ def get_default_pipeline(
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(pipeline),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
     )
+
+
+@router.get("/default/semantics", response_model=PipelineSemanticsSnapshotRead)
+def get_default_pipeline_semantics(
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, session.org_id, session.user_id)
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+    return PipelineSemanticsSnapshotRead(**pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot))
 
 
 @router.get("/{pipeline_id}", response_model=PipelineRead, dependencies=[MANAGE_PIPELINES_DEP])
@@ -210,9 +312,153 @@ def get_pipeline(
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(pipeline),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/{pipeline_id}/semantics",
+    response_model=PipelineSemanticsSnapshotRead,
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
+def get_pipeline_semantics(
+    pipeline_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+    return PipelineSemanticsSnapshotRead(**pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot))
+
+
+@router.get(
+    "/{pipeline_id}/dependency-graph",
+    response_model=PipelineDependencyGraphRead,
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
+def get_pipeline_dependency_graph(
+    pipeline_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    from app.services import pipeline_dependency_service
+
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    return PipelineDependencyGraphRead(**pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline))
+
+
+@router.get(
+    "/{pipeline_id}/recommended-draft",
+    response_model=PipelineDraftRead,
+    dependencies=[MANAGE_PIPELINES_DEP],
+)
+def get_recommended_pipeline_draft(
+    pipeline_id: UUID,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    draft = pipeline_service.build_recommended_pipeline_draft(pipeline)
+    return PipelineDraftRead(
+        name=str(draft["name"]),
+        feature_config=PipelineFeatureConfig.model_validate(draft["feature_config"]),
+        stages=[PipelineDraftStage.model_validate(stage) for stage in draft["stages"]],
+    )
+
+
+@router.post(
+    "/{pipeline_id}/change-preview",
+    response_model=PipelineChangePreviewRead,
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
+)
+def preview_pipeline_changes(
+    pipeline_id: UUID,
+    data: PipelineDraftRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Version conflict: expected {e.expected}, got {e.actual}",
+            )
+    preview = pipeline_service.build_pipeline_draft_preview(
+        db,
+        pipeline,
+        name=data.name,
+        stages=[stage.model_dump(mode="json", exclude_none=True) for stage in data.stages],
+        feature_config=data.feature_config.model_dump(mode="json"),
+        remaps=[item.model_dump(mode="json", exclude_none=True) for item in data.remaps],
+    )
+    return PipelineChangePreviewRead(
+        impact_areas=preview["impact_areas"],
+        validation_errors=preview["validation_errors"],
+        blocking_issues=preview["blocking_issues"],
+        required_remaps=preview["required_remaps"],
+        safe_auto_fixes=preview["safe_auto_fixes"],
+        dependency_graph=preview["dependency_graph"],
+    )
+
+
+@router.put(
+    "/{pipeline_id}/apply-draft",
+    response_model=PipelineRead,
+    dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
+)
+def apply_pipeline_draft(
+    pipeline_id: UUID,
+    data: PipelineDraftRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    if data.expected_version is not None:
+        try:
+            version_service.check_version(pipeline.current_version, data.expected_version)
+        except version_service.VersionConflictError as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Version conflict: expected {e.expected}, got {e.actual}",
+            )
+    try:
+        updated = pipeline_service.apply_pipeline_draft(
+            db,
+            pipeline,
+            name=data.name,
+            stages=[stage.model_dump(mode="json", exclude_none=True) for stage in data.stages],
+            feature_config=data.feature_config.model_dump(mode="json"),
+            remaps=[item.model_dump(mode="json", exclude_none=True) for item in data.remaps],
+            user_id=session.user_id,
+            comment=data.comment,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return PipelineRead(
+        id=updated.id,
+        name=updated.name,
+        is_default=updated.is_default,
+        stages=pipeline_service.get_stages(db, updated.id, include_inactive=True),
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(updated),
+        current_version=updated.current_version,
+        created_at=updated.created_at.isoformat(),
+        updated_at=updated.updated_at.isoformat(),
     )
 
 
@@ -242,6 +488,9 @@ def create_pipeline(
         user_id=session.user_id,
         name=data.name,
         stages=stages,
+        feature_config=(
+            data.feature_config.model_dump(mode="json") if data.feature_config is not None else None
+        ),
     )
 
     return PipelineRead(
@@ -249,6 +498,7 @@ def create_pipeline(
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(pipeline),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
@@ -321,6 +571,14 @@ def update_pipeline(
             user_id=session.user_id,
             comment=data.comment or "Renamed",
         )
+    elif data.feature_config is not None:
+        pipeline_service.update_pipeline_feature_config(
+            db=db,
+            pipeline=pipeline,
+            feature_config=data.feature_config.model_dump(mode="json"),
+            user_id=session.user_id,
+            comment=data.comment or "Updated pipeline behavior",
+        )
     else:
         raise HTTPException(status_code=400, detail="No updates provided")
 
@@ -329,6 +587,7 @@ def update_pipeline(
         name=pipeline.name,
         is_default=pipeline.is_default,
         stages=pipeline_service.get_stages(db, pipeline.id),
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(pipeline),
         current_version=pipeline.current_version,
         created_at=pipeline.created_at.isoformat(),
         updated_at=pipeline.updated_at.isoformat(),
@@ -458,6 +717,7 @@ def rollback_pipeline(
         name=updated.name,
         is_default=updated.is_default,
         stages=pipeline_service.get_stages(db, updated.id, include_inactive=True),
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(updated),
         current_version=updated.current_version,
         created_at=updated.created_at.isoformat(),
         updated_at=updated.updated_at.isoformat(),
@@ -510,7 +770,7 @@ def create_stage(
     """
     Create a new stage in a pipeline.
 
-    Slug and stage_type are immutable after creation.
+    stage_key is immutable after creation. Category remains editable later.
     Requires: Manager+ role
     """
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id)
@@ -532,8 +792,9 @@ def create_stage(
             slug=data.slug,
             label=data.label,
             color=data.color,
-            stage_type=data.stage_type,
+            stage_type=data.category or data.stage_type or "intake",
             order=data.order,
+            semantics=data.semantics.model_dump(mode="json") if data.semantics else None,
             user_id=session.user_id,
         )
         return stage
@@ -590,7 +851,7 @@ def update_stage(
     """
     Update a stage's slug, label, color, or order.
 
-    stage_key and stage_type are immutable.
+    stage_key is immutable. category/stage_type is editable.
     When label changes, all cases using this stage update their status_label.
     Requires: Manager+ role
     """
@@ -620,6 +881,8 @@ def update_stage(
             label=data.label,
             color=data.color,
             order=data.order,
+            stage_type=data.category or data.stage_type,
+            semantics=data.semantics.model_dump(mode="json") if data.semantics else None,
             user_id=session.user_id,
         )
     except ValueError as e:
