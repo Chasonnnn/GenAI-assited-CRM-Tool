@@ -621,6 +621,39 @@ describe('SurrogateDetailPage', () => {
         })
     })
 
+    it('shows email warning details in a tooltip on hover or focus', async () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                email: 'janeexample.com',
+                lead_intake_warnings: [
+                    {
+                        field_key: 'email',
+                        issue: 'invalid_value',
+                        raw_value: 'jane@example,com',
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const warningTrigger = screen.getByLabelText('Email lead intake warning')
+        fireEvent.mouseEnter(warningTrigger)
+
+        await waitFor(() => {
+            expect(screen.getByText('Email')).toBeInTheDocument()
+            expect(screen.getByText('This value could not be structured, so the field needs review.')).toBeInTheDocument()
+            expect(screen.getByText('jane@example,com')).toBeInTheDocument()
+        })
+    })
+
     it('computes BMI from rounded inches for decimal-feet height values', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
