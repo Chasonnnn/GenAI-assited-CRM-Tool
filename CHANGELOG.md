@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.46...surrogacy-crm-platform-v0.91.0) (2026-03-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* restore legacy stage-definition exports required by generated stage maps and enforce non-null intended parent stage assignments in ORM metadata to match migrated schema.
+
+### Features
+
+* add entity-aware pipeline settings and campaign filters ([de01a47](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/de01a4759935966611e5e4271cb260b2821655f4))
+* add form table field support ([bf34eb9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bf34eb9016b68b306ed6890eebd79f6f0ad0ac7c))
+* add match-scoped task controls on match detail ([4d9af33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d9af330ef1812c4b991ebd19585102740260c0a))
+* expand intended parent detail schema ([496c867](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/496c8670e2ea45d9b42556f9a7303e2be2ce3d59))
+* platformize intended parent pipelines backend ([7bf5dc0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7bf5dc0d4956efa48ebac492ee2e9edad9a29643))
+* redesign intended parent detail tab ([1b11ca6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1b11ca62cb461ac28847acf1151373f5d2dd363c))
+* refresh shared form builder workspace ([24a1e94](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24a1e9478150b69a8bba0e7373b0934c64b030cd))
+* refresh shared form builder workspace ([9941688](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/99416885835081080af459501945e57962e682cf))
+* restore CI stage contracts ([6031054](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6031054835dd88f0406feaa5688039346bf30525))
+* support match-scoped task creation in task api ([9b41587](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9b4158786f869ec9e66c7835f7638df990f24a74))
+* wire intended parent stages into web surfaces ([e648089](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e64808902bd8176dd81eb334ca045136bf1b53f5))
+
+
+### Bug Fixes
+
+* align activity timeline rows ([10287d6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/10287d63e79b123869793938df8a181f96deef64))
+* align attention stuck filter scope ([53060e0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/53060e045a66f32c5da612ef5235ba3a9f946eef))
+* align pipeline settings controls ([a9b5320](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a9b5320c3a04202bf252bb7cc4d02073d68a5cfa))
+* clean frontend test warnings ([9ce0d3f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9ce0d3f4fd2e1b4b0a1b9d0357545465c69cb12a))
+* densify field library sheet ([0ada929](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ada9299b767dbfc3f0eb1cb747971760148f832))
+* densify form builder field palette ([9023d7b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9023d7b5c6e9b6151a9d2595f9008292edb7013e))
+* humanize automation form settings dropdowns ([623718e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/623718e704ac48b127d0a4a75ed373044c06fe3f))
+* humanize form builder inspector dropdowns ([cf9bf29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cf9bf29879284d28b18ab664538869859441e319))
+* keep surrogate activity details collapsed by default ([6cf1bfc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6cf1bfc25b052097ae2cbada3d60aeee443ed106))
+* rename stuck attention filter label ([890c77a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/890c77a98b90d9188c3ba37b9e8e0d4f97959810))
+* replace lead review card with inline warnings ([1c2f395](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1c2f3952ed6819797cbaef5777849c5ee67059cb))
+* restore backend validation compatibility ([3f5f6f1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3f5f6f15564dbd1a4f1695d7b146928591b8eeb9))
+* simplify form builder workspace controls ([cb0cb41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cb0cb410a45c0de93d506e65d6199cab3989dc90))
+* tighten form builder table fields ([bda76ec](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bda76ec42d4aef36dced84cccf26ddee2048613d))
+* widen intended parent update status types ([b621453](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b6214539ef15ad6430ca0df7bd6967ac6de66d1d))
+
+
+### Maintenance
+
+* format analytics and workflow services ([5b9266b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5b9266b91199dc82819c993aa92370d72678c746))
+* format backend helpers and tests ([050a63d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/050a63deeb2869f0269f4bca37798f0b5a19e782))
+* format pipeline and journey services ([d4370c9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d4370c9b3bd1885afde7695f6f4579fcfe9bb913))
+
 ## [0.90.46](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.45...surrogacy-crm-platform-v0.90.46) (2026-03-21)
 
 
