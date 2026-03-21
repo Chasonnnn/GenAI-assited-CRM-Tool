@@ -109,9 +109,7 @@ def get_analytics_summary(
     new_this_period = int(metrics.new_this_period or 0)
     qualified_count = int(metrics.pre_qualified_count or 0)
 
-    qualification_rate = (
-        (qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
-    )
+    qualification_rate = (qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
 
     avg_time_to_qualification_hours = None
     if qualification_stage:
@@ -655,7 +653,9 @@ def get_conversion_funnel(
     stages = _get_default_pipeline_stages(db, organization_id)
     stage_by_key = {s.stage_key: s for s in stages if s.is_active}
     funnel_stage_keys = get_funnel_stage_keys(db, organization_id)
-    funnel_stages = [stage_by_key[stage_key] for stage_key in funnel_stage_keys if stage_key in stage_by_key]
+    funnel_stages = [
+        stage_by_key[stage_key] for stage_key in funnel_stage_keys if stage_key in stage_by_key
+    ]
     if not funnel_stages:
         funnel_stages = sorted([s for s in stages if s.is_active], key=lambda s: s.order)[:5]
 
@@ -1185,9 +1185,7 @@ def _get_activity_performance(
     )
     conversion_stage_key = analytics_config["conversion_stage_key"]
     conversion_stage = (
-        stage_key_to_stage.get(conversion_stage_key)
-        if conversion_stage_key
-        else None
+        stage_key_to_stage.get(conversion_stage_key) if conversion_stage_key else None
     )
     conversion_ever, _ = _load_history_stage_sets(
         db,

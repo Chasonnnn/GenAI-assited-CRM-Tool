@@ -126,7 +126,9 @@ def remap_campaign_stage_references(
 
     from app.services import pipeline_service
 
-    criteria = deepcopy(campaign.filter_criteria if isinstance(campaign.filter_criteria, dict) else {})
+    criteria = deepcopy(
+        campaign.filter_criteria if isinstance(campaign.filter_criteria, dict) else {}
+    )
     stage_keys: list[str] = []
     for stage_id in criteria.get("stage_ids") or []:
         try:
@@ -152,7 +154,9 @@ def remap_campaign_stage_references(
 
     criteria["stage_keys"] = stage_keys
     criteria.pop("stage_slugs", None)
-    campaign.filter_criteria = normalize_filter_criteria(db, org_id, campaign.recipient_type, criteria)
+    campaign.filter_criteria = normalize_filter_criteria(
+        db, org_id, campaign.recipient_type, criteria
+    )
 
 
 # =============================================================================

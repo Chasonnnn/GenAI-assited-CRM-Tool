@@ -154,7 +154,9 @@ def _build_stage_followup_templates(db: Session, org_id: UUID) -> list[dict]:
     return templates
 
 
-def list_rule_templates(db: Session | None = None, organization_id: UUID | None = None) -> list[dict]:
+def list_rule_templates(
+    db: Session | None = None, organization_id: UUID | None = None
+) -> list[dict]:
     stage_templates = (
         _build_stage_followup_templates(db, organization_id)
         if db is not None and organization_id is not None
@@ -181,7 +183,9 @@ def list_rule_templates(db: Session | None = None, organization_id: UUID | None 
             "default_stage_slug": "new_unread",
             "default_stage_key": "new_unread",
             "default_stage_label": "New Unread",
-            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[TEMPLATE_STAGE_FOLLOWUP_CUSTOM],
+            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[
+                TEMPLATE_STAGE_FOLLOWUP_CUSTOM
+            ],
             "is_default": False,
         },
         *stage_templates,
@@ -204,7 +208,9 @@ def list_rule_templates(db: Session | None = None, organization_id: UUID | None 
             "default_stage_slug": None,
             "default_stage_key": None,
             "default_stage_label": None,
-            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[TEMPLATE_MEETING_OUTCOME_MISSING],
+            "default_business_days": _DEFAULT_BUSINESS_DAYS_BY_PROFILE[
+                TEMPLATE_MEETING_OUTCOME_MISSING
+            ],
             "is_default": True,
         },
     ]
@@ -304,7 +310,9 @@ def update_settings(
     return settings
 
 
-def _resolve_stage_for_org(db: Session, org_id: UUID, stage_ref: str | None) -> PipelineStage | None:
+def _resolve_stage_for_org(
+    db: Session, org_id: UUID, stage_ref: str | None
+) -> PipelineStage | None:
     if not stage_ref:
         return None
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
@@ -320,7 +328,9 @@ def serialize_rule(db: Session, rule: OrgIntelligentSuggestionRule) -> dict:
         "name": rule.name,
         "rule_kind": rule.rule_kind,
         "stage_slug": rule.stage_slug,
-        "stage_key": stage.stage_key if stage else pipeline_service.normalize_stage_ref(rule.stage_slug),
+        "stage_key": stage.stage_key
+        if stage
+        else pipeline_service.normalize_stage_ref(rule.stage_slug),
         "stage_label": stage.label if stage else None,
         "business_days": rule.business_days,
         "enabled": rule.enabled,

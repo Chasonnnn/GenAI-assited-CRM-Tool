@@ -140,7 +140,11 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
             "org_name": "Test Org",
             "funnel_data": [],
             "state_data": [],
-            "performance_data": {"data": [], "columns": [], "unassigned": {"total_surrogates": 0, "stage_counts": {}}},
+            "performance_data": {
+                "data": [],
+                "columns": [],
+                "unassigned": {"total_surrogates": 0, "stage_counts": {}},
+            },
         },
     )
 

@@ -45,26 +45,27 @@ def get_analytics_stage_configuration(
 
     snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
     stage_by_key = {
-        stage.stage_key: stage
-        for stage in snapshot.stages
-        if stage.is_active and stage.stage_key
+        stage.stage_key: stage for stage in snapshot.stages if stage.is_active and stage.stage_key
     }
 
     analytics = snapshot.feature_config.analytics
     performance_stage_keys = [
         stage_key
-        for stage_key in analytics.performance_stage_keys or DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS
+        for stage_key in analytics.performance_stage_keys
+        or DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS
         if stage_key in stage_by_key
     ]
     if not performance_stage_keys:
-        performance_stage_keys = [
-            stage.stage_key for stage in snapshot.stages if stage.is_active
-        ]
+        performance_stage_keys = [stage.stage_key for stage in snapshot.stages if stage.is_active]
 
     qualification_stage_key = analytics.qualification_stage_key
     if qualification_stage_key not in stage_by_key:
         qualification_stage_key = next(
-            (stage_key for stage_key in DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS if stage_key in stage_by_key),
+            (
+                stage_key
+                for stage_key in DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS
+                if stage_key in stage_by_key
+            ),
             DEFAULT_ANALYTICS_QUALIFICATION_STAGE_KEY,
         )
         if qualification_stage_key not in stage_by_key:
@@ -73,7 +74,11 @@ def get_analytics_stage_configuration(
     conversion_stage_key = analytics.conversion_stage_key
     if conversion_stage_key not in stage_by_key:
         conversion_stage_key = next(
-            (stage_key for stage_key in DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS if stage_key in stage_by_key),
+            (
+                stage_key
+                for stage_key in DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS
+                if stage_key in stage_by_key
+            ),
             DEFAULT_ANALYTICS_CONVERSION_STAGE_KEY,
         )
         if conversion_stage_key not in stage_by_key:

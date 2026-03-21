@@ -124,7 +124,9 @@ def map_stage_key_to_meta_status_for_org(
             None,
         )
         stage = normalized
-    return _map_integration_bucket_to_meta_status(stage.semantics.integration_bucket if stage else None)
+    return _map_integration_bucket_to_meta_status(
+        stage.semantics.integration_bucket if stage else None
+    )
 
 
 def should_send_capi_event_for_org(

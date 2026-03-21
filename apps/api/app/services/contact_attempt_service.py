@@ -121,14 +121,13 @@ def create_contact_attempt(
                 session,
                 current_stage.pipeline_id,
             )
-            contacted_stage_snapshot = pipeline_semantics_service.get_first_active_stage_with_capability(
-                pipeline_snapshot,
-                "counts_as_contacted",
+            contacted_stage_snapshot = (
+                pipeline_semantics_service.get_first_active_stage_with_capability(
+                    pipeline_snapshot,
+                    "counts_as_contacted",
+                )
             )
-            if (
-                contacted_stage_snapshot
-                and current_stage.id != contacted_stage_snapshot.id
-            ):
+            if contacted_stage_snapshot and current_stage.id != contacted_stage_snapshot.id:
                 contacted_stage = pipeline_service.get_stage_by_id(
                     session,
                     contacted_stage_snapshot.id,

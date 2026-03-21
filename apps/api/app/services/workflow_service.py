@@ -318,7 +318,9 @@ def create_workflow(
     data: WorkflowCreate,
 ) -> AutomationWorkflow:
     """Create a new workflow with validation."""
-    trigger_config = _canonicalize_trigger_config(db, org_id, data.trigger_type, data.trigger_config)
+    trigger_config = _canonicalize_trigger_config(
+        db, org_id, data.trigger_type, data.trigger_config
+    )
     conditions = _canonicalize_conditions(db, org_id, data.conditions)
 
     # Validate trigger config
@@ -387,7 +389,9 @@ def update_workflow(
     """Update an existing workflow with validation."""
     trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
     trigger_config = (
-        _canonicalize_trigger_config(db, workflow.organization_id, trigger_type, data.trigger_config)
+        _canonicalize_trigger_config(
+            db, workflow.organization_id, trigger_type, data.trigger_config
+        )
         if data.trigger_config is not None
         else _canonicalize_trigger_config(
             db,

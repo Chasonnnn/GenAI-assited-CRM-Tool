@@ -1675,7 +1675,7 @@ def _generate_analytics_html(
     if performance_data and performance_data.get("data"):
         columns = performance_data.get("columns") or []
         column_headers = "".join(
-            f"<th class=\"text-center\">{html.escape(str(column.get('label', column.get('stage_key', 'Stage'))))}</th>"
+            f'<th class="text-center">{html.escape(str(column.get("label", column.get("stage_key", "Stage"))))}</th>'
             for column in columns
         )
         perf_rows = ""
@@ -1684,7 +1684,7 @@ def _generate_analytics_html(
             total = user.get("total_surrogates", 0)
             stage_counts = user.get("stage_counts", {}) or {}
             stage_cells = "".join(
-                f"<td class=\"text-center\">{int(stage_counts.get(column.get('stage_key'), 0))}</td>"
+                f'<td class="text-center">{int(stage_counts.get(column.get("stage_key"), 0))}</td>'
                 for column in columns
             )
             conv_rate = user.get("conversion_rate", 0)
@@ -1709,7 +1709,7 @@ def _generate_analytics_html(
         if unassigned.get("total_surrogates", 0) > 0:
             unassigned_counts = unassigned.get("stage_counts", {}) or {}
             unassigned_cells = "".join(
-                f"<td class=\"text-center\">{int(unassigned_counts.get(column.get('stage_key'), 0))}</td>"
+                f'<td class="text-center">{int(unassigned_counts.get(column.get("stage_key"), 0))}</td>'
                 for column in columns
             )
             perf_rows += f"""

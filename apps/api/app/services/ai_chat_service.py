@@ -85,7 +85,18 @@ def _build_performance_context(
         column_labels = [column["label"] for column in columns]
         header = ["Team Member", "Surrogates", *column_labels, "Conv. Rate"]
         lines.append("| " + " | ".join(header) + " |")
-        lines.append("|" + "|".join(["-------------", "-------", *(["-----------"] * len(column_labels)), "------------"]) + "|")
+        lines.append(
+            "|"
+            + "|".join(
+                [
+                    "-------------",
+                    "-------",
+                    *(["-----------"] * len(column_labels)),
+                    "------------",
+                ]
+            )
+            + "|"
+        )
 
         for user in data["data"]:
             if user["total_surrogates"] > 0:

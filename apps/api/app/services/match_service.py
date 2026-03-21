@@ -62,7 +62,9 @@ def get_intended_parent(
     filters = [IntendedParent.id == intended_parent_id]
     if org_id:
         filters.append(IntendedParent.organization_id == org_id)
-    return db.query(IntendedParent).options(joinedload(IntendedParent.stage)).filter(*filters).first()
+    return (
+        db.query(IntendedParent).options(joinedload(IntendedParent.stage)).filter(*filters).first()
+    )
 
 
 def get_match(
