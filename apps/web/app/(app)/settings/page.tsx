@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react"
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react"
+import NextImage from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -62,12 +63,175 @@ import { useSystemHealth } from "@/lib/hooks/use-system"
 import type { SocialLink } from "@/lib/api/signature"
 import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 
 const ROLE_LABELS: Record<string, string> = {
   intake_specialist: "Intake Specialist",
   case_manager: "Case Manager",
   admin: "Admin",
   developer: "Developer",
+}
+
+type ProfileFormState = {
+  name: string
+  phone: string
+  title: string
+}
+
+type OrgBrandingFormState = {
+  template: string
+  primaryColor: string
+  companyName: string
+  address: string
+  phone: string
+  website: string
+  disclaimer: string
+  orgEmail: string
+}
+
+type OrgBrandingUiState = {
+  saved: boolean
+  saving: boolean
+  previewLoading: boolean
+  previewHtml: string | null
+  orgSettingsLoading: boolean
+  orgSettingsError: string | null
+  initialized: boolean
+}
+
+type OrgDefaultsState = {
+  name: string
+  address: string
+  phone: string
+}
+
+type SignatureTemplateOption = {
+  id: string
+  name: string
+  description: string
+}
+
+function SignatureTemplatePicker({
+  templates,
+  selectedTemplate,
+  onSelect,
+}: {
+  templates: SignatureTemplateOption[]
+  selectedTemplate: string
+  onSelect: (templateId: string) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <Label>Signature Template</Label>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5" role="radiogroup" aria-label="Signature template">
+        {templates.map((templateOption) => (
+          <button
+            key={templateOption.id}
+            type="button"
+            onClick={() => onSelect(templateOption.id)}
+            aria-pressed={selectedTemplate === templateOption.id}
+            aria-label={`Template ${templateOption.name}`}
+            className={`rounded-lg border p-3 text-left transition-colors ${
+              selectedTemplate === templateOption.id
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-muted-foreground"
+            }`}
+          >
+            <div className="text-sm font-medium">{templateOption.name}</div>
+            <div className="text-xs text-muted-foreground">{templateOption.description}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OrganizationLogoField({
+  logoUrl,
+  fileInputRef,
+  onUpload,
+  onDelete,
+  uploadPending,
+  deletePending,
+}: {
+  logoUrl?: string | null
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void
+  onDelete: () => void
+  uploadPending: boolean
+  deletePending: boolean
+}) {
+  return (
+    <div className="space-y-3">
+      <Label>Organization Logo</Label>
+      <div className="flex items-center gap-4">
+        {logoUrl ? (
+          <div className="group relative">
+            <NextImage
+              src={logoUrl}
+              alt="Organization Logo"
+              width={200}
+              height={80}
+              unoptimized
+              className="h-16 w-auto rounded border"
+            />
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deletePending}
+              className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+              aria-label="Remove organization logo"
+            >
+              <TrashIcon className="size-3" aria-hidden="true" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex h-16 w-32 items-center justify-center rounded border-2 border-dashed text-muted-foreground">
+            No logo
+          </div>
+        )}
+        <div>
+          <input
+            id="org-logo-upload"
+            name="org_logo_upload"
+            type="file"
+            ref={fileInputRef}
+            onChange={onUpload}
+            accept="image/png,image/jpeg"
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadPending}
+          >
+            {uploadPending ? (
+              <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            ) : (
+              <UploadIcon className="mr-2 size-4" aria-hidden="true" />
+            )}
+            Upload Logo
+          </Button>
+          <p className="mt-1 text-xs text-muted-foreground">Max 200x80px, PNG/JPG</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SignaturePreviewPanel({ html }: { html: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-white p-6">
+      <p className="mb-3 border-b pb-3 text-xs text-muted-foreground">
+        Preview with sample employee data:
+      </p>
+      <SafeHtmlContent
+        html={html}
+        className="prose prose-sm prose-stone max-w-none text-stone-900"
+      />
+    </div>
+  )
 }
 
 // =============================================================================
@@ -80,19 +244,27 @@ function ProfileSection() {
   const deleteAvatarMutation = useDeleteAvatar()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [profileName, setProfileName] = useState(user?.display_name || "")
-  const [profilePhone, setProfilePhone] = useState(user?.phone || "")
-  const [profileTitle, setProfileTitle] = useState(user?.title || "")
+  const [profileForm, setProfileForm] = useState<ProfileFormState>({
+    name: user?.display_name || "",
+    phone: user?.phone || "",
+    title: user?.title || "",
+  })
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
 
   useEffect(() => {
     if (user) {
-      setProfileName(user.display_name || "")
-      setProfilePhone(user.phone || "")
-      setProfileTitle(user.title || "")
+      setProfileForm({
+        name: user.display_name || "",
+        phone: user.phone || "",
+        title: user.title || "",
+      })
     }
   }, [user])
+
+  const updateProfileForm = (field: keyof ProfileFormState, value: string) => {
+    setProfileForm((current) => ({ ...current, [field]: value }))
+  }
 
   const initials =
     user?.display_name
@@ -135,9 +307,9 @@ function ProfileSection() {
   const handleSaveProfile = async () => {
     setProfileSaving(true)
     try {
-      const trimmedName = profileName.trim()
-      const trimmedPhone = profilePhone.trim()
-      const trimmedTitle = profileTitle.trim()
+      const trimmedName = profileForm.name.trim()
+      const trimmedPhone = profileForm.phone.trim()
+      const trimmedTitle = profileForm.title.trim()
       await updateProfile({
         ...(trimmedName ? { display_name: trimmedName } : {}),
         ...(trimmedPhone ? { phone: trimmedPhone } : {}),
@@ -208,8 +380,8 @@ function ProfileSection() {
             id="fullName"
             name="fullName"
             autoComplete="name"
-            value={profileName}
-            onChange={(e) => setProfileName(e.target.value)}
+            value={profileForm.name}
+            onChange={(e) => updateProfileForm("name", e.target.value)}
           />
         </div>
 
@@ -232,8 +404,8 @@ function ProfileSection() {
             id="title"
             name="title"
             autoComplete="organization-title"
-            value={profileTitle}
-            onChange={(e) => setProfileTitle(e.target.value)}
+            value={profileForm.title}
+            onChange={(e) => updateProfileForm("title", e.target.value)}
             placeholder="Case Manager"
           />
           <p className="text-xs text-muted-foreground">Displayed in email signatures</p>
@@ -246,8 +418,8 @@ function ProfileSection() {
             name="phone"
             autoComplete="tel"
             type="tel"
-            value={profilePhone}
-            onChange={(e) => setProfilePhone(e.target.value)}
+            value={profileForm.phone}
+            onChange={(e) => updateProfileForm("phone", e.target.value)}
             placeholder="(555) 123-4567"
           />
           <p className="text-xs text-muted-foreground">Displayed in email signatures</p>
@@ -492,38 +664,44 @@ function SocialLinksSection() {
       </div>
 
       <div className="space-y-3">
-        {links.map((link, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <Input
-              value={link.platform}
-              onChange={(e) => updateLink(i, "platform", e.target.value)}
-              placeholder="Platform (e.g., LinkedIn)"
-              className="w-40"
-              name={`social-platform-${i}`}
-              autoComplete="off"
-              aria-label={`Social platform ${i + 1}`}
-            />
-            <Input
-              value={link.url}
-              onChange={(e) => updateLink(i, "url", e.target.value)}
-              placeholder="https://…"
-              className="flex-1"
-              name={`social-url-${i}`}
-              autoComplete="url"
-              aria-label={`Social URL ${i + 1}`}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => removeLink(i)}
-              className="text-destructive hover:text-destructive"
-              aria-label={`Remove social link ${i + 1}`}
-            >
-              <TrashIcon className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-        ))}
+        {links.map((link, i) => {
+          const linkOccurrence = links
+            .slice(0, i + 1)
+            .filter((candidate) => candidate.platform === link.platform && candidate.url === link.url).length
+          const linkKey = `${link.platform}-${link.url}-${linkOccurrence}`
+          return (
+            <div key={linkKey} className="flex items-center gap-3">
+              <Input
+                value={link.platform}
+                onChange={(e) => updateLink(i, "platform", e.target.value)}
+                placeholder="Platform (e.g., LinkedIn)"
+                className="w-40"
+                name={`social-platform-${i}`}
+                autoComplete="off"
+                aria-label={`Social platform ${i + 1}`}
+              />
+              <Input
+                value={link.url}
+                onChange={(e) => updateLink(i, "url", e.target.value)}
+                placeholder="https://…"
+                className="flex-1"
+                name={`social-url-${i}`}
+                autoComplete="url"
+                aria-label={`Social URL ${i + 1}`}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeLink(i)}
+                className="text-destructive hover:text-destructive"
+                aria-label={`Remove social link ${i + 1}`}
+              >
+                <TrashIcon className="size-4" aria-hidden="true" />
+              </Button>
+            </div>
+          )
+        })}
 
         {links.length < 6 && (
           <Button type="button" variant="outline" size="sm" onClick={addLink}>
@@ -562,26 +740,30 @@ function OrganizationBrandingSection() {
   const deleteLogo = useDeleteOrgLogo()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [template, setTemplate] = useState("")
-  const [primaryColor, setPrimaryColor] = useState("#E444A4")
-  const [companyName, setCompanyName] = useState("")
-  const [address, setAddress] = useState("")
-  const [phone, setPhone] = useState("")
-  const [website, setWebsite] = useState("")
-  const [disclaimer, setDisclaimer] = useState("")
-  const [orgEmail, setOrgEmail] = useState("")
-  const [saved, setSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
-  const [orgSettingsLoading, setOrgSettingsLoading] = useState(true)
-  const [orgSettingsError, setOrgSettingsError] = useState<string | null>(null)
-  const [orgDefaults, setOrgDefaults] = useState({ name: "", address: "", phone: "" })
-  const [initialized, setInitialized] = useState(false)
+  const [brandingForm, setBrandingForm] = useState<OrgBrandingFormState>({
+    template: "",
+    primaryColor: "#E444A4",
+    companyName: "",
+    address: "",
+    phone: "",
+    website: "",
+    disclaimer: "",
+    orgEmail: "",
+  })
+  const [brandingUi, setBrandingUi] = useState<OrgBrandingUiState>({
+    saved: false,
+    saving: false,
+    previewLoading: false,
+    previewHtml: null,
+    orgSettingsLoading: true,
+    orgSettingsError: null,
+    initialized: false,
+  })
+  const [orgDefaults, setOrgDefaults] = useState<OrgDefaultsState>({ name: "", address: "", phone: "" })
 
   const sanitizedPreviewHtml = useMemo(
-    () => (previewHtml ? DOMPurify.sanitize(previewHtml) : null),
-    [previewHtml]
+    () => (brandingUi.previewHtml ? DOMPurify.sanitize(brandingUi.previewHtml) : null),
+    [brandingUi.previewHtml]
   )
 
   const isMountedRef = useRef(true)
@@ -594,8 +776,11 @@ function OrganizationBrandingSection() {
 
   const loadOrgSettings = useCallback(async () => {
     if (!user?.org_id) return
-    setOrgSettingsLoading(true)
-    setOrgSettingsError(null)
+    setBrandingUi((current) => ({
+      ...current,
+      orgSettingsLoading: true,
+      orgSettingsError: null,
+    }))
     try {
       const settings = await getOrgSettings()
       if (!isMountedRef.current) return
@@ -604,13 +789,18 @@ function OrganizationBrandingSection() {
         address: settings.address || "",
         phone: settings.phone || "",
       })
-      setOrgEmail(settings.email || "")
+      setBrandingForm((current) => ({ ...current, orgEmail: settings.email || "" }))
     } catch (error) {
       console.error("Failed to load organization settings:", error)
       if (!isMountedRef.current) return
-      setOrgSettingsError("Unable to load organization settings. Please retry.")
+      setBrandingUi((current) => ({
+        ...current,
+        orgSettingsError: "Unable to load organization settings. Please retry.",
+      }))
     } finally {
-      if (isMountedRef.current) setOrgSettingsLoading(false)
+      if (isMountedRef.current) {
+        setBrandingUi((current) => ({ ...current, orgSettingsLoading: false }))
+      }
     }
   }, [user?.org_id])
 
@@ -618,36 +808,43 @@ function OrganizationBrandingSection() {
     if (user?.org_id) {
       loadOrgSettings()
     } else {
-      setOrgSettingsLoading(false)
+      setBrandingUi((current) => ({ ...current, orgSettingsLoading: false }))
     }
   }, [user?.org_id, loadOrgSettings])
 
   useEffect(() => {
-    if (initialized) return
-    if (sigLoading || orgSettingsLoading) return
-    setTemplate(orgSig?.signature_template || "classic")
-    setPrimaryColor(orgSig?.signature_primary_color || "#E444A4")
-    setCompanyName(orgSig?.signature_company_name || orgDefaults.name || user?.org_name || "")
-    setAddress(orgSig?.signature_address || orgDefaults.address || "")
-    setPhone(orgSig?.signature_phone || orgDefaults.phone || "")
-    setWebsite(orgSig?.signature_website || "")
-    setDisclaimer(orgSig?.signature_disclaimer || "")
-    setInitialized(true)
-  }, [initialized, sigLoading, orgSettingsLoading, orgSig, orgDefaults, user?.org_name])
+    if (brandingUi.initialized) return
+    if (sigLoading || brandingUi.orgSettingsLoading) return
+    setBrandingForm((current) => ({
+      ...current,
+      template: orgSig?.signature_template || "classic",
+      primaryColor: orgSig?.signature_primary_color || "#E444A4",
+      companyName: orgSig?.signature_company_name || orgDefaults.name || user?.org_name || "",
+      address: orgSig?.signature_address || orgDefaults.address || "",
+      phone: orgSig?.signature_phone || orgDefaults.phone || "",
+      website: orgSig?.signature_website || "",
+      disclaimer: orgSig?.signature_disclaimer || "",
+    }))
+    setBrandingUi((current) => ({ ...current, initialized: true }))
+  }, [brandingUi.initialized, sigLoading, brandingUi.orgSettingsLoading, orgSig, orgDefaults, user?.org_name])
+
+  const updateBrandingForm = <K extends keyof OrgBrandingFormState>(field: K, value: OrgBrandingFormState[K]) => {
+    setBrandingForm((current) => ({ ...current, [field]: value }))
+  }
 
   const handleSave = async () => {
-    setSaving(true)
+    setBrandingUi((current) => ({ ...current, saving: true }))
     try {
-      const trimmedCompanyName = companyName.trim()
-      const trimmedAddress = address.trim()
-      const trimmedPhone = phone.trim()
-      const trimmedWebsite = website.trim()
-      const trimmedDisclaimer = disclaimer.trim()
-      const trimmedEmail = orgEmail.trim()
+      const trimmedCompanyName = brandingForm.companyName.trim()
+      const trimmedAddress = brandingForm.address.trim()
+      const trimmedPhone = brandingForm.phone.trim()
+      const trimmedWebsite = brandingForm.website.trim()
+      const trimmedDisclaimer = brandingForm.disclaimer.trim()
+      const trimmedEmail = brandingForm.orgEmail.trim()
 
       const signaturePayload = {
-        signature_template: template,
-        signature_primary_color: primaryColor,
+        signature_template: brandingForm.template,
+        signature_primary_color: brandingForm.primaryColor,
         signature_company_name: trimmedCompanyName || null,
         signature_address: trimmedAddress || null,
         signature_phone: trimmedPhone || null,
@@ -655,7 +852,7 @@ function OrganizationBrandingSection() {
         signature_disclaimer: trimmedDisclaimer || null,
       }
 
-      if (orgSettingsError) {
+      if (brandingUi.orgSettingsError) {
         await updateOrgSig.mutateAsync(signaturePayload)
       } else {
         await Promise.all([
@@ -670,13 +867,15 @@ function OrganizationBrandingSection() {
         refetch()
       }
 
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      setBrandingUi((current) => ({ ...current, saved: true }))
+      setTimeout(() => {
+        setBrandingUi((current) => ({ ...current, saved: false }))
+      }, 2000)
     } catch (error) {
       console.error("Failed to save organization branding:", error)
       toast.error("Failed to save organization branding")
     } finally {
-      setSaving(false)
+      setBrandingUi((current) => ({ ...current, saving: false }))
     }
   }
 
@@ -702,7 +901,19 @@ function OrganizationBrandingSection() {
     }
   }
 
-  if (sigLoading || orgSettingsLoading) {
+  const handlePreviewTemplate = async () => {
+    setBrandingUi((current) => ({ ...current, previewLoading: true }))
+    try {
+      const result = await getOrgSignaturePreview(brandingForm.template)
+      setBrandingUi((current) => ({ ...current, previewHtml: result.html }))
+    } catch {
+      // Silent fail
+    } finally {
+      setBrandingUi((current) => ({ ...current, previewLoading: false }))
+    }
+  }
+
+  if (sigLoading || brandingUi.orgSettingsLoading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse motion-reduce:animate-none flex gap-4">
@@ -712,7 +923,7 @@ function OrganizationBrandingSection() {
     )
   }
 
-  const templates = orgSig?.available_templates || [
+  const templates: SignatureTemplateOption[] = orgSig?.available_templates || [
     { id: "classic", name: "Classic", description: "Traditional professional layout" },
     { id: "modern", name: "Modern", description: "Clean contemporary design" },
     { id: "minimal", name: "Minimal", description: "Simple and focused" },
@@ -732,10 +943,10 @@ function OrganizationBrandingSection() {
         </p>
       </div>
 
-      {orgSettingsError && (
+      {brandingUi.orgSettingsError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>{orgSettingsError}</span>
+            <span>{brandingUi.orgSettingsError}</span>
             <Button variant="outline" onClick={loadOrgSettings}>
               Retry
             </Button>
@@ -743,84 +954,20 @@ function OrganizationBrandingSection() {
         </div>
       )}
 
-      {/* Template Selection */}
-      <div className="space-y-3">
-        <Label>Signature Template</Label>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3" role="radiogroup" aria-label="Signature template">
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTemplate(t.id)}
-              aria-pressed={template === t.id}
-              aria-label={`Template ${t.name}`}
-              className={`p-3 rounded-lg border text-left transition-colors ${template === t.id
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-muted-foreground"
-                }`}
-            >
-              <div className="font-medium text-sm">{t.name}</div>
-              <div className="text-xs text-muted-foreground">{t.description}</div>
-            </button>
-          ))}
-        </div>
-      </div>
+      <SignatureTemplatePicker
+        templates={templates}
+        selectedTemplate={brandingForm.template}
+        onSelect={(templateId) => updateBrandingForm("template", templateId)}
+      />
 
-      {/* Logo Upload */}
-      <div className="space-y-3">
-        <Label>Organization Logo</Label>
-        <div className="flex items-center gap-4">
-          {orgSig?.signature_logo_url ? (
-            <div className="relative group">
-              <img
-                src={orgSig.signature_logo_url}
-                alt="Organization Logo"
-                width={200}
-                height={80}
-                className="h-16 w-auto border rounded"
-              />
-              <button
-                type="button"
-                onClick={handleDeleteLogo}
-                disabled={deleteLogo.isPending}
-                className="absolute -top-2 -right-2 p-1 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                aria-label="Remove organization logo"
-              >
-                <TrashIcon className="size-3" aria-hidden="true" />
-              </button>
-            </div>
-          ) : (
-            <div className="h-16 w-32 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
-              No logo
-            </div>
-          )}
-          <div>
-            <input
-              id="org-logo-upload"
-              name="org_logo_upload"
-              type="file"
-              ref={fileInputRef}
-              onChange={handleLogoUpload}
-              accept="image/png,image/jpeg"
-              className="hidden"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadLogo.isPending}
-            >
-              {uploadLogo.isPending ? (
-                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              ) : (
-                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
-              )}
-              Upload Logo
-            </Button>
-            <p className="text-xs text-muted-foreground mt-1">Max 200x80px, PNG/JPG</p>
-          </div>
-        </div>
-      </div>
+      <OrganizationLogoField
+        logoUrl={orgSig?.signature_logo_url ?? null}
+        fileInputRef={fileInputRef}
+        onUpload={handleLogoUpload}
+        onDelete={handleDeleteLogo}
+        uploadPending={uploadLogo.isPending}
+        deletePending={deleteLogo.isPending}
+      />
 
       {/* Primary Color */}
       <div className="space-y-2">
@@ -830,14 +977,14 @@ function OrganizationBrandingSection() {
             <input
               type="color"
               id="primaryColor"
-              value={primaryColor}
-              onChange={(e) => setPrimaryColor(e.target.value)}
+              value={brandingForm.primaryColor}
+              onChange={(e) => updateBrandingForm("primaryColor", e.target.value)}
               className="w-10 h-10 rounded cursor-pointer border"
             />
           </div>
           <Input
-            value={primaryColor}
-            onChange={(e) => setPrimaryColor(e.target.value)}
+            value={brandingForm.primaryColor}
+            onChange={(e) => updateBrandingForm("primaryColor", e.target.value)}
             className="w-28 font-mono text-sm"
             placeholder="#E444A4"
             name="primaryColorHex"
@@ -855,8 +1002,8 @@ function OrganizationBrandingSection() {
             id="sigCompanyName"
             name="sigCompanyName"
             autoComplete="organization"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
+            value={brandingForm.companyName}
+            onChange={(e) => updateBrandingForm("companyName", e.target.value)}
             placeholder="Your Organization"
           />
         </div>
@@ -866,8 +1013,8 @@ function OrganizationBrandingSection() {
             id="sigWebsite"
             name="sigWebsite"
             autoComplete="url"
-            value={website}
-            onChange={(e) => setWebsite(e.target.value)}
+            value={brandingForm.website}
+            onChange={(e) => updateBrandingForm("website", e.target.value)}
             placeholder="https://www.example.com"
           />
         </div>
@@ -877,8 +1024,8 @@ function OrganizationBrandingSection() {
             id="sigPhone"
             name="sigPhone"
             autoComplete="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            value={brandingForm.phone}
+            onChange={(e) => updateBrandingForm("phone", e.target.value)}
             placeholder="(555) 123-4567"
           />
         </div>
@@ -889,10 +1036,10 @@ function OrganizationBrandingSection() {
             name="sigEmail"
             autoComplete="email"
             type="email"
-            value={orgEmail}
-            onChange={(e) => setOrgEmail(e.target.value)}
+            value={brandingForm.orgEmail}
+            onChange={(e) => updateBrandingForm("orgEmail", e.target.value)}
             placeholder="contact@company.com"
-            disabled={!!orgSettingsError}
+            disabled={!!brandingUi.orgSettingsError}
           />
         </div>
         <div className="space-y-2 md:col-span-2">
@@ -901,8 +1048,8 @@ function OrganizationBrandingSection() {
             id="sigAddress"
             name="sigAddress"
             autoComplete="street-address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
+            value={brandingForm.address}
+            onChange={(e) => updateBrandingForm("address", e.target.value)}
             placeholder="123 Main St, City, State 12345"
             rows={2}
           />
@@ -912,8 +1059,8 @@ function OrganizationBrandingSection() {
           <Textarea
             id="sigDisclaimer"
             name="sigDisclaimer"
-            value={disclaimer}
-            onChange={(e) => setDisclaimer(e.target.value)}
+            value={brandingForm.disclaimer}
+            onChange={(e) => updateBrandingForm("disclaimer", e.target.value)}
             placeholder="Confidentiality notice, legal disclaimer, etc."
             rows={3}
           />
@@ -928,20 +1075,10 @@ function OrganizationBrandingSection() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={async () => {
-              setPreviewLoading(true)
-              try {
-                const result = await getOrgSignaturePreview(template)
-                setPreviewHtml(result.html)
-              } catch {
-                // Silent fail
-              } finally {
-                setPreviewLoading(false)
-              }
-            }}
-            disabled={previewLoading}
+            onClick={handlePreviewTemplate}
+            disabled={brandingUi.previewLoading}
           >
-            {previewLoading ? (
+            {brandingUi.previewLoading ? (
               <>
                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Loading…
               </>
@@ -951,12 +1088,12 @@ function OrganizationBrandingSection() {
               </>
             )}
           </Button>
-          <Button onClick={handleSave} disabled={saving || sigLoading || orgSettingsLoading}>
-            {saving ? (
+          <Button onClick={handleSave} disabled={brandingUi.saving || sigLoading || brandingUi.orgSettingsLoading}>
+            {brandingUi.saving ? (
               <>
                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
               </>
-            ) : saved ? (
+            ) : brandingUi.saved ? (
               <>
                 <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
               </>
@@ -967,15 +1104,7 @@ function OrganizationBrandingSection() {
         </div>
 
         {sanitizedPreviewHtml && (
-          <div className="rounded-lg border border-border p-6 bg-white">
-            <p className="text-xs text-muted-foreground mb-3 pb-3 border-b">
-              Preview with sample employee data:
-            </p>
-            <div
-              className="prose prose-sm prose-stone max-w-none text-stone-900"
-              dangerouslySetInnerHTML={{ __html: sanitizedPreviewHtml }}
-            />
-          </div>
+          <SignaturePreviewPanel html={sanitizedPreviewHtml} />
         )}
       </div>
     </div>
@@ -1006,24 +1135,45 @@ function IntelligentSuggestionsSection() {
   const { data: pipelines } = usePipelines()
 
   const stageOptions = useMemo(() => {
-    const bySlug = new Map<string, string>()
+    const byValue = new Map<string, { value: string; slug: string; stageKey: string; label: string }>()
     for (const pipeline of pipelines ?? []) {
       for (const rawStage of pipeline.stages ?? []) {
-        const stage = rawStage as { slug?: string; status?: string; label?: string; is_active?: boolean }
+        const stage = rawStage as {
+          slug?: string
+          status?: string
+          stage_key?: string
+          label?: string
+          is_active?: boolean
+        }
         const slug = stage.slug ?? stage.status
-        if (!slug || stage.is_active === false) continue
-        if (!bySlug.has(slug)) {
-          bySlug.set(slug, stage.label ?? slug)
+        const stageKey = stage.stage_key ?? slug
+        if (!slug || !stageKey || stage.is_active === false) continue
+        if (!byValue.has(stageKey)) {
+          byValue.set(stageKey, {
+            value: stageKey,
+            slug,
+            stageKey,
+            label: stage.label ?? stageKey,
+          })
         }
       }
     }
-    return Array.from(bySlug.entries())
-      .map(([slug, label]) => ({ slug, label }))
+    return Array.from(byValue.values())
       .sort((left, right) => left.label.localeCompare(right.label))
   }, [pipelines])
 
-  const stageLabelBySlug = useMemo(
-    () => new Map(stageOptions.map((option) => [option.slug, option.label])),
+  const stageLabelByRef = useMemo(
+    () =>
+      new Map(
+        stageOptions.flatMap((option) => [
+          [option.value, option.label] as const,
+          [option.slug, option.label] as const,
+        ]),
+      ),
+    [stageOptions],
+  )
+  const stageOptionByValue = useMemo(
+    () => new Map(stageOptions.map((option) => [option.value, option])),
     [stageOptions],
   )
   const templateByKey = useMemo(
@@ -1032,11 +1182,11 @@ function IntelligentSuggestionsSection() {
   )
 
   const formatStageLabel = useCallback(
-    (slug: string | null | undefined) => {
-      if (!slug) return "N/A"
-      return stageLabelBySlug.get(slug) ?? slug.replaceAll("_", " ")
+    (stageRef: string | null | undefined) => {
+      if (!stageRef) return "N/A"
+      return stageLabelByRef.get(stageRef) ?? stageRef.replaceAll("_", " ")
     },
-    [stageLabelBySlug],
+    [stageLabelByRef],
   )
 
   const requiresStageSelection = useCallback((template: IntelligentSuggestionTemplate | undefined) => {
@@ -1048,14 +1198,24 @@ function IntelligentSuggestionsSection() {
     (template: IntelligentSuggestionTemplate | undefined, stageSlug: string | null | undefined) => {
       if (!template || !requiresStageSelection(template)) return ""
       const normalized = (stageSlug ?? "").trim()
-      if (normalized && stageOptions.some((option) => option.slug === normalized)) {
-        return normalized
+      if (normalized) {
+        const matchingOption = stageOptions.find(
+          (option) => option.value === normalized || option.slug === normalized,
+        )
+        if (matchingOption) {
+          return matchingOption.value
+        }
       }
-      const defaultStage = (template.default_stage_slug ?? "").trim()
-      if (defaultStage && stageOptions.some((option) => option.slug === defaultStage)) {
-        return defaultStage
+      const defaultStage = (template.default_stage_key ?? template.default_stage_slug ?? "").trim()
+      if (defaultStage) {
+        const matchingDefault = stageOptions.find(
+          (option) => option.value === defaultStage || option.slug === defaultStage,
+        )
+        if (matchingDefault) {
+          return matchingDefault.value
+        }
       }
-      return stageOptions[0]?.slug ?? defaultStage
+      return stageOptions[0]?.value ?? defaultStage
     },
     [requiresStageSelection, stageOptions],
   )
@@ -1070,7 +1230,10 @@ function IntelligentSuggestionsSection() {
       return {
         template_key: template.template_key,
         name: overrides.name ?? template.name,
-        stage_slug: resolveStageSlug(template, overrides.stage_slug ?? template.default_stage_slug),
+        stage_slug: resolveStageSlug(
+          template,
+          overrides.stage_slug ?? template.default_stage_key ?? template.default_stage_slug,
+        ),
         business_days: overrides.business_days ?? template.default_business_days,
         enabled: overrides.enabled ?? true,
         sort_order: overrides.sort_order ?? sortOrder,
@@ -1189,10 +1352,12 @@ function IntelligentSuggestionsSection() {
 
     setRuleSaving(true)
     try {
+      const selectedStage = stageSlug ? stageOptionByValue.get(stageSlug) : null
       const createdRule = await createIntelligentSuggestionRule({
         template_key: template.template_key,
         name: newRuleDraft.name.trim() || template.name,
-        stage_slug: stageSlug,
+        stage_key: selectedStage?.stageKey ?? stageSlug,
+        stage_slug: selectedStage?.slug ?? stageSlug,
         business_days: Math.max(1, Math.min(60, newRuleDraft.business_days)),
         enabled: newRuleDraft.enabled,
       })
@@ -1231,7 +1396,7 @@ function IntelligentSuggestionsSection() {
     const template = templateByKey.get(rule.template_key)
     const nextDraft = buildRuleDraft(template, rule.sort_order, {
       name: rule.name,
-      stage_slug: rule.stage_slug ?? template?.default_stage_slug ?? "",
+      stage_slug: rule.stage_key ?? rule.stage_slug ?? template?.default_stage_key ?? template?.default_stage_slug ?? "",
       business_days: rule.business_days,
       enabled: rule.enabled,
       sort_order: rule.sort_order,
@@ -1263,9 +1428,11 @@ function IntelligentSuggestionsSection() {
 
     setRuleSaving(true)
     try {
+      const selectedStage = stageSlug ? stageOptionByValue.get(stageSlug) : null
       const updatedRule = await updateIntelligentSuggestionRule(editingRuleId, {
         name: editingRuleDraft.name.trim() || template.name,
-        stage_slug: stageSlug,
+        stage_key: selectedStage?.stageKey ?? stageSlug,
+        stage_slug: selectedStage?.slug ?? stageSlug,
         business_days: Math.max(1, Math.min(60, editingRuleDraft.business_days)),
         enabled: editingRuleDraft.enabled,
         sort_order: Math.max(0, editingRuleDraft.sort_order),
@@ -1301,27 +1468,27 @@ function IntelligentSuggestionsSection() {
     }
   }
 
-  const renderRuleDescription = (rule: IntelligentSuggestionRule) => {
+  const describeRule = (rule: IntelligentSuggestionRule) => {
     if (rule.rule_kind === "meeting_outcome_missing") {
       return `Passed scheduled meeting ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"} but no outcome logged`
     }
     if (rule.template_key === "preapproval_stuck") {
       return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
     }
-    return `${formatStageLabel(rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+    return `${rule.stage_label ?? formatStageLabel(rule.stage_key ?? rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
   }
 
-  const formatRuleStageLabel = (rule: IntelligentSuggestionRule) => {
+  const getRuleStageLabel = (rule: IntelligentSuggestionRule) => {
     if (rule.rule_kind === "meeting_outcome_missing") {
       return "All Stages Applied"
     }
     if (rule.template_key === "preapproval_stuck") {
       return "Intake Pre-approval Stages"
     }
-    return formatStageLabel(rule.stage_slug)
+    return rule.stage_label ?? formatStageLabel(rule.stage_key ?? rule.stage_slug)
   }
 
-  const renderStageInput = (
+  const buildStageInput = (
     id: string,
     value: string,
     onChange: (nextValue: string | null) => void,
@@ -1334,13 +1501,13 @@ function IntelligentSuggestionsSection() {
             <SelectValue placeholder="Select stage">
               {(selected: string | null) => {
                 if (!selected) return "Select stage"
-                return stageLabelBySlug.get(selected) ?? selected.replaceAll("_", " ")
+                return stageLabelByRef.get(selected) ?? selected.replaceAll("_", " ")
               }}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {stageOptions.map((option) => (
-              <SelectItem key={option.slug} value={option.slug}>
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
             ))}
@@ -1354,7 +1521,7 @@ function IntelligentSuggestionsSection() {
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Stage slug (for example: new_unread)"
+        placeholder="Stage key (for example: new_unread)"
       />
     )
   }
@@ -1453,7 +1620,7 @@ function IntelligentSuggestionsSection() {
               {newRuleNeedsStage && (
                 <div className="space-y-2">
                   <Label htmlFor="new-rule-stage">Stage</Label>
-                  {renderStageInput(
+                  {buildStageInput(
                     "new-rule-stage",
                     newRuleDraft.stage_slug,
                     (nextStage) =>
@@ -1506,13 +1673,15 @@ function IntelligentSuggestionsSection() {
             const isEditing = editingRuleId === rule.id && editingRuleDraft !== null
             const editingTemplate = isEditing ? templateByKey.get(editingRuleDraft.template_key) : undefined
             const editingNeedsStage = requiresStageSelection(editingTemplate)
+            const ruleDescription = describeRule(rule)
+            const ruleStageLabel = getRuleStageLabel(rule)
 
             return (
               <div key={rule.id} className="rounded-lg border border-border p-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-medium">{rule.name}</p>
-                    <p className="text-sm text-muted-foreground">{renderRuleDescription(rule)}</p>
+                    <p className="text-sm text-muted-foreground">{ruleDescription}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={rule.enabled ? "default" : "secondary"}>
@@ -1548,7 +1717,7 @@ function IntelligentSuggestionsSection() {
 
                 <div className="grid gap-3 text-sm md:grid-cols-3">
                   <p><span className="font-medium">Template:</span> {template?.name ?? rule.template_key}</p>
-                  <p><span className="font-medium">Stage:</span> {formatRuleStageLabel(rule)}</p>
+                  <p><span className="font-medium">Stage:</span> {ruleStageLabel}</p>
                   <p><span className="font-medium">Priority:</span> {rule.sort_order}</p>
                 </div>
 
@@ -1593,7 +1762,7 @@ function IntelligentSuggestionsSection() {
                       {editingNeedsStage && (
                         <div className="space-y-2">
                           <Label htmlFor={`edit-rule-stage-${rule.id}`}>Stage</Label>
-                          {renderStageInput(
+                          {buildStageInput(
                             `edit-rule-stage-${rule.id}`,
                             editingRuleDraft.stage_slug,
                             (nextStage) =>
@@ -1706,7 +1875,7 @@ function IntelligentSuggestionsSection() {
 // Main Settings Page
 // =============================================================================
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
@@ -1861,5 +2030,13 @@ export default function SettingsPage() {
         </Tabs>
       </div>
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <SettingsPageContent />
+    </Suspense>
   )
 }

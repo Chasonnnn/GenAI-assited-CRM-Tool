@@ -46,6 +46,8 @@ export interface IntelligentSuggestionTemplate {
     description: string;
     rule_kind: string;
     default_stage_slug: string | null;
+    default_stage_key?: string | null;
+    default_stage_label?: string | null;
     default_business_days: number;
     is_default: boolean;
 }
@@ -57,6 +59,8 @@ export interface IntelligentSuggestionRule {
     name: string;
     rule_kind: string;
     stage_slug: string | null;
+    stage_key?: string | null;
+    stage_label?: string | null;
     business_days: number;
     enabled: boolean;
     sort_order: number;
@@ -69,6 +73,7 @@ export interface CreateIntelligentSuggestionRuleRequest {
     name?: string;
     rule_kind?: string;
     stage_slug?: string | null;
+    stage_key?: string | null;
     business_days?: number;
     enabled?: boolean;
 }
@@ -76,6 +81,7 @@ export interface CreateIntelligentSuggestionRuleRequest {
 export interface UpdateIntelligentSuggestionRuleRequest {
     name?: string;
     stage_slug?: string | null;
+    stage_key?: string | null;
     business_days?: number;
     enabled?: boolean;
     sort_order?: number;

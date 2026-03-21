@@ -5,6 +5,7 @@ import IntegrationsPage from '../app/(app)/settings/integrations/page'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
+const mockUsePipelines = vi.fn()
 const mockRefetch = vi.fn()
 const mockUseIntegrationHealth = vi.fn()
 const mockUseUserIntegrations = vi.fn()
@@ -224,6 +225,51 @@ const resendSettingsData = {
     current_version: 1,
 } as const
 
+const pipelineData = [
+    {
+        id: "pipeline-1",
+        is_default: true,
+        stages: [
+            {
+                id: "stage-1",
+                stage_key: "new_unread",
+                slug: "new_unread",
+                label: "New Unread",
+                stage_type: "intake",
+                is_active: true,
+                semantics: { integration_bucket: "intake" },
+            },
+            {
+                id: "stage-2",
+                stage_key: "pre_qualified",
+                slug: "pre_qualified",
+                label: "Pre Qualified",
+                stage_type: "intake",
+                is_active: true,
+                semantics: { integration_bucket: "qualified" },
+            },
+            {
+                id: "stage-3",
+                stage_key: "matched",
+                slug: "matched",
+                label: "Matched",
+                stage_type: "post_approval",
+                is_active: true,
+                semantics: { integration_bucket: "converted" },
+            },
+            {
+                id: "stage-4",
+                stage_key: "disqualified",
+                slug: "disqualified",
+                label: "Disqualified",
+                stage_type: "terminal",
+                is_active: true,
+                semantics: { integration_bucket: "not_qualified" },
+            },
+        ],
+    },
+]
+
 vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
 }))
@@ -234,6 +280,10 @@ vi.mock('@/lib/auth-context', () => ({
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: () => mockUseEffectivePermissions(),
+}))
+
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    usePipelines: () => mockUsePipelines(),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -354,6 +404,7 @@ vi.mock('@/lib/hooks/use-meta-forms', () => ({
 
 describe('IntegrationsPage', () => {
     beforeEach(() => {
+        mockUsePipelines.mockReset()
         zapierSettingsData = createZapierSettingsData()
         zapierEventsSummaryData = {
             total_count: 3,
@@ -456,6 +507,7 @@ describe('IntegrationsPage', () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_integrations'] },
         })
+        mockUsePipelines.mockReturnValue({ data: pipelineData, isLoading: false })
         mockUseUserIntegrations.mockReturnValue({ data: [], isLoading: false })
         mockUseGoogleCalendarStatus.mockReturnValue({
             data: {

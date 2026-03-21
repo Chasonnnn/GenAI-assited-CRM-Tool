@@ -46,6 +46,7 @@ import {
 import { useIntegrationHealth } from "@/lib/hooks/use-ops"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { usePipelines } from "@/lib/hooks/use-pipelines"
 import {
     useUserIntegrations,
     useConnectZoom,
@@ -104,6 +105,7 @@ import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
+import type { StageSemantics } from "@/lib/api/pipelines"
 import type {
     MetaCrmDatasetEventMappingItem,
 } from "@/lib/api/meta-crm-dataset"
@@ -113,6 +115,7 @@ import type {
     ZapierOutboundEvent,
     ZapierStageBucket,
 } from "@/lib/api/zapier"
+import { getStageSemantics } from "@/lib/surrogate-stage-context"
 
 const statusConfig = {
     healthy: { icon: CheckCircleIcon, color: "text-green-600", badge: "default" as const, label: "Healthy" },
@@ -163,31 +166,44 @@ const ZAPIER_BUCKET_OPTIONS: Array<{ value: ZapierStageBucket; label: string }> 
     { value: "not_qualified", label: "Not Qualified" },
 ]
 
-const ZAPIER_RECOMMENDED_BUCKET_BY_STAGE: Record<string, ZapierStageBucket> = {
-    pre_qualified: "qualified",
-    interview_scheduled: "qualified",
-    application_submitted: "qualified",
-    under_review: "qualified",
-    approved: "qualified",
-    ready_to_match: "converted",
-    matched: "converted",
-    medical_clearance_passed: "converted",
-    legal_clearance_passed: "converted",
-    transfer_cycle: "converted",
-    second_hcg_confirmed: "converted",
-    heartbeat_confirmed: "converted",
-    ob_care_established: "converted",
-    anatomy_scanned: "converted",
-    delivered: "converted",
-    lost: "lost",
-    disqualified: "not_qualified",
-}
-
 const isZapierStageBucket = (value: unknown): value is ZapierStageBucket =>
     value === "qualified" ||
     value === "converted" ||
     value === "lost" ||
     value === "not_qualified"
+
+function buildRecommendedBucketByStage(
+    pipelines:
+        | Array<{
+            is_default?: boolean
+            stages?: Array<{
+                stage_key?: string
+                slug?: string
+                is_active?: boolean
+                semantics?: Partial<StageSemantics>
+                stage_type?: string
+            }>
+        }>
+        | null
+        | undefined,
+): Record<string, ZapierStageBucket> {
+    const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default) ?? pipelines?.[0]
+    if (!defaultPipeline?.stages?.length) {
+        return {}
+    }
+
+    const mapping: Record<string, ZapierStageBucket> = {}
+    for (const stage of defaultPipeline.stages) {
+        if (stage.is_active === false) continue
+        const stageKey = (stage.stage_key ?? stage.slug ?? "").trim()
+        if (!stageKey) continue
+        const bucket = getStageSemantics(stage).integration_bucket
+        if (isZapierStageBucket(bucket)) {
+            mapping[stageKey] = bucket
+        }
+    }
+    return mapping
+}
 
 function inferZapierBucket(item: ZapierEventMappingItem): ZapierStageBucket | null {
     if (isZapierStageBucket(item.bucket)) {
@@ -201,19 +217,22 @@ function inferZapierBucket(item: ZapierEventMappingItem): ZapierStageBucket | nu
     return null
 }
 
-function getZapierMappingHealth(eventMapping: ZapierEventMappingItem[] | null | undefined): {
+function getZapierMappingHealth(
+    eventMapping: ZapierEventMappingItem[] | null | undefined,
+    recommendedBucketByStage: Record<string, ZapierStageBucket>,
+): {
     total: number
     matched: number
     isHealthy: boolean
 } {
-    const total = Object.keys(ZAPIER_RECOMMENDED_BUCKET_BY_STAGE).length
+    const total = Object.keys(recommendedBucketByStage).length
     if (!eventMapping || eventMapping.length === 0) {
         return { total, matched: 0, isHealthy: false }
     }
 
     const byStage = new Map(eventMapping.map((item) => [item.stage_key, item]))
     let matched = 0
-    for (const [stageKey, expectedBucket] of Object.entries(ZAPIER_RECOMMENDED_BUCKET_BY_STAGE)) {
+    for (const [stageKey, expectedBucket] of Object.entries(recommendedBucketByStage)) {
         const item = byStage.get(stageKey)
         if (!item || !item.enabled) {
             continue
@@ -280,6 +299,54 @@ type AiProvider = (typeof AI_PROVIDERS)[number]["value"]
 const isAiProvider = (value: string | null | undefined): value is AiProvider =>
     AI_PROVIDERS.some((providerOption) => providerOption.value === value)
 
+type AiConfigurationFormState = {
+    isEnabled: boolean
+    provider: AiProvider
+    apiKey: string
+    model: string
+    vertexProjectId: string
+    vertexLocation: string
+    vertexAudience: string
+    vertexServiceAccount: string
+    vertexUseExpress: boolean
+}
+
+type AiConfigurationUiState = {
+    keyTested: boolean | null
+    saved: boolean
+    editingKey: boolean
+}
+
+type EmailConfigurationFormState = {
+    provider: "resend" | "gmail" | ""
+    apiKey: string
+    fromEmail: string
+    fromName: string
+    replyTo: string
+    webhookSigningSecret: string
+    defaultSender: string
+}
+
+type EmailConfigurationUiState = {
+    keyTested: { valid: boolean; error?: string | null; verified_domains?: string[] } | null
+    saved: boolean
+    isEditingKey: boolean
+    hasUserEdited: boolean
+}
+
+type MetaCrmDatasetFormState = {
+    datasetId: string
+    accessToken: string
+    enabled: boolean
+    crmName: string
+    sendHashedPii: boolean
+    eventMapping: MetaCrmDatasetEventMappingItem[]
+    testEventCode: string
+    selectedStage: string
+    outboundTestLeadId: string
+    outboundTestFbc: string
+}
+
 function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: aiSettings, isLoading } = useAISettings()
     const { data: consentInfo } = useAIConsent()
@@ -291,88 +358,93 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
     const disconnectIntegration = useDisconnectIntegration()
     const { refetch: refetchAuth } = useAuth()
 
-    const [isEnabled, setIsEnabled] = useState(false)
-    const [provider, setProvider] = useState<AiProvider>("gemini")
-    const [apiKey, setApiKey] = useState("")
-    const [model, setModel] = useState("")
-    const [vertexProjectId, setVertexProjectId] = useState("")
-    const [vertexLocation, setVertexLocation] = useState("us-central1")
-    const [vertexAudience, setVertexAudience] = useState("")
-    const [vertexServiceAccount, setVertexServiceAccount] = useState("")
-    const [vertexUseExpress, setVertexUseExpress] = useState(true)
-    const [keyTested, setKeyTested] = useState<boolean | null>(null)
-    const [saved, setSaved] = useState(false)
-    const [editingKey, setEditingKey] = useState(false)
+    const [aiForm, setAiForm] = useState<AiConfigurationFormState>({
+        isEnabled: false,
+        provider: "gemini",
+        apiKey: "",
+        model: "",
+        vertexProjectId: "",
+        vertexLocation: "us-central1",
+        vertexAudience: "",
+        vertexServiceAccount: "",
+        vertexUseExpress: true,
+    })
+    const [aiUi, setAiUi] = useState<AiConfigurationUiState>({
+        keyTested: null,
+        saved: false,
+        editingKey: false,
+    })
 
-    // Sync state with fetched settings
     useEffect(() => {
-        if (aiSettings) {
-            setIsEnabled(aiSettings.is_enabled)
-            if (isAiProvider(aiSettings.provider)) {
-                setProvider(aiSettings.provider)
-            } else {
-                setProvider("gemini")
-            }
-            setModel(aiSettings.model || "")
-            setEditingKey(false)
-            setVertexProjectId(
+        if (!aiSettings) return
+        setAiForm({
+            isEnabled: aiSettings.is_enabled,
+            provider: isAiProvider(aiSettings.provider) ? aiSettings.provider : "gemini",
+            apiKey: "",
+            model: aiSettings.model || "",
+            vertexProjectId:
                 aiSettings.vertex_wif?.project_id ||
                 aiSettings.vertex_api_key?.project_id ||
-                ""
-            )
-            setVertexLocation(
+                "",
+            vertexLocation:
                 aiSettings.vertex_wif?.location ||
                 aiSettings.vertex_api_key?.location ||
-                "us-central1"
-            )
-            setVertexAudience(aiSettings.vertex_wif?.audience || "")
-            setVertexServiceAccount(aiSettings.vertex_wif?.service_account_email || "")
-            setVertexUseExpress(
-                aiSettings.provider === "vertex_api_key" &&
-                !aiSettings.vertex_api_key?.project_id &&
-                !aiSettings.vertex_api_key?.location
-            )
-        }
+                "us-central1",
+            vertexAudience: aiSettings.vertex_wif?.audience || "",
+            vertexServiceAccount: aiSettings.vertex_wif?.service_account_email || "",
+            vertexUseExpress:
+                aiSettings.provider === "vertex_api_key"
+                && !aiSettings.vertex_api_key?.project_id
+                && !aiSettings.vertex_api_key?.location,
+        })
+        setAiUi((current) => ({
+            ...current,
+            keyTested: null,
+            editingKey: false,
+        }))
     }, [aiSettings])
 
+    const updateAiForm = <K extends keyof AiConfigurationFormState>(field: K, value: AiConfigurationFormState[K]) => {
+        setAiForm((current) => ({ ...current, [field]: value }))
+    }
+
     const selectedProviderModels =
-        AI_PROVIDERS.find((providerOption) => providerOption.value === provider)?.models ??
+        AI_PROVIDERS.find((providerOption) => providerOption.value === aiForm.provider)?.models ??
         []
     const consentAccepted = Boolean(aiSettings?.consent_accepted_at)
-    const gcpIntegration = userIntegrations?.find(i => i.integration_type === "gcp")
-    const vertexReady = provider !== "vertex_wif"
+    const gcpIntegration = userIntegrations?.find((integration) => integration.integration_type === "gcp")
+    const vertexReady = aiForm.provider !== "vertex_wif"
         || Boolean(
-            vertexProjectId.trim() &&
-            vertexLocation.trim() &&
-            vertexServiceAccount.trim() &&
-            vertexAudience.trim()
+            aiForm.vertexProjectId.trim()
+            && aiForm.vertexLocation.trim()
+            && aiForm.vertexServiceAccount.trim()
+            && aiForm.vertexAudience.trim()
         )
     const showHeading = variant === "page"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
     const handleTestKey = async () => {
-        if (provider === "vertex_wif") return
-        if (!apiKey.trim()) return
-        setKeyTested(null)
+        if (aiForm.provider === "vertex_wif" || !aiForm.apiKey.trim()) return
+        setAiUi((current) => ({ ...current, keyTested: null }))
         try {
             const payload: {
                 provider: "gemini" | "vertex_api_key";
                 api_key: string;
                 vertex_api_key?: { project_id: string | null; location: string | null };
             } = {
-                provider,
-                api_key: apiKey,
+                provider: aiForm.provider,
+                api_key: aiForm.apiKey,
             }
-            if (provider === "vertex_api_key") {
+            if (aiForm.provider === "vertex_api_key") {
                 payload.vertex_api_key = {
-                    project_id: vertexUseExpress ? null : vertexProjectId.trim() || null,
-                    location: vertexUseExpress ? null : vertexLocation.trim() || null,
+                    project_id: aiForm.vertexUseExpress ? null : aiForm.vertexProjectId.trim() || null,
+                    location: aiForm.vertexUseExpress ? null : aiForm.vertexLocation.trim() || null,
                 }
             }
             const result = await testKey.mutateAsync(payload)
-            setKeyTested(result.valid)
+            setAiUi((current) => ({ ...current, keyTested: result.valid }))
         } catch {
-            setKeyTested(false)
+            setAiUi((current) => ({ ...current, keyTested: false }))
         }
     }
 
@@ -393,36 +465,41 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                 location: string | null;
             };
         } = {
-            is_enabled: isEnabled,
-            provider,
+            is_enabled: aiForm.isEnabled,
+            provider: aiForm.provider,
         }
-        if (apiKey.trim()) {
-            update.api_key = apiKey
+        if (aiForm.apiKey.trim()) {
+            update.api_key = aiForm.apiKey
         }
-        if (model) {
-            update.model = model
+        if (aiForm.model) {
+            update.model = aiForm.model
         }
-        if (provider === "vertex_wif") {
+        if (aiForm.provider === "vertex_wif") {
             update.vertex_wif = {
-                project_id: vertexProjectId.trim() || null,
-                location: vertexLocation.trim() || null,
-                audience: vertexAudience.trim() || null,
-                service_account_email: vertexServiceAccount.trim() || null,
+                project_id: aiForm.vertexProjectId.trim() || null,
+                location: aiForm.vertexLocation.trim() || null,
+                audience: aiForm.vertexAudience.trim() || null,
+                service_account_email: aiForm.vertexServiceAccount.trim() || null,
             }
         }
-        if (provider === "vertex_api_key") {
+        if (aiForm.provider === "vertex_api_key") {
             update.vertex_api_key = {
-                project_id: vertexUseExpress ? null : vertexProjectId.trim() || null,
-                location: vertexUseExpress ? null : vertexLocation.trim() || null,
+                project_id: aiForm.vertexUseExpress ? null : aiForm.vertexProjectId.trim() || null,
+                location: aiForm.vertexUseExpress ? null : aiForm.vertexLocation.trim() || null,
             }
         }
         await updateSettings.mutateAsync(update)
-        setApiKey("") // Clear after save
-        setKeyTested(null)
-        setSaved(true)
-        setEditingKey(false)
+        setAiForm((current) => ({ ...current, apiKey: "" }))
+        setAiUi((current) => ({
+            ...current,
+            keyTested: null,
+            saved: true,
+            editingKey: false,
+        }))
         refetchAuth()
-        setTimeout(() => setSaved(false), 2000)
+        setTimeout(() => {
+            setAiUi((current) => ({ ...current, saved: false }))
+        }, 2000)
     }
 
     const handleAcceptConsent = async () => {
@@ -470,10 +547,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         <div className="max-h-40 overflow-auto rounded-md border border-yellow-200 bg-white p-3 text-xs leading-relaxed text-muted-foreground">
                             {consentInfo.consent_text}
                         </div>
-                        <Button
-                            onClick={handleAcceptConsent}
-                            disabled={acceptConsent.isPending}
-                        >
+                        <Button onClick={handleAcceptConsent} disabled={acceptConsent.isPending}>
                             {acceptConsent.isPending ? (
                                 <>
                                     <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -503,74 +577,79 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         </div>
                         <div className="flex items-center gap-2">
                             <Label htmlFor="ai-enabled" className="text-sm">
-                                {isEnabled ? "Enabled" : "Disabled"}
+                                {aiForm.isEnabled ? "Enabled" : "Disabled"}
                             </Label>
                             <Switch
                                 id="ai-enabled"
-                                checked={isEnabled}
-                                onCheckedChange={setIsEnabled}
-                                disabled={!consentAccepted && !isEnabled}
+                                checked={aiForm.isEnabled}
+                                onCheckedChange={(checked) => updateAiForm("isEnabled", checked)}
+                                disabled={!consentAccepted && !aiForm.isEnabled}
                             />
                         </div>
                     </div>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                    {/* Provider Selection */}
                     <div className="space-y-2">
                         <Label htmlFor="ai-provider">AI Provider</Label>
-                        <Select value={provider} onValueChange={(v) => {
-                            if (v) {
-                                if (isAiProvider(v)) {
-                                    setProvider(v)
-                                }
-                                setModel("") // Reset model when provider changes
-                                setKeyTested(null)
-                                setEditingKey(false)
-                            }
-                        }}>
+                        <Select
+                            value={aiForm.provider}
+                            onValueChange={(value) => {
+                                if (!value || !isAiProvider(value)) return
+                                setAiForm((current) => ({
+                                    ...current,
+                                    provider: value,
+                                    model: "",
+                                }))
+                                setAiUi((current) => ({
+                                    ...current,
+                                    keyTested: null,
+                                    editingKey: false,
+                                }))
+                            }}
+                        >
                             <SelectTrigger id="ai-provider">
                                 <SelectValue placeholder="Select provider" />
                             </SelectTrigger>
                             <SelectContent>
-                                {AI_PROVIDERS.map(p => (
-                                    <SelectItem key={p.value} value={p.value}>
-                                        {p.label}
+                                {AI_PROVIDERS.map((providerOption) => (
+                                    <SelectItem key={providerOption.value} value={providerOption.value}>
+                                        {providerOption.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
 
-                    {/* API Key Input (Gemini/Vertex API Key only) */}
-                    {provider !== "vertex_wif" && (
+                    {aiForm.provider !== "vertex_wif" && (
                         <div className="space-y-2">
                             <Label htmlFor="ai-key">API Key</Label>
                             <div className="flex gap-2">
                                 <Input
                                     id="ai-key"
                                     type="password"
-                                    value={editingKey
-                                        ? apiKey
-                                        : apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")
+                                    value={
+                                        aiUi.editingKey
+                                            ? aiForm.apiKey
+                                            : aiForm.apiKey || (aiSettings?.api_key_masked ? aiSettings.api_key_masked : "")
                                     }
-                                    onChange={(e) => {
-                                        setApiKey(e.target.value)
-                                        setKeyTested(null)
+                                    onChange={(event) => {
+                                        updateAiForm("apiKey", event.target.value)
+                                        setAiUi((current) => ({ ...current, keyTested: null }))
                                     }}
                                     placeholder="Enter API key"
-                                    disabled={!editingKey && !apiKey && !!aiSettings?.api_key_masked}
+                                    disabled={!aiUi.editingKey && !aiForm.apiKey && !!aiSettings?.api_key_masked}
                                     className="flex-1"
                                     name="ai-api-key"
                                     autoComplete="off"
                                 />
-                                {aiSettings?.api_key_masked && !apiKey && !editingKey ? (
+                                {aiSettings?.api_key_masked && !aiForm.apiKey && !aiUi.editingKey ? (
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() => {
-                                            setApiKey("")
-                                            setEditingKey(true)
+                                            updateAiForm("apiKey", "")
+                                            setAiUi((current) => ({ ...current, editingKey: true }))
                                         }}
                                         className="shrink-0"
                                     >
@@ -581,13 +660,13 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                         variant="outline"
                                         size="sm"
                                         onClick={handleTestKey}
-                                        disabled={!apiKey.trim() || testKey.isPending}
+                                        disabled={!aiForm.apiKey.trim() || testKey.isPending}
                                     >
                                         {testKey.isPending ? (
                                             <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        ) : keyTested === true ? (
+                                        ) : aiUi.keyTested === true ? (
                                             <CheckIcon className="size-4 text-green-600" aria-hidden="true" />
-                                        ) : keyTested === false ? (
+                                        ) : aiUi.keyTested === false ? (
                                             <XCircleIcon className="size-4 text-red-600" aria-hidden="true" />
                                         ) : (
                                             "Test"
@@ -595,21 +674,21 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                     </Button>
                                 )}
                             </div>
-                            {keyTested === true && (
+                            {aiUi.keyTested === true && (
                                 <p className="text-xs text-green-600">API key is valid!</p>
                             )}
-                            {keyTested === false && (
+                            {aiUi.keyTested === false && (
                                 <p className="text-xs text-red-600">API key is invalid. Please check and try again.</p>
                             )}
                             <p className="text-xs text-muted-foreground">
-                                {provider === "gemini"
+                                {aiForm.provider === "gemini"
                                     ? "Get your key from aistudio.google.com"
                                     : "Create a Vertex AI API key in Google Cloud"}
                             </p>
                         </div>
                     )}
 
-                    {provider === "vertex_api_key" && (
+                    {aiForm.provider === "vertex_api_key" && (
                         <div className="space-y-4 rounded-lg border p-4">
                             <div>
                                 <h3 className="text-sm font-medium">Vertex AI (API Key)</h3>
@@ -619,7 +698,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                             </div>
                             <div className="flex items-center justify-between rounded-md border p-3">
                                 <div className="text-sm">
-                                    {vertexUseExpress ? "Express mode active" : "Project-scoped mode"}
+                                    {aiForm.vertexUseExpress ? "Express mode active" : "Project-scoped mode"}
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Label htmlFor="vertex-express" className="text-xs text-muted-foreground">
@@ -627,19 +706,19 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                     </Label>
                                     <Switch
                                         id="vertex-express"
-                                        checked={vertexUseExpress}
-                                        onCheckedChange={(checked) => setVertexUseExpress(checked)}
+                                        checked={aiForm.vertexUseExpress}
+                                        onCheckedChange={(checked) => updateAiForm("vertexUseExpress", checked)}
                                     />
                                 </div>
                             </div>
-                            {!vertexUseExpress && (
+                            {!aiForm.vertexUseExpress && (
                                 <div className="grid gap-3 md:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label htmlFor="vertex-project-key">Project ID (optional)</Label>
                                         <Input
                                             id="vertex-project-key"
-                                            value={vertexProjectId}
-                                            onChange={(e) => setVertexProjectId(e.target.value)}
+                                            value={aiForm.vertexProjectId}
+                                            onChange={(event) => updateAiForm("vertexProjectId", event.target.value)}
                                             placeholder="your-gcp-project-id"
                                             name="vertex-project-key"
                                             autoComplete="off"
@@ -649,8 +728,8 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                         <Label htmlFor="vertex-location-key">Location (optional)</Label>
                                         <Input
                                             id="vertex-location-key"
-                                            value={vertexLocation}
-                                            onChange={(e) => setVertexLocation(e.target.value)}
+                                            value={aiForm.vertexLocation}
+                                            onChange={(event) => updateAiForm("vertexLocation", event.target.value)}
                                             placeholder="us-central1"
                                             name="vertex-location-key"
                                             autoComplete="off"
@@ -661,7 +740,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         </div>
                     )}
 
-                    {provider === "vertex_wif" && (
+                    {aiForm.provider === "vertex_wif" && (
                         <div className="space-y-4 rounded-lg border p-4">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -693,11 +772,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                         Disconnect
                                     </Button>
                                 ) : (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => connectGcp.mutate()}
-                                        disabled={connectGcp.isPending}
-                                    >
+                                    <Button size="sm" onClick={() => connectGcp.mutate()} disabled={connectGcp.isPending}>
                                         {connectGcp.isPending ? (
                                             <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                         ) : null}
@@ -710,8 +785,8 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                 <Label htmlFor="vertex-project">Project ID</Label>
                                 <Input
                                     id="vertex-project"
-                                    value={vertexProjectId}
-                                    onChange={(e) => setVertexProjectId(e.target.value)}
+                                    value={aiForm.vertexProjectId}
+                                    onChange={(event) => updateAiForm("vertexProjectId", event.target.value)}
                                     placeholder="your-gcp-project-id"
                                     name="vertex-project"
                                     autoComplete="off"
@@ -722,8 +797,8 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                 <Label htmlFor="vertex-location">Location</Label>
                                 <Input
                                     id="vertex-location"
-                                    value={vertexLocation}
-                                    onChange={(e) => setVertexLocation(e.target.value)}
+                                    value={aiForm.vertexLocation}
+                                    onChange={(event) => updateAiForm("vertexLocation", event.target.value)}
                                     placeholder="us-central1"
                                     name="vertex-location"
                                     autoComplete="off"
@@ -734,8 +809,8 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                 <Label htmlFor="vertex-service-account">Service Account Email</Label>
                                 <Input
                                     id="vertex-service-account"
-                                    value={vertexServiceAccount}
-                                    onChange={(e) => setVertexServiceAccount(e.target.value)}
+                                    value={aiForm.vertexServiceAccount}
+                                    onChange={(event) => updateAiForm("vertexServiceAccount", event.target.value)}
                                     placeholder="vertex-sa@project.iam.gserviceaccount.com"
                                     name="vertex-service-account"
                                     autoComplete="off"
@@ -746,8 +821,8 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                 <Label htmlFor="vertex-audience">Workload Identity Audience</Label>
                                 <Input
                                     id="vertex-audience"
-                                    value={vertexAudience}
-                                    onChange={(e) => setVertexAudience(e.target.value)}
+                                    value={aiForm.vertexAudience}
+                                    onChange={(event) => updateAiForm("vertexAudience", event.target.value)}
                                     placeholder="//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider"
                                     name="vertex-audience"
                                     autoComplete="off"
@@ -759,17 +834,16 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         </div>
                     )}
 
-                    {/* Model Selection */}
                     <div className="space-y-2">
                         <Label htmlFor="ai-model">Model</Label>
-                        <Select value={model} onValueChange={(v) => setModel(v || "")}>
+                        <Select value={aiForm.model} onValueChange={(value) => updateAiForm("model", value || "")}>
                             <SelectTrigger id="ai-model">
                                 <SelectValue placeholder="Select model (optional)" />
                             </SelectTrigger>
                             <SelectContent>
-                                {selectedProviderModels.map(m => (
-                                    <SelectItem key={m} value={m}>
-                                        {m}
+                                {selectedProviderModels.map((selectedModel) => (
+                                    <SelectItem key={selectedModel} value={selectedModel}>
+                                        {selectedModel}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -779,14 +853,13 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         </p>
                     </div>
 
-                    {/* Save Button */}
                     <Button onClick={handleSave} disabled={updateSettings.isPending || !vertexReady} className="w-full">
                         {updateSettings.isPending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                 Saving…
                             </>
-                        ) : saved ? (
+                        ) : aiUi.saved ? (
                             <>
                                 <CheckIcon className="mr-2 size-4" aria-hidden="true" />
                                 Saved!
@@ -806,69 +879,89 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
     const updateSettings = useUpdateResendSettings()
     const testKey = useTestResendKey()
     const rotateWebhook = useRotateWebhook()
+    const [emailForm, setEmailForm] = useState<EmailConfigurationFormState>({
+        provider: "",
+        apiKey: "",
+        fromEmail: "",
+        fromName: "",
+        replyTo: "",
+        webhookSigningSecret: "",
+        defaultSender: "",
+    })
+    const [emailUi, setEmailUi] = useState<EmailConfigurationUiState>({
+        keyTested: null,
+        saved: false,
+        isEditingKey: false,
+        hasUserEdited: false,
+    })
+    const { data: eligibleSenders, isLoading: eligibleSendersLoading } = useEligibleSenders(emailForm.provider === "gmail")
 
-    const [provider, setProvider] = useState<"resend" | "gmail" | "">("")
-    const [apiKey, setApiKey] = useState("")
-    const [fromEmail, setFromEmail] = useState("")
-    const [fromName, setFromName] = useState("")
-    const [replyTo, setReplyTo] = useState("")
-    const [webhookSigningSecret, setWebhookSigningSecret] = useState("")
-    const [defaultSender, setDefaultSender] = useState("")
-    const [keyTested, setKeyTested] = useState<{ valid: boolean; error?: string | null; verified_domains?: string[] } | null>(null)
-    const [saved, setSaved] = useState(false)
-    const [isEditingKey, setIsEditingKey] = useState(false)
-    const [hasUserEdited, setHasUserEdited] = useState(false)
-    const { data: eligibleSenders, isLoading: eligibleSendersLoading } = useEligibleSenders(provider === "gmail")
-
-    // Sync state with fetched settings
     useEffect(() => {
-        if (settings && !hasUserEdited) {
-            setProvider(settings.email_provider || "resend")
-            setFromEmail(settings.from_email || "")
-            setFromName(settings.from_name || "")
-            setReplyTo(settings.reply_to_email || "")
-            setWebhookSigningSecret("")
-            setDefaultSender(settings.default_sender_user_id || "")
-            setApiKey("")
-            setIsEditingKey(false)
-            setKeyTested(null)
-        }
-    }, [settings, hasUserEdited])
+        if (!settings || emailUi.hasUserEdited) return
+        setEmailForm({
+            provider: settings.email_provider || "resend",
+            apiKey: "",
+            fromEmail: settings.from_email || "",
+            fromName: settings.from_name || "",
+            replyTo: settings.reply_to_email || "",
+            webhookSigningSecret: "",
+            defaultSender: settings.default_sender_user_id || "",
+        })
+        setEmailUi((current) => ({
+            ...current,
+            keyTested: null,
+            isEditingKey: false,
+        }))
+    }, [settings, emailUi.hasUserEdited])
 
     const getErrorMessage = (error: unknown, fallback: string) => {
         if (error instanceof Error && error.message) return error.message
         return fallback
     }
 
-    const handleProviderChange = (value: "resend" | "gmail" | "") => {
-        setProvider(value)
-        setHasUserEdited(true)
-        setSaved(false)
-        setKeyTested(null)
-        if (value !== "resend") {
-            setApiKey("")
-            setIsEditingKey(false)
-            setWebhookSigningSecret("")
+    const updateEmailForm = <K extends keyof EmailConfigurationFormState>(
+        field: K,
+        value: EmailConfigurationFormState[K],
+        markEdited = false,
+    ) => {
+        setEmailForm((current) => ({ ...current, [field]: value }))
+        if (markEdited) {
+            setEmailUi((current) => ({ ...current, hasUserEdited: true }))
         }
     }
 
+    const handleProviderChange = (value: "resend" | "gmail" | "") => {
+        setEmailForm((current) => ({
+            ...current,
+            provider: value,
+            apiKey: value !== "resend" ? "" : current.apiKey,
+            webhookSigningSecret: value !== "resend" ? "" : current.webhookSigningSecret,
+        }))
+        setEmailUi((current) => ({
+            ...current,
+            hasUserEdited: true,
+            saved: false,
+            keyTested: null,
+            isEditingKey: value !== "resend" ? false : current.isEditingKey,
+        }))
+    }
+
     const handleTestKey = async () => {
-        if (!apiKey.trim()) return
-        setKeyTested(null)
+        if (!emailForm.apiKey.trim()) return
+        setEmailUi((current) => ({ ...current, keyTested: null }))
         try {
-            const result = await testKey.mutateAsync(apiKey)
-            setKeyTested(result)
+            const result = await testKey.mutateAsync(emailForm.apiKey)
+            setEmailUi((current) => ({ ...current, keyTested: result }))
             if (result.valid && result.verified_domains.length > 0) {
-                // Auto-suggest from email based on verified domain
                 const domain = result.verified_domains[0]
-                if (!fromEmail) {
-                    setFromEmail(`no-reply@${domain}`)
-                    setHasUserEdited(true)
+                if (!emailForm.fromEmail) {
+                    setEmailForm((current) => ({ ...current, fromEmail: `no-reply@${domain}` }))
+                    setEmailUi((current) => ({ ...current, hasUserEdited: true }))
                 }
             }
         } catch (error) {
             const message = getErrorMessage(error, "Failed to test key")
-            setKeyTested({ valid: false, error: message })
+            setEmailUi((current) => ({ ...current, keyTested: { valid: false, error: message } }))
             toast.error(message)
         }
     }
@@ -884,37 +977,45 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
             default_sender_user_id?: string | null;
             expected_version?: number;
         } = {
-            email_provider: provider,
+            email_provider: emailForm.provider,
         }
 
         if (settings?.current_version !== undefined) {
             update.expected_version = settings.current_version
         }
 
-        if (provider === "resend") {
-            if (apiKey.trim()) {
-                update.api_key = apiKey
+        if (emailForm.provider === "resend") {
+            if (emailForm.apiKey.trim()) {
+                update.api_key = emailForm.apiKey
             }
-            update.from_email = fromEmail
-            update.from_name = fromName
-            update.reply_to_email = replyTo
-            if (webhookSigningSecret.trim()) {
-                update.webhook_signing_secret = webhookSigningSecret.trim()
+            update.from_email = emailForm.fromEmail
+            update.from_name = emailForm.fromName
+            update.reply_to_email = emailForm.replyTo
+            if (emailForm.webhookSigningSecret.trim()) {
+                update.webhook_signing_secret = emailForm.webhookSigningSecret.trim()
             }
-        } else if (provider === "gmail") {
-            update.default_sender_user_id = defaultSender || null
+        } else if (emailForm.provider === "gmail") {
+            update.default_sender_user_id = emailForm.defaultSender || null
         }
 
         try {
             await updateSettings.mutateAsync(update)
-            setApiKey("") // Clear after save
-            setWebhookSigningSecret("") // Write-only
-            setKeyTested(null)
-            setIsEditingKey(false)
-            setHasUserEdited(false)
-            setSaved(true)
+            setEmailForm((current) => ({
+                ...current,
+                apiKey: "",
+                webhookSigningSecret: "",
+            }))
+            setEmailUi((current) => ({
+                ...current,
+                keyTested: null,
+                isEditingKey: false,
+                hasUserEdited: false,
+                saved: true,
+            }))
             toast.success("Email configuration saved")
-            setTimeout(() => setSaved(false), 2000)
+            setTimeout(() => {
+                setEmailUi((current) => ({ ...current, saved: false }))
+            }, 2000)
         } catch (error) {
             const message = getErrorMessage(error, "Failed to save email configuration")
             toast.error(message)
@@ -942,13 +1043,13 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
             .catch(() => toast.error("Failed to copy"))
     }
 
-    const hasResendKey = Boolean(apiKey.trim() || settings?.api_key_masked)
-    const hasFromEmail = Boolean(fromEmail.trim())
-    const hasGmailSender = Boolean(defaultSender)
-    const resendReady = provider !== "resend" || (hasResendKey && hasFromEmail)
-    const gmailReady = provider !== "gmail" || hasGmailSender
-    const canSave = Boolean(provider) && resendReady && gmailReady
-    const showMaskedKey = Boolean(settings?.api_key_masked) && !isEditingKey && !apiKey
+    const hasResendKey = Boolean(emailForm.apiKey.trim() || settings?.api_key_masked)
+    const hasFromEmail = Boolean(emailForm.fromEmail.trim())
+    const hasGmailSender = Boolean(emailForm.defaultSender)
+    const resendReady = emailForm.provider !== "resend" || (hasResendKey && hasFromEmail)
+    const gmailReady = emailForm.provider !== "gmail" || hasGmailSender
+    const canSave = Boolean(emailForm.provider) && resendReady && gmailReady
+    const showMaskedKey = Boolean(settings?.api_key_masked) && !emailUi.isEditingKey && !emailForm.apiKey
     const showHeading = variant === "page"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
@@ -1000,7 +1101,7 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                     <div className="space-y-3">
                         <Label htmlFor="email-provider">Email Provider</Label>
                         <RadioGroup
-                            value={provider}
+                            value={emailForm.provider}
                             onValueChange={(v) => handleProviderChange(v as "resend" | "gmail" | "")}
                             className="flex flex-col gap-3"
                             id="email-provider"
@@ -1023,24 +1124,24 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                         </RadioGroup>
                     </div>
 
-                    {/* Resend Configuration */}
-                    {provider === "resend" && (
+                    {emailForm.provider === "resend" && (
                         <div className="space-y-4 rounded-lg border p-4">
                             <h3 className="text-sm font-medium">Resend Configuration</h3>
 
-                            {/* API Key */}
                             <div className="space-y-2">
                                 <Label htmlFor="resend-key">API Key</Label>
                                 <div className="flex gap-2">
                                     <Input
                                         id="resend-key"
                                         type="password"
-                                        value={showMaskedKey ? settings?.api_key_masked ?? "" : apiKey}
+                                        value={showMaskedKey ? settings?.api_key_masked ?? "" : emailForm.apiKey}
                                         onChange={(e) => {
-                                            setApiKey(e.target.value)
-                                            setKeyTested(null)
-                                            setIsEditingKey(true)
-                                            setHasUserEdited(true)
+                                            updateEmailForm("apiKey", e.target.value, true)
+                                            setEmailUi((current) => ({
+                                                ...current,
+                                                keyTested: null,
+                                                isEditingKey: true,
+                                            }))
                                         }}
                                         placeholder="re_…"
                                         disabled={showMaskedKey}
@@ -1053,10 +1154,12 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                             variant="outline"
                                             size="sm"
                                             onClick={() => {
-                                                setIsEditingKey(true)
-                                                setApiKey("")
-                                                setKeyTested(null)
-                                                setHasUserEdited(true)
+                                                updateEmailForm("apiKey", "", true)
+                                                setEmailUi((current) => ({
+                                                    ...current,
+                                                    isEditingKey: true,
+                                                    keyTested: null,
+                                                }))
                                             }}
                                             className="shrink-0"
                                         >
@@ -1068,26 +1171,29 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={handleTestKey}
-                                                disabled={!apiKey.trim() || testKey.isPending}
+                                                disabled={!emailForm.apiKey.trim() || testKey.isPending}
                                             >
                                                 {testKey.isPending ? (
                                                     <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                                ) : keyTested?.valid ? (
+                                                ) : emailUi.keyTested?.valid ? (
                                                     <CheckIcon className="size-4 text-green-600" aria-hidden="true" />
-                                                ) : keyTested !== null ? (
+                                                ) : emailUi.keyTested !== null ? (
                                                     <XCircleIcon className="size-4 text-red-600" aria-hidden="true" />
                                                 ) : (
                                                     "Test"
                                                 )}
                                             </Button>
-                                            {settings?.api_key_masked && isEditingKey && (
+                                            {settings?.api_key_masked && emailUi.isEditingKey && (
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => {
-                                                        setIsEditingKey(false)
-                                                        setApiKey("")
-                                                        setKeyTested(null)
+                                                        updateEmailForm("apiKey", "")
+                                                        setEmailUi((current) => ({
+                                                            ...current,
+                                                            isEditingKey: false,
+                                                            keyTested: null,
+                                                        }))
                                                     }}
                                                 >
                                                     Cancel
@@ -1096,20 +1202,19 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                         </div>
                                     )}
                                 </div>
-                                {keyTested?.valid && (
+                                {emailUi.keyTested?.valid && (
                                     <p className="text-xs text-green-600">
-                                        API key is valid! Verified domain: {keyTested.verified_domains?.[0] || settings?.verified_domain}
+                                        API key is valid! Verified domain: {emailUi.keyTested.verified_domains?.[0] || settings?.verified_domain}
                                     </p>
                                 )}
-                                {keyTested && !keyTested.valid && (
-                                    <p className="text-xs text-red-600">{keyTested.error || "API key is invalid"}</p>
+                                {emailUi.keyTested && !emailUi.keyTested.valid && (
+                                    <p className="text-xs text-red-600">{emailUi.keyTested.error || "API key is invalid"}</p>
                                 )}
                                 <p className="text-xs text-muted-foreground">
                                     Get your key from <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">resend.com/api-keys</a>
                                 </p>
                             </div>
 
-                            {/* Verified Domain */}
                             {settings?.verified_domain && (
                                 <div className="flex items-center gap-2 rounded-md bg-green-50 px-3 py-2 text-sm dark:bg-green-900/20">
                                     <CheckCircleIcon className="size-4 text-green-600" aria-hidden="true" />
@@ -1117,17 +1222,13 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                 </div>
                             )}
 
-                            {/* From Email */}
                             <div className="space-y-2">
                                 <Label htmlFor="from-email">From Email</Label>
                                 <Input
                                     id="from-email"
                                     type="email"
-                                    value={fromEmail}
-                                    onChange={(e) => {
-                                        setFromEmail(e.target.value)
-                                        setHasUserEdited(true)
-                                    }}
+                                    value={emailForm.fromEmail}
+                                    onChange={(e) => updateEmailForm("fromEmail", e.target.value, true)}
                                     placeholder={settings?.verified_domain ? `no-reply@${settings.verified_domain}` : "no-reply@yourdomain.com"}
                                     name="from-email"
                                     autoComplete="email"
@@ -1139,40 +1240,31 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                 )}
                             </div>
 
-                            {/* From Name */}
                             <div className="space-y-2">
                                 <Label htmlFor="from-name">From Name (optional)</Label>
                                 <Input
                                     id="from-name"
-                                    value={fromName}
-                                    onChange={(e) => {
-                                        setFromName(e.target.value)
-                                        setHasUserEdited(true)
-                                    }}
+                                    value={emailForm.fromName}
+                                    onChange={(e) => updateEmailForm("fromName", e.target.value, true)}
                                     placeholder="Your Company Name"
                                     name="from-name"
                                     autoComplete="organization"
                                 />
                             </div>
 
-                            {/* Reply-To */}
                             <div className="space-y-2">
                                 <Label htmlFor="reply-to">Reply-To Email (optional)</Label>
                                 <Input
                                     id="reply-to"
                                     type="email"
-                                    value={replyTo}
-                                    onChange={(e) => {
-                                        setReplyTo(e.target.value)
-                                        setHasUserEdited(true)
-                                    }}
+                                    value={emailForm.replyTo}
+                                    onChange={(e) => updateEmailForm("replyTo", e.target.value, true)}
                                     placeholder="support@yourdomain.com"
                                     name="reply-to"
                                     autoComplete="email"
                                 />
                             </div>
 
-                            {/* Webhook URL */}
                             {settings?.webhook_url && (
                                 <div className="space-y-2">
                                     <Label>Webhook URL</Label>
@@ -1210,17 +1302,13 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                 </div>
                             )}
 
-                            {/* Webhook Signing Secret */}
                             <div className="space-y-2">
                                 <Label htmlFor="resend-webhook-secret">Webhook Signing Secret</Label>
                                 <Input
                                     id="resend-webhook-secret"
                                     type="password"
-                                    value={webhookSigningSecret}
-                                    onChange={(e) => {
-                                        setWebhookSigningSecret(e.target.value)
-                                        setHasUserEdited(true)
-                                    }}
+                                    value={emailForm.webhookSigningSecret}
+                                    onChange={(e) => updateEmailForm("webhookSigningSecret", e.target.value, true)}
                                     placeholder="whsec_…"
                                     name="resend-webhook-signing-secret"
                                     autoComplete="off"
@@ -1238,19 +1326,15 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                         </div>
                     )}
 
-                    {/* Gmail Configuration */}
-                    {provider === "gmail" && (
+                    {emailForm.provider === "gmail" && (
                         <div className="space-y-4 rounded-lg border p-4">
                             <h3 className="text-sm font-medium">Gmail Configuration</h3>
 
                             <div className="space-y-2">
                                 <Label htmlFor="gmail-sender">Default Sender</Label>
                                 <Select
-                                    value={defaultSender}
-                                    onValueChange={(v) => {
-                                        setDefaultSender(v ?? "")
-                                        setHasUserEdited(true)
-                                    }}
+                                    value={emailForm.defaultSender}
+                                    onValueChange={(v) => updateEmailForm("defaultSender", v ?? "", true)}
                                 >
                                     <SelectTrigger id="gmail-sender">
                                         <SelectValue placeholder={eligibleSendersLoading ? "Loading senders…" : "Select admin with Gmail connected"} />
@@ -1284,14 +1368,13 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                         </div>
                     )}
 
-                    {/* Save Button */}
                     <Button onClick={handleSave} disabled={updateSettings.isPending || !canSave} className="w-full">
                         {updateSettings.isPending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                 Saving…
                             </>
-                        ) : saved ? (
+                        ) : emailUi.saved ? (
                             <>
                                 <CheckIcon className="mr-2 size-4" aria-hidden="true" />
                                 Saved!
@@ -1473,6 +1556,8 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
 }
 
 function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const { data: pipelines } = usePipelines()
+    const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
     const { data: settings, isLoading } = useZapierSettings()
     const { data: metaForms = [], isLoading: metaFormsLoading } = useMetaForms()
     const createInboundWebhook = useCreateZapierInboundWebhook()
@@ -1738,7 +1823,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const applyRecommendedBucketMapping = () => {
         setEventMapping((current) =>
             current.map((item) => {
-                const recommendedBucket = ZAPIER_RECOMMENDED_BUCKET_BY_STAGE[item.stage_key]
+                const recommendedBucket = recommendedBucketByStage[item.stage_key]
                 if (!recommendedBucket) {
                     return item
                 }
@@ -2233,7 +2318,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                     next[index] = {
                                                         ...existing,
                                                         bucket: null,
-                                                        enabled: ZAPIER_RECOMMENDED_BUCKET_BY_STAGE[existing.stage_key]
+                                                        enabled: recommendedBucketByStage[existing.stage_key]
                                                             ? false
                                                             : existing.enabled,
                                                     }
@@ -2535,37 +2620,56 @@ function MetaCrmDatasetMonitoringSection({ variant = "page" }: { variant?: "page
 }
 
 function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const { data: pipelines } = usePipelines()
+    const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
     const { data: settings, isLoading } = useMetaCrmDatasetSettings()
     const updateSettings = useUpdateMetaCrmDatasetSettings()
     const sendOutboundTest = useMetaCrmDatasetOutboundTest()
     const isDialog = variant === "dialog"
-    const [datasetId, setDatasetId] = useState("")
-    const [accessToken, setAccessToken] = useState("")
-    const [enabled, setEnabled] = useState(false)
-    const [crmName, setCrmName] = useState("Surrogacy Force CRM")
-    const [sendHashedPii, setSendHashedPii] = useState(false)
-    const [eventMapping, setEventMapping] = useState<MetaCrmDatasetEventMappingItem[]>([])
-    const [testEventCode, setTestEventCode] = useState("")
-    const [selectedStage, setSelectedStage] = useState("")
-    const [outboundTestLeadId, setOutboundTestLeadId] = useState("")
-    const [outboundTestFbc, setOutboundTestFbc] = useState("")
+    const [metaForm, setMetaForm] = useState<MetaCrmDatasetFormState>({
+        datasetId: "",
+        accessToken: "",
+        enabled: false,
+        crmName: "Surrogacy Force CRM",
+        sendHashedPii: false,
+        eventMapping: [],
+        testEventCode: "",
+        selectedStage: "",
+        outboundTestLeadId: "",
+        outboundTestFbc: "",
+    })
 
     useEffect(() => {
         if (!settings) return
-        setDatasetId(settings.dataset_id || "")
-        setAccessToken("")
-        setEnabled(Boolean(settings.enabled))
-        setCrmName(settings.crm_name || "Surrogacy Force CRM")
-        setSendHashedPii(Boolean(settings.send_hashed_pii))
-        setEventMapping(settings.event_mapping || [])
-        setTestEventCode(settings.test_event_code || "")
-        setSelectedStage((currentStage) => {
-            if (currentStage && settings.event_mapping?.some((item) => item.stage_key === currentStage)) {
-                return currentStage
-            }
-            return settings.event_mapping?.[0]?.stage_key || ""
-        })
+        setMetaForm((current) => ({
+            ...current,
+            datasetId: settings.dataset_id || "",
+            accessToken: "",
+            enabled: Boolean(settings.enabled),
+            crmName: settings.crm_name || "Surrogacy Force CRM",
+            sendHashedPii: Boolean(settings.send_hashed_pii),
+            eventMapping: settings.event_mapping || [],
+            testEventCode: settings.test_event_code || "",
+            selectedStage:
+                current.selectedStage
+                && settings.event_mapping?.some((item) => item.stage_key === current.selectedStage)
+                    ? current.selectedStage
+                    : settings.event_mapping?.[0]?.stage_key || "",
+        }))
     }, [settings])
+
+    const updateMetaForm = <K extends keyof MetaCrmDatasetFormState>(field: K, value: MetaCrmDatasetFormState[K]) => {
+        setMetaForm((current) => ({ ...current, [field]: value }))
+    }
+
+    const updateEventMapping = (
+        updater: (current: MetaCrmDatasetEventMappingItem[]) => MetaCrmDatasetEventMappingItem[],
+    ) => {
+        setMetaForm((current) => ({
+            ...current,
+            eventMapping: updater(current.eventMapping),
+        }))
+    }
 
     const handleSave = async () => {
         try {
@@ -2578,19 +2682,19 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                 event_mapping: MetaCrmDatasetEventMappingItem[]
                 test_event_code: string | null
             } = {
-                dataset_id: datasetId.trim() || null,
-                enabled,
-                crm_name: crmName.trim() || "Surrogacy Force CRM",
-                send_hashed_pii: sendHashedPii,
-                event_mapping: eventMapping,
-                test_event_code: testEventCode.trim() || null,
+                dataset_id: metaForm.datasetId.trim() || null,
+                enabled: metaForm.enabled,
+                crm_name: metaForm.crmName.trim() || "Surrogacy Force CRM",
+                send_hashed_pii: metaForm.sendHashedPii,
+                event_mapping: metaForm.eventMapping,
+                test_event_code: metaForm.testEventCode.trim() || null,
             }
-            const nextAccessToken = accessToken.trim()
+            const nextAccessToken = metaForm.accessToken.trim()
             if (nextAccessToken) {
                 payload.access_token = nextAccessToken
             }
             await updateSettings.mutateAsync(payload)
-            setAccessToken("")
+            setMetaForm((current) => ({ ...current, accessToken: "" }))
             toast.success("CRM dataset settings saved")
         } catch (error) {
             const message = error instanceof Error ? error.message : null
@@ -2606,18 +2710,18 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                 fbc?: string | null
                 test_event_code?: string | null
             } = {}
-            if (selectedStage) {
-                payload.stage_key = selectedStage
+            if (metaForm.selectedStage) {
+                payload.stage_key = metaForm.selectedStage
             }
-            const leadId = outboundTestLeadId.trim()
+            const leadId = metaForm.outboundTestLeadId.trim()
             if (leadId) {
                 payload.lead_id = leadId
             }
-            const clickId = outboundTestFbc.trim()
+            const clickId = metaForm.outboundTestFbc.trim()
             if (clickId) {
                 payload.fbc = clickId
             }
-            payload.test_event_code = testEventCode.trim() || null
+            payload.test_event_code = metaForm.testEventCode.trim() || null
             const result = await sendOutboundTest.mutateAsync(payload)
             toast.success(`Test event queued: ${result.event_name} for ${result.lead_id}`)
         } catch (error) {
@@ -2627,9 +2731,9 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
     }
 
     const applyRecommendedBucketMapping = () => {
-        setEventMapping((current) =>
+        updateEventMapping((current) =>
             current.map((item) => {
-                const recommendedBucket = ZAPIER_RECOMMENDED_BUCKET_BY_STAGE[item.stage_key]
+                const recommendedBucket = recommendedBucketByStage[item.stage_key]
                 if (!recommendedBucket) {
                     return item
                 }
@@ -2685,8 +2789,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         </p>
                     </div>
                     <Switch
-                        checked={enabled}
-                        onCheckedChange={setEnabled}
+                        checked={metaForm.enabled}
+                        onCheckedChange={(checked) => updateMetaForm("enabled", checked)}
                         aria-label="Enable direct CRM dataset delivery"
                     />
                 </div>
@@ -2696,8 +2800,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         <Label htmlFor="meta-crm-dataset-id">Dataset ID</Label>
                         <Input
                             id="meta-crm-dataset-id"
-                            value={datasetId}
-                            onChange={(event) => setDatasetId(event.target.value)}
+                            value={metaForm.datasetId}
+                            onChange={(event) => updateMetaForm("datasetId", event.target.value)}
                             placeholder="1428122951556949"
                             autoComplete="off"
                         />
@@ -2707,8 +2811,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         <Input
                             id="meta-crm-dataset-access-token"
                             type="password"
-                            value={accessToken}
-                            onChange={(event) => setAccessToken(event.target.value)}
+                            value={metaForm.accessToken}
+                            onChange={(event) => updateMetaForm("accessToken", event.target.value)}
                             placeholder={settings?.access_token_configured ? "•••••••• (set)" : "Enter access token"}
                             autoComplete="off"
                         />
@@ -2720,8 +2824,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         <Label htmlFor="meta-crm-dataset-crm-name">CRM Name</Label>
                         <Input
                             id="meta-crm-dataset-crm-name"
-                            value={crmName}
-                            onChange={(event) => setCrmName(event.target.value)}
+                            value={metaForm.crmName}
+                            onChange={(event) => updateMetaForm("crmName", event.target.value)}
                             placeholder="Surrogacy Force CRM"
                             autoComplete="off"
                         />
@@ -2730,8 +2834,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         <Label htmlFor="meta-crm-dataset-test-event-code">Test Event Code</Label>
                         <Input
                             id="meta-crm-dataset-test-event-code"
-                            value={testEventCode}
-                            onChange={(event) => setTestEventCode(event.target.value)}
+                            value={metaForm.testEventCode}
+                            onChange={(event) => updateMetaForm("testEventCode", event.target.value)}
                             placeholder="Optional Meta test event code"
                             autoComplete="off"
                         />
@@ -2746,8 +2850,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         </p>
                     </div>
                     <Switch
-                        checked={sendHashedPii}
-                        onCheckedChange={setSendHashedPii}
+                        checked={metaForm.sendHashedPii}
+                        onCheckedChange={(checked) => updateMetaForm("sendHashedPii", checked)}
                         aria-label="Include hashed PII for Meta CRM dataset"
                     />
                 </div>
@@ -2768,7 +2872,7 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         Map each internal surrogate stage to the Meta CRM event bucket you want to report.
                     </p>
                     <div className="space-y-2">
-                        {eventMapping.map((item, index) => (
+                        {metaForm.eventMapping.map((item, index) => (
                             <div
                                 key={item.stage_key}
                                 className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
@@ -2779,24 +2883,26 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                 <Select
                                     value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
                                     onValueChange={(value) => {
-                                        const next = [...eventMapping]
-                                        const existing = next[index]
-                                        if (!existing) return
-                                        if (value === "__none__") {
-                                            next[index] = {
-                                                ...existing,
-                                                bucket: null,
-                                                enabled: false,
+                                        updateEventMapping((current) => {
+                                            const next = [...current]
+                                            const existing = next[index]
+                                            if (!existing) return current
+                                            if (value === "__none__") {
+                                                next[index] = {
+                                                    ...existing,
+                                                    bucket: null,
+                                                    enabled: false,
+                                                }
+                                            } else if (isZapierStageBucket(value)) {
+                                                next[index] = {
+                                                    ...existing,
+                                                    bucket: value,
+                                                    event_name: ZAPIER_BUCKET_EVENT_NAME[value],
+                                                    enabled: true,
+                                                }
                                             }
-                                        } else if (isZapierStageBucket(value)) {
-                                            next[index] = {
-                                                ...existing,
-                                                bucket: value,
-                                                event_name: ZAPIER_BUCKET_EVENT_NAME[value],
-                                                enabled: true,
-                                            }
-                                        }
-                                        setEventMapping(next)
+                                            return next
+                                        })
                                     }}
                                 >
                                     <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
@@ -2814,11 +2920,13 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                 <Input
                                     value={item.event_name}
                                     onChange={(event) => {
-                                        const next = [...eventMapping]
-                                        const existing = next[index]
-                                        if (!existing) return
-                                        next[index] = { ...existing, event_name: event.target.value }
-                                        setEventMapping(next)
+                                        updateEventMapping((current) => {
+                                            const next = [...current]
+                                            const existing = next[index]
+                                            if (!existing) return current
+                                            next[index] = { ...existing, event_name: event.target.value }
+                                            return next
+                                        })
                                     }}
                                     placeholder="Event name"
                                     name={`meta-crm-dataset-event-${item.stage_key}`}
@@ -2829,11 +2937,13 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                     <Switch
                                         checked={item.enabled}
                                         onCheckedChange={(checked) => {
-                                            const next = [...eventMapping]
-                                            const existing = next[index]
-                                            if (!existing) return
-                                            next[index] = { ...existing, enabled: checked }
-                                            setEventMapping(next)
+                                            updateEventMapping((current) => {
+                                                const next = [...current]
+                                                const existing = next[index]
+                                                if (!existing) return current
+                                                next[index] = { ...existing, enabled: checked }
+                                                return next
+                                            })
                                         }}
                                         aria-label={`Enable ${item.stage_key} Meta CRM dataset event`}
                                     />
@@ -2860,8 +2970,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                             <Label htmlFor="meta-crm-dataset-test-lead-id">Real Meta Lead ID</Label>
                             <Input
                                 id="meta-crm-dataset-test-lead-id"
-                                value={outboundTestLeadId}
-                                onChange={(event) => setOutboundTestLeadId(event.target.value)}
+                                value={metaForm.outboundTestLeadId}
+                                onChange={(event) => updateMetaForm("outboundTestLeadId", event.target.value)}
                                 placeholder="Use a real Meta lead ID for testing"
                                 autoComplete="off"
                             />
@@ -2873,8 +2983,8 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                             <Label htmlFor="meta-crm-dataset-test-fbc">Click ID (fbc)</Label>
                             <Input
                                 id="meta-crm-dataset-test-fbc"
-                                value={outboundTestFbc}
-                                onChange={(event) => setOutboundTestFbc(event.target.value)}
+                                value={metaForm.outboundTestFbc}
+                                onChange={(event) => updateMetaForm("outboundTestFbc", event.target.value)}
                                 placeholder="Optional Meta click ID for better matching"
                                 autoComplete="off"
                             />
@@ -2884,14 +2994,14 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                         </div>
                         <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
                             <Select
-                                value={selectedStage}
-                                onValueChange={(value) => setSelectedStage(value ?? "")}
+                                value={metaForm.selectedStage}
+                                onValueChange={(value) => updateMetaForm("selectedStage", value ?? "")}
                             >
                                 <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select Meta CRM dataset stage">
                                     <SelectValue placeholder="Select stage" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {eventMapping.map((item) => (
+                                    {metaForm.eventMapping.map((item) => (
                                         <SelectItem key={item.stage_key} value={item.stage_key}>
                                             {item.stage_key.replace(/_/g, " ")}
                                         </SelectItem>
@@ -3386,6 +3496,7 @@ export default function IntegrationsPage() {
     const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings()
     const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings()
     const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings()
+    const { data: pipelines } = usePipelines()
     const { data: metaFormsData } = useMetaForms()
     const { data: metaConnectionsData } = useMetaConnections()
     const { data: metaAdAccountsData } = useAdminMetaAdAccounts()
@@ -3434,7 +3545,11 @@ export default function IntegrationsPage() {
     const inboundWebhooks = zapierSettings?.inbound_webhooks ?? []
     const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
     const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
-    const zapierMappingHealth = getZapierMappingHealth(zapierSettings?.event_mapping)
+    const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
+    const zapierMappingHealth = getZapierMappingHealth(
+        zapierSettings?.event_mapping,
+        recommendedBucketByStage,
+    )
     const zapierMappingBadgeLabel = zapierMappingHealth.isHealthy
         ? "Mapping Healthy"
         : "Mapping Needs Review"
