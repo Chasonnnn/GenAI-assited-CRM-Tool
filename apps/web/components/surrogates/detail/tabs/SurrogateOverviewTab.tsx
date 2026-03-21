@@ -59,21 +59,27 @@ function LeadWarningIndicator({
             <TooltipTrigger
                 type="button"
                 aria-label={`${fieldLabel} lead intake warning`}
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-red-300/80 bg-[radial-gradient(circle_at_28%_28%,rgba(255,255,255,0.96),rgba(255,255,255,0.42)_34%,rgba(252,165,165,0.3)_38%,rgba(248,113,113,0.26)_62%,rgba(220,38,38,0.18)_100%)] text-red-600 shadow-[0_6px_16px_-10px_rgba(220,38,38,0.95),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/70 focus-visible:ring-offset-2"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-red-300/80 bg-[radial-gradient(circle_at_28%_28%,rgba(255,255,255,0.96),rgba(255,255,255,0.42)_34%,rgba(252,165,165,0.3)_38%,rgba(248,113,113,0.26)_62%,rgba(220,38,38,0.18)_100%)] text-red-600 shadow-[0_6px_16px_-10px_rgba(220,38,38,0.95),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/70 focus-visible:ring-offset-2 dark:border-red-400/90 dark:bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.3),rgba(255,255,255,0.08)_18%,rgba(248,113,113,0.72)_42%,rgba(220,38,38,0.86)_70%,rgba(69,10,10,0.98)_100%)] dark:text-red-50 dark:shadow-[0_10px_24px_-14px_rgba(248,113,113,0.98),inset_0_1px_0_rgba(255,255,255,0.18)] dark:focus-visible:ring-red-400/70"
             >
-                <AlertTriangleIcon className="size-3.5" aria-hidden="true" />
+                <AlertTriangleIcon
+                    className="size-3.5 drop-shadow-[0_0_1px_rgba(255,255,255,0.16)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.52)]"
+                    aria-hidden="true"
+                />
             </TooltipTrigger>
-            <TooltipContent className="max-w-64 px-3 py-2">
+            <TooltipContent
+                className="max-w-64 border border-slate-200/80 bg-white px-3 py-2 text-slate-950 shadow-xl shadow-slate-950/12 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-50 dark:shadow-black/40"
+                arrowClassName="bg-white fill-white dark:bg-zinc-950 dark:fill-zinc-950"
+            >
                 <div className="space-y-1.5">
                     <div className="text-sm font-medium">{fieldLabel}</div>
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-background/70">
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-zinc-400">
                         {LEAD_WARNING_REASON_LABELS[warning.issue]}
                     </div>
-                    <p className="text-xs leading-relaxed text-background/88">
+                    <p className="text-xs leading-relaxed text-slate-700 dark:text-zinc-200">
                         {LEAD_WARNING_REASON_COPY[warning.issue]}
                     </p>
-                    <div className="border-t border-background/15 pt-1.5">
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-background/70">
+                    <div className="border-t border-slate-200/80 pt-1.5 dark:border-white/10">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-zinc-400">
                             Raw lead value
                         </div>
                         <div className="mt-1 break-words text-xs font-medium">

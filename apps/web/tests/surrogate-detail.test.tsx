@@ -603,7 +603,10 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.queryByTestId('lead-intake-review-card')).not.toBeInTheDocument()
 
-        expect(screen.getByLabelText('Phone lead intake warning')).toBeInTheDocument()
+        const phoneWarning = screen.getByLabelText('Phone lead intake warning')
+        expect(phoneWarning).toBeInTheDocument()
+        expect(phoneWarning).toHaveClass('dark:border-red-400/90')
+        expect(phoneWarning).toHaveClass('dark:text-red-50')
         expect(screen.getByLabelText('State lead intake warning')).toBeInTheDocument()
         expect(screen.getByLabelText('Height lead intake warning')).toBeInTheDocument()
         expect(screen.getByLabelText('Weight lead intake warning')).toBeInTheDocument()
@@ -617,7 +620,7 @@ describe('SurrogateDetailPage', () => {
         expect(weightRow).toBeTruthy()
         expect(weightRow).toHaveTextContent(/Weight:\s*-/)
 
-        fireEvent.focus(screen.getByLabelText('Phone lead intake warning'))
+        fireEvent.focus(phoneWarning)
 
         await waitFor(() => {
             expect(screen.getByText('Phone')).toBeInTheDocument()
@@ -664,6 +667,11 @@ describe('SurrogateDetailPage', () => {
             expect(screen.getByText('This value could not be structured, so the field needs review.')).toBeInTheDocument()
             expect(screen.getByText('jane@example,com')).toBeInTheDocument()
         })
+
+        const tooltipContent = screen.getByText('Raw lead value').closest('[data-slot="tooltip-content"]')
+        expect(tooltipContent).toHaveClass('bg-white')
+        expect(tooltipContent).toHaveClass('text-slate-950')
+        expect(tooltipContent).toHaveClass('dark:bg-zinc-950')
     })
 
     it('computes BMI from rounded inches for decimal-feet height values', () => {
