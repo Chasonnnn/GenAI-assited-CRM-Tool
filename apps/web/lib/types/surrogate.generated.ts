@@ -2,12 +2,6 @@
 
 export type SurrogateSource = "manual" | "meta" | "tiktok" | "google" | "website" | "referral" | "import" | "agency" | "other";
 
-export type SurrogateLeadIntakeWarning = {
-    field_key: "email" | "phone" | "height_ft" | "weight_lb";
-    issue: "missing_value" | "invalid_value";
-    raw_value: string;
-};
-
 export interface SurrogateListItem {
     id: string;
     surrogate_number: string;
@@ -32,6 +26,12 @@ export interface SurrogateListItem {
     last_activity_at?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface SurrogateLeadIntakeWarning {
+    field_key: "email" | "phone" | "height_ft" | "weight_lb";
+    issue: "missing_value" | "invalid_value";
+    raw_value: string;
 }
 
 export interface SurrogateRead {
