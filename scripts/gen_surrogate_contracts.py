@@ -60,6 +60,29 @@ def _format_property_name(name: str) -> str:
     return name if _is_identifier(name) else json.dumps(name)
 
 
+def _collect_component_refs(schema: dict[str, Any], refs: set[str]) -> None:
+    if "$ref" in schema:
+        refs.add(_ref_name(schema["$ref"]))
+        return
+
+    for key in ("anyOf", "oneOf", "allOf"):
+        for part in schema.get(key, []):
+            _collect_component_refs(part, refs)
+
+    if schema.get("type") == "array":
+        items = schema.get("items")
+        if isinstance(items, dict):
+            _collect_component_refs(items, refs)
+
+    if schema.get("type") == "object":
+        additional = schema.get("additionalProperties")
+        if isinstance(additional, dict):
+            _collect_component_refs(additional, refs)
+        for prop_schema in schema.get("properties", {}).values():
+            if isinstance(prop_schema, dict):
+                _collect_component_refs(prop_schema, refs)
+
+
 def _ts_from_schema(schema: dict[str, Any], components: dict[str, Any]) -> str:
     if "$ref" in schema:
         return _ref_name(schema["$ref"])
@@ -108,6 +131,29 @@ def _render_named_schema(name: str, schema: dict[str, Any], components: dict[str
     return [f"export type {name} = {ts_type};"]
 
 
+def _build_render_order(components: dict[str, Any]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def visit(schema_name: str) -> None:
+        if schema_name in seen:
+            return
+        if schema_name not in components:
+            raise KeyError(f"Schema not found in OpenAPI components: {schema_name}")
+
+        seen.add(schema_name)
+        refs: set[str] = set()
+        _collect_component_refs(components[schema_name], refs)
+        for ref_name in sorted(refs):
+            visit(ref_name)
+        ordered.append(schema_name)
+
+    for schema_name in TARGET_SCHEMAS:
+        visit(schema_name)
+
+    return ordered
+
+
 def render_typescript() -> str:
     openapi = app.openapi()
     components = openapi.get("components", {}).get("schemas", {})
@@ -117,9 +163,7 @@ def render_typescript() -> str:
         "",
     ]
 
-    for schema_name in TARGET_SCHEMAS:
-        if schema_name not in components:
-            raise KeyError(f"Schema not found in OpenAPI components: {schema_name}")
+    for schema_name in _build_render_order(components):
         lines.extend(_render_named_schema(schema_name, components[schema_name], components))
         lines.append("")
 
