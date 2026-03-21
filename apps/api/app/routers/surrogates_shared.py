@@ -7,7 +7,6 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import NO_VALUE
 
-from app.db.models import FormSubmission, MetaLead
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
 from app.services import queue_service, surrogate_stage_context, user_service
