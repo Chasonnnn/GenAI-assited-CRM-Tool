@@ -108,6 +108,27 @@ def _get_default_pipeline_snapshot(db: Session, org_id: UUID):
     return pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
 
 
+def _get_stage_profile_key_map(db: Session, org_id: UUID) -> dict[str, str | None]:
+    snapshot = _get_default_pipeline_snapshot(db, org_id)
+    return {
+        stage.stage_key: stage.semantics.suggestion_profile_key
+        for stage in snapshot.stages
+        if stage.stage_key
+    }
+
+
+def _rule_matches_suggestion_profile(
+    profile_key_by_stage: dict[str, str | None],
+    rule: OrgIntelligentSuggestionRule,
+    profile_key: str,
+) -> bool:
+    normalized_stage_key = pipeline_service.normalize_stage_ref(rule.stage_slug)
+    return rule.template_key == profile_key or (
+        normalized_stage_key is not None
+        and profile_key_by_stage.get(normalized_stage_key) == profile_key
+    )
+
+
 def _build_stage_followup_templates(db: Session, org_id: UUID) -> list[dict]:
     snapshot = _get_default_pipeline_snapshot(db, org_id)
     templates: list[dict] = []
@@ -906,14 +927,15 @@ def get_intelligent_rule_ids(
     if not rules:
         return set()
 
+    profile_key_by_stage = _get_stage_profile_key_map(db, org_id)
     matched: set[UUID] = set()
     for rule in rules:
         rule_ids = results.get(rule.id, set())
         if rule_key == FILTER_INTELLIGENT_NEW_UNREAD:
-            resolved_stage_key = pipeline_service.normalize_stage_ref(rule.stage_slug)
-            if (
-                rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP
-                or resolved_stage_key == "new_unread"
+            if _rule_matches_suggestion_profile(
+                profile_key_by_stage,
+                rule,
+                TEMPLATE_NEW_UNREAD_FOLLOWUP,
             ):
                 matched.update(rule_ids)
         elif rule_key == FILTER_INTELLIGENT_MEETING_OUTCOME:
@@ -947,12 +969,14 @@ def get_intelligent_summary(
         user_role=user_role,
         now_utc=now_utc,
     )
+    profile_key_by_stage = _get_stage_profile_key_map(db, org_id)
 
     for rule in rules:
         rule_ids = results.get(rule.id, set())
-        if (
-            rule.template_key == TEMPLATE_NEW_UNREAD_FOLLOWUP
-            or pipeline_service.normalize_stage_ref(rule.stage_slug) == "new_unread"
+        if _rule_matches_suggestion_profile(
+            profile_key_by_stage,
+            rule,
+            TEMPLATE_NEW_UNREAD_FOLLOWUP,
         ):
             counts[FILTER_INTELLIGENT_NEW_UNREAD] += len(rule_ids)
         if rule.rule_kind == RULE_KIND_MEETING_OUTCOME_MISSING:

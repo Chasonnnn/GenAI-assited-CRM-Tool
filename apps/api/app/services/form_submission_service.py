@@ -578,10 +578,10 @@ def create_submission(
                 exc_info=True,
             )
 
-        # Best-effort: advance stage to application_submitted (never regress)
+        # Best-effort: advance stage to the configured conversion stage (never regress)
         try:
             from app.db.models import Pipeline
-            from app.services import pipeline_service, surrogate_status_service
+            from app.services import analytics_shared, pipeline_service, surrogate_status_service
 
             current_stage = (
                 pipeline_service.get_stage_by_id(db, surrogate.stage_id)
@@ -596,16 +596,31 @@ def create_submission(
                 ).id
             )
 
-            target_stage = pipeline_service.get_stage_by_slug(
-                db=db, pipeline_id=pipeline_id, slug="application_submitted"
+            analytics_config = analytics_shared.get_analytics_stage_configuration(
+                db,
+                surrogate.organization_id,
+                pipeline_id=pipeline_id,
+            )
+            conversion_stage_key = analytics_config["conversion_stage_key"]
+            target_stage = (
+                pipeline_service.get_stage_by_key(
+                    db=db,
+                    pipeline_id=pipeline_id,
+                    stage_key=conversion_stage_key,
+                )
+                if conversion_stage_key
+                else None
             )
             if not target_stage:
                 pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
                 if pipeline:
                     pipeline_service.sync_missing_stages(db, pipeline, user_id=None)
-                target_stage = pipeline_service.get_stage_by_slug(
-                    db=db, pipeline_id=pipeline_id, slug="application_submitted"
-                )
+                if conversion_stage_key:
+                    target_stage = pipeline_service.get_stage_by_key(
+                        db=db,
+                        pipeline_id=pipeline_id,
+                        stage_key=conversion_stage_key,
+                    )
 
             if target_stage and surrogate.stage_id != target_stage.id:
                 current_order = current_stage.order if current_stage else 0
@@ -623,13 +638,13 @@ def create_submission(
                         old_label=old_label,
                         old_slug=old_slug,
                         user_id=None,
-                        reason="application_submitted via public form",
+                        reason=f"{conversion_stage_key or 'conversion'} via public form",
                         effective_at=now,
                         recorded_at=now,
                     )
         except Exception:
             logger.debug(
-                "advance_stage_application_submitted_failed",
+                "advance_stage_conversion_failed",
                 exc_info=True,
             )
 

@@ -22,7 +22,7 @@ from app.schemas.surrogate import (
     ContactAttemptResponse,
     ContactAttemptsSummary,
 )
-from app.services import surrogate_service, pipeline_service
+from app.services import pipeline_semantics_service, surrogate_service, pipeline_service
 
 
 def _sanitize_note_preview(note: str | None, max_chars: int = 120) -> str | None:
@@ -117,9 +117,21 @@ def create_contact_attempt(
 
         current_stage = pipeline_service.get_stage_by_id(session, surrogate.stage_id)
         if current_stage and current_stage.stage_type == "intake":
-            if not pipeline_service.stage_matches_key(current_stage, "contacted"):
-                contacted_stage = pipeline_service.get_stage_by_slug(
-                    session, current_stage.pipeline_id, "contacted"
+            pipeline_snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(
+                session,
+                current_stage.pipeline_id,
+            )
+            contacted_stage_snapshot = pipeline_semantics_service.get_first_active_stage_with_capability(
+                pipeline_snapshot,
+                "counts_as_contacted",
+            )
+            if (
+                contacted_stage_snapshot
+                and current_stage.id != contacted_stage_snapshot.id
+            ):
+                contacted_stage = pipeline_service.get_stage_by_id(
+                    session,
+                    contacted_stage_snapshot.id,
                 )
                 if contacted_stage:
                     surrogate_service.change_status(
