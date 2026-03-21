@@ -32,6 +32,7 @@ import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
     phone: "Phone",
+    state: "State",
     height_ft: "Height",
     weight_lb: "Weight",
 } as const
@@ -132,6 +133,7 @@ export function SurrogateOverviewTab() {
         stageContext.effectiveStageKey === "lost" || stageContext.effectiveStageKey === "disqualified"
     const emailLeadWarning = leadWarningMap.get("email")
     const phoneLeadWarning = leadWarningMap.get("phone")
+    const stateLeadWarning = leadWarningMap.get("state")
     const heightLeadWarning = leadWarningMap.get("height_ft")
     const weightLeadWarning = leadWarningMap.get("weight_lb")
     const hasMeasurementData =
@@ -227,22 +229,30 @@ export function SurrogateOverviewTab() {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">State:</span>
-                            <InlineEditField
-                                value={surrogateData.state ?? undefined}
-                                onSave={async (value) => {
-                                    await updateSurrogateMutation.mutateAsync({
-                                        surrogateId: id,
-                                        data: { state: value || null },
-                                    })
-                                }}
-                                placeholder="-"
-                                validate={(value) =>
-                                    value && value.length !== 2
-                                        ? "Use 2-letter code (e.g., CA, TX)"
-                                        : null
-                                }
-                                label="State"
-                            />
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <InlineEditField
+                                    value={surrogateData.state ?? undefined}
+                                    onSave={async (value) => {
+                                        await updateSurrogateMutation.mutateAsync({
+                                            surrogateId: id,
+                                            data: { state: value || null },
+                                        })
+                                    }}
+                                    placeholder="-"
+                                    validate={(value) =>
+                                        value && value.length !== 2
+                                            ? "Use 2-letter code (e.g., CA, TX)"
+                                            : null
+                                    }
+                                    label="State"
+                                />
+                                {stateLeadWarning && (
+                                    <LeadWarningIndicator
+                                        warning={stateLeadWarning}
+                                        fieldLabel={LEAD_WARNING_FIELD_LABELS.state}
+                                    />
+                                )}
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Source:</span>

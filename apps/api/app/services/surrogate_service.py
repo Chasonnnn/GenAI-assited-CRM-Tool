@@ -38,6 +38,7 @@ from app.utils.normalization import (
     normalize_name,
     normalize_phone,
     normalize_search_text,
+    normalize_state,
 )
 from app.services.surrogate_status_service import StatusChangeResult
 
@@ -50,8 +51,17 @@ _LEAD_WARNING_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("email", ("email", "email_address", "emailaddress", "e_mail")),
     (
         "phone",
-        ("phone", "phone_number", "phone_number_1", "mobile_phone", "cell_phone", "mobile"),
+        (
+            "phone",
+            "phone_number",
+            "phone_number_1",
+            "mobile_phone",
+            "cell_phone",
+            "mobile",
+            "telephone",
+        ),
     ),
+    ("state", ("state", "us_state", "province")),
     ("height_ft", ("height_ft", "height", "height_feet", "height_inches")),
     ("weight_lb", ("weight_lb", "weight", "weight_lbs", "weight_pounds")),
 )
@@ -78,6 +88,15 @@ def _coerce_raw_scalar(value: object) -> str | None:
 def _find_json_value_by_key(payload: object, candidate_keys: tuple[str, ...]) -> str | None:
     normalized_keys = {_normalize_json_key(key) for key in candidate_keys}
     if isinstance(payload, dict):
+        meta_field_name = payload.get("name")
+        if isinstance(meta_field_name, str):
+            if _normalize_json_key(meta_field_name) in normalized_keys:
+                coerced = _coerce_raw_scalar(payload.get("values"))
+                if coerced:
+                    return coerced
+                coerced = _coerce_raw_scalar(payload.get("value"))
+                if coerced:
+                    return coerced
         for key, value in payload.items():
             if _normalize_json_key(str(key)) in normalized_keys:
                 coerced = _coerce_raw_scalar(value)
@@ -144,6 +163,16 @@ def _has_valid_phone(value: str | None) -> bool:
     return True
 
 
+def _has_valid_state(value: str | None) -> bool:
+    if not value or not value.strip():
+        return False
+    try:
+        normalize_state(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _has_valid_decimal(value: object | None) -> bool:
     if value is None:
         return False
@@ -199,6 +228,7 @@ def build_lead_intake_warnings(db: Session, surrogate: Surrogate) -> list[dict[s
     validators = {
         "email": (surrogate.email, _has_valid_email),
         "phone": (surrogate.phone, _has_valid_phone),
+        "state": (surrogate.state, _has_valid_state),
         "height_ft": (surrogate.height_ft, _has_valid_decimal),
         "weight_lb": (surrogate.weight_lb, _has_valid_int),
     }

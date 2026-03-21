@@ -397,7 +397,7 @@ class BulkAssign(BaseModel):
 class SurrogateLeadIntakeWarning(BaseModel):
     """Lead intake value that needs manual review on the surrogate record."""
 
-    field_key: Literal["email", "phone", "height_ft", "weight_lb"]
+    field_key: Literal["email", "phone", "state", "height_ft", "weight_lb"]
     issue: Literal["missing_value", "invalid_value"]
     raw_value: str
 

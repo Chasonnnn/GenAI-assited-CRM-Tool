@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy import update as sql_update
 
-from app.db.models import EmailLog, Form, FormSubmission, Surrogate, SurrogateActivityLog
+from app.db.models import EmailLog, Form, FormSubmission, MetaLead, Surrogate, SurrogateActivityLog
 
 
 @pytest.mark.asyncio
@@ -317,6 +317,7 @@ async def test_surrogate_detail_includes_lead_intake_warnings_with_raw_values(
     assert surrogate is not None
     surrogate.email = "broken-email"
     surrogate.phone = None
+    surrogate.state = None
     surrogate.height_ft = None
     surrogate.weight_lb = None
 
@@ -337,6 +338,7 @@ async def test_surrogate_detail_includes_lead_intake_warnings_with_raw_values(
         answers_json={
             "email": "broken-email",
             "phone": "555-CALL-NOW",
+            "state": "Atlantis",
             "height": "5 ft 7 in",
             "weight_lb": "140 lbs",
         },
@@ -358,6 +360,79 @@ async def test_surrogate_detail_includes_lead_intake_warnings_with_raw_values(
             "field_key": "phone",
             "issue": "missing_value",
             "raw_value": "555-CALL-NOW",
+        },
+        {
+            "field_key": "state",
+            "issue": "missing_value",
+            "raw_value": "Atlantis",
+        },
+        {
+            "field_key": "height_ft",
+            "issue": "missing_value",
+            "raw_value": "5 ft 7 in",
+        },
+        {
+            "field_key": "weight_lb",
+            "issue": "missing_value",
+            "raw_value": "140 lbs",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_surrogate_detail_falls_back_to_meta_raw_field_data_for_lead_intake_warnings(
+    authed_client, db, test_org
+):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Meta Lead Review",
+            "email": f"meta-lead-review-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = uuid.UUID(create_res.json()["id"])
+
+    surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+    assert surrogate is not None
+    surrogate.phone = None
+    surrogate.state = None
+    surrogate.height_ft = None
+    surrogate.weight_lb = None
+
+    meta_lead = MetaLead(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        meta_lead_id=f"lead-{uuid.uuid4().hex[:8]}",
+        raw_payload={
+            "field_data": [
+                {"name": "Phone Number", "values": ["555-CALL-NOW"]},
+                {"name": "State", "values": ["Atlantis"]},
+                {"name": "Height", "values": ["5 ft 7 in"]},
+                {"name": "Weight", "values": ["140 lbs"]},
+            ]
+        },
+    )
+    db.add(meta_lead)
+    db.flush()
+
+    surrogate.meta_lead_id = meta_lead.id
+    db.commit()
+
+    detail_res = await authed_client.get(f"/surrogates/{surrogate_id}")
+    assert detail_res.status_code == 200, detail_res.text
+    detail = detail_res.json()
+
+    assert detail["lead_intake_warnings"] == [
+        {
+            "field_key": "phone",
+            "issue": "missing_value",
+            "raw_value": "555-CALL-NOW",
+        },
+        {
+            "field_key": "state",
+            "issue": "missing_value",
+            "raw_value": "Atlantis",
         },
         {
             "field_key": "height_ft",

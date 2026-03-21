@@ -575,6 +575,11 @@ describe('SurrogateDetailPage', () => {
                         raw_value: '555-CALL-NOW',
                     },
                     {
+                        field_key: 'state',
+                        issue: 'missing_value',
+                        raw_value: 'Atlantis',
+                    },
+                    {
                         field_key: 'height_ft',
                         issue: 'missing_value',
                         raw_value: '5 ft 7 in',
@@ -599,10 +604,10 @@ describe('SurrogateDetailPage', () => {
         expect(screen.queryByTestId('lead-intake-review-card')).not.toBeInTheDocument()
 
         expect(screen.getByLabelText('Phone lead intake warning')).toBeInTheDocument()
+        expect(screen.getByLabelText('State lead intake warning')).toBeInTheDocument()
         expect(screen.getByLabelText('Height lead intake warning')).toBeInTheDocument()
         expect(screen.getByLabelText('Weight lead intake warning')).toBeInTheDocument()
         expect(screen.queryByLabelText('Email lead intake warning')).not.toBeInTheDocument()
-        expect(screen.queryByLabelText('State lead intake warning')).not.toBeInTheDocument()
 
         const heightRow = screen.getByText('Height:').parentElement
         expect(heightRow).toBeTruthy()
@@ -618,6 +623,13 @@ describe('SurrogateDetailPage', () => {
             expect(screen.getByText('Phone')).toBeInTheDocument()
             expect(screen.getByText('This value could not be structured, so the field needs review.')).toBeInTheDocument()
             expect(screen.getByText('555-CALL-NOW')).toBeInTheDocument()
+        })
+
+        fireEvent.mouseEnter(screen.getByLabelText('State lead intake warning'))
+
+        await waitFor(() => {
+            expect(screen.getByText('State')).toBeInTheDocument()
+            expect(screen.getByText('Atlantis')).toBeInTheDocument()
         })
     })
 
