@@ -15,6 +15,7 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(None, max_length=2000)
     task_type: TaskType = TaskType.OTHER
+    match_id: UUID | None = None
     surrogate_id: UUID | None = None
     intended_parent_id: UUID | None = None
     # New owner model
@@ -45,6 +46,7 @@ class TaskRead(BaseModel):
 
     id: UUID
     surrogate_id: UUID | None
+    intended_parent_id: UUID | None
     surrogate_number: str | None = None
     # Owner (new model)
     owner_type: str
@@ -91,6 +93,7 @@ class TaskListItem(BaseModel):
 
     id: UUID
     surrogate_id: UUID | None
+    intended_parent_id: UUID | None
     surrogate_number: str | None = None
     title: str
     task_type: TaskType

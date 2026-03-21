@@ -479,6 +479,7 @@ def to_task_read(task: Task, context: dict[str, dict[UUID, str | None]]) -> Task
     return TaskRead(
         id=task.id,
         surrogate_id=task.surrogate_id,
+        intended_parent_id=task.intended_parent_id,
         surrogate_number=surrogate_number,
         owner_type=task.owner_type,
         owner_id=task.owner_id,
@@ -523,6 +524,7 @@ def to_task_list_item(
     return TaskListItem(
         id=task.id,
         surrogate_id=task.surrogate_id,
+        intended_parent_id=task.intended_parent_id,
         surrogate_number=surrogate_number,
         title=task.title,
         task_type=_coerce_task_type(task.task_type, task_id=task.id),

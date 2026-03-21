@@ -124,11 +124,36 @@ def create_task(
 ):
     """Create a new task (respects surrogate access control)."""
     from app.core.surrogate_access import check_surrogate_access
+    from app.services import ip_service, match_service, surrogate_service
+
+    if data.match_id and (data.surrogate_id or data.intended_parent_id):
+        raise HTTPException(
+            status_code=400,
+            detail="match_id cannot be combined with surrogate_id or intended_parent_id",
+        )
+
+    if data.match_id:
+        match = match_service.get_match(db, data.match_id, session.org_id)
+        if not match:
+            raise HTTPException(status_code=400, detail="Match not found")
+
+        if match.surrogate_id:
+            surrogate = surrogate_service.get_surrogate(db, session.org_id, match.surrogate_id)
+            if not surrogate:
+                raise HTTPException(status_code=400, detail="Surrogate not found")
+            check_surrogate_access(
+                surrogate, session.role, session.user_id, db=db, org_id=session.org_id
+            )
+
+        data = data.model_copy(
+            update={
+                "surrogate_id": match.surrogate_id,
+                "intended_parent_id": match.intended_parent_id,
+            }
+        )
 
     # Verify surrogate belongs to org if specified
     if data.surrogate_id:
-        from app.services import surrogate_service
-
         surrogate = surrogate_service.get_surrogate(db, session.org_id, data.surrogate_id)
         if not surrogate:
             raise HTTPException(status_code=400, detail="Surrogate not found")
@@ -136,6 +161,14 @@ def create_task(
         check_surrogate_access(
             surrogate, session.role, session.user_id, db=db, org_id=session.org_id
         )
+
+    # Verify intended parent belongs to org if specified
+    if data.intended_parent_id:
+        intended_parent = ip_service.get_intended_parent(
+            db, data.intended_parent_id, session.org_id
+        )
+        if not intended_parent:
+            raise HTTPException(status_code=400, detail="Intended parent not found")
 
     # Verify owner belongs to org if specified
     try:
