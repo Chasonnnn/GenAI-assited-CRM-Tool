@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ArrowDownIcon, ArrowUpIcon, CopyIcon, GripVerticalIcon, Layers2Icon, PlusIcon, Settings2Icon, Trash2Icon, XIcon } from "lucide-react"
+import { CopyIcon, Layers2Icon, PlusIcon, Settings2Icon, Trash2Icon, XIcon } from "lucide-react"
 
 import { FormBuilderFieldPreview } from "@/components/forms/FormBuilderFieldPreview"
 import { FormBuilderPalette } from "@/components/forms/FormBuilderPalette"
@@ -195,6 +195,8 @@ function CanvasFieldSurface({
     const publicField = React.useMemo(() => buildCanvasField(field), [field])
     const fieldLabel = field.label.trim() || "Untitled"
     const usesFallbackRenderer = ["address", "file", "repeatable_table"].includes(field.type)
+    const floatingActionButtonClass =
+        "pointer-events-auto rounded-full border border-stone-200/80 bg-white/95 text-stone-700 shadow-sm backdrop-blur hover:border-primary/40 hover:bg-white hover:text-stone-950"
 
     return (
         <div className="space-y-2">
@@ -233,39 +235,38 @@ function CanvasFieldSurface({
                             {selected ? (
                                 <div
                                     data-testid="form-builder-selected-field-actions"
-                                    className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-full border border-border/70 bg-white/95 px-1.5 py-1 shadow-sm backdrop-blur"
+                                    className="pointer-events-none absolute right-4 top-4 z-10 flex items-center gap-1.5"
                                 >
-                                    <GripVerticalIcon className="ml-1 size-3.5 text-muted-foreground" />
-                                    <div className="ml-auto flex items-center gap-1">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={(event) => {
-                                                event.stopPropagation()
-                                                onDuplicate(field.id)
-                                            }}
-                                            aria-label={`Duplicate ${fieldLabel}`}
-                                        >
-                                            <CopyIcon className="size-4" />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={(event) => {
-                                                event.stopPropagation()
-                                                onDelete(field.id)
-                                            }}
-                                            aria-label={`Delete ${fieldLabel}`}
-                                        >
-                                            <XIcon className="size-4" />
-                                        </Button>
-                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className={floatingActionButtonClass}
+                                        onClick={(event) => {
+                                            event.stopPropagation()
+                                            onDuplicate(field.id)
+                                        }}
+                                        aria-label={`Duplicate ${fieldLabel}`}
+                                    >
+                                        <CopyIcon className="size-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className={floatingActionButtonClass}
+                                        onClick={(event) => {
+                                            event.stopPropagation()
+                                            onDelete(field.id)
+                                        }}
+                                        aria-label={`Delete ${fieldLabel}`}
+                                    >
+                                        <XIcon className="size-4" />
+                                    </Button>
                                 </div>
                             ) : null}
 
-                            <div className={cn("pointer-events-none", selected ? "pr-28" : undefined)}>
+                            <div className="pointer-events-none">
                             {usesFallbackRenderer ? (
                                 <UnsupportedCanvasField field={field} />
                             ) : (
@@ -294,7 +295,6 @@ function PageStrip({
     onAddPage,
     onDuplicatePage,
     onRenamePage,
-    onMovePage,
     onRequestDeletePage,
     onOpenFieldLibrary,
 }: {
@@ -305,7 +305,6 @@ function PageStrip({
     onAddPage: () => void
     onDuplicatePage: (pageId: number) => void
     onRenamePage: (pageId: number, name: string) => void
-    onMovePage: (pageId: number, direction: "up" | "down") => void
     onRequestDeletePage: (pageId: number) => void
     onOpenFieldLibrary: () => void
 }) {
@@ -386,28 +385,6 @@ function PageStrip({
                     >
                         <CopyIcon className="mr-2 size-4" />
                         Duplicate
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onMovePage(activePage, "up")}
-                        disabled={activeIndex === 0}
-                        aria-label={`Move ${currentPageLabel} up`}
-                    >
-                        <ArrowUpIcon className="mr-2 size-4" />
-                        Up
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onMovePage(activePage, "down")}
-                        disabled={activeIndex === pages.length - 1}
-                        aria-label={`Move ${currentPageLabel} down`}
-                    >
-                        <ArrowDownIcon className="mr-2 size-4" />
-                        Down
                     </Button>
                     <Button
                         type="button"
@@ -573,6 +550,8 @@ function FieldInspector({
     removeOption: (fieldId: string, optionIndex: number) => void
 }) {
     const [activeTab, setActiveTab] = React.useState("general")
+    const settingsPanelClass =
+        "w-full border-t border-border/70 bg-card p-4 xl:min-h-[58rem] xl:w-auto xl:self-stretch xl:overflow-y-auto xl:border-t-0 xl:border-l xl:p-6"
 
     React.useEffect(() => {
         setActiveTab("general")
@@ -580,12 +559,8 @@ function FieldInspector({
 
     if (!selectedFieldData) {
         return (
-        <aside
-            data-testid="form-builder-settings"
-            aria-label="Form builder settings"
-            className="w-full border-t border-border/70 bg-card p-4 xl:min-h-0 xl:w-auto xl:overflow-y-auto xl:border-t-0 xl:border-l xl:p-6"
-        >
-                <div className="space-y-4">
+            <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
+                <div className="flex min-h-full flex-col gap-4">
                     <div className="rounded-2xl border border-border/70 bg-background p-4">
                         <div className="flex items-start gap-3">
                             <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -616,12 +591,8 @@ function FieldInspector({
     }
 
     return (
-        <aside
-            data-testid="form-builder-settings"
-            aria-label="Form builder settings"
-            className="w-full border-t border-border/70 bg-card p-4 xl:min-h-0 xl:w-auto xl:overflow-y-auto xl:border-t-0 xl:border-l xl:p-6"
-        >
-            <div className="space-y-4">
+        <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
+            <div className="flex min-h-full flex-col gap-4">
                 <div className="rounded-2xl border border-border/70 bg-background p-4">
                     <div className="flex items-start gap-3">
                         <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -644,7 +615,7 @@ function FieldInspector({
                     </div>
                 </div>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col gap-4">
                     <TabsList aria-label="Field settings sections" className="grid w-full grid-cols-2 bg-stone-100">
                         <TabsTrigger value="general">General</TabsTrigger>
                         <TabsTrigger value="advanced">Advanced</TabsTrigger>
@@ -1130,13 +1101,12 @@ export function FormBuilderWorkspace({
                         onAddPage={document.handleAddPage}
                         onDuplicatePage={document.handleDuplicatePage}
                         onRenamePage={document.handleRenamePage}
-                        onMovePage={document.handleMovePage}
                         onRequestDeletePage={document.requestDeletePage}
                         onOpenFieldLibrary={() => setFieldLibraryOpen(true)}
                     />
                 </div>
 
-                <div className="flex min-h-0 flex-1 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(18rem,23vw,24rem)]">
+                <div className="flex min-h-0 flex-1 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(18rem,23vw,24rem)] xl:items-stretch">
                     <EditCanvas
                         desktopCanvasWidthClass={desktopCanvasWidthClass}
                         canvasFrameClass={canvasFrameClass}

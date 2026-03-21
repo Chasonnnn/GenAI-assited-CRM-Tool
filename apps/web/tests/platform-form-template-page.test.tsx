@@ -193,7 +193,7 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getByTestId("form-builder-palette")).toBeInTheDocument()
         expect(screen.getByTestId("form-builder-canvas")).toBeInTheDocument()
         expect(screen.getByTestId("form-builder-page-shell")).toHaveClass("min-h-[58rem]")
-        expect(screen.getByTestId("form-builder-settings")).toBeInTheDocument()
+        expect(screen.getByTestId("form-builder-settings")).toHaveClass("xl:min-h-[58rem]", "xl:self-stretch")
         expect(screen.queryByTestId("form-builder-page-rail")).not.toBeInTheDocument()
 
         fireEvent.click(await screen.findByRole("button", { name: "Add Name field" }))
@@ -207,7 +207,14 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.click(screen.getByRole("button", { name: /select name field/i }))
 
         expect(await screen.findByRole("tab", { name: /^general$/i })).toBeInTheDocument()
-        expect(screen.getByTestId("form-builder-selected-field-actions")).toBeInTheDocument()
+        const selectedFieldActions = screen.getByTestId("form-builder-selected-field-actions")
+        expect(selectedFieldActions).toHaveClass("gap-1.5", "pointer-events-none")
+        expect(selectedFieldActions).not.toHaveClass("rounded-full", "border", "bg-white/95")
+        expect(selectedFieldActions.childElementCount).toBe(2)
+        expect(selectedFieldActions.querySelectorAll("button")).toHaveLength(2)
+        expect(screen.getByRole("button", { name: "Duplicate Name" })).toHaveClass("rounded-full", "border")
+        expect(screen.getByRole("button", { name: "Delete Name" })).toHaveClass("rounded-full", "border")
+        expect(selectedFieldActions.nextElementSibling).not.toHaveClass("pr-24")
         expect(screen.getByTestId("form-builder-selected-field-body")).toHaveClass("pt-3.5")
         expect(screen.getByRole("tab", { name: /^advanced$/i })).toBeInTheDocument()
         expect(screen.getByLabelText(/field title/i)).toHaveValue("Name")
@@ -273,7 +280,7 @@ describe("PlatformFormTemplatePage", () => {
         expect(await screen.findByRole("button", { name: /select email field/i })).toBeInTheDocument()
     })
 
-    it("supports page renaming and reordering from the compact page strip", async () => {
+    it("supports page renaming and omits page reorder buttons from the compact page strip", async () => {
         render(<PlatformFormTemplatePage />)
 
         fireEvent.click(await screen.findByRole("button", { name: /^add page$/i }))
@@ -284,13 +291,8 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.change(pageTwoInput, { target: { value: "Medical history" } })
 
         expect(screen.getByDisplayValue("Medical history")).toBeInTheDocument()
-
-        await act(async () => {
-            fireEvent.click(screen.getByRole("button", { name: "Move Medical history up" }))
-        })
-
-        const pageTabs = within(screen.getByRole("tablist", { name: /form pages/i })).getAllByRole("tab")
-        expect(pageTabs[0]).toHaveAttribute("aria-label", "Medical history")
+        expect(screen.queryByRole("button", { name: /move medical history up/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /move medical history down/i })).not.toBeInTheDocument()
     })
 
     it("adds a fixed table field with editable rows and columns", async () => {
