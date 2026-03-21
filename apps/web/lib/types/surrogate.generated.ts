@@ -51,7 +51,6 @@ export interface SurrogateRead {
     email: string;
     phone: string | null;
     state: string | null;
-    lead_intake_warnings?: SurrogateLeadIntakeWarning[];
     date_of_birth: string | null;
     race: string | null;
     height_ft: string | null;
