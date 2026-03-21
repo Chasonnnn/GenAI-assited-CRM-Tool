@@ -92,7 +92,7 @@ describe("FormBuilderPage", () => {
         render(<FormBuilderPage />)
 
         expect(screen.getByTestId("form-builder-workspace")).toHaveClass("flex-col", "xl:flex-row")
-        expect(screen.getByTestId("form-builder-palette")).toHaveClass("w-full", "xl:w-[200px]")
+        expect(screen.getByTestId("form-builder-palette")).toHaveClass("w-full", "xl:w-[320px]")
         expect(screen.getByTestId("form-builder-canvas")).toHaveClass("min-w-0", "p-4", "sm:p-6", "xl:p-8")
         expect(screen.getByTestId("form-builder-settings")).toHaveClass("w-full", "xl:w-[280px]")
     })
@@ -111,17 +111,45 @@ describe("FormBuilderPage", () => {
         expect(await screen.findByRole("button", { name: "Remove column Column 1" })).toBeInTheDocument()
     })
 
-    it("groups preset surrogate questions and shows answer previews on field cards", async () => {
+    it("keeps multi-select option inputs focused while editing", async () => {
         render(<FormBuilderPage />)
 
-        expect(screen.getByText("Contacts")).toBeInTheDocument()
-        expect(screen.getByText("Demographics")).toBeInTheDocument()
-        expect(screen.getByText("Eligibility")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Add Multi-Select field" }))
 
-        fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
+        const optionInput = await screen.findByDisplayValue("Option 1")
+        optionInput.focus()
+        fireEvent.change(optionInput, { target: { value: "Option 1 extended" } })
+
+        const updatedInput = screen.getByDisplayValue("Option 1 extended")
+        expect(updatedInput).toHaveFocus()
+    })
+
+    it("shows preset group navigation, switches visible preset fields, and trims answer previews on field cards", async () => {
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("button", { name: "Contacts" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Demographics" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Eligibility" })).toBeInTheDocument()
+
+        expect(screen.getByRole("button", { name: "Add preset Full Name field" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add preset Date of Birth field" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add preset Age Eligible field" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
+        expect(screen.getByRole("button", { name: "Add preset Date of Birth field" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add preset Full Name field" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Eligibility" }))
+        expect(screen.getByRole("button", { name: "Add preset Age Eligible field" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add preset Date of Birth field" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
         fireEvent.click(screen.getByRole("button", { name: "Add preset Date of Birth field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Contacts" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
 
         const fullNamePreview = await screen.findByLabelText("Preview answer for Full Name")
+        expect(fullNamePreview).toHaveClass("mt-2", "p-3")
         expect(within(fullNamePreview).getByPlaceholderText("Enter full name")).toBeInTheDocument()
 
         const dobPreview = screen.getByLabelText("Preview answer for Date of Birth")
