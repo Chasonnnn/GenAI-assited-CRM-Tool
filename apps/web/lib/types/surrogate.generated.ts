@@ -29,7 +29,7 @@ export interface SurrogateListItem {
 }
 
 export interface SurrogateLeadIntakeWarning {
-    field_key: "email" | "phone" | "height_ft" | "weight_lb";
+    field_key: "email" | "phone" | "state" | "height_ft" | "weight_lb";
     issue: "missing_value" | "invalid_value";
     raw_value: string;
 }
