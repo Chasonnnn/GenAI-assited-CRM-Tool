@@ -271,6 +271,14 @@ def change_status(
     if not pipeline:
         raise ValueError("Pipeline not found")
     feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
+    mutation_rule = feature_config.role_mutation.get(role_str)
+    allowed_types = set(mutation_rule.stage_types if mutation_rule else [])
+    allowed_stage_keys = {
+        pipeline_service.normalize_stage_ref(stage_key)
+        for stage_key in (mutation_rule.stage_keys if mutation_rule else [])
+        if pipeline_service.normalize_stage_ref(stage_key)
+    }
+    new_stage_key = pipeline_service.get_stage_semantic_key(new_stage) or new_stage.slug
     if is_resume_from_on_hold:
         pass
     elif not is_regression:

@@ -240,7 +240,7 @@ class PipelineChangePreviewRead(BaseModel):
 
 @router.get("", response_model=list[PipelineRead], dependencies=[MANAGE_PIPELINES_DEP])
 def list_pipelines(
-    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
+    entity_type: Annotated[str, Query()] = SURROGATE_PIPELINE_ENTITY,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -279,7 +279,7 @@ def list_pipelines(
 
 @router.get("/default", response_model=PipelineRead)
 def get_default_pipeline(
-    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
+    entity_type: Annotated[str, Query()] = SURROGATE_PIPELINE_ENTITY,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -310,7 +310,7 @@ def get_default_pipeline(
 
 @router.get("/default/semantics", response_model=PipelineSemanticsSnapshotRead)
 def get_default_pipeline_semantics(
-    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
+    entity_type: Annotated[str, Query()] = SURROGATE_PIPELINE_ENTITY,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -321,13 +321,15 @@ def get_default_pipeline_semantics(
         entity_type=normalize_pipeline_entity_type(entity_type),
     )
     snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
-    return PipelineSemanticsSnapshotRead(**pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot))
+    return PipelineSemanticsSnapshotRead(
+        **pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot)
+    )
 
 
 @router.get("/{pipeline_id}", response_model=PipelineRead, dependencies=[MANAGE_PIPELINES_DEP])
 def get_pipeline(
     pipeline_id: UUID,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -356,7 +358,7 @@ def get_pipeline(
 )
 def get_pipeline_semantics(
     pipeline_id: UUID,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -364,7 +366,9 @@ def get_pipeline_semantics(
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
     snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
-    return PipelineSemanticsSnapshotRead(**pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot))
+    return PipelineSemanticsSnapshotRead(
+        **pipeline_semantics_service.serialize_pipeline_semantics_snapshot(snapshot)
+    )
 
 
 @router.get(
@@ -374,7 +378,7 @@ def get_pipeline_semantics(
 )
 def get_pipeline_dependency_graph(
     pipeline_id: UUID,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -383,7 +387,9 @@ def get_pipeline_dependency_graph(
     pipeline = pipeline_service.get_pipeline(db, session.org_id, pipeline_id, entity_type)
     if not pipeline:
         raise HTTPException(404, "Pipeline not found")
-    return PipelineDependencyGraphRead(**pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline))
+    return PipelineDependencyGraphRead(
+        **pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
+    )
 
 
 @router.get(
@@ -393,7 +399,7 @@ def get_pipeline_dependency_graph(
 )
 def get_recommended_pipeline_draft(
     pipeline_id: UUID,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -416,7 +422,7 @@ def get_recommended_pipeline_draft(
 def preview_pipeline_changes(
     pipeline_id: UUID,
     data: PipelineDraftRequest,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -457,7 +463,7 @@ def preview_pipeline_changes(
 def apply_pipeline_draft(
     pipeline_id: UUID,
     data: PipelineDraftRequest,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -548,7 +554,7 @@ def create_pipeline(
     dependencies=[MANAGE_PIPELINES_DEP, Depends(require_csrf_header)],
 )
 def sync_default_pipeline_stages(
-    entity_type: str = Query(default=SURROGATE_PIPELINE_ENTITY),
+    entity_type: Annotated[str, Query()] = SURROGATE_PIPELINE_ENTITY,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> object:
@@ -582,7 +588,7 @@ def sync_default_pipeline_stages(
 def update_pipeline(
     pipeline_id: UUID,
     data: PipelineUpdate,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -647,7 +653,7 @@ def update_pipeline(
 )
 def delete_pipeline(
     pipeline_id: UUID,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> Response:
@@ -682,7 +688,7 @@ def delete_pipeline(
 def get_pipeline_versions(
     pipeline_id: UUID,
     limit: Annotated[int, "fastapi_param"] = Query(50, ge=1, le=100),
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -718,7 +724,7 @@ def get_pipeline_versions(
 def rollback_pipeline(
     pipeline_id: UUID,
     data: RollbackRequest,
-    entity_type: str | None = Query(default=None),
+    entity_type: Annotated[str | None, Query()] = None,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):

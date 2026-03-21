@@ -591,7 +591,15 @@ def get_request_with_details(
             result["entity_number"] = intended_parent.intended_parent_number
             result["current_stage_label"] = intended_parent.status_label
             if request.target_stage_id:
-                target_stage = pipeline_service.get_stage_by_id(db, request.target_stage_id)
+                target_stage = (
+                    db.query(PipelineStage)
+                    .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+                    .filter(
+                        PipelineStage.id == request.target_stage_id,
+                        Pipeline.organization_id == org_id,
+                    )
+                    .first()
+                )
                 if target_stage:
                     result["target_stage_label"] = target_stage.label
     elif request.entity_type == "match":

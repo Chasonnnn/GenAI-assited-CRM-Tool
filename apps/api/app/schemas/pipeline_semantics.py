@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 from app.core.stage_definitions import (
     INTENDED_PARENT_PIPELINE_ENTITY,
-    SURROGATE_PIPELINE_ENTITY,
     canonicalize_stage_key,
     normalize_pipeline_entity_type,
 )
@@ -347,7 +346,9 @@ def default_pipeline_feature_config(entity_type: str | None = None) -> dict[str,
     return PipelineFeatureConfig(
         journey=JourneyFeatureConfig(
             phases=[phase.model_copy(deep=True) for phase in DEFAULT_JOURNEY_PHASES],
-            milestones=[milestone.model_copy(deep=True) for milestone in DEFAULT_JOURNEY_MILESTONES],
+            milestones=[
+                milestone.model_copy(deep=True) for milestone in DEFAULT_JOURNEY_MILESTONES
+            ],
         ),
         analytics=AnalyticsFeatureConfig(
             funnel_stage_keys=list(DEFAULT_ANALYTICS_FUNNEL_STAGE_KEYS),

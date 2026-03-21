@@ -135,6 +135,9 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
     ],
 }
 
+# Backward-compatible export used by legacy surrogate-stage tests and callers.
+DEFAULT_STAGE_ORDER = DEFAULT_STAGE_ORDER_BY_ENTITY[SURROGATE_PIPELINE_ENTITY]
+
 
 def normalize_pipeline_entity_type(value: str | None) -> str:
     normalized = str(value or "").strip().lower()
