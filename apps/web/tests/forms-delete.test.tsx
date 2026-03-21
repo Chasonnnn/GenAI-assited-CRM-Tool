@@ -5,6 +5,13 @@ import FormsListPage from "../app/(app)/automation/forms/page"
 const mockPush = vi.fn()
 const mockDeleteForm = vi.fn()
 const mockDeleteTemplate = vi.fn()
+let mockForms: Array<{
+    id: string
+    name: string
+    status: string
+    created_at: string
+    updated_at: string
+}> = []
 let mockTemplates: Array<{
     id: string
     name: string
@@ -26,15 +33,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/hooks/use-forms", () => ({
     useForms: () => ({
-        data: [
-            {
-                id: "form-1",
-                name: "Test Form",
-                status: "draft",
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            },
-        ],
+        data: mockForms,
         isLoading: false,
     }),
     useCreateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -46,9 +45,19 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 
 describe("FormsListPage delete", () => {
     beforeEach(() => {
+        vi.useRealTimers()
         mockPush.mockReset()
         mockDeleteForm.mockReset()
         mockDeleteTemplate.mockReset()
+        mockForms = [
+            {
+                id: "form-1",
+                name: "Test Form",
+                status: "draft",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+        ]
         mockTemplates = []
     })
 
@@ -90,5 +99,30 @@ describe("FormsListPage delete", () => {
         fireEvent.click(screen.getByRole("button", { name: "Remove" }))
 
         await waitFor(() => expect(mockDeleteTemplate).toHaveBeenCalledWith("template-1"))
+    })
+
+    it("shows an absolute saved time instead of a negative relative timestamp", () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-03-21T03:29:29Z"))
+
+        mockForms = [
+            {
+                id: "form-1",
+                name: "Test Form",
+                status: "draft",
+                created_at: "2026-03-20T23:29:29Z",
+                updated_at: "2026-03-21T07:29:29Z",
+            },
+        ]
+
+        render(<FormsListPage />)
+
+        const expectedTime = new Date("2026-03-21T07:29:29Z").toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+        })
+
+        expect(screen.getByText(`Saved ${expectedTime}`)).toBeInTheDocument()
+        expect(screen.queryByText(/Updated -/i)).not.toBeInTheDocument()
     })
 })

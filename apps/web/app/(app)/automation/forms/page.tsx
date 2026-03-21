@@ -60,15 +60,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 function formatRelativeTime(dateString: string): string {
     const date = parseDateInput(dateString)
     const now = new Date()
+    if (Number.isNaN(date.getTime())) {
+        return "Updated recently"
+    }
+
+    if (date.getTime() > now.getTime()) {
+        return `Saved ${date.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+        })}`
+    }
+
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays === 1) return "Yesterday"
-    return `${diffDays}d ago`
+    if (diffMins < 60) return `Updated ${diffMins}m ago`
+    if (diffHours < 24) return `Updated ${diffHours}h ago`
+    if (diffDays === 1) return "Updated Yesterday"
+    return `Updated ${diffDays}d ago`
 }
 
 export default function FormsListPage() {
@@ -465,7 +476,7 @@ export default function FormsListPage() {
                                                 </CardHeader>
                                                 <CardContent className="pt-0">
                                                     <p className="text-xs text-muted-foreground">
-                                                        Updated {formatRelativeTime(form.updated_at)}
+                                                        {formatRelativeTime(form.updated_at)}
                                                     </p>
                                                 </CardContent>
                                             </Card>
@@ -570,7 +581,7 @@ export default function FormsListPage() {
                                                         {template.description || "No description provided."}
                                                     </p>
                                                     <p className="mt-2 text-xs text-muted-foreground">
-                                                        Updated {formatRelativeTime(template.updated_at)}
+                                                        {formatRelativeTime(template.updated_at)}
                                                     </p>
                                                 </CardContent>
                                             </Card>
