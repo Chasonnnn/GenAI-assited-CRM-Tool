@@ -5,9 +5,8 @@ import { useCallback, useReducer } from "react"
 import type { FormSchema } from "@/lib/api/forms"
 import { schemaToMetadata } from "@/lib/forms/form-builder-document"
 
-type WorkspaceTab = "builder" | "settings"
+type WorkspaceTab = "edit" | "preview" | "settings"
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error"
-type CanvasMode = "compose" | "preview"
 type PreviewDevice = "desktop" | "mobile"
 
 type TemplateBuilderState = {
@@ -24,9 +23,7 @@ type TemplateBuilderState = {
     isPublished: boolean
     isSaving: boolean
     isPublishing: boolean
-    canvasMode: CanvasMode
     previewDevice: PreviewDevice
-    fieldLibraryOpen: boolean
     fieldLibrarySearch: string
     fieldLibraryCategory: string
     autoSaveStatus: AutoSaveStatus
@@ -62,13 +59,11 @@ const buildInitialState = (isNewForm: boolean): TemplateBuilderState => ({
     maxFileSizeMb: 10,
     maxFileCount: 10,
     allowedMimeTypesText: "",
-    workspaceTab: "builder",
+    workspaceTab: "edit",
     isPublished: false,
     isSaving: false,
     isPublishing: false,
-    canvasMode: "compose",
     previewDevice: "desktop",
-    fieldLibraryOpen: false,
     fieldLibrarySearch: "",
     fieldLibraryCategory: "all",
     autoSaveStatus: "idle",

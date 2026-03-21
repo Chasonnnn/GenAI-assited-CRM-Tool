@@ -8,6 +8,7 @@ import {
     FALLBACK_FORM_PAGE,
     buildFieldId,
     buildColumnId,
+    buildRowId,
     createBuilderField,
     normalizeValidation,
     type BuilderFormField,
@@ -26,6 +27,27 @@ const cloneFieldForDuplicate = (field: BuilderFormField): BuilderFormField => ({
     ...field,
     id: buildFieldId(),
     surrogateFieldMapping: "",
+    ...(field.options ? { options: [...field.options] } : {}),
+    validation: field.validation ? { ...field.validation } : null,
+    showIf: field.showIf ? { ...field.showIf } : null,
+    ...(field.columns
+        ? {
+            columns: field.columns.map((column) => ({
+                ...column,
+                id: buildColumnId(),
+                ...(column.options ? { options: [...column.options] } : {}),
+                validation: column.validation ? { ...column.validation } : null,
+            })),
+        }
+        : {}),
+    ...(field.rows
+        ? {
+            rows: field.rows.map((row) => ({
+                ...row,
+                id: buildRowId(),
+            })),
+        }
+        : {}),
 })
 
 const clonePageFields = (fields: BuilderFormField[]) => fields.map(cloneFieldForDuplicate)
@@ -223,7 +245,7 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
     }, [activePage, selectedField, selectField])
 
     const handleDuplicateField = useCallback((fieldId: string) => {
-        const nextId = buildFieldId()
+        let nextId = buildFieldId()
         setPages((prev) =>
             prev.map((page) => {
                 if (page.id !== activePage) return page
@@ -231,11 +253,11 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
                 if (index === -1) return page
                 const source = page.fields[index]
                 if (!source) return page
+                const duplicatedSource = cloneFieldForDuplicate(source)
+                nextId = duplicatedSource.id
                 const duplicated: BuilderFormField = {
-                    ...source,
-                    id: nextId,
+                    ...duplicatedSource,
                     label: `${source.label} (Copy)`,
-                    surrogateFieldMapping: "",
                 }
                 const nextFields = [...page.fields]
                 nextFields.splice(index + 1, 0, duplicated)
@@ -294,6 +316,35 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         const nextColumns = existing.filter((column) => column.id !== columnId)
         handleUpdateField(fieldId, { columns: nextColumns })
     }, [handleUpdateField, selectedFieldData?.columns])
+
+    const handleAddRow = useCallback((fieldId: string) => {
+        const existing = selectedFieldData?.rows ?? []
+        const nextRows = [
+            ...existing,
+            {
+                id: buildRowId(),
+                label: `Item ${existing.length + 1}`,
+                helpText: "",
+            },
+        ]
+        handleUpdateField(fieldId, { rows: nextRows })
+    }, [handleUpdateField, selectedFieldData?.rows])
+
+    const handleUpdateRow = useCallback((
+        fieldId: string,
+        rowId: string,
+        updates: Partial<NonNullable<BuilderFormField["rows"]>[number]>,
+    ) => {
+        const existing = selectedFieldData?.rows ?? []
+        const nextRows = existing.map((row) => (row.id === rowId ? { ...row, ...updates } : row))
+        handleUpdateField(fieldId, { rows: nextRows })
+    }, [handleUpdateField, selectedFieldData?.rows])
+
+    const handleRemoveRow = useCallback((fieldId: string, rowId: string) => {
+        const existing = selectedFieldData?.rows ?? []
+        const nextRows = existing.filter((row) => row.id !== rowId)
+        handleUpdateField(fieldId, { rows: nextRows })
+    }, [handleUpdateField, selectedFieldData?.rows])
 
     const handleShowIfChange = useCallback((
         fieldId: string,
@@ -447,6 +498,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         handleAddColumn,
         handleUpdateColumn,
         handleRemoveColumn,
+        handleAddRow,
+        handleUpdateRow,
+        handleRemoveRow,
         handleShowIfChange,
         handleMappingChange,
         handleAddPage,

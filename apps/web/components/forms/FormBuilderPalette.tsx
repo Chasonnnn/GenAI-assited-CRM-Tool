@@ -1,189 +1,228 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { GripVerticalIcon, PlusIcon } from "lucide-react"
+import { useMemo } from "react"
 
-import { Button } from "@/components/ui/button"
+import { Command, CommandInput } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
+    ALL_BUILDER_FIELD_GROUPS,
     CUSTOM_FIELD_GROUPS,
     PRESET_FIELD_GROUPS,
+    type BuilderLibraryCategory,
     type BuilderPaletteField,
 } from "@/lib/forms/form-builder-library"
 import { cn } from "@/lib/utils"
 
 type FormBuilderPaletteProps = {
+    activeCategory: BuilderLibraryCategory
+    search: string
+    onCategoryChange: (value: BuilderLibraryCategory) => void
+    onSearchChange: (value: string) => void
     onInsertField: (field: BuilderPaletteField) => void
     onFieldDragStart: (field: BuilderPaletteField) => void
     onFieldDragEnd: () => void
-    onAddPage: () => void
     className?: string
 }
 
-function PaletteFieldButton({
+type VisibleSection = {
+    id: string
+    label: string
+    isPreset: boolean
+    fields: BuilderPaletteField[]
+}
+
+const ALL_CATEGORY_ID = "all"
+
+function buildTileTestId(field: BuilderPaletteField) {
+    return `form-builder-palette-tile-${field.key}`
+}
+
+function PaletteFieldTile({
     field,
-    ariaLabel,
+    isPreset,
     onInsertField,
     onFieldDragStart,
     onFieldDragEnd,
-    className,
-    iconClassName,
 }: {
     field: BuilderPaletteField
-    ariaLabel: string
+    isPreset: boolean
     onInsertField: (field: BuilderPaletteField) => void
     onFieldDragStart: (field: BuilderPaletteField) => void
     onFieldDragEnd: () => void
-    className?: string
-    iconClassName?: string
 }) {
-    const IconComponent = field.icon
+    const Icon = field.icon
 
     return (
         <button
             type="button"
+            data-testid={buildTileTestId(field)}
             draggable
             onClick={() => onInsertField(field)}
             onDragStart={() => onFieldDragStart(field)}
             onDragEnd={onFieldDragEnd}
-            aria-label={ariaLabel}
+            aria-label={`${isPreset ? "Add preset" : "Add"} ${field.label} field`}
             className={cn(
-                "flex w-full cursor-grab items-center gap-3 rounded-xl border border-border/70 bg-background px-3 py-2.5 text-left text-sm font-medium transition-all hover:border-primary/40 hover:bg-muted active:cursor-grabbing",
-                className,
+                "group flex min-h-0 flex-col items-start gap-2.5 rounded-2xl border border-transparent px-2 py-2.5 text-left transition-colors active:cursor-grabbing",
+                isPreset
+                    ? "hover:bg-sky-50/75 focus-visible:border-sky-200"
+                    : "hover:bg-emerald-50/70 focus-visible:border-emerald-200",
             )}
         >
-            <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary", iconClassName)}>
-                <IconComponent className="size-4" aria-hidden="true" />
-            </span>
-            <span className="min-w-0 flex-1 break-words">{field.label}</span>
-            <GripVerticalIcon className="size-4 text-muted-foreground/70" aria-hidden="true" />
+            <div className="flex w-full items-start justify-between gap-3">
+                <span
+                    className={cn(
+                        "flex size-14 items-center justify-center rounded-[18px] border bg-white text-slate-900 transition-transform group-hover:scale-[1.02]",
+                        isPreset
+                            ? "border-sky-200/90 bg-sky-50/70"
+                            : "border-emerald-200/90 bg-emerald-50/65",
+                    )}
+                >
+                    <Icon className="size-[18px]" aria-hidden="true" />
+                </span>
+            </div>
+            <div className="pr-1 text-[15px] font-medium leading-snug text-slate-950">{field.label}</div>
         </button>
     )
 }
 
 export function FormBuilderPalette({
+    activeCategory,
+    search,
+    onCategoryChange,
+    onSearchChange,
     onInsertField,
     onFieldDragStart,
     onFieldDragEnd,
-    onAddPage,
     className,
 }: FormBuilderPaletteProps) {
-    const [activePresetGroupId, setActivePresetGroupId] = useState(PRESET_FIELD_GROUPS[0]?.id ?? "")
-    const activePresetGroup = useMemo(
-        () => PRESET_FIELD_GROUPS.find((group) => group.id === activePresetGroupId) ?? PRESET_FIELD_GROUPS[0]!,
-        [activePresetGroupId],
+    const normalizedSearch = search.trim().toLowerCase()
+
+    const categories = useMemo(
+        () => [
+            { id: ALL_CATEGORY_ID, label: "All" },
+            ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
+            ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
+        ],
+        [],
     )
 
+    const visibleSections = useMemo<VisibleSection[]>(() => {
+        const sourceGroups =
+            normalizedSearch
+                ? ALL_BUILDER_FIELD_GROUPS
+                : activeCategory === ALL_CATEGORY_ID
+                ? ALL_BUILDER_FIELD_GROUPS
+                : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
+
+        return sourceGroups
+            .map((group) => ({
+                id: group.id,
+                label: group.label,
+                isPreset: PRESET_FIELD_GROUPS.some((presetGroup) => presetGroup.id === group.id),
+                fields: group.fields.filter((field) => {
+                    if (!normalizedSearch) return true
+                    return `${field.label} ${field.key}`.toLowerCase().includes(normalizedSearch)
+                }),
+            }))
+            .filter((section) => section.fields.length > 0)
+    }, [activeCategory, normalizedSearch])
+
     return (
-        <div
+        <aside
             data-testid="form-builder-palette"
             aria-label="Field palette"
             className={cn(
-                "w-full shrink-0 border-b border-border bg-card p-4 xl:min-h-0 xl:w-[320px] xl:overflow-y-auto xl:border-r xl:border-b-0",
+                "w-full shrink-0 border-b border-border bg-card xl:min-h-0 xl:min-w-0 xl:w-auto xl:overflow-hidden xl:border-r xl:border-b-0",
                 className,
             )}
         >
-            <div className="space-y-6">
-                <section className="space-y-4">
-                    <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Preset Fields
-                        </h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Common surrogate intake questions, grouped by topic.
-                        </p>
-                    </div>
+            <div className="flex h-full min-h-0 flex-col">
+                <div className="border-b border-border/70 px-4 py-4">
+                    <h2 className="text-[1.05rem] font-semibold tracking-tight text-slate-950">Add form fields</h2>
+                </div>
 
-                    <div className="space-y-3 xl:grid xl:grid-cols-[104px_minmax(0,1fr)] xl:items-start xl:gap-3 xl:space-y-0">
-                        <div
-                            role="group"
-                            aria-label="Preset field groups"
-                            className="flex flex-wrap gap-2 xl:flex-col xl:rounded-2xl xl:border xl:border-border/70 xl:bg-muted/30 xl:p-2"
-                        >
-                            {PRESET_FIELD_GROUPS.map((group) => {
-                                const isActive = group.id === activePresetGroup?.id
+                <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[8rem_minmax(0,1fr)]">
+                    <aside className="border-b border-border/70 bg-stone-50/75 xl:border-r xl:border-b-0">
+                        <ScrollArea className="h-full">
+                            <div className="space-y-1 p-2.5" role="group" aria-label="Field categories">
+                                {categories.map((category) => {
+                                    const isActive = activeCategory === category.id
 
-                                return (
-                                    <button
-                                        key={group.id}
-                                        type="button"
-                                        aria-pressed={isActive}
-                                        onClick={() => setActivePresetGroupId(group.id)}
-                                        className={cn(
-                                            "inline-flex min-h-10 flex-none items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition-all xl:w-full xl:justify-start",
-                                            isActive
-                                                ? "border-primary/30 bg-primary/10 text-foreground shadow-sm"
-                                                : "border-border/70 bg-background text-muted-foreground hover:border-primary/25 hover:text-foreground",
-                                        )}
-                                    >
-                                        {group.label}
-                                    </button>
-                                )
-                            })}
+                                    return (
+                                        <button
+                                            key={category.id}
+                                            type="button"
+                                            onClick={() => onCategoryChange(category.id)}
+                                            className={cn(
+                                                "flex w-full items-center rounded-lg px-3 py-2 text-left text-[15px] font-medium leading-5 transition-all",
+                                                isActive
+                                                    ? "bg-sky-100/90 text-slate-950"
+                                                    : "text-slate-700 hover:bg-white/90 hover:text-slate-950",
+                                            )}
+                                        >
+                                            {category.label}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </ScrollArea>
+                    </aside>
+
+                    <div className="flex min-h-0 flex-col bg-white">
+                        <div className="border-b border-border/70 bg-white/95 px-4 py-3 supports-[backdrop-filter]:bg-white/80">
+                            <div
+                                data-testid="form-builder-palette-search"
+                                className="rounded-xl border border-stone-200/80 bg-white shadow-none"
+                            >
+                                <Command className="rounded-xl border-0 bg-transparent p-0 shadow-none">
+                                    <CommandInput
+                                        className="text-[15px] placeholder:text-slate-400"
+                                        value={search}
+                                        onValueChange={onSearchChange}
+                                        placeholder="Search form fields"
+                                    />
+                                </Command>
+                            </div>
                         </div>
 
-                        <div className="min-w-0 rounded-2xl border border-border/70 bg-muted/15">
-                            <div className="border-b border-border/60 px-3 py-3">
-                                <h4 className="text-sm font-semibold text-foreground">{activePresetGroup.label}</h4>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    Drag or click a preset field to add it to the active page.
-                                </p>
+                        <ScrollArea className="min-h-0 flex-1">
+                            <div className="space-y-6 p-4">
+                                {visibleSections.length > 0 ? (
+                                    visibleSections.map((section) => (
+                                        <section key={section.id} className="space-y-3">
+                                            <h3 className="text-[15px] font-semibold tracking-tight text-slate-950">
+                                                {section.label}
+                                            </h3>
+                                            <div
+                                                data-testid="form-builder-palette-field-grid"
+                                                className="grid grid-cols-2 gap-2.5 2xl:grid-cols-3"
+                                            >
+                                                {section.fields.map((field) => (
+                                                    <PaletteFieldTile
+                                                        key={`${section.id}-${field.key}`}
+                                                        field={field}
+                                                        isPreset={section.isPreset}
+                                                        onInsertField={onInsertField}
+                                                        onFieldDragStart={onFieldDragStart}
+                                                        onFieldDragEnd={onFieldDragEnd}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </section>
+                                    ))
+                                ) : (
+                                    <div className="rounded-[22px] border border-dashed border-border/80 bg-stone-50 p-8 text-center">
+                                        <p className="text-base font-semibold text-slate-900">No matching fields</p>
+                                        <p className="mt-1.5 text-sm text-slate-500">
+                                            Try a different search or switch categories.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
-                            <ScrollArea className="h-[320px] sm:h-[360px] xl:h-[320px]">
-                                <div className="grid grid-cols-1 gap-2 p-3">
-                                    {activePresetGroup.fields.map((field) => (
-                                        <PaletteFieldButton
-                                            key={`${activePresetGroup.id}-${field.key}`}
-                                            field={field}
-                                            ariaLabel={`Add preset ${field.label} field`}
-                                            onInsertField={onInsertField}
-                                            onFieldDragStart={onFieldDragStart}
-                                            onFieldDragEnd={onFieldDragEnd}
-                                        />
-                                    ))}
-                                </div>
-                            </ScrollArea>
-                        </div>
+                        </ScrollArea>
                     </div>
-                </section>
-
-                <section>
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Custom Fields
-                    </h3>
-                    <div className="space-y-4">
-                        {CUSTOM_FIELD_GROUPS.map((group) => (
-                            <div key={group.id} className="space-y-2">
-                                <h4 className="text-sm font-semibold text-foreground">{group.label}</h4>
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                                    {group.fields.map((field) => (
-                                        <PaletteFieldButton
-                                            key={field.key}
-                                            field={field}
-                                            ariaLabel={`Add ${field.label} field`}
-                                            onInsertField={onInsertField}
-                                            onFieldDragStart={onFieldDragStart}
-                                            onFieldDragEnd={onFieldDragEnd}
-                                            className="rounded-lg border-border px-3 py-3"
-                                            iconClassName="size-10 rounded-lg bg-transparent text-muted-foreground"
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </section>
-
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full bg-transparent sm:w-auto xl:w-full"
-                    onClick={onAddPage}
-                >
-                    <PlusIcon className="mr-2 size-4" />
-                    Add Page
-                </Button>
+                </div>
             </div>
-        </div>
+        </aside>
     )
 }

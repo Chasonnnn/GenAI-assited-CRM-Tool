@@ -99,6 +99,12 @@ function PreviewFallbackField({ field }: { field: FormField }) {
                     label: column.label,
                     type: column.type,
                     required: column.required ?? false,
+                    ...(column.options ? { options: column.options.map((option) => option.label) } : {}),
+                }))}
+                rows={field.rows?.map((row) => ({
+                    id: row.key,
+                    label: row.label,
+                    ...(row.help_text ? { helpText: row.help_text } : {}),
                 }))}
             />
             {field.help_text ? <p className="text-xs text-stone-500">{field.help_text}</p> : null}
@@ -151,7 +157,7 @@ export function FormBuilderCanvasPreview({
         <div
             data-testid="form-builder-preview-shell"
             className={cn(
-                "mx-auto w-full rounded-[36px] border border-border/70 bg-gradient-to-b from-stone-50 to-stone-100/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)]",
+                "mx-auto w-full rounded-[28px] border border-border/70 bg-gradient-to-b from-stone-50 to-stone-100/70",
                 previewDevice === "mobile" ? mobileWidthClass : desktopWidthClass,
             )}
         >
@@ -173,13 +179,13 @@ export function FormBuilderCanvasPreview({
             </PublicFormHeader>
 
             <div className="mx-auto max-w-3xl px-4 pb-8">
-                <div className="rounded-[28px] border border-stone-200/80 bg-white/95 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.06)] md:p-6">
+                <div className="min-h-[58rem] rounded-[24px] border border-stone-200/80 bg-white/95 p-5 md:p-6">
                     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-400">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
                                 Active page
                             </p>
-                            <h2 className="mt-2 text-xl font-semibold text-stone-900">
+                            <h2 className="mt-1.5 text-lg font-semibold text-stone-900">
                                 {currentPage?.name || `Page ${activeIndex + 1}`}
                             </h2>
                         </div>
@@ -226,7 +232,7 @@ export function FormBuilderCanvasPreview({
                             <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
                                 <p className="text-base font-semibold text-stone-900">Nothing to preview on this page yet</p>
                                 <p className="mt-2 text-sm text-stone-500">
-                                    Add fields in Compose mode to see the branded preview here.
+                                    Add fields in Edit to see the branded preview here.
                                 </p>
                             </div>
                         )}

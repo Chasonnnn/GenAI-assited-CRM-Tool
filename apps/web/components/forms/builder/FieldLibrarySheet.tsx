@@ -60,23 +60,23 @@ function FieldTile({
             aria-label={buildTileAriaLabel(field, isPreset)}
             onClick={() => onInsertField(field)}
             className={cn(
-                "group flex min-h-[138px] flex-col items-start justify-between rounded-[28px] border px-4 py-4 text-left transition-all",
+                "group flex min-h-0 flex-col items-start gap-2.5 rounded-2xl border border-transparent px-2 py-2.5 text-left transition-colors",
                 isPreset
-                    ? "border-sky-200/80 bg-sky-50/80 hover:border-sky-300 hover:bg-sky-50"
-                    : "border-emerald-200/80 bg-emerald-50/70 hover:border-emerald-300 hover:bg-emerald-50",
+                    ? "hover:bg-sky-50/75 focus-visible:border-sky-200"
+                    : "hover:bg-emerald-50/70 focus-visible:border-emerald-200",
             )}
         >
             <span
                 className={cn(
-                    "flex size-14 items-center justify-center rounded-2xl border transition-transform group-hover:scale-[1.03]",
+                    "flex size-14 items-center justify-center rounded-[18px] border transition-transform group-hover:scale-[1.02]",
                     isPreset
-                        ? "border-sky-200 bg-white text-slate-900"
-                        : "border-emerald-200 bg-white text-slate-900",
+                        ? "border-sky-200/90 bg-sky-50/70 text-slate-900"
+                        : "border-emerald-200/90 bg-emerald-50/65 text-slate-900",
                 )}
             >
-                <Icon className="size-6" aria-hidden="true" />
+                <Icon className="size-[18px]" aria-hidden="true" />
             </span>
-            <span className="text-base font-semibold text-slate-900">{field.label}</span>
+            <span className="pr-1 text-[15px] font-medium leading-snug text-slate-900">{field.label}</span>
         </button>
     )
 }
@@ -126,17 +126,15 @@ export function FieldLibrarySheet({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent side="right" className="w-full p-0 sm:max-w-[980px]">
                 <div className="flex h-full flex-col">
-                    <SheetHeader className="border-b border-border/70 px-6 py-5">
-                        <SheetTitle className="text-[2rem] font-semibold tracking-tight">Add form fields</SheetTitle>
-                        <SheetDescription>
-                            Search or browse recommended intake fields and custom controls for the active page.
-                        </SheetDescription>
+                    <SheetHeader className="border-b border-border/70 px-6 py-4">
+                        <SheetTitle className="text-xl font-semibold tracking-tight">Add form fields</SheetTitle>
+                        <SheetDescription>Search and add fields for the active page.</SheetDescription>
                     </SheetHeader>
 
-                    <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[232px_minmax(0,1fr)]">
-                        <aside className="border-b border-border/70 bg-stone-50/90 md:border-r md:border-b-0">
+                    <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[12rem_minmax(0,1fr)]">
+                        <aside className="border-b border-border/70 bg-stone-50/75 md:border-r md:border-b-0">
                             <ScrollArea className="h-full">
-                                <div className="space-y-2 p-4">
+                                <div className="space-y-1 p-2.5">
                                     {categories.map((category) => {
                                         const isActive = activeCategory === category.id
 
@@ -146,10 +144,10 @@ export function FieldLibrarySheet({
                                                 type="button"
                                                 onClick={() => onCategoryChange(category.id)}
                                                 className={cn(
-                                                    "flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-base font-medium transition-all",
+                                                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[15px] font-medium leading-5 transition-all",
                                                     isActive
-                                                        ? "bg-sky-100 text-slate-950 shadow-sm"
-                                                        : "text-slate-700 hover:bg-white hover:text-slate-950",
+                                                        ? "bg-sky-100/90 text-slate-950"
+                                                        : "text-slate-700 hover:bg-white/90 hover:text-slate-950",
                                                 )}
                                             >
                                                 {category.label}
@@ -160,33 +158,29 @@ export function FieldLibrarySheet({
                             </ScrollArea>
                         </aside>
 
-                        <div className="min-h-0 bg-white">
-                            <div className="border-b border-border/70 p-4">
-                                <Command className="rounded-[28px] border border-border/70 bg-stone-50/80 p-2">
-                                    <CommandInput
-                                        value={search}
-                                        onValueChange={onSearchChange}
-                                        placeholder="Search form fields"
-                                    />
-                                </Command>
+                        <div className="flex min-h-0 flex-col bg-white">
+                            <div className="border-b border-border/70 bg-white/95 px-4 py-3 supports-[backdrop-filter]:bg-white/80">
+                                <div className="rounded-xl border border-stone-200/80 bg-white shadow-none">
+                                    <Command className="rounded-xl border-0 bg-transparent p-0 shadow-none">
+                                        <CommandInput
+                                            className="text-[15px] placeholder:text-slate-400"
+                                            value={search}
+                                            onValueChange={onSearchChange}
+                                            placeholder="Search form fields"
+                                        />
+                                    </Command>
+                                </div>
                             </div>
 
-                            <ScrollArea className="h-[calc(100vh-180px)]">
-                                <div className="space-y-10 p-6">
+                            <ScrollArea className="min-h-0 flex-1">
+                                <div className="space-y-6 p-4">
                                     {visibleSections.length > 0 ? (
                                         visibleSections.map((section) => (
-                                            <section key={section.id} className="space-y-4">
-                                                <div className="space-y-1">
-                                                    <h3 className="text-2xl font-semibold tracking-tight text-slate-950">
-                                                        {section.label}
-                                                    </h3>
-                                                    <p className="text-sm text-slate-500">
-                                                        {section.isPreset
-                                                            ? "Recommended surrogate intake fields."
-                                                            : "Custom builder controls for this form."}
-                                                    </p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+                                            <section key={section.id} className="space-y-3">
+                                                <h3 className="text-[15px] font-semibold tracking-tight text-slate-950">
+                                                    {section.label}
+                                                </h3>
+                                                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
                                                     {section.fields.map((field) => (
                                                         <FieldTile
                                                             key={`${section.id}-${field.key}`}
@@ -199,9 +193,9 @@ export function FieldLibrarySheet({
                                             </section>
                                         ))
                                     ) : (
-                                        <div className="rounded-[28px] border border-dashed border-border/80 bg-stone-50 p-10 text-center">
-                                            <p className="text-lg font-semibold text-slate-900">No matching fields</p>
-                                            <p className="mt-2 text-sm text-slate-500">
+                                        <div className="rounded-[22px] border border-dashed border-border/80 bg-stone-50 p-8 text-center">
+                                            <p className="text-base font-semibold text-slate-900">No matching fields</p>
+                                            <p className="mt-1.5 text-sm text-slate-500">
                                                 Try a different search or switch categories.
                                             </p>
                                         </div>

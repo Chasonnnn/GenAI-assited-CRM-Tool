@@ -14,6 +14,7 @@ import type { TemplateFormBuilderPageController } from "@/lib/forms/use-template
 
 import { DeletePageDialog } from "@/components/forms/builder/DeletePageDialog"
 import { FormBuilderHeader } from "@/components/forms/builder/FormBuilderHeader"
+import { FormBuilderPreviewPane } from "@/components/forms/builder/FormBuilderPreviewPane"
 import { TemplateFormPublishDialog } from "@/components/forms/builder/TemplateFormPublishDialog"
 import { FormBuilderWorkspace } from "@/components/forms/builder/FormBuilderWorkspace"
 import { FormBuilderWorkspaceTabs } from "@/components/forms/builder/FormBuilderWorkspaceTabs"
@@ -84,7 +85,6 @@ export function TemplateFormBuilderScreen({
                 autoSaveTone={controller.state.autoSaveStatus === "error" ? "error" : "default"}
                 onBack={controller.onBack}
                 onFormNameChange={controller.onFormNameChange}
-                onPreview={controller.handlePreview}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
                 publishDisabled={controller.state.isPublished}
@@ -103,16 +103,21 @@ export function TemplateFormBuilderScreen({
                 value={controller.state.workspaceTab}
                 onValueChange={controller.onWorkspaceTabChange}
                 tabs={[
-                    { value: "builder", label: "Builder" },
+                    { value: "edit", label: "Edit" },
+                    { value: "preview", label: "Preview" },
                     { value: "settings", label: "Settings" },
                 ]}
             />
 
-            {controller.state.workspaceTab === "builder" ? (
+            {controller.state.workspaceTab === "edit" ? (
                 <FormBuilderWorkspace {...controller.workspaceProps} />
             ) : (
                 <div data-testid="form-builder-workspace" className="hidden" />
             )}
+
+            <div className={controller.state.workspaceTab === "preview" ? "flex-1 overflow-hidden" : "hidden"}>
+                <FormBuilderPreviewPane {...controller.previewProps} />
+            </div>
 
             <div
                 className={

@@ -172,6 +172,9 @@ export function useAutomationFormBuilderPage() {
         handleAddColumn,
         handleUpdateColumn,
         handleRemoveColumn,
+        handleAddRow,
+        handleUpdateRow,
+        handleRemoveRow,
         handleShowIfChange,
         handleMappingChange,
         handleAddPage,
@@ -546,46 +549,10 @@ export function useAutomationFormBuilderPage() {
             toast.error("Add at least one field before previewing")
             return
         }
-
-        const previewKey = formId || "draft"
-        const previewPayload = {
-            form_id: previewKey,
-            name: state.formName.trim() || "Untitled Form",
-            description: state.formDescription.trim() || null,
-            form_schema: buildFormSchema(pages, {
-                publicTitle: state.publicTitle,
-                logoUrl: state.logoUrl,
-                privacyNotice: state.privacyNotice,
-            }),
-            max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),
-            max_file_count: Math.max(0, Math.round(state.maxFileCount)),
-            allowed_mime_types: (() => {
-                const parsed = state.allowedMimeTypesText
-                    .split(",")
-                    .map((entry) => entry.trim())
-                    .filter(Boolean)
-                return parsed.length > 0 ? parsed : null
-            })(),
-            generated_at: new Date().toISOString(),
-        }
-
-        try {
-            window.localStorage.setItem(`form-preview:${previewKey}`, JSON.stringify(previewPayload))
-            window.open(`/apply/preview?formId=${encodeURIComponent(previewKey)}`, "_blank")
-        } catch {
-            toast.error("Failed to open preview")
-        }
+        patchState({ workspaceTab: "preview" })
     }, [
-        formId,
         pages,
-        state.allowedMimeTypesText,
-        state.formDescription,
-        state.formName,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicTitle,
+        patchState,
     ])
 
     const confirmPublish = useCallback(async () => {
@@ -967,6 +934,9 @@ export function useAutomationFormBuilderPage() {
             handleAddColumn,
             handleUpdateColumn,
             handleRemoveColumn,
+            handleAddRow,
+            handleUpdateRow,
+            handleRemoveRow,
             handleShowIfChange,
             handleMappingChange,
             syncOptionKeys,
@@ -981,6 +951,7 @@ export function useAutomationFormBuilderPage() {
             currentPage,
             dropIndicatorId,
             handleAddColumn,
+            handleAddRow,
             handleAddPage,
             handleCanvasDragOver,
             handleDeleteField,
@@ -997,10 +968,12 @@ export function useAutomationFormBuilderPage() {
             handleMappingChange,
             handleMovePage,
             handleRemoveColumn,
+            handleRemoveRow,
             handleRenamePage,
             handleShowIfChange,
             handleUpdateColumn,
             handleUpdateField,
+            handleUpdateRow,
             handleValidationChange,
             isDragging,
             pages,
@@ -1023,26 +996,31 @@ export function useAutomationFormBuilderPage() {
         patchState,
         autoSaveLabel,
         workspaceProps: {
-            desktopCanvasWidthClass: "max-w-3xl",
-            mobileCanvasWidthClass: "max-w-sm",
-            canvasFrameClass: "rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8",
+            desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
+            canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
             mappingOptions: surrogateFieldMappings,
+            formName: state.formName,
+            formDescription: state.formDescription,
+            publicTitle: state.publicTitle,
+            fieldLibrarySearch: state.fieldLibrarySearch,
+            fieldLibraryCategory: state.fieldLibraryCategory,
+            onFieldLibrarySearchChange: (value: string) => patchState({ fieldLibrarySearch: value }),
+            onFieldLibraryCategoryChange: (value: string) => patchState({ fieldLibraryCategory: value }),
+            document: workspaceDocument,
+        },
+        previewProps: {
+            pages,
+            activePage,
             formName: state.formName,
             formDescription: state.formDescription,
             publicTitle: state.publicTitle,
             resolvedLogoUrl,
             privacyNotice: state.privacyNotice,
-            canvasMode: state.canvasMode,
             previewDevice: state.previewDevice,
-            fieldLibraryOpen: state.fieldLibraryOpen,
-            fieldLibrarySearch: state.fieldLibrarySearch,
-            fieldLibraryCategory: state.fieldLibraryCategory,
-            onCanvasModeChange: (value: "compose" | "preview") => patchState({ canvasMode: value }),
+            desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
+            mobileCanvasWidthClass: "max-w-sm",
+            onSetActivePage: setActivePage,
             onPreviewDeviceChange: (value: "desktop" | "mobile") => patchState({ previewDevice: value }),
-            onFieldLibraryOpenChange: (open: boolean) => patchState({ fieldLibraryOpen: open }),
-            onFieldLibrarySearchChange: (value: string) => patchState({ fieldLibrarySearch: value }),
-            onFieldLibraryCategoryChange: (value: string) => patchState({ fieldLibraryCategory: value }),
-            document: workspaceDocument,
         },
         settingsPanelProps: {
             formName: state.formName,

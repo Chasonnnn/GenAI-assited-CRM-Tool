@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeftIcon, EyeIcon, Loader2Icon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, Loader2Icon, Trash2Icon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,6 @@ type FormBuilderHeaderProps = {
     autoSaveTone?: "default" | "error"
     onBack: () => void
     onFormNameChange: (value: string) => void
-    onPreview: () => void
     onSave: () => void
     onPublish: () => void
     publishDisabled?: boolean
@@ -40,15 +39,14 @@ export function FormBuilderHeader({
     autoSaveTone = "default",
     onBack,
     onFormNameChange,
-    onPreview,
     onSave,
     onPublish,
     publishDisabled = false,
     deleteAction,
 }: FormBuilderHeaderProps) {
     return (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6 lg:h-16 lg:flex-nowrap lg:py-0">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 sm:gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6 lg:h-14 lg:flex-nowrap lg:py-0">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 sm:gap-3">
                 <Button
                     variant="ghost"
                     size="icon"
@@ -62,14 +60,14 @@ export function FormBuilderHeader({
                     value={formName}
                     onChange={(event) => onFormNameChange(event.target.value)}
                     placeholder="Form name..."
-                    className="h-9 min-w-0 flex-1 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0 sm:max-w-xs lg:w-64 lg:flex-none"
+                    className="h-8 min-w-0 flex-1 border-none bg-transparent px-0 text-base font-medium focus-visible:ring-0 sm:max-w-xs lg:w-72 lg:flex-none"
                 />
-                <Badge variant={isPublished ? "default" : "secondary"}>
+                <Badge variant={isPublished ? "default" : "secondary"} className="h-5 rounded-full px-2 text-[11px]">
                     {isPublished ? "Published" : "Draft"}
                 </Badge>
             </div>
 
-            <div className="flex w-full flex-wrap items-center gap-2 sm:gap-3 lg:w-auto lg:justify-end">
+            <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
                 {deleteAction ? (
                     <Button
                         variant="destructive"
@@ -85,13 +83,9 @@ export function FormBuilderHeader({
                         {deleteAction.label ?? "Delete"}
                     </Button>
                 ) : null}
-                <Button variant="outline" size="sm" onClick={onPreview}>
-                    <EyeIcon className="mr-2 size-4" />
-                    Preview
-                </Button>
                 {autoSaveLabel ? (
                     <span
-                        className={`w-full text-right text-xs lg:w-auto ${
+                        className={`w-full text-right text-[11px] lg:w-auto ${
                             autoSaveTone === "error" ? "text-destructive" : "text-muted-foreground"
                         }`}
                     >
