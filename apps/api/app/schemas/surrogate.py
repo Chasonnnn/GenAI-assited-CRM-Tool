@@ -394,6 +394,14 @@ class BulkAssign(BaseModel):
     owner_id: UUID
 
 
+class SurrogateLeadIntakeWarning(BaseModel):
+    """Lead intake value that needs manual review on the surrogate record."""
+
+    field_key: Literal["email", "phone", "height_ft", "weight_lb"]
+    issue: Literal["missing_value", "invalid_value"]
+    raw_value: str
+
+
 class SurrogateRead(BaseModel):
     """Full surrogateresponse for detail views."""
 
@@ -423,6 +431,7 @@ class SurrogateRead(BaseModel):
     email: str
     phone: str | None
     state: str | None
+    lead_intake_warnings: list[SurrogateLeadIntakeWarning] = Field(default_factory=list)
 
     # Demographics
     date_of_birth: date | None

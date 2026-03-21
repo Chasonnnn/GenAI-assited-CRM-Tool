@@ -564,6 +564,49 @@ describe('SurrogateDetailPage', () => {
         expect(heightRow).toHaveTextContent(/Height:\s*-/)
     })
 
+    it('shows a reflective lead intake review card with raw values that need cleanup', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                lead_intake_warnings: [
+                    {
+                        field_key: 'phone',
+                        issue: 'missing_value',
+                        raw_value: '555-CALL-NOW',
+                    },
+                    {
+                        field_key: 'height_ft',
+                        issue: 'missing_value',
+                        raw_value: '5 ft 7 in',
+                    },
+                    {
+                        field_key: 'weight_lb',
+                        issue: 'missing_value',
+                        raw_value: '140 lbs',
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const reviewCard = screen.getByTestId('lead-intake-review-card')
+        expect(reviewCard).toBeInTheDocument()
+        expect(reviewCard).toHaveTextContent('Lead Intake Review')
+        expect(reviewCard).toHaveTextContent('Phone')
+        expect(reviewCard).toHaveTextContent('555-CALL-NOW')
+        expect(reviewCard).toHaveTextContent('Height')
+        expect(reviewCard).toHaveTextContent('5 ft 7 in')
+        expect(reviewCard).toHaveTextContent('Weight')
+        expect(reviewCard).toHaveTextContent('140 lbs')
+    })
+
     it('computes BMI from rounded inches for decimal-feet height values', () => {
         mockUseSurrogate.mockReturnValueOnce({
             data: {
