@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -165,7 +165,7 @@ const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
     attention_stuck: "Attention Needed: Stuck Leads",
 }
 
-const SOURCE_LABELS: Record<Exclude<SourceFilter, "all">, string> = {
+const SOURCE_LABELS: Record<string, string> = {
     manual: "Manual",
     meta: "Meta",
     tiktok: "TikTok",
@@ -173,6 +173,42 @@ const SOURCE_LABELS: Record<Exclude<SourceFilter, "all">, string> = {
     website: "Website",
     referral: "Referral",
     other: "Others",
+    agency: "Agency",
+    import: "Import",
+}
+
+const getStageFilterLabel = (
+    value: string | null | undefined,
+    stages: Array<{ id: string; label: string }>
+) => {
+    if (!value || value === "all") return "All Stages"
+    return stages.find((stage) => stage.id === value)?.label ?? value
+}
+
+const getSourceFilterLabel = (value: string | null | undefined) => {
+    if (!value || value === "all") return "All Sources"
+    return SOURCE_LABELS[value] ?? value
+}
+
+const getQueueFilterLabel = (
+    value: string | null | undefined,
+    queues?: Array<{ id: string; name: string }>
+) => {
+    if (!value || value === "all") return "All Queues"
+    return queues?.find((queue) => queue.id === value)?.name ?? value
+}
+
+const getAssigneeFilterLabel = (
+    value: string | null | undefined,
+    assignees?: Array<{ id: string; name: string }>
+) => {
+    if (!value || value === "all") return "All Assignees"
+    return assignees?.find((assignee) => assignee.id === value)?.name ?? value
+}
+
+const getDynamicFilterLabel = (value: DynamicSurrogateFilter | null | undefined) => {
+    if (!value) return "No smart filter"
+    return DYNAMIC_FILTER_LABELS[value]
 }
 
 const parsePageParam = (value: string | null): number => {
@@ -257,17 +293,7 @@ export default function SurrogatesPage() {
     const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
     const [sortBy, setSortBy] = useState<string | null>(initialSortBy)
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialSortOrder)
-    const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-    const [draftStageFilter, setDraftStageFilter] = useState<string>(urlStage || "all")
-    const [draftSourceFilter, setDraftSourceFilter] = useState<SourceFilter>(
-        isSourceFilter(urlSource) ? urlSource : "all"
-    )
-    const [draftQueueFilter, setDraftQueueFilter] = useState<string>(urlQueue || "all")
-    const [draftOwnerFilter, setDraftOwnerFilter] = useState<string>(effectiveUrlOwnerId || "all")
-    const [draftDateRange, setDraftDateRange] = useState<DateRangePreset>(initialRange)
-    const [draftCustomRange, setDraftCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
-    const [draftDynamicFilter, setDraftDynamicFilter] = useState<DynamicSurrogateFilter | null>(initialDynamicFilter)
-    const [draftPriorityOnly, setDraftPriorityOnly] = useState(initialPriorityOnly)
+    const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isMassEditOpen, setIsMassEditOpen] = useState(false)
     const [createForm, setCreateForm] = useState({
@@ -472,6 +498,48 @@ export default function SurrogatesPage() {
         })
     }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
 
+    const handleDynamicFilterChange = useCallback((nextDynamicFilter: DynamicSurrogateFilter | null) => {
+        startFilterTransition(() => {
+            setDynamicFilter(nextDynamicFilter)
+            setPage(1)
+            updateUrlParams(
+                stageFilter,
+                sourceFilter,
+                queueFilter,
+                debouncedSearch,
+                ownerFilter,
+                1,
+                dateRange,
+                customRange,
+                nextDynamicFilter,
+                priorityOnly,
+                sortBy,
+                sortOrder,
+            )
+        })
+    }, [customRange, dateRange, debouncedSearch, ownerFilter, priorityOnly, queueFilter, sortBy, sortOrder, sourceFilter, stageFilter, updateUrlParams])
+
+    const handlePriorityOnlyChange = useCallback((nextPriorityOnly: boolean) => {
+        startFilterTransition(() => {
+            setPriorityOnly(nextPriorityOnly)
+            setPage(1)
+            updateUrlParams(
+                stageFilter,
+                sourceFilter,
+                queueFilter,
+                debouncedSearch,
+                ownerFilter,
+                1,
+                dateRange,
+                customRange,
+                dynamicFilter,
+                nextPriorityOnly,
+                sortBy,
+                sortOrder,
+            )
+        })
+    }, [customRange, dateRange, debouncedSearch, dynamicFilter, ownerFilter, queueFilter, sortBy, sortOrder, sourceFilter, stageFilter, updateUrlParams])
+
     const handlePageChange = useCallback((nextPage: number) => {
         startFilterTransition(() => {
             setPage(nextPage)
@@ -541,40 +609,8 @@ export default function SurrogatesPage() {
     }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
 
     const handleIntelligentSuggestionToggle = useCallback(() => {
-        startFilterTransition(() => {
-            const nextDynamicFilter: DynamicSurrogateFilter | null =
-                dynamicFilter === "intelligent_any" ? null : "intelligent_any"
-            setDynamicFilter(nextDynamicFilter)
-            setPage(1)
-            updateUrlParams(
-                stageFilter,
-                sourceFilter,
-                queueFilter,
-                debouncedSearch,
-                ownerFilter,
-                1,
-                dateRange,
-                customRange,
-                nextDynamicFilter,
-                priorityOnly,
-                sortBy,
-                sortOrder,
-            )
-        })
-    }, [
-        customRange,
-        dateRange,
-        debouncedSearch,
-        dynamicFilter,
-        ownerFilter,
-        priorityOnly,
-        queueFilter,
-        sortBy,
-        sortOrder,
-        sourceFilter,
-        stageFilter,
-        updateUrlParams,
-    ])
+        handleDynamicFilterChange(dynamicFilter === "intelligent_any" ? null : "intelligent_any")
+    }, [dynamicFilter, handleDynamicFilterChange])
 
     // Fetch queues for filter dropdown (case_manager+ only)
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
@@ -583,85 +619,6 @@ export default function SurrogatesPage() {
     const { data: defaultPipeline } = useDefaultPipeline()
     const stageOptions = defaultPipeline?.stages || []
     const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
-
-    const syncFilterSheetDraft = useCallback(() => {
-        setDraftStageFilter(stageFilter)
-        setDraftSourceFilter(sourceFilter)
-        setDraftQueueFilter(queueFilter)
-        setDraftOwnerFilter(ownerFilter)
-        setDraftDateRange(dateRange)
-        setDraftCustomRange(customRange)
-        setDraftDynamicFilter(dynamicFilter)
-        setDraftPriorityOnly(priorityOnly)
-    }, [stageFilter, sourceFilter, queueFilter, ownerFilter, dateRange, customRange, dynamicFilter, priorityOnly])
-
-    const openFilterSheet = useCallback(() => {
-        syncFilterSheetDraft()
-        setIsFilterSheetOpen(true)
-    }, [syncFilterSheetDraft])
-
-    const clearFilterSheetDraft = useCallback(() => {
-        setDraftStageFilter("all")
-        setDraftSourceFilter("all")
-        setDraftQueueFilter("all")
-        setDraftOwnerFilter("all")
-        setDraftDateRange("all")
-        setDraftCustomRange({ from: undefined, to: undefined })
-        setDraftDynamicFilter(null)
-        setDraftPriorityOnly(false)
-    }, [])
-
-    const applyFilterSheet = useCallback(() => {
-        const nextOwnerFilter = canFilterByAssignee ? draftOwnerFilter : "all"
-        const nextRange = draftDateRange
-        const nextRangeDates =
-            draftDateRange === "custom"
-                ? draftCustomRange
-                : { from: undefined, to: undefined }
-
-        startFilterTransition(() => {
-            setStageFilter(draftStageFilter)
-            setSourceFilter(draftSourceFilter)
-            setQueueFilter(draftQueueFilter)
-            setOwnerFilter(nextOwnerFilter)
-            setDateRange(nextRange)
-            setCustomRange(nextRangeDates)
-            setDynamicFilter(draftDynamicFilter)
-            setPriorityOnly(draftPriorityOnly)
-            setPage(1)
-            setSelectedSurrogates(new Set())
-            updateUrlParams(
-                draftStageFilter,
-                draftSourceFilter,
-                draftQueueFilter,
-                debouncedSearch,
-                nextOwnerFilter,
-                1,
-                nextRange,
-                nextRangeDates,
-                draftDynamicFilter,
-                draftPriorityOnly,
-                sortBy,
-                sortOrder,
-            )
-        })
-
-        setIsFilterSheetOpen(false)
-    }, [
-        canFilterByAssignee,
-        debouncedSearch,
-        draftCustomRange,
-        draftDateRange,
-        draftDynamicFilter,
-        draftOwnerFilter,
-        draftPriorityOnly,
-        draftQueueFilter,
-        draftSourceFilter,
-        draftStageFilter,
-        sortBy,
-        sortOrder,
-        updateUrlParams,
-    ])
 
     // Debounce search input
     useEffect(() => {
@@ -759,21 +716,6 @@ export default function SurrogatesPage() {
             setCustomRange({ from: undefined, to: undefined })
         }
 
-        setDraftStageFilter(nextStage)
-        setDraftSourceFilter(nextSource)
-        setDraftQueueFilter(nextQueue)
-        setDraftOwnerFilter(nextOwner)
-        setDraftDateRange(nextRange)
-        setDraftCustomRange(
-            nextRange === "custom"
-                ? {
-                    from: parseDateParam(searchParams.get("from")),
-                    to: parseDateParam(searchParams.get("to")),
-                }
-                : { from: undefined, to: undefined }
-        )
-        setDraftDynamicFilter(nextDynamicFilter)
-        setDraftPriorityOnly(nextPriorityOnly)
     }, [canFilterByAssignee, currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Convert date range to ISO strings
@@ -882,6 +824,12 @@ export default function SurrogatesPage() {
         priorityOnly ||
         searchQuery !== "" ||
         dateRange !== "all"
+    const hasActiveSecondaryFilters =
+        sourceFilter !== "all" ||
+        queueFilter !== "all" ||
+        ownerFilter !== "all" ||
+        (dynamicFilter !== null && dynamicFilter !== "intelligent_any") ||
+        priorityOnly
 
     const resetFilters = useCallback(() => {
         setStageFilter("all")
@@ -897,12 +845,11 @@ export default function SurrogatesPage() {
         setPage(1)
         setSortBy(null)
         setSortOrder("desc")
-        clearFilterSheetDraft()
-        setIsFilterSheetOpen(false)
+        setIsMoreFiltersOpen(false)
         setSelectedSurrogates(new Set())
         // Clear URL params
         router.replace('/surrogates', { scroll: false })
-    }, [clearFilterSheetDraft, router])
+    }, [router])
 
     const clearSecondaryFilter = useCallback((filterKey: "source" | "queue" | "owner" | "dynamic" | "priority") => {
         if (filterKey === "source") {
@@ -918,53 +865,37 @@ export default function SurrogatesPage() {
             return
         }
 
-        startFilterTransition(() => {
-            const nextDynamicFilter = filterKey === "dynamic" ? null : dynamicFilter
-            const nextPriorityOnly = filterKey === "priority" ? false : priorityOnly
+        if (filterKey === "dynamic") {
+            handleDynamicFilterChange(null)
+            return
+        }
 
-            if (filterKey === "dynamic") setDynamicFilter(null)
-            if (filterKey === "priority") setPriorityOnly(false)
-            setPage(1)
-            updateUrlParams(
-                stageFilter,
-                sourceFilter,
-                queueFilter,
-                debouncedSearch,
-                ownerFilter,
-                1,
-                dateRange,
-                customRange,
-                nextDynamicFilter,
-                nextPriorityOnly,
-                sortBy,
-                sortOrder,
-            )
-        })
-    }, [customRange, dateRange, debouncedSearch, dynamicFilter, handleOwnerChange, handleQueueChange, handleSourceChange, ownerFilter, priorityOnly, queueFilter, sortBy, sortOrder, sourceFilter, stageFilter, updateUrlParams])
+        handlePriorityOnlyChange(false)
+    }, [handleDynamicFilterChange, handleOwnerChange, handlePriorityOnlyChange, handleQueueChange, handleSourceChange])
 
     const secondaryFilterChips = [
         ...(sourceFilter !== "all"
             ? [{
                 key: "source" as const,
-                label: `Source: ${SOURCE_LABELS[sourceFilter as Exclude<SourceFilter, "all">]}`,
+                label: `Source: ${getSourceFilterLabel(sourceFilter)}`,
             }]
             : []),
         ...(queueFilter !== "all"
             ? [{
                 key: "queue" as const,
-                label: `Queue: ${queues?.find((queue) => queue.id === queueFilter)?.name ?? queueFilter}`,
+                label: `Queue: ${getQueueFilterLabel(queueFilter, queues)}`,
             }]
             : []),
         ...(ownerFilter !== "all"
             ? [{
                 key: "owner" as const,
-                label: `Assignee: ${assignees?.find((assignee) => assignee.id === ownerFilter)?.name ?? ownerFilter}`,
+                label: `Assignee: ${getAssigneeFilterLabel(ownerFilter, assignees)}`,
             }]
             : []),
         ...(dynamicFilter && dynamicFilter !== "intelligent_any"
             ? [{
                 key: "dynamic" as const,
-                label: DYNAMIC_FILTER_LABELS[dynamicFilter],
+                label: getDynamicFilterLabel(dynamicFilter),
             }]
             : []),
         ...(priorityOnly
@@ -1084,8 +1015,212 @@ export default function SurrogatesPage() {
             {/* Filters Row */}
             <div className="flex-shrink-0 border-b border-border px-6 py-3">
                 <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="relative min-w-[260px] flex-1">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                        <div className="flex flex-wrap items-center gap-3">
+                            {hasIntelligentSuggestions && (
+                                <Button
+                                    variant="outline"
+                                    onClick={handleIntelligentSuggestionToggle}
+                                    disabled={isFilterPending}
+                                    className={cn(
+                                        "border-sky-400/30 bg-background/90 text-sky-100 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_0_18px_-10px_rgba(56,189,248,0.95)] hover:border-sky-300/45 hover:bg-background hover:text-white hover:shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_24px_-10px_rgba(56,189,248,1)]",
+                                        dynamicFilter === "intelligent_any" &&
+                                            "border-sky-300/60 bg-background text-white shadow-[0_0_0_1px_rgba(125,211,252,0.24),0_0_28px_-8px_rgba(56,189,248,1)]"
+                                    )}
+                                >
+                                    Intelligent Suggestions ({intelligentSuggestionCount})
+                                </Button>
+                            )}
+
+                            <div className="hidden md:block">
+                                <Select
+                                    value={stageFilter}
+                                    onValueChange={(value) => handleStageChange(value || "all")}
+                                >
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue placeholder="All Stages">
+                                            {(value: string | null) => getStageFilterLabel(value, stageOptions)}
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Stages</SelectItem>
+                                        {stageOptions.map((stage) => (
+                                            <SelectItem key={stage.id} value={stage.id}>
+                                                {stage.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="hidden md:block">
+                                <DateRangePicker
+                                    preset={dateRange}
+                                    onPresetChange={handlePresetChange}
+                                    customRange={customRange}
+                                    onCustomRangeChange={handleCustomRangeChange}
+                                    availableDateKeys={availableCreatedDateKeys ?? []}
+                                />
+                            </div>
+
+                            <Popover open={isMoreFiltersOpen} onOpenChange={setIsMoreFiltersOpen}>
+                                <PopoverTrigger
+                                    type="button"
+                                    aria-label="More Filters"
+                                    className={buttonVariants({
+                                        variant: "outline",
+                                        className: cn(
+                                            "justify-between border-border/70 bg-background/85 shadow-xs backdrop-blur-sm",
+                                            hasActiveSecondaryFilters &&
+                                                "border-foreground/15 bg-accent/40 text-foreground shadow-[0_14px_30px_-24px_rgba(15,23,42,0.9)]"
+                                        ),
+                                    })}
+                                >
+                                    <SlidersHorizontalIcon className="size-4" />
+                                    More Filters
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    align="end"
+                                    className="w-[min(24rem,calc(100vw-2rem))] gap-4 border border-border/70 bg-background/95 p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.9)] backdrop-blur-xl"
+                                >
+                                    <div className="grid gap-4">
+                                        <div className="grid gap-2">
+                                            <Label>Source</Label>
+                                            <Select
+                                                value={sourceFilter}
+                                                onValueChange={(value) =>
+                                                    handleSourceChange(isSourceFilter(value) ? value : "all")
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="All Sources">
+                                                        {(value: string | null) => getSourceFilterLabel(value)}
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Sources</SelectItem>
+                                                    <SelectItem value="manual">Manual</SelectItem>
+                                                    <SelectItem value="meta">Meta</SelectItem>
+                                                    <SelectItem value="tiktok">TikTok</SelectItem>
+                                                    <SelectItem value="google">Google</SelectItem>
+                                                    <SelectItem value="website">Website</SelectItem>
+                                                    <SelectItem value="referral">Referral</SelectItem>
+                                                    <SelectItem value="other">Others</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {canSeeQueues && queues && queues.length > 0 && (
+                                            <div className="grid gap-2">
+                                                <Label>Queue</Label>
+                                                <Select
+                                                    value={queueFilter}
+                                                    onValueChange={(value) => handleQueueChange(value || "all")}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="All Queues">
+                                                            {(value: string | null) =>
+                                                                getQueueFilterLabel(value, queues)
+                                                            }
+                                                        </SelectValue>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">All Queues</SelectItem>
+                                                        {queues.map((queue) => (
+                                                            <SelectItem key={queue.id} value={queue.id}>
+                                                                {queue.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+
+                                        {canFilterByAssignee && (
+                                            <div className="grid gap-2">
+                                                <Label>Assignee</Label>
+                                                <Select
+                                                    value={ownerFilter}
+                                                    onValueChange={(value) => handleOwnerChange(value || "all")}
+                                                >
+                                                    <SelectTrigger aria-label="Filter by assignee">
+                                                        <SelectValue placeholder="All Assignees">
+                                                            {(value: string | null) =>
+                                                                getAssigneeFilterLabel(value, assignees)
+                                                            }
+                                                        </SelectValue>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">All Assignees</SelectItem>
+                                                        {(assignees ?? []).map((assignee) => (
+                                                            <SelectItem key={assignee.id} value={assignee.id}>
+                                                                {assignee.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+
+                                        <div className="grid gap-2">
+                                            <Label>Attention / Smart Filter</Label>
+                                            <Select
+                                                value={dynamicFilter ?? "none"}
+                                                onValueChange={(value) =>
+                                                    handleDynamicFilterChange(
+                                                        value === "none" || !isDynamicSurrogateFilter(value)
+                                                            ? null
+                                                            : value
+                                                    )
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="No smart filter">
+                                                        {(value: string | null) =>
+                                                            getDynamicFilterLabel(
+                                                                value === "none" || !isDynamicSurrogateFilter(value)
+                                                                    ? null
+                                                                    : value
+                                                            )
+                                                        }
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">No smart filter</SelectItem>
+                                                    {(Object.entries(DYNAMIC_FILTER_LABELS) as Array<[DynamicSurrogateFilter, string]>)
+                                                        .filter(([key]) => key !== "intelligent_any")
+                                                        .map(([key, label]) => (
+                                                            <SelectItem key={key} value={key}>
+                                                                {label}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
+                                            <div className="flex items-start gap-3">
+                                                <Checkbox
+                                                    id="surrogate-priority-only"
+                                                    checked={priorityOnly}
+                                                    onCheckedChange={(checked) =>
+                                                        handlePriorityOnlyChange(Boolean(checked))
+                                                    }
+                                                />
+                                                <div className="space-y-1">
+                                                    <Label htmlFor="surrogate-priority-only">Priority only</Label>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Show only surrogates marked as priority.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+
+                        <div className="relative w-full xl:ml-auto xl:w-[320px] xl:flex-none">
                             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 placeholder="Search surrogates..."
@@ -1095,60 +1230,6 @@ export default function SurrogatesPage() {
                                 aria-label="Search surrogates"
                             />
                         </div>
-
-                        {hasIntelligentSuggestions && (
-                            <Button
-                                variant={dynamicFilter === "intelligent_any" ? "default" : "outline"}
-                                onClick={handleIntelligentSuggestionToggle}
-                                disabled={isFilterPending}
-                            >
-                                Intelligent Suggestions ({intelligentSuggestionCount})
-                            </Button>
-                        )}
-
-                        <div className="hidden md:block">
-                            <Select
-                                value={stageFilter}
-                                onValueChange={(value) => handleStageChange(value || "all")}
-                            >
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="All Stages">
-                                        {(value: string | null) => {
-                                            if (!value || value === "all") return "All Stages"
-                                            const stage = stageOptions.find((item) => item.id === value)
-                                            return stage?.label ?? value
-                                        }}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Stages</SelectItem>
-                                    {stageOptions.map((stage) => (
-                                        <SelectItem key={stage.id} value={stage.id}>
-                                            {stage.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="hidden md:block">
-                            <DateRangePicker
-                                preset={dateRange}
-                                onPresetChange={handlePresetChange}
-                                customRange={customRange}
-                                onCustomRangeChange={handleCustomRangeChange}
-                                availableDateKeys={availableCreatedDateKeys ?? []}
-                            />
-                        </div>
-
-                        <Button
-                            variant="outline"
-                            onClick={openFilterSheet}
-                            aria-label="More Filters"
-                        >
-                            <SlidersHorizontalIcon className="mr-2 size-4" />
-                            More Filters
-                        </Button>
                     </div>
 
                     {hasActiveFilters && (
@@ -1171,184 +1252,6 @@ export default function SurrogatesPage() {
                         </div>
                     )}
                 </div>
-
-                <Sheet
-                    open={isFilterSheetOpen}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            syncFilterSheetDraft()
-                        }
-                        setIsFilterSheetOpen(open)
-                    }}
-                >
-                    <SheetContent side="right" className="w-full sm:max-w-md">
-                        <SheetHeader>
-                            <SheetTitle>More Filters</SheetTitle>
-                            <SheetDescription>
-                                Secondary filters stay here so the list keeps its core controls visible.
-                            </SheetDescription>
-                        </SheetHeader>
-                        <div className="flex-1 space-y-5 overflow-y-auto px-6 pb-6">
-                            <div className="space-y-2 md:hidden">
-                                <Label>Stage</Label>
-                                <Select
-                                    value={draftStageFilter}
-                                    onValueChange={(value) => setDraftStageFilter(value || "all")}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="All Stages" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Stages</SelectItem>
-                                        {stageOptions.map((stage) => (
-                                            <SelectItem key={stage.id} value={stage.id}>
-                                                {stage.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2 md:hidden">
-                                <Label>Created Date</Label>
-                                <DateRangePicker
-                                    preset={draftDateRange}
-                                    onPresetChange={setDraftDateRange}
-                                    customRange={draftCustomRange}
-                                    onCustomRangeChange={setDraftCustomRange}
-                                    availableDateKeys={availableCreatedDateKeys ?? []}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Source</Label>
-                                <Select
-                                    value={draftSourceFilter}
-                                    onValueChange={(value) =>
-                                        setDraftSourceFilter(isSourceFilter(value) ? value : "all")
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="All Sources" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Sources</SelectItem>
-                                        <SelectItem value="manual">Manual</SelectItem>
-                                        <SelectItem value="meta">Meta</SelectItem>
-                                        <SelectItem value="tiktok">TikTok</SelectItem>
-                                        <SelectItem value="google">Google</SelectItem>
-                                        <SelectItem value="website">Website</SelectItem>
-                                        <SelectItem value="referral">Referral</SelectItem>
-                                        <SelectItem value="other">Others</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {canSeeQueues && queues && queues.length > 0 && (
-                                <div className="space-y-2">
-                                    <Label>Queue</Label>
-                                    <Select
-                                        value={draftQueueFilter}
-                                        onValueChange={(value) => setDraftQueueFilter(value || "all")}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="All Queues" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Queues</SelectItem>
-                                            {queues.map((queue) => (
-                                                <SelectItem key={queue.id} value={queue.id}>
-                                                    {queue.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-
-                            {canFilterByAssignee && (
-                                <div className="space-y-2">
-                                    <Label>Assignee</Label>
-                                    <Select
-                                        value={draftOwnerFilter}
-                                        onValueChange={(value) => setDraftOwnerFilter(value || "all")}
-                                    >
-                                        <SelectTrigger aria-label="Filter by assignee">
-                                            <SelectValue placeholder="All Assignees" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Assignees</SelectItem>
-                                            {(assignees ?? []).map((assignee) => (
-                                                <SelectItem key={assignee.id} value={assignee.id}>
-                                                    {assignee.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <Label>Attention / Smart Filter</Label>
-                                <Select
-                                    value={draftDynamicFilter ?? "none"}
-                                    onValueChange={(value) =>
-                                        setDraftDynamicFilter(
-                                            value === "none" || !isDynamicSurrogateFilter(value)
-                                                ? null
-                                                : value
-                                        )
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="No smart filter" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">No smart filter</SelectItem>
-                                        {(Object.entries(DYNAMIC_FILTER_LABELS) as Array<[DynamicSurrogateFilter, string]>)
-                                            .filter(([key]) => key !== "intelligent_any")
-                                            .map(([key, label]) => (
-                                                <SelectItem key={key} value={key}>
-                                                    {label}
-                                                </SelectItem>
-                                            ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="rounded-lg border border-border p-4">
-                                <div className="flex items-start gap-3">
-                                    <Checkbox
-                                        id="surrogate-priority-only"
-                                        checked={draftPriorityOnly}
-                                        onCheckedChange={(checked) => setDraftPriorityOnly(Boolean(checked))}
-                                    />
-                                    <div className="space-y-1">
-                                        <Label htmlFor="surrogate-priority-only">Priority only</Label>
-                                        <p className="text-sm text-muted-foreground">
-                                            Show only surrogates marked as priority.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <SheetFooter className="border-t">
-                            <Button variant="ghost" onClick={clearFilterSheetDraft}>
-                                Clear
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    syncFilterSheetDraft()
-                                    setIsFilterSheetOpen(false)
-                                }}
-                            >
-                                Cancel
-                            </Button>
-                            <Button onClick={applyFilterSheet}>Apply</Button>
-                        </SheetFooter>
-                    </SheetContent>
-                </Sheet>
             </div>
 
             {/* Create Modal */}
@@ -1563,20 +1466,7 @@ export default function SurrogatesPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge variant="secondary" className="capitalize">
-                                                        {(() => {
-                                                            const labels: Record<string, string> = {
-                                                                manual: "Manual",
-                                                                meta: "Meta",
-                                                                tiktok: "TikTok",
-                                                                google: "Google",
-                                                                website: "Website",
-                                                                referral: "Referral",
-                                                                other: "Others",
-                                                                agency: "Others",
-                                                                import: "Others",
-                                                            }
-                                                            return labels[surrogateItem.source] ?? surrogateItem.source
-                                                        })()}
+                                                        {getSourceFilterLabel(surrogateItem.source)}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>

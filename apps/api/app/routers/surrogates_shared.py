@@ -157,7 +157,9 @@ def _build_lead_intake_warnings(db: Session, surrogate) -> list[dict[str, str]]:
             continue
 
         issue = "missing_value"
-        if isinstance(current_value, str) and current_value.strip():
+        if current_value is not None and (
+            not isinstance(current_value, str) or current_value.strip()
+        ):
             issue = "invalid_value"
 
         warnings.append(

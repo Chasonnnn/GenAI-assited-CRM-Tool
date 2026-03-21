@@ -524,6 +524,74 @@ describe('SurrogatesPage', () => {
         expect(screen.queryByText('All Assignees')).not.toBeInTheDocument()
     })
 
+    it('renders secondary controls inside the More Filters popover instead of the old sheet', () => {
+        mockUseAssignees.mockReturnValue({
+            data: [{ id: 'user-123', name: 'Case Manager A', role: 'case_manager' }],
+        })
+        mockUseQueues.mockReturnValue({
+            data: [{ id: 'queue-1', name: 'Unassigned' }],
+        })
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
+
+        expect(screen.getByText('Source')).toBeInTheDocument()
+        expect(screen.getByText('Queue')).toBeInTheDocument()
+        expect(screen.getByText('Assignee')).toBeInTheDocument()
+        expect(screen.getByText('Attention / Smart Filter')).toBeInTheDocument()
+        expect(screen.queryByText('Secondary filters stay here so the list keeps its core controls visible.')).not.toBeInTheDocument()
+    })
+
+    it('shows friendly secondary filter labels inside More Filters', () => {
+        mockSearchParams.set('source', 'manual')
+        mockSearchParams.set('queue', 'queue-1')
+        mockSearchParams.set('owner_id', 'user-123')
+        mockSearchParams.set('dynamic_filter', 'attention_unreached')
+        mockUseAssignees.mockReturnValue({
+            data: [{ id: 'user-123', name: 'Case Manager A', role: 'case_manager' }],
+        })
+        mockUseQueues.mockReturnValue({
+            data: [{ id: 'queue-1', name: 'Unassigned' }],
+        })
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
+
+        expect(screen.getByText('Manual')).toBeInTheDocument()
+        expect(screen.getByText('Unassigned')).toBeInTheDocument()
+        expect(screen.getByText('Case Manager A')).toBeInTheDocument()
+        expect(screen.getAllByText('Attention Needed: Unreached Leads').length).toBeGreaterThan(0)
+        expect(screen.queryByText('queue-1')).not.toBeInTheDocument()
+        expect(screen.queryByText('user-123')).not.toBeInTheDocument()
+    })
+
+    it('applies priority-only immediately from More Filters', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
+        fireEvent.click(screen.getByLabelText('Priority only'))
+
+        expect(mockRouterReplace).toHaveBeenCalledWith('/surrogates?priority=only', { scroll: false })
+    })
+
     it('applies priority-only filter from URL params', () => {
         mockSearchParams.set('priority', 'only')
         mockUseSurrogates.mockReturnValue({
