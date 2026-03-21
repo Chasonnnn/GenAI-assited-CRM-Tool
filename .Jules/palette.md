@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Custom List Button Keyboard Focus
+**Learning:** Custom `<button>` elements used as list items (e.g., in lists of interviews or tasks) naturally receive keyboard focus but may lack visible focus indicators due to utility classes overriding default styles. This makes them inaccessible for keyboard users navigating through the list.
+**Action:** Always append explicit `focus-visible` utility classes (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) to any custom interactive component acting as a list item to ensure a clear visual indicator on keyboard focus.
