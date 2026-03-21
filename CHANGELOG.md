@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.0...surrogacy-crm-platform-v0.91.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* move partner details above marital status ([2809fed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2809fed6c76b8a299b60cc38f6fcb06063a2c3ae))
+* regenerate surrogate contracts ([97dd532](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/97dd5328efba90ec91477400afd5250164d1b0db))
+* surface surrogate intake warnings for state fields ([6fe095d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6fe095da9568fdfce52261a0ff9d88092a6ceb08))
+
 ## [0.91.0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.46...surrogacy-crm-platform-v0.91.0) (2026-03-21)
 
 
