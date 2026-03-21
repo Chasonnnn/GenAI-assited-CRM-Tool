@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy import update as sql_update
 
-from app.db.models import Form, FormSubmission, Surrogate, SurrogateActivityLog
+from app.db.models import EmailLog, Form, FormSubmission, Surrogate, SurrogateActivityLog
 
 
 @pytest.mark.asyncio
@@ -368,5 +368,86 @@ async def test_surrogate_detail_includes_lead_intake_warnings_with_raw_values(
             "field_key": "weight_lb",
             "issue": "missing_value",
             "raw_value": "140 lbs",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_surrogate_detail_flags_bounced_email_from_resend_activity(
+    authed_client, db, test_org
+):
+    bounced_email = f"lead-bounced-{uuid.uuid4().hex[:8]}@example.com"
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Lead Bounced",
+            "email": bounced_email,
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = uuid.UUID(create_res.json()["id"])
+
+    surrogate = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+    assert surrogate is not None
+
+    form = Form(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Lead Intake Review",
+    )
+    db.add(form)
+    db.flush()
+
+    submission = FormSubmission(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        form_id=form.id,
+        surrogate_id=surrogate.id,
+        source_mode="shared",
+        answers_json={
+            "email": bounced_email,
+        },
+    )
+    db.add(submission)
+
+    email_log = EmailLog(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        surrogate_id=surrogate.id,
+        recipient_email=bounced_email,
+        subject="Test bounced email",
+        body="Body",
+        resend_status="bounced",
+        bounced_at=datetime.now(timezone.utc),
+        error="bounced",
+    )
+    db.add(email_log)
+    db.flush()
+
+    db.add(
+        SurrogateActivityLog(
+            id=uuid.uuid4(),
+            surrogate_id=surrogate.id,
+            organization_id=test_org.id,
+            activity_type="email_bounced",
+            actor_user_id=None,
+            details={
+                "email_log_id": str(email_log.id),
+                "provider": "resend",
+                "reason": "bounced",
+            },
+        )
+    )
+    db.commit()
+
+    detail_res = await authed_client.get(f"/surrogates/{surrogate_id}")
+    assert detail_res.status_code == 200, detail_res.text
+    detail = detail_res.json()
+
+    assert detail["lead_intake_warnings"] == [
+        {
+            "field_key": "email",
+            "issue": "invalid_value",
+            "raw_value": bounced_email,
         },
     ]

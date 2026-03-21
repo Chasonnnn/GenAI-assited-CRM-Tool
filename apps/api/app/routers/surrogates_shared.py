@@ -3,11 +3,11 @@
 from decimal import Decimal, InvalidOperation
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
-from sqlalchemy import inspect
+from sqlalchemy import func, inspect, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import NO_VALUE
 
-from app.db.models import FormSubmission, MetaLead
+from app.db.models import EmailLog, FormSubmission, MetaLead
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
 from app.services import queue_service, surrogate_stage_context, user_service
@@ -71,6 +71,35 @@ def _has_valid_email(value: str | None) -> bool:
     except ValidationError:
         return False
     return True
+
+
+def _has_bounced_email_delivery(
+    db: Session,
+    surrogate,
+    *candidate_emails: str | None,
+) -> bool:
+    normalized_candidates = sorted(
+        {
+            value.strip().lower()
+            for value in candidate_emails
+            if isinstance(value, str) and _has_valid_email(value)
+        }
+    )
+    if not normalized_candidates:
+        return False
+
+    bounced_email = (
+        db.query(EmailLog.id)
+        .filter(
+            EmailLog.organization_id == surrogate.organization_id,
+            EmailLog.surrogate_id == surrogate.id,
+            func.lower(EmailLog.recipient_email).in_(normalized_candidates),
+            or_(EmailLog.resend_status == "bounced", EmailLog.bounced_at.isnot(None)),
+        )
+        .order_by(EmailLog.bounced_at.desc(), EmailLog.created_at.desc())
+        .first()
+    )
+    return bounced_email is not None
 
 
 def _has_valid_phone(value: str | None) -> bool:
@@ -153,7 +182,15 @@ def _build_lead_intake_warnings(db: Session, surrogate) -> list[dict[str, str]]:
             continue
 
         current_value, validator = validators[field_key]
-        if validator(current_value):
+        if field_key == "email":
+            if validator(current_value) and not _has_bounced_email_delivery(
+                db,
+                surrogate,
+                current_value,
+                raw_value,
+            ):
+                continue
+        elif validator(current_value):
             continue
 
         issue = "missing_value"
