@@ -14,6 +14,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import AnalyticsSnapshot
 from app.services import pipeline_semantics_service, pipeline_service
+from app.schemas.pipeline_semantics import (
+    DEFAULT_ANALYTICS_CONVERSION_STAGE_KEY,
+    DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS,
+    DEFAULT_ANALYTICS_QUALIFICATION_STAGE_KEY,
+)
 
 
 DEFAULT_FUNNEL_STAGE_KEYS = [
@@ -24,6 +29,70 @@ DEFAULT_FUNNEL_STAGE_KEYS = [
     "matched",
     "medical_clearance_passed",
 ]
+
+
+def get_analytics_stage_configuration(
+    db: Session,
+    organization_id: uuid.UUID,
+    pipeline_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    if pipeline_id is None:
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+    else:
+        pipeline = pipeline_service.get_pipeline(db, organization_id, pipeline_id)
+        if pipeline is None:
+            pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
+
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
+    stage_by_key = {
+        stage.stage_key: stage
+        for stage in snapshot.stages
+        if stage.is_active and stage.stage_key
+    }
+
+    analytics = snapshot.feature_config.analytics
+    performance_stage_keys = [
+        stage_key
+        for stage_key in analytics.performance_stage_keys or DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS
+        if stage_key in stage_by_key
+    ]
+    if not performance_stage_keys:
+        performance_stage_keys = [
+            stage.stage_key for stage in snapshot.stages if stage.is_active
+        ]
+
+    qualification_stage_key = analytics.qualification_stage_key
+    if qualification_stage_key not in stage_by_key:
+        qualification_stage_key = next(
+            (stage_key for stage_key in DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS if stage_key in stage_by_key),
+            DEFAULT_ANALYTICS_QUALIFICATION_STAGE_KEY,
+        )
+        if qualification_stage_key not in stage_by_key:
+            qualification_stage_key = performance_stage_keys[0] if performance_stage_keys else None
+
+    conversion_stage_key = analytics.conversion_stage_key
+    if conversion_stage_key not in stage_by_key:
+        conversion_stage_key = next(
+            (stage_key for stage_key in DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS if stage_key in stage_by_key),
+            DEFAULT_ANALYTICS_CONVERSION_STAGE_KEY,
+        )
+        if conversion_stage_key not in stage_by_key:
+            conversion_stage_key = performance_stage_keys[-1] if performance_stage_keys else None
+
+    match_stage = pipeline_semantics_service.get_first_active_stage_with_capability(
+        snapshot,
+        "locks_match_state",
+    )
+
+    return {
+        "pipeline": pipeline,
+        "snapshot": snapshot,
+        "stage_by_key": stage_by_key,
+        "performance_stage_keys": performance_stage_keys,
+        "qualification_stage_key": qualification_stage_key,
+        "conversion_stage_key": conversion_stage_key,
+        "match_stage_key": match_stage.stage_key if match_stage else None,
+    }
 
 
 def _build_snapshot_key(params: dict[str, Any]) -> str:

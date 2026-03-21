@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 import uuid
 from datetime import datetime, timedelta, date, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, text, exists, and_, select, case, literal, or_
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import func, text, and_, case
+from sqlalchemy.orm import Session
 
 from app.db.enums import OwnerType
 from app.db.models import (
@@ -22,6 +23,7 @@ from app.services.analytics_shared import (
     _apply_date_range_filters,
     _get_default_pipeline_stages,
     _get_or_compute_snapshot,
+    get_analytics_stage_configuration,
     get_funnel_stage_keys,
 )
 
@@ -54,19 +56,21 @@ def get_analytics_summary(
     end: datetime,
 ) -> dict[str, Any]:
     """Get high-level analytics summary."""
-    from app.services import pipeline_service
-
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
-    stages = pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
-    pre_qualified_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "pre_qualified")
-    if pre_qualified_stage:
-        pre_qualified_stage_ids = [
-            s.id for s in stages if s.order >= pre_qualified_stage.order and s.is_active
-        ]
-    else:
-        pre_qualified_stage_ids = [
-            s.id for s in stages if s.stage_type in ("post_approval", "terminal") and s.is_active
-        ]
+    analytics_config = get_analytics_stage_configuration(db, organization_id)
+    snapshot = analytics_config["snapshot"]
+    qualification_stage_key = analytics_config["qualification_stage_key"]
+    qualification_stage = (
+        analytics_config["stage_by_key"].get(qualification_stage_key)
+        if qualification_stage_key
+        else None
+    )
+    qualified_stage_ids = [
+        stage.id
+        for stage in snapshot.stages
+        if stage.is_active
+        and qualification_stage is not None
+        and stage.order >= qualification_stage.order
+    ]
 
     # Combine counts into a single aggregation query to reduce DB round trips.
     metrics = (
@@ -87,7 +91,7 @@ def get_analytics_summary(
             func.coalesce(
                 func.sum(
                     case(
-                        (Surrogate.stage_id.in_(pre_qualified_stage_ids), 1),
+                        (Surrogate.stage_id.in_(qualified_stage_ids), 1),
                         else_=0,
                     )
                 ),
@@ -103,14 +107,14 @@ def get_analytics_summary(
 
     total_surrogates = int(metrics.total_surrogates or 0)
     new_this_period = int(metrics.new_this_period or 0)
-    pre_qualified_count = int(metrics.pre_qualified_count or 0)
+    qualified_count = int(metrics.pre_qualified_count or 0)
 
-    pre_qualified_rate = (
-        (pre_qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
+    qualification_rate = (
+        (qualified_count / total_surrogates * 100) if total_surrogates > 0 else 0.0
     )
 
-    avg_time_to_pre_qualified_hours = None
-    if pre_qualified_stage:
+    avg_time_to_qualification_hours = None
+    if qualification_stage:
         result = db.execute(
             text(
                 """
@@ -119,7 +123,7 @@ def get_analytics_summary(
                 JOIN surrogate_status_history csh ON c.id = csh.surrogate_id
                 WHERE c.organization_id = :org_id
                   AND c.is_archived = false
-                  AND csh.to_stage_id = :pre_qualified_stage_id
+                  AND csh.to_stage_id = :qualification_stage_id
                   AND csh.changed_at >= :start
                   AND csh.changed_at < :end
             """
@@ -128,17 +132,18 @@ def get_analytics_summary(
                 "org_id": organization_id,
                 "start": start,
                 "end": end,
-                "pre_qualified_stage_id": pre_qualified_stage.id,
+                "qualification_stage_id": qualification_stage.id,
             },
         )
         row = result.fetchone()
-        avg_time_to_pre_qualified_hours = float(round(row[0], 1)) if row and row[0] else None
+        avg_time_to_qualification_hours = float(round(row[0], 1)) if row and row[0] else None
 
     return {
         "total_surrogates": total_surrogates,
         "new_this_period": new_this_period,
-        "pre_qualified_rate": round(pre_qualified_rate, 1),
-        "avg_time_to_pre_qualified_hours": avg_time_to_pre_qualified_hours,
+        "qualification_rate": round(qualification_rate, 1),
+        "qualification_stage_key": qualification_stage_key,
+        "avg_time_to_qualification_hours": avg_time_to_qualification_hours,
     }
 
 
@@ -843,15 +848,7 @@ def get_cached_summary_kpis(
     )
 
 
-PERFORMANCE_STAGE_SLUGS = [
-    "contacted",
-    "pre_qualified",
-    "ready_to_match",
-    "matched",
-    "application_submitted",
-    "on_hold",
-    "lost",
-]
+PERFORMANCE_STAGE_SLUGS: list[str] = []
 
 
 def get_performance_stage_ids(
@@ -859,14 +856,136 @@ def get_performance_stage_ids(
     pipeline_id: uuid.UUID,
 ) -> dict[str, uuid.UUID | None]:
     """Resolve performance stage keys to IDs for a pipeline."""
-    from app.services import pipeline_service
+    from app.services import pipeline_semantics_service
 
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline_id)
+    performance_stage_keys = snapshot.feature_config.analytics.performance_stage_keys or [
+        stage.stage_key for stage in snapshot.stages if stage.is_active
+    ]
     stage_ids: dict[str, uuid.UUID | None] = {}
-    for stage_key in PERFORMANCE_STAGE_SLUGS:
-        stage = pipeline_service.get_stage_by_key(db, pipeline_id, stage_key)
-        stage_ids[stage_key] = stage.id if stage else None
-
+    for stage_key in performance_stage_keys:
+        stage = snapshot.stage_by_key.get(stage_key)
+        stage_ids[stage_key] = stage.id if stage and stage.is_active else None
     return stage_ids
+
+
+def _load_active_users(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> list[tuple[uuid.UUID, str]]:
+    return (
+        db.query(User.id, User.display_name)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(
+            Membership.organization_id == organization_id,
+            Membership.is_active.is_(True),
+            User.is_active.is_(True),
+        )
+        .all()
+    )
+
+
+def _build_performance_columns(analytics_config: dict[str, Any]) -> list[dict[str, Any]]:
+    stage_by_key = analytics_config["stage_by_key"]
+    columns: list[dict[str, Any]] = []
+    for stage_key in analytics_config["performance_stage_keys"]:
+        stage = stage_by_key.get(stage_key)
+        if not stage:
+            continue
+        columns.append(
+            {
+                "stage_key": stage.stage_key,
+                "label": stage.label,
+                "color": stage.color,
+                "order": stage.order,
+            }
+        )
+    return columns
+
+
+def _empty_stage_counts(stage_keys: list[str]) -> dict[str, int]:
+    return {stage_key: 0 for stage_key in stage_keys}
+
+
+def _empty_performance_bucket(stage_keys: list[str]) -> dict[str, Any]:
+    return {
+        "total_surrogates": 0,
+        "archived_count": 0,
+        "stage_counts": _empty_stage_counts(stage_keys),
+        "conversion_rate": 0.0,
+        "avg_days_to_match": None,
+        "avg_days_to_conversion": None,
+    }
+
+
+def _load_history_stage_sets(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    surrogate_ids: set[uuid.UUID],
+    stage_id_to_key: dict[uuid.UUID, str],
+    start_dt: datetime | None = None,
+    end_dt: datetime | None = None,
+) -> tuple[dict[uuid.UUID, set[str]], dict[uuid.UUID, dict[str, datetime]]]:
+    reached: dict[uuid.UUID, set[str]] = defaultdict(set)
+    first_changed_at: dict[uuid.UUID, dict[str, datetime]] = defaultdict(dict)
+    if not surrogate_ids or not stage_id_to_key:
+        return reached, first_changed_at
+
+    query = db.query(
+        SurrogateStatusHistory.surrogate_id,
+        SurrogateStatusHistory.to_stage_id,
+        SurrogateStatusHistory.changed_at,
+    ).filter(
+        SurrogateStatusHistory.organization_id == organization_id,
+        SurrogateStatusHistory.surrogate_id.in_(list(surrogate_ids)),
+        SurrogateStatusHistory.to_stage_id.in_(list(stage_id_to_key.keys())),
+    )
+    if start_dt is not None:
+        query = query.filter(SurrogateStatusHistory.changed_at >= start_dt)
+    if end_dt is not None:
+        query = query.filter(SurrogateStatusHistory.changed_at <= end_dt)
+
+    for surrogate_id, stage_id, changed_at in query.all():
+        stage_key = stage_id_to_key.get(stage_id)
+        if not stage_key:
+            continue
+        reached[surrogate_id].add(stage_key)
+        existing = first_changed_at[surrogate_id].get(stage_key)
+        if existing is None or changed_at < existing:
+            first_changed_at[surrogate_id][stage_key] = changed_at
+
+    return reached, first_changed_at
+
+
+def _finalize_performance_rows(
+    *,
+    user_rows: list[tuple[uuid.UUID, str]],
+    user_buckets: dict[str, dict[str, Any]],
+    unassigned_bucket: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    data: list[dict[str, Any]] = []
+    for user_id, display_name in user_rows:
+        bucket = user_buckets.get(str(user_id))
+        if bucket is None:
+            data.append(
+                {
+                    "user_id": str(user_id),
+                    "user_name": display_name or "Unknown",
+                    **_empty_performance_bucket(list(unassigned_bucket["stage_counts"].keys())),
+                }
+            )
+            continue
+        data.append(
+            {
+                "user_id": str(user_id),
+                "user_name": display_name or "Unknown",
+                **bucket,
+            }
+        )
+
+    data.sort(key=lambda item: item["total_surrogates"], reverse=True)
+    return data, unassigned_bucket
 
 
 def get_performance_by_user(
@@ -888,21 +1007,29 @@ def get_performance_by_user(
     end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
-    stage_ids = get_performance_stage_ids(db, pipeline.id)
+    analytics_config = get_analytics_stage_configuration(db, organization_id, pipeline.id)
+    columns = _build_performance_columns(analytics_config)
 
     now = datetime.now(timezone.utc)
 
     if mode == "cohort":
         user_data, unassigned = _get_cohort_performance(
-            db, organization_id, start_dt, end_dt, stage_ids
+            db, organization_id, start_dt, end_dt, analytics_config
         )
     else:
         user_data, unassigned = _get_activity_performance(
-            db, organization_id, start_dt, end_dt, stage_ids
+            db, organization_id, start_dt, end_dt, analytics_config
         )
 
     if mode == "cohort":
-        _add_time_metrics(db, organization_id, start_dt, end_dt, stage_ids, user_data)
+        _add_time_metrics(
+            db,
+            organization_id,
+            start_dt,
+            end_dt,
+            analytics_config,
+            user_data,
+        )
 
     return {
         "from_date": start_date.isoformat(),
@@ -910,6 +1037,9 @@ def get_performance_by_user(
         "mode": mode,
         "as_of": now.isoformat(),
         "pipeline_id": str(pipeline.id),
+        "columns": columns,
+        "match_stage_key": analytics_config["match_stage_key"],
+        "conversion_stage_key": analytics_config["conversion_stage_key"],
         "data": user_data,
         "unassigned": unassigned,
     }
@@ -920,158 +1050,79 @@ def _get_cohort_performance(
     organization_id: uuid.UUID,
     start_dt: datetime,
     end_dt: datetime,
-    stage_ids: dict[str, uuid.UUID | None],
+    analytics_config: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Cohort mode: Cases created within date range, grouped by current owner."""
-    users_query = (
-        db.query(User.id, User.display_name)
-        .join(Membership, Membership.user_id == User.id)
-        .filter(
-            Membership.organization_id == organization_id,
-            Membership.is_active.is_(True),
-            User.is_active.is_(True),
-        )
-        .all()
-    )
-
-    def _stage_condition(stage_id: uuid.UUID | None):
-        return (
-            literal(False) if stage_id is None else SurrogateStatusHistory.to_stage_id == stage_id
-        )
-
-    def _count_distinct(condition):
-        return func.count(func.distinct(case((condition, Surrogate.id))))
-
-    application_submitted_sid = stage_ids.get("application_submitted")
-    lost_sid = stage_ids.get("lost")
-    if lost_sid:
-        if application_submitted_sid:
-            csh_application_submitted = aliased(SurrogateStatusHistory)
-            lost_condition = and_(
-                SurrogateStatusHistory.to_stage_id == lost_sid,
-                ~exists(
-                    select(csh_application_submitted.id).where(
-                        csh_application_submitted.surrogate_id == Surrogate.id,
-                        csh_application_submitted.to_stage_id == application_submitted_sid,
-                    )
-                ),
-            )
-        else:
-            lost_condition = SurrogateStatusHistory.to_stage_id == lost_sid
-    else:
-        lost_condition = literal(False)
-
-    base_filters = [
-        Surrogate.organization_id == organization_id,
-        Surrogate.owner_type == OwnerType.USER.value,
-        Surrogate.owner_id.isnot(None),
-        Surrogate.created_at >= start_dt,
-        Surrogate.created_at <= end_dt,
-    ]
-
-    metrics_rows = (
-        db.query(
-            Surrogate.owner_id.label("user_id"),
-            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
-            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
-                "pre_qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
-                "ready_to_match"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
-                "application_submitted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
-            _count_distinct(lost_condition).label("lost"),
-        )
-        .select_from(Surrogate)
-        .outerjoin(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
-        .filter(*base_filters)
-        .group_by(Surrogate.owner_id)
-        .all()
-    )
-
-    metrics_by_user = {row.user_id: row for row in metrics_rows}
-
-    user_data = []
-    for user_id, user_name in users_query:
-        metrics = metrics_by_user.get(user_id)
-        total = metrics.total_surrogates if metrics else 0
-        conversion_rate = (
-            round((metrics.application_submitted / total * 100), 1)
-            if metrics and total > 0
-            else 0.0
-        )
-
-        user_data.append(
-            {
-                "user_id": str(user_id),
-                "user_name": user_name or "Unknown",
-                "total_surrogates": total,
-                "archived_count": metrics.archived_count if metrics else 0,
-                "contacted": metrics.contacted if metrics else 0,
-                "pre_qualified": metrics.pre_qualified if metrics else 0,
-                "ready_to_match": metrics.ready_to_match if metrics else 0,
-                "matched": metrics.matched if metrics else 0,
-                "application_submitted": metrics.application_submitted if metrics else 0,
-                "on_hold": metrics.on_hold if metrics else 0,
-                "lost": metrics.lost if metrics else 0,
-                "conversion_rate": conversion_rate,
-                "avg_days_to_match": None,
-                "avg_days_to_application_submitted": None,
-            }
-        )
-
-    user_data.sort(key=lambda x: x["total_surrogates"], reverse=True)
-
-    unassigned_filters = [
-        Surrogate.organization_id == organization_id,
-        Surrogate.created_at >= start_dt,
-        Surrogate.created_at <= end_dt,
-        or_(Surrogate.owner_type != OwnerType.USER.value, Surrogate.owner_id.is_(None)),
-    ]
-
-    unassigned_row = (
-        db.query(
-            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
-            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
-                "pre_qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
-                "ready_to_match"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
-                "application_submitted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
-            _count_distinct(lost_condition).label("lost"),
-        )
-        .select_from(Surrogate)
-        .outerjoin(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
-        .filter(*unassigned_filters)
-        .first()
-    )
-
-    unassigned = {
-        "total_surrogates": unassigned_row.total_surrogates if unassigned_row else 0,
-        "archived_count": unassigned_row.archived_count if unassigned_row else 0,
-        "contacted": unassigned_row.contacted if unassigned_row else 0,
-        "pre_qualified": unassigned_row.pre_qualified if unassigned_row else 0,
-        "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
-        "matched": unassigned_row.matched if unassigned_row else 0,
-        "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
-        "on_hold": unassigned_row.on_hold if unassigned_row else 0,
-        "lost": unassigned_row.lost if unassigned_row else 0,
+    stage_keys = list(analytics_config["performance_stage_keys"])
+    stage_key_to_stage = analytics_config["stage_by_key"]
+    stage_id_to_key = {
+        stage.id: stage_key
+        for stage_key, stage in stage_key_to_stage.items()
+        if stage_key in stage_keys
     }
+    users_query = _load_active_users(db, organization_id)
+    user_buckets: dict[str, dict[str, Any]] = {}
+    unassigned_bucket = _empty_performance_bucket(stage_keys)
 
-    return user_data, unassigned
+    surrogates = (
+        db.query(
+            Surrogate.id,
+            Surrogate.owner_id,
+            Surrogate.owner_type,
+            Surrogate.is_archived,
+            Surrogate.stage_id,
+        )
+        .filter(
+            Surrogate.organization_id == organization_id,
+            Surrogate.created_at >= start_dt,
+            Surrogate.created_at <= end_dt,
+        )
+        .all()
+    )
+    surrogate_ids = {row.id for row in surrogates}
+    reached_by_surrogate, _ = _load_history_stage_sets(
+        db,
+        organization_id=organization_id,
+        surrogate_ids=surrogate_ids,
+        stage_id_to_key=stage_id_to_key,
+    )
+    conversion_stage_key = analytics_config["conversion_stage_key"]
+
+    for row in surrogates:
+        bucket = (
+            user_buckets.setdefault(str(row.owner_id), _empty_performance_bucket(stage_keys))
+            if row.owner_type == OwnerType.USER.value and row.owner_id
+            else unassigned_bucket
+        )
+        bucket["total_surrogates"] += 1
+        if row.is_archived:
+            bucket["archived_count"] += 1
+
+        reached_keys = set(reached_by_surrogate.get(row.id, set()))
+        current_stage_key = stage_id_to_key.get(row.stage_id)
+        if current_stage_key:
+            reached_keys.add(current_stage_key)
+
+        for stage_key in stage_keys:
+            if stage_key == "lost":
+                if "lost" in reached_keys and (
+                    not conversion_stage_key or conversion_stage_key not in reached_keys
+                ):
+                    bucket["stage_counts"]["lost"] += 1
+                continue
+            if stage_key in reached_keys:
+                bucket["stage_counts"][stage_key] += 1
+
+    for bucket in [*user_buckets.values(), unassigned_bucket]:
+        total = bucket["total_surrogates"]
+        converted = bucket["stage_counts"].get(conversion_stage_key or "", 0)
+        bucket["conversion_rate"] = round((converted / total * 100), 1) if total > 0 else 0.0
+
+    return _finalize_performance_rows(
+        user_rows=users_query,
+        user_buckets=user_buckets,
+        unassigned_bucket=unassigned_bucket,
+    )
 
 
 def _get_activity_performance(
@@ -1079,158 +1130,106 @@ def _get_activity_performance(
     organization_id: uuid.UUID,
     start_dt: datetime,
     end_dt: datetime,
-    stage_ids: dict[str, uuid.UUID | None],
+    analytics_config: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Activity mode: Cases with status transitions within date range."""
-    users_query = (
-        db.query(User.id, User.display_name)
-        .join(Membership, Membership.user_id == User.id)
-        .filter(
-            Membership.organization_id == organization_id,
-            Membership.is_active.is_(True),
-            User.is_active.is_(True),
-        )
-        .all()
-    )
-
-    def _stage_condition(stage_id: uuid.UUID | None):
-        return (
-            literal(False) if stage_id is None else SurrogateStatusHistory.to_stage_id == stage_id
-        )
-
-    def _count_distinct(condition):
-        return func.count(func.distinct(case((condition, Surrogate.id))))
-
-    application_submitted_sid = stage_ids.get("application_submitted")
-    lost_sid = stage_ids.get("lost")
-    if lost_sid:
-        if application_submitted_sid:
-            csh_application_submitted = aliased(SurrogateStatusHistory)
-            lost_condition = and_(
-                SurrogateStatusHistory.to_stage_id == lost_sid,
-                ~exists(
-                    select(csh_application_submitted.id).where(
-                        csh_application_submitted.surrogate_id == Surrogate.id,
-                        csh_application_submitted.to_stage_id == application_submitted_sid,
-                    )
-                ),
-            )
-        else:
-            lost_condition = SurrogateStatusHistory.to_stage_id == lost_sid
-    else:
-        lost_condition = literal(False)
-
-    base_filters = [
-        Surrogate.organization_id == organization_id,
-        Surrogate.owner_type == OwnerType.USER.value,
-        Surrogate.owner_id.isnot(None),
-        SurrogateStatusHistory.changed_at >= start_dt,
-        SurrogateStatusHistory.changed_at <= end_dt,
-    ]
-
-    metrics_rows = (
-        db.query(
-            Surrogate.owner_id.label("user_id"),
-            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
-            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
-                "pre_qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
-                "ready_to_match"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
-                "application_submitted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
-            _count_distinct(lost_condition).label("lost"),
-        )
-        .select_from(Surrogate)
-        .join(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
-        .filter(*base_filters)
-        .group_by(Surrogate.owner_id)
-        .all()
-    )
-
-    metrics_by_user = {row.user_id: row for row in metrics_rows}
-
-    user_data = []
-    for user_id, user_name in users_query:
-        metrics = metrics_by_user.get(user_id)
-        total = metrics.total_surrogates if metrics else 0
-        conversion_rate = (
-            round((metrics.application_submitted / total * 100), 1)
-            if metrics and total > 0
-            else 0.0
-        )
-
-        user_data.append(
-            {
-                "user_id": str(user_id),
-                "user_name": user_name or "Unknown",
-                "total_surrogates": total,
-                "archived_count": metrics.archived_count if metrics else 0,
-                "contacted": metrics.contacted if metrics else 0,
-                "pre_qualified": metrics.pre_qualified if metrics else 0,
-                "ready_to_match": metrics.ready_to_match if metrics else 0,
-                "matched": metrics.matched if metrics else 0,
-                "application_submitted": metrics.application_submitted if metrics else 0,
-                "on_hold": metrics.on_hold if metrics else 0,
-                "lost": metrics.lost if metrics else 0,
-                "conversion_rate": conversion_rate,
-                "avg_days_to_match": None,
-                "avg_days_to_application_submitted": None,
-            }
-        )
-
-    user_data.sort(key=lambda x: x["total_surrogates"], reverse=True)
-
-    unassigned_filters = [
-        Surrogate.organization_id == organization_id,
-        or_(Surrogate.owner_type != OwnerType.USER.value, Surrogate.owner_id.is_(None)),
-        SurrogateStatusHistory.changed_at >= start_dt,
-        SurrogateStatusHistory.changed_at <= end_dt,
-    ]
-
-    unassigned_row = (
-        db.query(
-            func.count(func.distinct(Surrogate.id)).label("total_surrogates"),
-            _count_distinct(Surrogate.is_archived.is_(True)).label("archived_count"),
-            _count_distinct(_stage_condition(stage_ids.get("contacted"))).label("contacted"),
-            _count_distinct(_stage_condition(stage_ids.get("pre_qualified"))).label(
-                "pre_qualified"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("ready_to_match"))).label(
-                "ready_to_match"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("matched"))).label("matched"),
-            _count_distinct(_stage_condition(stage_ids.get("application_submitted"))).label(
-                "application_submitted"
-            ),
-            _count_distinct(_stage_condition(stage_ids.get("on_hold"))).label("on_hold"),
-            _count_distinct(lost_condition).label("lost"),
-        )
-        .select_from(Surrogate)
-        .join(SurrogateStatusHistory, SurrogateStatusHistory.surrogate_id == Surrogate.id)
-        .filter(*unassigned_filters)
-        .first()
-    )
-
-    unassigned = {
-        "total_surrogates": unassigned_row.total_surrogates if unassigned_row else 0,
-        "archived_count": unassigned_row.archived_count if unassigned_row else 0,
-        "contacted": unassigned_row.contacted if unassigned_row else 0,
-        "pre_qualified": unassigned_row.pre_qualified if unassigned_row else 0,
-        "ready_to_match": unassigned_row.ready_to_match if unassigned_row else 0,
-        "matched": unassigned_row.matched if unassigned_row else 0,
-        "application_submitted": unassigned_row.application_submitted if unassigned_row else 0,
-        "on_hold": unassigned_row.on_hold if unassigned_row else 0,
-        "lost": unassigned_row.lost if unassigned_row else 0,
+    stage_keys = list(analytics_config["performance_stage_keys"])
+    stage_key_to_stage = analytics_config["stage_by_key"]
+    stage_id_to_key = {
+        stage.id: stage_key
+        for stage_key, stage in stage_key_to_stage.items()
+        if stage_key in stage_keys
     }
+    users_query = _load_active_users(db, organization_id)
+    user_buckets: dict[str, dict[str, Any]] = {}
+    unassigned_bucket = _empty_performance_bucket(stage_keys)
 
-    return user_data, unassigned
+    activity_history_rows = (
+        db.query(SurrogateStatusHistory.surrogate_id)
+        .filter(
+            SurrogateStatusHistory.organization_id == organization_id,
+            SurrogateStatusHistory.changed_at >= start_dt,
+            SurrogateStatusHistory.changed_at <= end_dt,
+        )
+        .distinct()
+        .all()
+    )
+    touched_surrogate_ids = {row.surrogate_id for row in activity_history_rows}
+    if not touched_surrogate_ids:
+        return _finalize_performance_rows(
+            user_rows=users_query,
+            user_buckets=user_buckets,
+            unassigned_bucket=unassigned_bucket,
+        )
+
+    surrogates = (
+        db.query(
+            Surrogate.id,
+            Surrogate.owner_id,
+            Surrogate.owner_type,
+            Surrogate.is_archived,
+        )
+        .filter(
+            Surrogate.organization_id == organization_id,
+            Surrogate.id.in_(list(touched_surrogate_ids)),
+        )
+        .all()
+    )
+    activity_stage_sets, _ = _load_history_stage_sets(
+        db,
+        organization_id=organization_id,
+        surrogate_ids=touched_surrogate_ids,
+        stage_id_to_key=stage_id_to_key,
+        start_dt=start_dt,
+        end_dt=end_dt,
+    )
+    conversion_stage_key = analytics_config["conversion_stage_key"]
+    conversion_stage = (
+        stage_key_to_stage.get(conversion_stage_key)
+        if conversion_stage_key
+        else None
+    )
+    conversion_ever, _ = _load_history_stage_sets(
+        db,
+        organization_id=organization_id,
+        surrogate_ids=touched_surrogate_ids,
+        stage_id_to_key=(
+            {conversion_stage.id: conversion_stage_key}
+            if conversion_stage and conversion_stage_key
+            else {}
+        ),
+    )
+
+    for row in surrogates:
+        bucket = (
+            user_buckets.setdefault(str(row.owner_id), _empty_performance_bucket(stage_keys))
+            if row.owner_type == OwnerType.USER.value and row.owner_id
+            else unassigned_bucket
+        )
+        bucket["total_surrogates"] += 1
+        if row.is_archived:
+            bucket["archived_count"] += 1
+
+        activity_stage_keys = set(activity_stage_sets.get(row.id, set()))
+        converted_ever = conversion_stage_key in conversion_ever.get(row.id, set())
+        for stage_key in stage_keys:
+            if stage_key == "lost":
+                if "lost" in activity_stage_keys and not converted_ever:
+                    bucket["stage_counts"]["lost"] += 1
+                continue
+            if stage_key in activity_stage_keys:
+                bucket["stage_counts"][stage_key] += 1
+
+    for bucket in [*user_buckets.values(), unassigned_bucket]:
+        total = bucket["total_surrogates"]
+        converted = bucket["stage_counts"].get(conversion_stage_key or "", 0)
+        bucket["conversion_rate"] = round((converted / total * 100), 1) if total > 0 else 0.0
+
+    return _finalize_performance_rows(
+        user_rows=users_query,
+        user_buckets=user_buckets,
+        unassigned_bucket=unassigned_bucket,
+    )
 
 
 def _add_time_metrics(
@@ -1238,12 +1237,17 @@ def _add_time_metrics(
     organization_id: uuid.UUID,
     start_dt: datetime,
     end_dt: datetime,
-    stage_ids: dict[str, uuid.UUID | None],
+    analytics_config: dict[str, Any],
     user_data: list[dict[str, Any]],
 ) -> None:
-    """Add avg_days_to_match and avg_days_to_application_submitted to user data."""
-    matched_sid = stage_ids.get("matched")
-    application_submitted_sid = stage_ids.get("application_submitted")
+    """Add avg_days_to_match and avg_days_to_conversion to user data."""
+    stage_by_key = analytics_config["stage_by_key"]
+    match_stage_key = analytics_config["match_stage_key"]
+    conversion_stage_key = analytics_config["conversion_stage_key"]
+    matched_sid = stage_by_key[match_stage_key].id if match_stage_key in stage_by_key else None
+    conversion_sid = (
+        stage_by_key[conversion_stage_key].id if conversion_stage_key in stage_by_key else None
+    )
 
     def _avg_days_by_user(stage_id: uuid.UUID | None) -> dict[str, float]:
         if not stage_id:
@@ -1289,12 +1293,12 @@ def _add_time_metrics(
         }
 
     match_avgs = _avg_days_by_user(matched_sid)
-    apply_avgs = _avg_days_by_user(application_submitted_sid)
+    conversion_avgs = _avg_days_by_user(conversion_sid)
 
     for user in user_data:
         user_id = user["user_id"]
         user["avg_days_to_match"] = match_avgs.get(user_id)
-        user["avg_days_to_application_submitted"] = apply_avgs.get(user_id)
+        user["avg_days_to_conversion"] = conversion_avgs.get(user_id)
 
 
 def get_cached_performance_by_user(

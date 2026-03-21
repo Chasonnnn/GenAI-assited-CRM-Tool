@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.enums import TaskType
-from app.db.models import PipelineStage, Surrogate, Task
+from app.db.models import Surrogate, Task
 from app.services import analytics_meta_service as _meta
 from app.services import analytics_shared as _shared
 from app.services import analytics_surrogate_service as _surrogate
@@ -57,29 +57,33 @@ def get_pdf_export_data(
         or 0
     )
 
-    from app.services import pipeline_service
+    analytics_config = _shared.get_analytics_stage_configuration(db, organization_id)
+    snapshot = analytics_config["snapshot"]
+    qualification_stage_key = analytics_config["qualification_stage_key"]
+    qualification_stage = (
+        analytics_config["stage_by_key"].get(qualification_stage_key)
+        if qualification_stage_key
+        else None
+    )
 
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
-    pre_qualified_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "pre_qualified")
-
-    pre_qualified_rate = 0.0
-    if pre_qualified_stage and total_surrogates > 0:
-        pre_qualified_stage_ids = db.query(PipelineStage.id).filter(
-            PipelineStage.pipeline_id == pipeline.id,
-            PipelineStage.order >= pre_qualified_stage.order,
-            PipelineStage.is_active.is_(True),
-        )
-        pre_qualified_count = (
+    qualification_rate = 0.0
+    if qualification_stage and total_surrogates > 0:
+        qualified_stage_ids = [
+            stage.id
+            for stage in snapshot.stages
+            if stage.is_active and stage.order >= qualification_stage.order
+        ]
+        qualified_count = (
             db.query(func.count(Surrogate.id))
             .filter(
                 Surrogate.organization_id == organization_id,
                 Surrogate.is_archived.is_(False),
-                Surrogate.stage_id.in_(pre_qualified_stage_ids),
+                Surrogate.stage_id.in_(qualified_stage_ids),
             )
             .scalar()
             or 0
         )
-        pre_qualified_rate = (pre_qualified_count / total_surrogates) * 100
+        qualification_rate = (qualified_count / total_surrogates) * 100
 
     pending_tasks = (
         db.query(func.count(Task.id))
@@ -107,7 +111,8 @@ def get_pdf_export_data(
     summary = {
         "total_surrogates": total_surrogates,
         "new_this_period": new_this_period,
-        "pre_qualified_rate": pre_qualified_rate,
+        "qualification_rate": qualification_rate,
+        "qualification_stage_key": qualification_stage_key,
         "pending_tasks": pending_tasks,
         "overdue_tasks": overdue_tasks,
     }
@@ -160,11 +165,11 @@ def get_pdf_export_data(
 _SHARED_EXPORTS = {
     "DEFAULT_FUNNEL_STAGE_KEYS",
     "_normalize_date_bounds",
+    "get_analytics_stage_configuration",
     "get_funnel_stage_keys",
     "parse_date_range",
 }
 _SURROGATE_EXPORTS = {
-    "PERFORMANCE_STAGE_SLUGS",
     "get_cached_analytics_summary",
     "get_cached_conversion_funnel",
     "get_cached_performance_by_user",

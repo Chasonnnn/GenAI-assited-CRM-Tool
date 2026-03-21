@@ -13,6 +13,7 @@ import type { UserPerformanceData } from "@/lib/api/analytics"
 
 interface TeamPerformanceChartProps {
     data: UserPerformanceData[] | undefined
+    conversionStageKey?: string | null
     isLoading?: boolean
     isError?: boolean
     title?: string
@@ -32,6 +33,7 @@ const chartConfig = {
 
 export function TeamPerformanceChart({
     data,
+    conversionStageKey = null,
     isLoading = false,
     isError = false,
     title = "Conversion Rate by Team Member",
@@ -47,25 +49,28 @@ export function TeamPerformanceChart({
                 fullName: user.user_name,
                 conversion_rate: user.conversion_rate,
                 total_surrogates: user.total_surrogates,
-                application_submitted: user.application_submitted,
+                converted_count: conversionStageKey
+                    ? (user.stage_counts[conversionStageKey] ?? 0)
+                    : 0,
                 fill: getConversionColor(user.conversion_rate),
             }))
-    }, [data])
+    }, [conversionStageKey, data])
 
     const avgConversionRate = useMemo(() => {
         if (!data || data.length === 0) return 0
         const usersWithSurrogates = data.filter((u) => u.total_surrogates > 0)
         if (usersWithSurrogates.length === 0) return 0
-        const totalApplied = usersWithSurrogates.reduce(
-            (sum, u) => sum + u.application_submitted,
+        const totalConverted = usersWithSurrogates.reduce(
+            (sum, u) =>
+                sum + (conversionStageKey ? (u.stage_counts[conversionStageKey] ?? 0) : 0),
             0
         )
         const totalSurrogates = usersWithSurrogates.reduce(
             (sum, u) => sum + u.total_surrogates,
             0
         )
-        return totalSurrogates > 0 ? (totalApplied / totalSurrogates) * 100 : 0
-    }, [data])
+        return totalSurrogates > 0 ? (totalConverted / totalSurrogates) * 100 : 0
+    }, [conversionStageKey, data])
 
     if (isLoading) {
         return (

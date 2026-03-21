@@ -62,6 +62,9 @@ class JourneyFeatureConfig(BaseModel):
 
 class AnalyticsFeatureConfig(BaseModel):
     funnel_stage_keys: list[str] = Field(default_factory=list)
+    performance_stage_keys: list[str] = Field(default_factory=list)
+    qualification_stage_key: str | None = None
+    conversion_stage_key: str | None = None
 
 
 class RoleStageRule(BaseModel):
@@ -178,6 +181,18 @@ DEFAULT_ANALYTICS_FUNNEL_STAGE_KEYS = [
     "matched",
     "medical_clearance_passed",
 ]
+
+DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS = [
+    "contacted",
+    "pre_qualified",
+    "ready_to_match",
+    "matched",
+    "application_submitted",
+    "on_hold",
+    "lost",
+]
+DEFAULT_ANALYTICS_QUALIFICATION_STAGE_KEY = "pre_qualified"
+DEFAULT_ANALYTICS_CONVERSION_STAGE_KEY = "application_submitted"
 
 DEFAULT_ROLE_VISIBILITY = {
     "intake_specialist": RoleStageRule(stage_types=["intake", "paused", "terminal"]),
@@ -310,7 +325,10 @@ def default_pipeline_feature_config() -> dict[str, Any]:
             milestones=[milestone.model_copy(deep=True) for milestone in DEFAULT_JOURNEY_MILESTONES],
         ),
         analytics=AnalyticsFeatureConfig(
-            funnel_stage_keys=list(DEFAULT_ANALYTICS_FUNNEL_STAGE_KEYS)
+            funnel_stage_keys=list(DEFAULT_ANALYTICS_FUNNEL_STAGE_KEYS),
+            performance_stage_keys=list(DEFAULT_ANALYTICS_PERFORMANCE_STAGE_KEYS),
+            qualification_stage_key=DEFAULT_ANALYTICS_QUALIFICATION_STAGE_KEY,
+            conversion_stage_key=DEFAULT_ANALYTICS_CONVERSION_STAGE_KEY,
         ),
         role_visibility={
             role: rule.model_copy(deep=True) for role, rule in DEFAULT_ROLE_VISIBILITY.items()

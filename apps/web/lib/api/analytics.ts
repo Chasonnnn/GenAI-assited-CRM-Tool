@@ -10,8 +10,9 @@ import type { JsonObject } from '../types/json';
 export interface AnalyticsSummary {
     total_surrogates: number;
     new_this_period: number;
-    pre_qualified_rate: number;
-    avg_time_to_pre_qualified_hours: number | null;
+    qualification_rate: number;
+    qualification_stage_key: string | null;
+    avg_time_to_qualification_hours: number | null;
 }
 
 export interface StatusCount {
@@ -34,10 +35,12 @@ export interface TrendPoint {
 
 export interface MetaPerformance {
     leads_received: number;
-    leads_pre_qualified: number;
+    leads_qualified: number;
     leads_converted: number;
-    pre_qualification_rate: number;
+    qualified_rate: number;
+    qualification_stage_key: string | null;
     conversion_rate: number;
+    conversion_stage_key: string | null;
     avg_time_to_convert_hours: number | null;
 }
 
@@ -245,33 +248,28 @@ export async function getActivityFeed(params: ActivityFeedParams = {}): Promise<
 }
 
 // Performance by User types
+export interface PerformanceStageColumn {
+    stage_key: string;
+    label: string;
+    color: string;
+    order: number;
+}
+
 export interface UserPerformanceData {
     user_id: string;
     user_name: string;
     total_surrogates: number;
     archived_count: number;
-    contacted: number;
-    pre_qualified: number;
-    ready_to_match: number;
-    matched: number;
-    application_submitted: number;
-    on_hold: number;
-    lost: number;
+    stage_counts: Record<string, number>;
     conversion_rate: number;
     avg_days_to_match: number | null;
-    avg_days_to_application_submitted: number | null;
+    avg_days_to_conversion: number | null;
 }
 
 export interface UnassignedPerformanceData {
     total_surrogates: number;
     archived_count: number;
-    contacted: number;
-    pre_qualified: number;
-    ready_to_match: number;
-    matched: number;
-    application_submitted: number;
-    on_hold: number;
-    lost: number;
+    stage_counts: Record<string, number>;
 }
 
 export interface PerformanceByUserResponse {
@@ -280,6 +278,9 @@ export interface PerformanceByUserResponse {
     mode: 'cohort' | 'activity';
     as_of: string;
     pipeline_id: string | null;
+    columns: PerformanceStageColumn[];
+    match_stage_key: string | null;
+    conversion_stage_key: string | null;
     data: UserPerformanceData[];
     unassigned: UnassignedPerformanceData;
 }
@@ -411,9 +412,9 @@ export interface FormPerformance {
     mapping_status: string;
     lead_count: number;
     surrogate_count: number;
-    pre_qualified_count: number;
+    qualified_count: number;
     conversion_rate: number;
-    pre_qualified_rate: number;
+    qualified_rate: number;
 }
 
 export interface MetaPlatformBreakdownItem {

@@ -3,37 +3,40 @@ import { render, screen, within } from "@testing-library/react"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
 
 describe("TeamPerformanceTable", () => {
-    it("renders a separate On-Hold column alongside Lost", () => {
+    const columns = [
+        { stage_key: "contacted", label: "Contacted", color: "#10B981", order: 1 },
+        { stage_key: "on_hold", label: "On-Hold", color: "#6B7280", order: 2 },
+        { stage_key: "lost", label: "Lost", color: "#EF4444", order: 3 },
+    ]
+
+    it("renders dynamic stage columns from the analytics response", () => {
         render(
             <TeamPerformanceTable
+                columns={columns}
                 data={[
                     {
                         user_id: "u1",
                         user_name: "Alex Case Manager",
                         total_surrogates: 12,
                         archived_count: 1,
-                        contacted: 8,
-                        pre_qualified: 6,
-                        ready_to_match: 4,
-                        matched: 2,
-                        application_submitted: 5,
-                        on_hold: 3,
-                        lost: 1,
+                        stage_counts: {
+                            contacted: 8,
+                            on_hold: 3,
+                            lost: 1,
+                        },
                         conversion_rate: 41,
                         avg_days_to_match: 12.4,
-                        avg_days_to_application_submitted: 9.5,
+                        avg_days_to_conversion: 9.5,
                     },
                 ]}
                 unassigned={{
                     total_surrogates: 2,
                     archived_count: 0,
-                    contacted: 1,
-                    pre_qualified: 0,
-                    ready_to_match: 0,
-                    matched: 0,
-                    application_submitted: 0,
-                    on_hold: 1,
-                    lost: 0,
+                    stage_counts: {
+                        contacted: 1,
+                        on_hold: 1,
+                        lost: 0,
+                    },
                 }}
             />
         )
@@ -48,34 +51,31 @@ describe("TeamPerformanceTable", () => {
     it("renders a mobile-friendly summary view for each team member", () => {
         render(
             <TeamPerformanceTable
+                columns={columns}
                 data={[
                     {
                         user_id: "u1",
                         user_name: "Alex Case Manager",
                         total_surrogates: 12,
                         archived_count: 1,
-                        contacted: 8,
-                        pre_qualified: 6,
-                        ready_to_match: 4,
-                        matched: 2,
-                        application_submitted: 5,
-                        on_hold: 3,
-                        lost: 1,
+                        stage_counts: {
+                            contacted: 8,
+                            on_hold: 3,
+                            lost: 1,
+                        },
                         conversion_rate: 41,
                         avg_days_to_match: 12.4,
-                        avg_days_to_application_submitted: 9.5,
+                        avg_days_to_conversion: 9.5,
                     },
                 ]}
                 unassigned={{
                     total_surrogates: 2,
                     archived_count: 0,
-                    contacted: 1,
-                    pre_qualified: 0,
-                    ready_to_match: 0,
-                    matched: 0,
-                    application_submitted: 0,
-                    on_hold: 1,
-                    lost: 0,
+                    stage_counts: {
+                        contacted: 1,
+                        on_hold: 1,
+                        lost: 0,
+                    },
                 }}
             />,
         )

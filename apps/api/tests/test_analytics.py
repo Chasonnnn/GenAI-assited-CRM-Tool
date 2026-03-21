@@ -237,7 +237,8 @@ class TestAnalyticsSummary:
         data = response.json()
         assert "total_surrogates" in data
         assert "new_this_period" in data
-        assert "pre_qualified_rate" in data
+        assert "qualification_rate" in data
+        assert "qualification_stage_key" in data
         assert data["total_surrogates"] >= 0
 
     @pytest.mark.asyncio
@@ -426,9 +427,11 @@ class TestMetaPerformance:
 
         data = response.json()
         assert "leads_received" in data
-        assert "leads_pre_qualified" in data
+        assert "leads_qualified" in data
         assert "leads_converted" in data
-        assert "pre_qualification_rate" in data
+        assert "qualified_rate" in data
+        assert "qualification_stage_key" in data
+        assert "conversion_stage_key" in data
         assert "conversion_rate" in data
         assert "avg_time_to_convert_hours" in data
 
@@ -440,9 +443,9 @@ class TestMetaPerformance:
 
         data = response.json()
         assert data["leads_received"] == 4
-        assert data["leads_pre_qualified"] == 3
+        assert data["leads_qualified"] == 3
         assert data["leads_converted"] == 2
-        assert data["pre_qualification_rate"] >= 0
+        assert data["qualified_rate"] >= 0
         assert data["conversion_rate"] >= 0
 
     @pytest.mark.asyncio
@@ -873,12 +876,15 @@ class TestPerformanceByUser:
         assert "to_date" in data
         assert "mode" in data
         assert "as_of" in data
+        assert "columns" in data
+        assert "conversion_stage_key" in data
         assert "data" in data
         assert "unassigned" in data
         assert data["mode"] == "cohort"
         assert isinstance(data["data"], list)
-        assert "on_hold" in data["data"][0]
-        assert "on_hold" in data["unassigned"]
+        assert any(column["stage_key"] == "on_hold" for column in data["columns"])
+        assert "stage_counts" in data["data"][0]
+        assert "stage_counts" in data["unassigned"]
 
     @pytest.mark.asyncio
     async def test_performance_user_metrics(self, authed_client, performance_cases, test_user):
@@ -895,11 +901,11 @@ class TestPerformanceByUser:
 
         assert user_data is not None
         assert user_data["total_surrogates"] == 4
-        assert user_data["contacted"] == 4  # All 4 reached contacted
-        assert user_data["pre_qualified"] == 4  # All 4 reached pre-qualified
-        assert user_data["application_submitted"] == 2  # 2 reached application_submitted
-        assert user_data["lost"] == 1  # 1 lost (without application_submitted)
-        assert user_data["on_hold"] == 1  # 1 paused separately from lost
+        assert user_data["stage_counts"]["contacted"] == 4  # All 4 reached contacted
+        assert user_data["stage_counts"]["pre_qualified"] == 4  # All 4 reached pre-qualified
+        assert user_data["stage_counts"]["application_submitted"] == 2
+        assert user_data["stage_counts"]["lost"] == 1
+        assert user_data["stage_counts"]["on_hold"] == 1
 
     @pytest.mark.asyncio
     async def test_lost_excludes_application_submitted(
@@ -919,8 +925,8 @@ class TestPerformanceByUser:
         assert user2_data is not None
         assert user2_data["total_surrogates"] == 2
         # Case that went application_submitted -> lost should NOT count as lost
-        assert user2_data["lost"] == 0  # The lost case had also reached application_submitted
-        assert user2_data["application_submitted"] == 1
+        assert user2_data["stage_counts"]["lost"] == 0
+        assert user2_data["stage_counts"]["application_submitted"] == 1
 
     @pytest.mark.asyncio
     async def test_unassigned_bucket(self, authed_client, performance_cases):
@@ -931,7 +937,7 @@ class TestPerformanceByUser:
         data = response.json()
         unassigned = data["unassigned"]
         assert unassigned["total_surrogates"] == 1
-        assert unassigned["on_hold"] == 0
+        assert unassigned["stage_counts"]["on_hold"] == 0
 
     @pytest.mark.asyncio
     async def test_conversion_rate_calculation(self, authed_client, performance_cases, test_user):

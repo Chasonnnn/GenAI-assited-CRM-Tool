@@ -77,6 +77,16 @@ def stage_has_capability(
     return bool(get_stage_semantics(stage).capabilities.model_dump().get(capability))
 
 
+def get_first_active_stage_with_capability(
+    snapshot: PipelineSemanticsSnapshot,
+    capability: StageCapabilityKey,
+) -> PipelineSemanticsStageSnapshot | None:
+    for stage in snapshot.stages:
+        if stage.is_active and stage.semantics.capabilities.model_dump().get(capability):
+            return stage
+    return None
+
+
 def get_stage_integration_bucket(stage: PipelineStage | dict[str, Any] | None) -> str:
     return get_stage_semantics(stage).integration_bucket
 

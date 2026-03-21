@@ -59,7 +59,7 @@ type AssigneeChartDatum = {
 
 type MetaPerformance = {
     leads_received?: number | null
-    leads_pre_qualified?: number | null
+    leads_qualified?: number | null
     leads_converted?: number | null
     avg_time_to_convert_hours?: number | null
     conversion_rate?: number | null
@@ -296,19 +296,19 @@ export function ReportsChartsGrid({
                                 <Pie
                                     data={[
                                         {
-                                            name: "Not Pre-Qualified",
+                                            name: "Not Qualified",
                                             value: Math.max(
                                                 0,
                                                 (metaPerf?.leads_received ?? 0) -
-                                                    (metaPerf?.leads_pre_qualified ?? 0)
+                                                    (metaPerf?.leads_qualified ?? 0)
                                             ),
                                             fill: "#94a3b8",
                                         },
                                         {
-                                            name: "Pre-Qualified Only",
+                                            name: "Qualified Only",
                                             value: Math.max(
                                                 0,
-                                                (metaPerf?.leads_pre_qualified ?? 0) -
+                                                (metaPerf?.leads_qualified ?? 0) -
                                                     (metaPerf?.leads_converted ?? 0)
                                             ),
                                             fill: "#3b82f6",

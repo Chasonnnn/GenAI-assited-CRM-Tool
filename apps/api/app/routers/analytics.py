@@ -36,8 +36,9 @@ router = APIRouter(
 class AnalyticsSummary(BaseModel):
     total_surrogates: int
     new_this_period: int
-    pre_qualified_rate: float
-    avg_time_to_pre_qualified_hours: Optional[float]
+    qualification_rate: float
+    qualification_stage_key: str | None = None
+    avg_time_to_qualification_hours: Optional[float]
 
 
 class StatusCount(BaseModel):
@@ -60,16 +61,25 @@ class TrendPoint(BaseModel):
 
 class MetaPerformance(BaseModel):
     leads_received: int
-    leads_pre_qualified: int
+    leads_qualified: int
     leads_converted: int
-    pre_qualification_rate: float
+    qualified_rate: float
+    qualification_stage_key: str | None = None
     conversion_rate: float
+    conversion_stage_key: str | None = None
     avg_time_to_convert_hours: Optional[float]
 
 
 # =============================================================================
 # Performance by User Schemas
 # =============================================================================
+
+
+class PerformanceStageColumn(BaseModel):
+    stage_key: str
+    label: str
+    color: str
+    order: int
 
 
 class UserPerformanceData(BaseModel):
@@ -79,16 +89,10 @@ class UserPerformanceData(BaseModel):
     user_name: str
     total_surrogates: int
     archived_count: int
-    contacted: int
-    pre_qualified: int
-    ready_to_match: int
-    matched: int
-    application_submitted: int
-    on_hold: int
-    lost: int
+    stage_counts: dict[str, int]
     conversion_rate: float
     avg_days_to_match: Optional[float]
-    avg_days_to_application_submitted: Optional[float]
+    avg_days_to_conversion: Optional[float]
 
 
 class UnassignedPerformanceData(BaseModel):
@@ -96,13 +100,7 @@ class UnassignedPerformanceData(BaseModel):
 
     total_surrogates: int
     archived_count: int
-    contacted: int
-    pre_qualified: int
-    ready_to_match: int
-    matched: int
-    application_submitted: int
-    on_hold: int
-    lost: int
+    stage_counts: dict[str, int]
 
 
 class PerformanceByUserResponse(BaseModel):
@@ -113,6 +111,9 @@ class PerformanceByUserResponse(BaseModel):
     mode: Literal["cohort", "activity"]
     as_of: str
     pipeline_id: Optional[str]
+    columns: list[PerformanceStageColumn]
+    match_stage_key: str | None = None
+    conversion_stage_key: str | None = None
     data: list[UserPerformanceData]
     unassigned: UnassignedPerformanceData
 
@@ -241,8 +242,8 @@ def get_meta_performance(
     """
     Get Meta Lead Ads performance metrics.
 
-    Pre-qualified = Lead's surrogate reached the "Pre-Qualified" stage or later.
-    Converted = Lead's surrogate reached the "Application Submitted" stage or later.
+    Qualified = Lead's surrogate reached the configured qualification stage or later.
+    Converted = Lead's surrogate reached the configured conversion stage or later.
     """
     from app.services import analytics_service
 
@@ -321,9 +322,9 @@ class FormPerformanceItem(BaseModel):
     mapping_status: str
     lead_count: int
     surrogate_count: int
-    pre_qualified_count: int
+    qualified_count: int
     conversion_rate: float
-    pre_qualified_rate: float
+    qualified_rate: float
 
 
 class MetaPlatformBreakdownItem(BaseModel):
@@ -728,11 +729,11 @@ def get_performance_by_user(
     **Metrics:**
     - `total_surrogates`: Number of surrogates (cohort: created in range; activity: with transitions in range)
     - `archived_count`: Cases that are archived
-    - `contacted/pre_qualified/ready_to_match/matched/application_submitted`: Surrogates that reached each stage
-    - `lost`: Surrogates that reached lost stage AND never reached application_submitted
-    - `conversion_rate`: (application_submitted / total_surrogates) * 100
+    - `columns`: Ordered performance stages from the pipeline analytics config
+    - `stage_counts`: Per-stage counts keyed by immutable `stage_key`
+    - `conversion_rate`: (conversion_stage_count / total_surrogates) * 100
     - `avg_days_to_match`: Average days from creation to first match transition
-    - `avg_days_to_application_submitted`: Average days from creation to first application_submitted transition
+    - `avg_days_to_conversion`: Average days from creation to first conversion-stage transition
 
     **Credit Model:**
     All metrics are attributed to the current surrogate owner. Surrogates without an owner
@@ -753,6 +754,9 @@ def get_performance_by_user(
         mode=data["mode"],
         as_of=data["as_of"],
         pipeline_id=data.get("pipeline_id"),
+        columns=[PerformanceStageColumn(**column) for column in data.get("columns", [])],
+        match_stage_key=data.get("match_stage_key"),
+        conversion_stage_key=data.get("conversion_stage_key"),
         data=[UserPerformanceData(**user) for user in data["data"]],
         unassigned=UnassignedPerformanceData(**data["unassigned"]),
     )

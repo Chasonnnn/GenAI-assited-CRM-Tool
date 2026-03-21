@@ -1512,8 +1512,8 @@ def _generate_analytics_html(
             <div class="metric-label">New This Period</div>
         </div>
         <div class="metric-card">
-            <div class="metric-value">{summary.get("pre_qualified_rate", 0):.1f}%</div>
-            <div class="metric-label">Pre-Qualified Rate</div>
+            <div class="metric-value">{summary.get("qualification_rate", 0):.1f}%</div>
+            <div class="metric-label">Qualification Rate</div>
         </div>
         <div class="metric-card">
             <div class="metric-value">{summary.get("pending_tasks", 0)}</div>
@@ -1604,17 +1604,17 @@ def _generate_analytics_html(
     meta_section = ""
     if meta_performance and meta_performance.get("leads_received", 0) > 0:
         leads_received = meta_performance.get("leads_received", 0)
-        leads_pre_qualified = meta_performance.get("leads_pre_qualified", 0)
+        leads_qualified = meta_performance.get("leads_qualified", 0)
         leads_converted = meta_performance.get("leads_converted", 0)
         conv_rate = meta_performance.get("conversion_rate", 0)
 
-        # Build pie chart data like frontend (Not Pre-Qualified, Pre-Qualified Only, Converted)
-        not_pre_qualified = max(0, leads_received - leads_pre_qualified)
-        pre_qualified_only = max(0, leads_pre_qualified - leads_converted)
+        # Build pie chart data like frontend (Not Qualified, Qualified Only, Converted)
+        not_qualified = max(0, leads_received - leads_qualified)
+        qualified_only = max(0, leads_qualified - leads_converted)
 
         meta_pie_data = [
-            {"name": "Not Pre-Qualified", "value": not_pre_qualified},
-            {"name": "Pre-Qualified Only", "value": pre_qualified_only},
+            {"name": "Not Qualified", "value": not_qualified},
+            {"name": "Qualified Only", "value": qualified_only},
             {"name": "Converted", "value": leads_converted},
         ]
         # Filter out zero values
@@ -1658,48 +1658,50 @@ def _generate_analytics_html(
     # Individual Performance Table section
     performance_section = ""
     if performance_data and performance_data.get("data"):
+        columns = performance_data.get("columns") or []
+        column_headers = "".join(
+            f"<th class=\"text-center\">{html.escape(str(column.get('label', column.get('stage_key', 'Stage'))))}</th>"
+            for column in columns
+        )
         perf_rows = ""
         for user in performance_data["data"]:
             user_name = html.escape(user.get("user_name", "Unknown"))
             total = user.get("total_surrogates", 0)
-            contacted = user.get("contacted", 0)
-            pre_qualified = user.get("pre_qualified", 0)
-            matched = user.get("matched", 0)
-            application_submitted = user.get("application_submitted", 0)
-            lost = user.get("lost", 0)
+            stage_counts = user.get("stage_counts", {}) or {}
+            stage_cells = "".join(
+                f"<td class=\"text-center\">{int(stage_counts.get(column.get('stage_key'), 0))}</td>"
+                for column in columns
+            )
             conv_rate = user.get("conversion_rate", 0)
             avg_match = user.get("avg_days_to_match")
             avg_match_str = f"{avg_match:.1f}" if avg_match else "—"
-            avg_apply = user.get("avg_days_to_application_submitted")
-            avg_apply_str = f"{avg_apply:.1f}" if avg_apply else "—"
+            avg_conversion = user.get("avg_days_to_conversion")
+            avg_conversion_str = f"{avg_conversion:.1f}" if avg_conversion else "—"
 
             perf_rows += f"""
             <tr>
                 <td>{user_name}</td>
                 <td class="text-center">{total}</td>
-                <td class="text-center">{contacted}</td>
-                <td class="text-center">{pre_qualified}</td>
-                <td class="text-center">{matched}</td>
-                <td class="text-center">{application_submitted}</td>
-                <td class="text-center">{lost}</td>
+                {stage_cells}
                 <td class="text-center">{conv_rate:.1f}%</td>
                 <td class="text-center">{avg_match_str}</td>
-                <td class="text-center">{avg_apply_str}</td>
+                <td class="text-center">{avg_conversion_str}</td>
             </tr>
             """
 
         # Add unassigned row if there are unassigned surrogates
         unassigned = performance_data.get("unassigned", {})
         if unassigned.get("total_surrogates", 0) > 0:
+            unassigned_counts = unassigned.get("stage_counts", {}) or {}
+            unassigned_cells = "".join(
+                f"<td class=\"text-center\">{int(unassigned_counts.get(column.get('stage_key'), 0))}</td>"
+                for column in columns
+            )
             perf_rows += f"""
             <tr class="unassigned-row">
                 <td>Unassigned</td>
                 <td class="text-center">{unassigned.get("total_surrogates", 0)}</td>
-                <td class="text-center">{unassigned.get("contacted", 0)}</td>
-                <td class="text-center">{unassigned.get("pre_qualified", 0)}</td>
-                <td class="text-center">{unassigned.get("matched", 0)}</td>
-                <td class="text-center">{unassigned.get("application_submitted", 0)}</td>
-                <td class="text-center">{unassigned.get("lost", 0)}</td>
+                {unassigned_cells}
                 <td class="text-center">—</td>
                 <td class="text-center">—</td>
                 <td class="text-center">—</td>
@@ -1714,14 +1716,10 @@ def _generate_analytics_html(
                     <tr>
                         <th>Team Member</th>
                         <th class="text-center">Total</th>
-                        <th class="text-center">Contacted</th>
-                        <th class="text-center">Pre-Qualified</th>
-                        <th class="text-center">Matched</th>
-                        <th class="text-center">Application Submitted</th>
-                        <th class="text-center">Lost</th>
+                        {column_headers}
                         <th class="text-center">Conv %</th>
                         <th class="text-center">Days to Match</th>
-                        <th class="text-center">Days to Apply</th>
+                        <th class="text-center">Days to Conversion</th>
                     </tr>
                 </thead>
                 <tbody>

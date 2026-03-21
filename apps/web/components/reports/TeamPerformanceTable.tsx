@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useMemo, useState } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     Table,
@@ -10,38 +12,43 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Loader2Icon, ArrowUpDownIcon, ArrowUpIcon, ArrowDownIcon, UsersIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import type { UserPerformanceData, UnassignedPerformanceData } from "@/lib/api/analytics"
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, Loader2Icon, UsersIcon } from "lucide-react"
+import type {
+    PerformanceStageColumn,
+    UnassignedPerformanceData,
+    UserPerformanceData,
+} from "@/lib/api/analytics"
 import { cn } from "@/lib/utils"
 
 interface TeamPerformanceTableProps {
+    columns: PerformanceStageColumn[]
     data: UserPerformanceData[] | undefined
     unassigned: UnassignedPerformanceData | undefined
+    conversionStageKey?: string | null
     isLoading?: boolean
     isError?: boolean
     title?: string
     asOf?: string
 }
 
-type SortKey = "user_name" | "total_surrogates" | "contacted" | "pre_qualified" | "ready_to_match" | "matched" | "application_submitted" | "on_hold" | "lost" | "conversion_rate" | "avg_days_to_match" | "avg_days_to_application_submitted"
+type SortKey =
+    | "user_name"
+    | "total_surrogates"
+    | "conversion_rate"
+    | "avg_days_to_match"
+    | "avg_days_to_conversion"
+    | `stage:${string}`
 type SortDirection = "asc" | "desc"
+
 type PerformanceSummaryEntry = {
     id: string
     name: string
     archivedCount: number
     totalSurrogates: number
-    contacted: number
-    preQualified: number
-    readyToMatch: number
-    matched: number
-    applicationSubmitted: number
-    onHold: number
-    lost: number
+    stageCounts: Record<string, number>
     conversionRate: number | null
     avgDaysToMatch: number | null
-    avgDaysToApplicationSubmitted: number | null
+    avgDaysToConversion: number | null
     muted?: boolean
 }
 
@@ -62,7 +69,20 @@ function SortDirectionIcon({
         : <ArrowDownIcon className="ml-1 size-3" />
 }
 
+function getSortableValue(user: UserPerformanceData, sortKey: SortKey): number | string {
+    if (sortKey === "user_name") return user.user_name
+    if (sortKey === "total_surrogates") return user.total_surrogates
+    if (sortKey === "conversion_rate") return user.conversion_rate
+    if (sortKey === "avg_days_to_match") return user.avg_days_to_match ?? -Infinity
+    if (sortKey === "avg_days_to_conversion") return user.avg_days_to_conversion ?? -Infinity
+    if (sortKey.startsWith("stage:")) {
+        return user.stage_counts[sortKey.slice(6)] ?? 0
+    }
+    return 0
+}
+
 export function TeamPerformanceTable({
+    columns,
     data,
     unassigned,
     isLoading = false,
@@ -76,33 +96,27 @@ export function TeamPerformanceTable({
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
             setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-        } else {
-            setSortKey(key)
-            setSortDirection("desc")
+            return
         }
+        setSortKey(key)
+        setSortDirection("desc")
     }
 
     const sortedData = useMemo(() => {
         if (!data) return []
         return [...data].sort((a, b) => {
-            let aVal = a[sortKey]
-            let bVal = b[sortKey]
-
-            // Handle null values
-            if (aVal === null) aVal = -Infinity
-            if (bVal === null) bVal = -Infinity
-
-            if (typeof aVal === "string" && typeof bVal === "string") {
+            const aValue = getSortableValue(a, sortKey)
+            const bValue = getSortableValue(b, sortKey)
+            if (typeof aValue === "string" && typeof bValue === "string") {
                 return sortDirection === "asc"
-                    ? aVal.localeCompare(bVal)
-                    : bVal.localeCompare(aVal)
+                    ? aValue.localeCompare(bValue)
+                    : bValue.localeCompare(aValue)
             }
-
-            const numA = Number(aVal)
-            const numB = Number(bVal)
-            return sortDirection === "asc" ? numA - numB : numB - numA
+            return sortDirection === "asc"
+                ? Number(aValue) - Number(bValue)
+                : Number(bValue) - Number(aValue)
         })
-    }, [data, sortKey, sortDirection])
+    }, [data, sortDirection, sortKey])
 
     const mobileSummaryData = useMemo<PerformanceSummaryEntry[]>(() => {
         const entries: PerformanceSummaryEntry[] = sortedData.map((user) => ({
@@ -110,16 +124,10 @@ export function TeamPerformanceTable({
             name: user.user_name,
             archivedCount: user.archived_count,
             totalSurrogates: user.total_surrogates,
-            contacted: user.contacted,
-            preQualified: user.pre_qualified,
-            readyToMatch: user.ready_to_match,
-            matched: user.matched,
-            applicationSubmitted: user.application_submitted,
-            onHold: user.on_hold,
-            lost: user.lost,
+            stageCounts: user.stage_counts,
             conversionRate: user.conversion_rate,
             avgDaysToMatch: user.avg_days_to_match,
-            avgDaysToApplicationSubmitted: user.avg_days_to_application_submitted,
+            avgDaysToConversion: user.avg_days_to_conversion,
         }))
 
         if (unassigned && unassigned.total_surrogates > 0) {
@@ -128,22 +136,18 @@ export function TeamPerformanceTable({
                 name: "Unassigned",
                 archivedCount: unassigned.archived_count,
                 totalSurrogates: unassigned.total_surrogates,
-                contacted: unassigned.contacted,
-                preQualified: unassigned.pre_qualified,
-                readyToMatch: unassigned.ready_to_match,
-                matched: unassigned.matched,
-                applicationSubmitted: unassigned.application_submitted,
-                onHold: unassigned.on_hold,
-                lost: unassigned.lost,
+                stageCounts: unassigned.stage_counts,
                 conversionRate: null,
                 avgDaysToMatch: null,
-                avgDaysToApplicationSubmitted: null,
+                avgDaysToConversion: null,
                 muted: true,
             })
         }
 
         return entries
     }, [sortedData, unassigned])
+
+    const stageKeys = columns.map((column) => column.stage_key)
 
     if (isLoading) {
         return (
@@ -199,16 +203,8 @@ export function TeamPerformanceTable({
         )
     }
 
-    const formatDays = (value: number | null) => {
-        if (value === null) return "-"
-        return `${value.toFixed(1)}d`
-    }
-
-    const formatPercent = (value: number | null) => {
-        if (value === null) return "-"
-        return `${value}%`
-    }
-
+    const formatDays = (value: number | null) => (value === null ? "-" : `${value.toFixed(1)}d`)
+    const formatPercent = (value: number | null) => (value === null ? "-" : `${value}%`)
     const conversionBadgeClass = (value: number | null) =>
         cn(
             value === null && "border-border bg-muted text-muted-foreground hover:bg-muted",
@@ -226,11 +222,11 @@ export function TeamPerformanceTable({
                             <UsersIcon className="size-5" />
                             {title}
                         </CardTitle>
-                        {asOf && (
+                        {asOf ? (
                             <CardDescription>
                                 Data as of {new Date(asOf).toLocaleString()}
                             </CardDescription>
-                        )}
+                        ) : null}
                     </div>
                 </div>
             </CardHeader>
@@ -253,293 +249,193 @@ export function TeamPerformanceTable({
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <h3 className="truncate font-semibold">{entry.name}</h3>
-                                        {entry.archivedCount > 0 && (
+                                        {entry.archivedCount > 0 ? (
                                             <Badge variant="outline" className="text-xs">
                                                 {entry.archivedCount} archived
                                             </Badge>
-                                        )}
+                                        ) : null}
                                     </div>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {entry.totalSurrogates} surrogates
                                     </p>
                                 </div>
-                                <Badge
-                                    variant="outline"
-                                    className={conversionBadgeClass(entry.conversionRate)}
-                                >
+                                <Badge variant="outline" className={conversionBadgeClass(entry.conversionRate)}>
                                     {formatPercent(entry.conversionRate)}
                                 </Badge>
                             </div>
 
                             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                                {[
-                                    { label: "Contacted", value: entry.contacted },
-                                    { label: "Pre-qualified", value: entry.preQualified },
-                                    { label: "Ready to match", value: entry.readyToMatch },
-                                    { label: "Matched", value: entry.matched },
-                                    { label: "Application submitted", value: entry.applicationSubmitted, className: "text-green-600" },
-                                    { label: "On-Hold", value: entry.onHold, className: entry.onHold > 0 ? "text-rose-700" : "" },
-                                    { label: "Lost", value: entry.lost, className: entry.lost > 0 ? "text-red-600" : "" },
-                                    { label: "Match conversion", value: formatPercent(entry.conversionRate) },
-                                    { label: "Avg to match", value: formatDays(entry.avgDaysToMatch) },
-                                    { label: "Avg to application", value: formatDays(entry.avgDaysToApplicationSubmitted) },
-                                ].map((metric) => (
-                                    <div key={metric.label} className="rounded-xl bg-muted/40 p-3">
+                                {columns.map((column) => (
+                                    <div key={column.stage_key} className="rounded-xl bg-muted/40 p-3">
                                         <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                            {metric.label}
+                                            {column.label}
                                         </dt>
-                                        <dd className={cn("mt-1 text-base font-semibold", metric.className)}>
-                                            {metric.value}
+                                        <dd className="mt-1 text-base font-semibold">
+                                            {entry.stageCounts[column.stage_key] ?? 0}
                                         </dd>
                                     </div>
                                 ))}
+                                <div className="rounded-xl bg-muted/40 p-3">
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                        Match conversion
+                                    </dt>
+                                    <dd className="mt-1 text-base font-semibold">
+                                        {formatPercent(entry.conversionRate)}
+                                    </dd>
+                                </div>
+                                <div className="rounded-xl bg-muted/40 p-3">
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                        Avg to match
+                                    </dt>
+                                    <dd className="mt-1 text-base font-semibold">
+                                        {formatDays(entry.avgDaysToMatch)}
+                                    </dd>
+                                </div>
+                                <div className="rounded-xl bg-muted/40 p-3">
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                        Avg to conversion
+                                    </dt>
+                                    <dd className="mt-1 text-base font-semibold">
+                                        {formatDays(entry.avgDaysToConversion)}
+                                    </dd>
+                                </div>
                             </dl>
                         </article>
                     ))}
                 </div>
 
                 <div className="hidden overflow-x-auto md:block">
-                <Table className="min-w-[980px]">
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 -ml-3 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("user_name")}
-                                >
-                                    Team Member
-                                    <SortDirectionIcon columnKey="user_name" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("total_surrogates")}
-                                >
-                                    Surrogates
-                                    <SortDirectionIcon columnKey="total_surrogates" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("contacted")}
-                                >
-                                    Contacted
-                                    <SortDirectionIcon columnKey="contacted" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("pre_qualified")}
-                                >
-                                    Pre-Qualified
-                                    <SortDirectionIcon columnKey="pre_qualified" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("ready_to_match")}
-                                >
-                                    Ready to Match
-                                    <SortDirectionIcon columnKey="ready_to_match" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("matched")}
-                                >
-                                    Matched
-                                    <SortDirectionIcon columnKey="matched" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("application_submitted")}
-                                >
-                                    Application Submitted
-                                    <SortDirectionIcon columnKey="application_submitted" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("on_hold")}
-                                >
-                                    On-Hold
-                                    <SortDirectionIcon columnKey="on_hold" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("lost")}
-                                >
-                                    Lost
-                                    <SortDirectionIcon columnKey="lost" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("conversion_rate")}
-                                >
-                                    Conv. Rate
-                                    <SortDirectionIcon columnKey="conversion_rate" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("avg_days_to_match")}
-                                >
-                                    Avg to Match
-                                    <SortDirectionIcon columnKey="avg_days_to_match" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                            <TableHead className="text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 hover:bg-transparent"
-                                    onClick={() => handleSort("avg_days_to_application_submitted")}
-                                >
-                                    Avg to Application Submitted
-                                    <SortDirectionIcon columnKey="avg_days_to_application_submitted" sortKey={sortKey} sortDirection={sortDirection} />
-                                </Button>
-                            </TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {sortedData.map((user) => (
-                            <TableRow key={user.user_id}>
-                                <TableCell className="font-medium">
-                                    {user.user_name}
-                                    {user.archived_count > 0 && (
-                                        <Badge variant="outline" className="ml-2 text-xs">
-                                            {user.archived_count} archived
-                                        </Badge>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-center font-medium">
-                                    {user.total_surrogates}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    {user.contacted}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    {user.pre_qualified}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    {user.ready_to_match}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    {user.matched}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <span className="text-green-600 font-medium">
-                                        {user.application_submitted}
-                                    </span>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <span className={cn(
-                                        user.on_hold > 0 && "text-rose-700"
-                                    )}>
-                                        {user.on_hold}
-                                    </span>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <span className={cn(
-                                        user.lost > 0 && "text-red-600"
-                                    )}>
-                                        {user.lost}
-                                    </span>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <Badge
-                                        variant="outline"
-                                        className={conversionBadgeClass(user.conversion_rate)}
+                    <Table className="min-w-[980px]">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 -ml-3 px-2 hover:bg-transparent"
+                                        onClick={() => handleSort("user_name")}
                                     >
-                                        {user.conversion_rate}%
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {formatDays(user.avg_days_to_match)}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {formatDays(user.avg_days_to_application_submitted)}
-                                </TableCell>
+                                        Team Member
+                                        <SortDirectionIcon columnKey="user_name" sortKey={sortKey} sortDirection={sortDirection} />
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 hover:bg-transparent"
+                                        onClick={() => handleSort("total_surrogates")}
+                                    >
+                                        Surrogates
+                                        <SortDirectionIcon columnKey="total_surrogates" sortKey={sortKey} sortDirection={sortDirection} />
+                                    </Button>
+                                </TableHead>
+                                {columns.map((column) => {
+                                    const columnKey = `stage:${column.stage_key}` as const
+                                    return (
+                                        <TableHead key={column.stage_key} className="text-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 px-2 hover:bg-transparent"
+                                                onClick={() => handleSort(columnKey)}
+                                            >
+                                                {column.label}
+                                                <SortDirectionIcon columnKey={columnKey} sortKey={sortKey} sortDirection={sortDirection} />
+                                            </Button>
+                                        </TableHead>
+                                    )
+                                })}
+                                <TableHead className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 hover:bg-transparent"
+                                        onClick={() => handleSort("conversion_rate")}
+                                    >
+                                        Conv. Rate
+                                        <SortDirectionIcon columnKey="conversion_rate" sortKey={sortKey} sortDirection={sortDirection} />
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 hover:bg-transparent"
+                                        onClick={() => handleSort("avg_days_to_match")}
+                                    >
+                                        Avg to Match
+                                        <SortDirectionIcon columnKey="avg_days_to_match" sortKey={sortKey} sortDirection={sortDirection} />
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 hover:bg-transparent"
+                                        onClick={() => handleSort("avg_days_to_conversion")}
+                                    >
+                                        Avg to Conversion
+                                        <SortDirectionIcon columnKey="avg_days_to_conversion" sortKey={sortKey} sortDirection={sortDirection} />
+                                    </Button>
+                                </TableHead>
                             </TableRow>
-                        ))}
-
-                        {/* Unassigned row */}
-                        {unassigned && unassigned.total_surrogates > 0 && (
-                            <TableRow className="bg-muted/30">
-                                <TableCell className="font-medium text-muted-foreground">
-                                    Unassigned
-                                    {unassigned.archived_count > 0 && (
-                                        <Badge variant="outline" className="ml-2 text-xs">
-                                            {unassigned.archived_count} archived
+                        </TableHeader>
+                        <TableBody>
+                            {sortedData.map((user) => (
+                                <TableRow key={user.user_id}>
+                                    <TableCell className="font-medium">
+                                        {user.user_name}
+                                        {user.archived_count > 0 ? (
+                                            <Badge variant="outline" className="ml-2 text-xs">
+                                                {user.archived_count} archived
+                                            </Badge>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell className="text-center font-medium">{user.total_surrogates}</TableCell>
+                                    {stageKeys.map((stageKey) => (
+                                        <TableCell key={stageKey} className="text-center">
+                                            {user.stage_counts[stageKey] ?? 0}
+                                        </TableCell>
+                                    ))}
+                                    <TableCell className="text-center">
+                                        <Badge variant="outline" className={conversionBadgeClass(user.conversion_rate)}>
+                                            {user.conversion_rate}%
                                         </Badge>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-center font-medium text-muted-foreground">
-                                    {unassigned.total_surrogates}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.contacted}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.pre_qualified}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.ready_to_match}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.matched}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.application_submitted}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.on_hold}
-                                </TableCell>
-                                <TableCell className="text-center text-muted-foreground">
-                                    {unassigned.lost}
-                                </TableCell>
-                                <TableCell className="text-center">-</TableCell>
-                                <TableCell className="text-center">-</TableCell>
-                                <TableCell className="text-center">-</TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                                    </TableCell>
+                                    <TableCell className="text-center text-muted-foreground">
+                                        {formatDays(user.avg_days_to_match)}
+                                    </TableCell>
+                                    <TableCell className="text-center text-muted-foreground">
+                                        {formatDays(user.avg_days_to_conversion)}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {unassigned && unassigned.total_surrogates > 0 ? (
+                                <TableRow className="bg-muted/30">
+                                    <TableCell className="font-medium text-muted-foreground">
+                                        Unassigned
+                                        {unassigned.archived_count > 0 ? (
+                                            <Badge variant="outline" className="ml-2 text-xs">
+                                                {unassigned.archived_count} archived
+                                            </Badge>
+                                        ) : null}
+                                    </TableCell>
+                                    <TableCell className="text-center font-medium text-muted-foreground">
+                                        {unassigned.total_surrogates}
+                                    </TableCell>
+                                    {stageKeys.map((stageKey) => (
+                                        <TableCell key={stageKey} className="text-center text-muted-foreground">
+                                            {unassigned.stage_counts[stageKey] ?? 0}
+                                        </TableCell>
+                                    ))}
+                                    <TableCell className="text-center">-</TableCell>
+                                    <TableCell className="text-center">-</TableCell>
+                                    <TableCell className="text-center">-</TableCell>
+                                </TableRow>
+                            ) : null}
+                        </TableBody>
+                    </Table>
                 </div>
             </CardContent>
         </Card>

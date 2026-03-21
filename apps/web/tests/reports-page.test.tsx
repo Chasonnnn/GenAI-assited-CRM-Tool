@@ -61,11 +61,32 @@ vi.mock('@/components/ui/date-range-picker', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-analytics', () => ({
-    useAnalyticsSummary: () => ({ data: { total_surrogates: 42, new_this_period: 5, pre_qualified_rate: 10 }, isLoading: false }),
+    useAnalyticsSummary: () => ({
+        data: {
+            total_surrogates: 42,
+            new_this_period: 5,
+            qualification_rate: 10,
+            qualification_stage_key: 'pre_qualified',
+            avg_time_to_qualification_hours: 48,
+        },
+        isLoading: false,
+    }),
     useSurrogatesByStatus: () => ({ data: [{ status: 'new_unread', count: 1 }], isLoading: false }),
     useSurrogatesByAssignee: () => ({ data: [{ user_email: 'alice@example.com', count: 2 }], isLoading: false }),
     useSurrogatesTrend: () => ({ data: [{ date: '2025-01-01', count: 1 }], isLoading: false }),
-    useMetaPerformance: () => ({ data: { conversion_rate: 20, leads_converted: 2, leads_received: 10 }, isLoading: false }),
+    useMetaPerformance: () => ({
+        data: {
+            qualified_rate: 40,
+            qualification_stage_key: 'pre_qualified',
+            conversion_rate: 20,
+            conversion_stage_key: 'application_submitted',
+            leads_qualified: 4,
+            leads_converted: 2,
+            leads_received: 10,
+            avg_time_to_convert_hours: 72,
+        },
+        isLoading: false,
+    }),
     useMetaAdAccounts: () => ({ data: [{ id: 'ad-1', ad_account_name: 'Test Account' }], isLoading: false }),
     useSpendTotals: () => ({
         data: {
@@ -87,7 +108,24 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
     useFunnelCompare: () => ({ data: null, isLoading: false }),
     useSurrogatesByStateCompare: () => ({ data: null, isLoading: false }),
     useCampaigns: () => ({ data: [], isLoading: false }),
-    usePerformanceByUser: () => ({ data: { data: [], unassigned: { total_surrogates: 0 } }, isLoading: false }),
+    usePerformanceByUser: () => ({
+        data: {
+            from_date: '2025-01-01',
+            to_date: '2025-01-31',
+            mode: 'cohort',
+            as_of: '2025-01-31T00:00:00Z',
+            pipeline_id: 'pipeline-1',
+            columns: [
+                { stage_key: 'contacted', label: 'Contacted', color: '#10B981', order: 1 },
+                { stage_key: 'matched', label: 'Matched', color: '#3B82F6', order: 2 },
+            ],
+            match_stage_key: 'matched',
+            conversion_stage_key: 'application_submitted',
+            data: [],
+            unassigned: { total_surrogates: 0, archived_count: 0, stage_counts: {} },
+        },
+        isLoading: false,
+    }),
 }))
 
 describe('ReportsPage', () => {

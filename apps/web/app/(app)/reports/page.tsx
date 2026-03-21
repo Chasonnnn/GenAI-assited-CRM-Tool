@@ -453,7 +453,7 @@ export default function ReportsPage() {
 
                     <Card className="animate-in fade-in-50 duration-500 delay-200">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Pre-Qualified Rate</CardTitle>
+                            <CardTitle className="text-sm font-medium">Qualification Rate</CardTitle>
                             <CheckCircle2Icon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
@@ -466,8 +466,8 @@ export default function ReportsPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="text-2xl font-bold">{summary?.pre_qualified_rate ?? 0}%</div>
-                                    <p className="text-xs text-muted-foreground">Pre-qualified + approved</p>
+                                    <div className="text-2xl font-bold">{summary?.qualification_rate ?? 0}%</div>
+                                    <p className="text-xs text-muted-foreground">Reached the qualification stage or later</p>
                                 </>
                             )}
                         </CardContent>
@@ -489,8 +489,8 @@ export default function ReportsPage() {
                             ) : (
                                 <div className="space-y-1">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Pre-Qualified</span>
-                                        <span className="text-sm font-semibold">{metaPerf?.pre_qualification_rate ?? 0}%</span>
+                                        <span className="text-xs text-muted-foreground">Qualified</span>
+                                        <span className="text-sm font-semibold">{metaPerf?.qualified_rate ?? 0}%</span>
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs text-muted-foreground">Converted</span>
@@ -650,12 +650,19 @@ export default function ReportsPage() {
                             data={performanceData?.data}
                             isLoading={performanceLoading}
                             isError={performanceError}
+                            {...(performanceData?.conversion_stage_key !== undefined
+                                ? { conversionStageKey: performanceData.conversion_stage_key }
+                                : {})}
                         />
                         <TeamPerformanceTable
+                            columns={performanceData?.columns ?? []}
                             data={performanceData?.data}
                             unassigned={performanceData?.unassigned}
                             isLoading={performanceLoading}
                             isError={performanceError}
+                            {...(performanceData?.conversion_stage_key !== undefined
+                                ? { conversionStageKey: performanceData.conversion_stage_key }
+                                : {})}
                             {...(performanceData?.as_of ? { asOf: performanceData.as_of } : {})}
                         />
                     </div>

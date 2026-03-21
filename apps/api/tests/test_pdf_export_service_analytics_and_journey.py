@@ -63,7 +63,7 @@ def test_generate_analytics_html_includes_sections():
         summary={
             "total_surrogates": 12,
             "new_this_period": 5,
-            "pre_qualified_rate": 41.7,
+            "qualification_rate": 41.7,
             "pending_tasks": 2,
             "overdue_tasks": 1,
         },
@@ -72,7 +72,7 @@ def test_generate_analytics_html_includes_sections():
         trend_data=[{"date": "2026-01-01", "count": 2}, {"date": "2026-01-02", "count": 5}],
         meta_performance={
             "leads_received": 12,
-            "leads_pre_qualified": 8,
+            "leads_qualified": 8,
             "leads_converted": 3,
             "conversion_rate": 25.0,
             "avg_time_to_convert_hours": 48,
@@ -82,21 +82,27 @@ def test_generate_analytics_html_includes_sections():
         funnel_data=[{"stage": "New", "count": 12}, {"stage": "Qualified", "count": 8}],
         state_data=[{"state": "CA", "count": 4}],
         performance_data={
+            "columns": [
+                {"stage_key": "contacted", "label": "Contacted"},
+                {"stage_key": "application_submitted", "label": "Application Submitted"},
+                {"stage_key": "lost", "label": "Lost"},
+            ],
+            "conversion_stage_key": "application_submitted",
             "data": [
                 {
                     "user_name": "Owner",
                     "total_surrogates": 10,
-                    "contacted": 9,
-                    "pre_qualified": 7,
-                    "matched": 3,
-                    "application_submitted": 5,
-                    "lost": 1,
+                    "stage_counts": {
+                        "contacted": 9,
+                        "application_submitted": 5,
+                        "lost": 1,
+                    },
                     "conversion_rate": 30,
                     "avg_days_to_match": 10.5,
-                    "avg_days_to_application_submitted": 4.5,
+                    "avg_days_to_conversion": 4.5,
                 }
             ],
-            "unassigned": {"total_surrogates": 0},
+            "unassigned": {"total_surrogates": 0, "stage_counts": {}},
         },
         meta_spend={"total_spend": 2500.0, "cost_per_lead": 33.33},
     )
@@ -118,7 +124,7 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
             "summary": {
                 "total_surrogates": 8,
                 "new_this_period": 3,
-                "pre_qualified_rate": 37.5,
+                "qualification_rate": 37.5,
                 "pending_tasks": 2,
                 "overdue_tasks": 1,
             },
@@ -127,14 +133,14 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
             "trend_data": [{"date": "2026-01-01", "count": 1}, {"date": "2026-01-02", "count": 2}],
             "meta_performance": {
                 "leads_received": 0,
-                "leads_pre_qualified": 0,
+                "leads_qualified": 0,
                 "leads_converted": 0,
                 "conversion_rate": 0,
             },
             "org_name": "Test Org",
             "funnel_data": [],
             "state_data": [],
-            "performance_data": {"data": [], "unassigned": {"total_surrogates": 0}},
+            "performance_data": {"data": [], "columns": [], "unassigned": {"total_surrogates": 0, "stage_counts": {}}},
         },
     )
 

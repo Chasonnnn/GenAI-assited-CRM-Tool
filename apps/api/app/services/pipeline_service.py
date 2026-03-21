@@ -238,6 +238,23 @@ def _build_default_feature_config_for_stages(stage_defs: list[dict]) -> dict:
         for stage_key in feature_config.analytics.funnel_stage_keys
         if _normalize_stage_key(stage_key) in active_stage_keys
     ]
+    feature_config.analytics.performance_stage_keys = [
+        stage_key
+        for stage_key in feature_config.analytics.performance_stage_keys
+        if _normalize_stage_key(stage_key) in active_stage_keys
+    ]
+    if _normalize_stage_key(feature_config.analytics.qualification_stage_key) not in active_stage_keys:
+        feature_config.analytics.qualification_stage_key = (
+            feature_config.analytics.performance_stage_keys[0]
+            if feature_config.analytics.performance_stage_keys
+            else None
+        )
+    if _normalize_stage_key(feature_config.analytics.conversion_stage_key) not in active_stage_keys:
+        feature_config.analytics.conversion_stage_key = (
+            feature_config.analytics.performance_stage_keys[-1]
+            if feature_config.analytics.performance_stage_keys
+            else None
+        )
     feature_config.role_visibility = {
         role: rule.model_copy(
             update={

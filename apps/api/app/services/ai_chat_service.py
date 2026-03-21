@@ -80,37 +80,59 @@ def _build_performance_context(
             "\n## Team Performance (Last 90 Days)",
             "Mode: Cohort (surrogates created in the period)",
             "",
-            "| Team Member | Surrogates | Contacted | Pre-Qualified | Matched | Application Submitted | Lost | Conv. Rate |",
-            "|-------------|-------|-----------|-----------|---------|---------|------|------------|",
         ]
+        columns = data.get("columns", [])
+        column_labels = [column["label"] for column in columns]
+        header = ["Team Member", "Surrogates", *column_labels, "Conv. Rate"]
+        lines.append("| " + " | ".join(header) + " |")
+        lines.append("|" + "|".join(["-------------", "-------", *(["-----------"] * len(column_labels)), "------------"]) + "|")
 
         for user in data["data"]:
             if user["total_surrogates"] > 0:
+                stage_counts = user.get("stage_counts", {})
                 lines.append(
-                    f"| {user['user_name']} | {user['total_surrogates']} | {user['contacted']} | "
-                    f"{user['pre_qualified']} | {user['matched']} | {user['application_submitted']} | "
-                    f"{user['lost']} | {user['conversion_rate']}% |"
+                    "| "
+                    + " | ".join(
+                        [
+                            user["user_name"],
+                            str(user["total_surrogates"]),
+                            *[str(stage_counts.get(column["stage_key"], 0)) for column in columns],
+                            f"{user['conversion_rate']}%",
+                        ]
+                    )
+                    + " |"
                 )
 
         # Add unassigned if any
         unassigned = data.get("unassigned", {})
         if unassigned.get("total_surrogates", 0) > 0:
+            stage_counts = unassigned.get("stage_counts", {})
             lines.append(
-                f"| Unassigned | {unassigned['total_surrogates']} | {unassigned['contacted']} | "
-                f"{unassigned['pre_qualified']} | {unassigned['matched']} | {unassigned['application_submitted']} | "
-                f"{unassigned['lost']} | - |"
+                "| "
+                + " | ".join(
+                    [
+                        "Unassigned",
+                        str(unassigned["total_surrogates"]),
+                        *[str(stage_counts.get(column["stage_key"], 0)) for column in columns],
+                        "-",
+                    ]
+                )
+                + " |"
             )
 
         # Add summary
         total_surrogates = sum(u["total_surrogates"] for u in data["data"])
-        total_submitted = sum(u["application_submitted"] for u in data["data"])
+        conversion_stage_key = data.get("conversion_stage_key")
+        total_converted = sum(
+            int(u.get("stage_counts", {}).get(conversion_stage_key or "", 0)) for u in data["data"]
+        )
         avg_conversion = (
-            round(total_submitted / total_surrogates * 100, 1) if total_surrogates > 0 else 0
+            round(total_converted / total_surrogates * 100, 1) if total_surrogates > 0 else 0
         )
 
         lines.append("")
         lines.append(
-            f"**Summary**: {total_surrogates} total surrogates, {total_submitted} submitted, {avg_conversion}% team avg conversion rate"
+            f"**Summary**: {total_surrogates} total surrogates, {total_converted} converted, {avg_conversion}% team avg conversion rate"
         )
 
         return "\n".join(lines)
