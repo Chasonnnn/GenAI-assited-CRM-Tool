@@ -2,7 +2,12 @@
  * Intended Parent types
  */
 
+import type { MaritalStatus } from '@/lib/intended-parent-marital-status'
+import type { TrustFundingStatus } from '@/lib/trust-funding-status'
+
 export type IntendedParentStatus = string
+export type EmbryoEggSource = 'intended_mother' | 'egg_donor'
+export type EmbryoSpermSource = 'intended_father' | 'sperm_donor'
 
 export interface IntendedParent {
     id: string
@@ -15,9 +20,29 @@ export interface IntendedParent {
     budget: number | null
     notes_internal: string | null
     pronouns: string | null
+    date_of_birth: string | null
+    marital_status: MaritalStatus | string | null
     partner_name: string | null
     partner_email: string | null
     partner_pronouns: string | null
+    partner_date_of_birth: string | null
+    embryo_count: number | null
+    pgs_tested: boolean | null
+    egg_source: EmbryoEggSource | null
+    sperm_source: EmbryoSpermSource | null
+    trust_provider_name: string | null
+    trust_primary_contact_name: string | null
+    trust_email: string | null
+    trust_phone: string | null
+    trust_address_line1: string | null
+    trust_address_line2: string | null
+    trust_city: string | null
+    trust_state: string | null
+    trust_postal: string | null
+    trust_case_reference: string | null
+    trust_funding_status: TrustFundingStatus | null
+    trust_portal_url: string | null
+    trust_notes: string | null
     address_line1: string | null
     address_line2: string | null
     city: string | null
@@ -76,9 +101,29 @@ export interface IntendedParentCreate {
     budget?: number | null
     notes_internal?: string | null
     pronouns?: string | null
+    date_of_birth?: string | null
+    marital_status?: MaritalStatus | null
     partner_name?: string | null
     partner_email?: string | null
     partner_pronouns?: string | null
+    partner_date_of_birth?: string | null
+    embryo_count?: number | null
+    pgs_tested?: boolean | null
+    egg_source?: EmbryoEggSource | null
+    sperm_source?: EmbryoSpermSource | null
+    trust_provider_name?: string | null
+    trust_primary_contact_name?: string | null
+    trust_email?: string | null
+    trust_phone?: string | null
+    trust_address_line1?: string | null
+    trust_address_line2?: string | null
+    trust_city?: string | null
+    trust_state?: string | null
+    trust_postal?: string | null
+    trust_case_reference?: string | null
+    trust_funding_status?: TrustFundingStatus | null
+    trust_portal_url?: string | null
+    trust_notes?: string | null
     address_line1?: string | null
     address_line2?: string | null
     city?: string | null
@@ -104,9 +149,29 @@ export interface IntendedParentUpdate {
     budget?: number | null
     notes_internal?: string | null
     pronouns?: string | null
+    date_of_birth?: string | null
+    marital_status?: MaritalStatus | null
     partner_name?: string | null
     partner_email?: string | null
     partner_pronouns?: string | null
+    partner_date_of_birth?: string | null
+    embryo_count?: number | null
+    pgs_tested?: boolean | null
+    egg_source?: EmbryoEggSource | null
+    sperm_source?: EmbryoSpermSource | null
+    trust_provider_name?: string | null
+    trust_primary_contact_name?: string | null
+    trust_email?: string | null
+    trust_phone?: string | null
+    trust_address_line1?: string | null
+    trust_address_line2?: string | null
+    trust_city?: string | null
+    trust_state?: string | null
+    trust_postal?: string | null
+    trust_case_reference?: string | null
+    trust_funding_status?: TrustFundingStatus | null
+    trust_portal_url?: string | null
+    trust_notes?: string | null
     address_line1?: string | null
     address_line2?: string | null
     city?: string | null

@@ -9,6 +9,14 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { InlineDateField } from "@/components/inline-date-field"
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -30,7 +38,7 @@ import {
     MailIcon,
     PhoneIcon,
     MapPinIcon,
-    ClockIcon,
+    CalendarIcon,
     ArchiveIcon,
     ArchiveRestoreIcon,
     Trash2Icon,
@@ -44,6 +52,8 @@ import {
     type IntendedParentFormValues,
 } from "@/components/intended-parents/IntendedParentFormFields"
 import { IntendedParentClinicCard } from "@/components/intended-parents/IntendedParentClinicCard"
+import { TrustInfoCard } from "@/components/intended-parents/TrustInfoCard"
+import { IntendedParentActivityTimeline } from "@/components/intended-parents/IntendedParentActivityTimeline"
 import {
     useIntendedParent,
     useIntendedParentHistory,
@@ -56,6 +66,8 @@ import {
     useCreateIntendedParentNote,
 } from "@/lib/hooks/use-intended-parents"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
+import { useTasks } from "@/lib/hooks/use-tasks"
+import { useIPAttachments } from "@/lib/hooks/use-attachments"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
@@ -65,6 +77,7 @@ import {
     getIntendedParentStatusStyle,
     toPipelineStages,
 } from "@/lib/intended-parent-stage-utils"
+import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import { parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
 
@@ -84,6 +97,11 @@ export default function IntendedParentDetailPage() {
     const { data: history } = useIntendedParentHistory(id)
     const { data: notes } = useIntendedParentNotes(id)
     const { data: stageOptionsResponse } = useIntendedParentStatuses()
+    const { data: tasksData } = useTasks(
+        { intended_parent_id: id, exclude_approvals: true },
+        { enabled: !!id },
+    )
+    const { data: attachments } = useIPAttachments(id)
 
     // Mutations
     const updateMutation = useUpdateIntendedParent()
@@ -163,6 +181,10 @@ export default function IntendedParentDetailPage() {
         setFormData((previous) => ({ ...previous, [field]: value }))
     }
 
+    const updateDetailField = async (data: Parameters<typeof updateMutation.mutateAsync>[0]["data"]) => {
+        await updateMutation.mutateAsync({ id, data })
+    }
+
     const handleStatusChange = async (data: {
         stage_id: string
         reason?: string
@@ -177,7 +199,7 @@ export default function IntendedParentDetailPage() {
             stageOptionsResponse?.statuses,
             data.stage_id,
         )
-        const targetLabel = targetStage?.label ?? "Status"
+        const targetLabel = targetStage?.label ?? "Stage"
         const payload: { stage_id: string; reason?: string; effective_at?: string } = {
             stage_id: data.stage_id,
         }
@@ -193,7 +215,7 @@ export default function IntendedParentDetailPage() {
         if (result.request_id) response.request_id = result.request_id
 
         if (result.status === "applied") {
-            toast.success(`Status updated to ${targetLabel}`, {
+            toast.success(`Stage updated to ${targetLabel}`, {
                 action: {
                     label: "Undo (5 min)",
                     onClick: async () => {
@@ -206,7 +228,7 @@ export default function IntendedParentDetailPage() {
                                 id,
                                 data: { stage_id: previousStageId },
                             })
-                            toast.success("Status change undone")
+                            toast.success("Stage change undone")
                         } catch (error) {
                             const message =
                                 error instanceof Error ? error.message : "Undo failed"
@@ -217,7 +239,7 @@ export default function IntendedParentDetailPage() {
                 duration: 60000,
             })
         } else {
-            toast("Status change request submitted for approval")
+            toast("Stage change request submitted for approval")
         }
 
         return response
@@ -266,6 +288,8 @@ export default function IntendedParentDetailPage() {
         )
     }
 
+    const maritalStatusOptions = getMaritalStatusOptions(ip.marital_status)
+
     return (
         <div className="flex min-h-screen flex-col">
             {/* Header */}
@@ -297,6 +321,13 @@ export default function IntendedParentDetailPage() {
                         >
                             <HeartHandshakeIcon className="size-4 mr-2" />
                             Propose Match
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => setChangeStatusModalOpen(true)}
+                            disabled={statusMutation.isPending || ip.is_archived}
+                        >
+                            Change Stage
                         </Button>
                         <Badge
                             variant="outline"
@@ -374,6 +405,20 @@ export default function IntendedParentDetailPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
+                                    <CalendarIcon className="size-5 text-muted-foreground" />
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Date of Birth</p>
+                                        <InlineDateField
+                                            value={ip.date_of_birth}
+                                            onSave={async (value) => {
+                                                await updateDetailField({ date_of_birth: value })
+                                            }}
+                                            placeholder="Not provided"
+                                            label="Date of Birth"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
                                     <MapPinIcon className="size-5 text-muted-foreground" />
                                     <div>
                                         <p className="text-sm text-muted-foreground">Address</p>
@@ -387,8 +432,52 @@ export default function IntendedParentDetailPage() {
                             </CardContent>
                         </Card>
 
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Marital Status</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Select
+                                    value={ip.marital_status ?? "__none__"}
+                                    onValueChange={async (value) => {
+                                        await updateDetailField({
+                                            marital_status: value === "__none__" ? null : value,
+                                        })
+                                    }}
+                                    disabled={updateMutation.isPending}
+                                >
+                                    <SelectTrigger aria-label="Marital status" className="w-full sm:w-[240px]">
+                                        <SelectValue placeholder="Not provided">
+                                            {(value: string | null) =>
+                                                maritalStatusOptions.find((option) => option.value === value)?.label ??
+                                                "Not provided"
+                                            }
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__none__">Not provided</SelectItem>
+                                        {maritalStatusOptions.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </CardContent>
+                        </Card>
+
+                        <TrustInfoCard
+                            intendedParent={ip}
+                            onUpdate={async (data) => {
+                                await updateDetailField(data)
+                            }}
+                        />
+
                         {/* Partner Info */}
-                        {(ip.partner_name || ip.partner_email) && (
+                        {(ip.partner_name ||
+                            ip.partner_email ||
+                            ip.partner_pronouns ||
+                            ip.partner_date_of_birth) && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Partner</CardTitle>
@@ -417,6 +506,20 @@ export default function IntendedParentDetailPage() {
                                             </div>
                                         </div>
                                     )}
+                                    <div className="flex items-center gap-3">
+                                        <CalendarIcon className="size-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Date of Birth</p>
+                                            <InlineDateField
+                                                value={ip.partner_date_of_birth}
+                                                onSave={async (value) => {
+                                                    await updateDetailField({ partner_date_of_birth: value })
+                                                }}
+                                                placeholder="Not provided"
+                                                label="Partner date of birth"
+                                            />
+                                        </div>
+                                    </div>
                                 </CardContent>
                             </Card>
                         )}
@@ -424,38 +527,9 @@ export default function IntendedParentDetailPage() {
                         <IntendedParentClinicCard
                             intendedParent={ip}
                             onUpdate={async (data) => {
-                                await updateMutation.mutateAsync({ id, data })
+                                await updateDetailField(data)
                             }}
                         />
-
-                        {/* Status Change */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Status</CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                                <Badge
-                                    variant="outline"
-                                    style={getIntendedParentStatusStyle(
-                                        stageOptionsResponse?.statuses,
-                                        ip.stage_key ?? ip.status,
-                                    )}
-                                >
-                                    {getIntendedParentStatusLabel(
-                                        stageOptionsResponse?.statuses,
-                                        ip.stage_key ?? ip.status,
-                                        ip.status_label,
-                                    )}
-                                </Badge>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setChangeStatusModalOpen(true)}
-                                    disabled={statusMutation.isPending || ip.is_archived}
-                                >
-                                    Change Status
-                                </Button>
-                            </CardContent>
-                        </Card>
 
                         {/* Notes */}
                         <Card>
@@ -502,99 +576,14 @@ export default function IntendedParentDetailPage() {
 
                     {/* Right Column - History */}
                     <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Status History</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {history?.length ? (
-                                    <div className="space-y-4">
-                                        {history.map((item, idx) => (
-                                            <div key={item.id} className="flex gap-3">
-                                                <div className="flex flex-col items-center">
-                                                    <div className="size-2 rounded-full bg-teal-500" />
-                                                    {idx < history.length - 1 && (
-                                                        <div className="mt-1 h-full w-px bg-border" />
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 pb-4">
-                                                    <p className="text-sm font-medium">
-                                                        {item.old_status ? (
-                                                            <>
-                                                                <span className="text-muted-foreground">
-                                                                    {getIntendedParentStatusLabel(
-                                                                        stageOptionsResponse?.statuses,
-                                                                        item.old_status,
-                                                                        item.old_status,
-                                                                    )}
-                                                                </span>
-                                                                {" → "}
-                                                            </>
-                                                        ) : null}
-                                                        {getIntendedParentStatusLabel(
-                                                            stageOptionsResponse?.statuses,
-                                                            item.new_status,
-                                                            item.new_status,
-                                                        )}
-                                                    </p>
-                                                    {item.reason && (
-                                                        <p className="text-xs text-muted-foreground">{item.reason}</p>
-                                                    )}
-                                                    {item.is_undo && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Reverted within grace period
-                                                        </p>
-                                                    )}
-                                                    {item.requested_at ? (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Requested by {item.changed_by_name || "Unknown"} •{" "}
-                                                            {formatDate(item.requested_at)}
-                                                        </p>
-                                                    ) : item.changed_by_name ? (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Changed by {item.changed_by_name}
-                                                        </p>
-                                                    ) : null}
-                                                    {item.approved_by_name && item.approved_at && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Approved by {item.approved_by_name} •{" "}
-                                                            {formatDate(item.approved_at)}
-                                                        </p>
-                                                    )}
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        Effective {formatDate(item.effective_at || item.changed_at)}
-                                                        {item.recorded_at &&
-                                                            item.recorded_at !== item.effective_at && (
-                                                                <> • Recorded {formatDate(item.recorded_at)}</>
-                                                            )}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">No history yet.</p>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Activity</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <ClockIcon className="size-4 text-muted-foreground" />
-                                    <span className="text-muted-foreground">Created:</span>
-                                    <span>{formatDate(ip.created_at)}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <ClockIcon className="size-4 text-muted-foreground" />
-                                    <span className="text-muted-foreground">Last Activity:</span>
-                                    <span>{formatDate(ip.last_activity)}</span>
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <IntendedParentActivityTimeline
+                            currentStageId={ip.stage_id ?? ""}
+                            stages={statusStages}
+                            history={history ?? []}
+                            notes={notes ?? []}
+                            attachments={attachments ?? []}
+                            tasks={tasksData?.items ?? []}
+                        />
                     </div>
                 </div>
             </div>
@@ -609,7 +598,7 @@ export default function IntendedParentDetailPage() {
                     ip.stage_key ?? ip.status,
                     ip.status_label,
                 )}
-                entityLabel="Status"
+                entityLabel="Stage"
                 onSubmit={handleStatusChange}
                 isPending={statusMutation.isPending}
             />

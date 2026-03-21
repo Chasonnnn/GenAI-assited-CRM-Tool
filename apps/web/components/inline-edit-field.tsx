@@ -10,7 +10,7 @@ interface InlineEditFieldProps {
     value: string | null | undefined
     onSave: (value: string) => Promise<void>
     placeholder?: string
-    type?: "text" | "email" | "tel"
+    type?: "text" | "email" | "tel" | "url"
     className?: string
     displayClassName?: string
     validate?: (value: string) => string | null
