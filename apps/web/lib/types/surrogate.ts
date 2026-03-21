@@ -24,6 +24,12 @@ export type SurrogateListItem = Omit<GeneratedSurrogateListItem, 'owner_type'> &
     owner_type: 'user' | 'queue' | null;
 };
 
+export type SurrogateLeadIntakeWarning = {
+    field_key: 'email' | 'phone' | 'height_ft' | 'weight_lb';
+    issue: 'missing_value' | 'invalid_value';
+    raw_value: string;
+};
+
 export type SurrogateRead = Omit<
     GeneratedSurrogateRead,
     'owner_type' | 'height_ft' | 'delivery_baby_gender' | 'delivery_baby_weight'
@@ -37,6 +43,7 @@ export type SurrogateRead = Omit<
     height_ft: number | null;
     delivery_baby_gender: string | null;
     delivery_baby_weight: string | null;
+    lead_intake_warnings?: SurrogateLeadIntakeWarning[];
 };
 
 export type SurrogateListResponse = Omit<GeneratedSurrogateListResponse, 'items'> & {
