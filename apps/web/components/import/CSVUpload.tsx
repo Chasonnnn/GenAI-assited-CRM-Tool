@@ -38,6 +38,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 import {
     usePreviewImport,
     useSubmitImport,
@@ -987,14 +988,14 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                                             <SelectTrigger className="w-[180px]">
                                                                 <SelectValue placeholder="Select field" />
                                                             </SelectTrigger>
-                                                            <SelectContent>
-                                                                {preview.available_fields.map((field) => (
-                                                                    <SelectItem key={field} value={field}>
-                                                                        {field}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                                <SelectContent>
+                                                                    {preview.available_fields.map((field) => (
+                                                                        <SelectItem key={field} value={field}>
+                                                                            {getSurrogateFieldLabel(field) ?? "Unknown field"}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
                                                     ) : mapping.action === "custom" ? (
                                                         <Input
                                                             value={mapping.custom_field_key || ""}

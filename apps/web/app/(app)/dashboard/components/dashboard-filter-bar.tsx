@@ -96,7 +96,7 @@ export function DashboardFilterBar({
                                 if (!value || value === "all") return isAdmin ? "All Assignees" : "Mine"
                             if (value === user?.user_id) return "Mine"
                             const assignee = assignees?.find((item) => item.id === value)
-                            return assignee?.name ?? value
+                            return assignee?.name ?? "Unknown assignee"
                         }}
                         </SelectValue>
                     </SelectTrigger>

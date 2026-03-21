@@ -26,6 +26,30 @@ import {
 const STATUS_OPTIONS = ['new', 'open', 'pending', 'resolved', 'closed', 'spam'] as const
 const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
 
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+    new: 'New',
+    open: 'Open',
+    pending: 'Pending',
+    resolved: 'Resolved',
+    closed: 'Closed',
+    spam: 'Spam',
+}
+
+const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
+    low: 'Low',
+    normal: 'Normal',
+    high: 'High',
+    urgent: 'Urgent',
+}
+
+function getTicketStatusLabel(value: TicketStatus | null | undefined): string {
+    return value ? TICKET_STATUS_LABELS[value] ?? 'Unknown status' : 'Status'
+}
+
+function getTicketPriorityLabel(value: TicketPriority | null | undefined): string {
+    return value ? TICKET_PRIORITY_LABELS[value] ?? 'Unknown priority' : 'Priority'
+}
+
 export default function TicketDetailPage() {
     const params = useParams<{ ticketId: string }>()
     const ticketId = params.ticketId
@@ -172,8 +196,8 @@ export default function TicketDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                     <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary">{data.ticket.status}</Badge>
-                        <Badge variant="outline">{data.ticket.priority}</Badge>
+                        <Badge variant="secondary">{getTicketStatusLabel(data.ticket.status)}</Badge>
+                        <Badge variant="outline">{getTicketPriorityLabel(data.ticket.priority)}</Badge>
                         {data.ticket.surrogate_link_status === 'needs_review' && (
                             <Badge variant="destructive">Needs review</Badge>
                         )}
@@ -188,12 +212,14 @@ export default function TicketDetailPage() {
                             onValueChange={(value) => setStatusValue((value ?? 'new') as TicketStatus)}
                         >
                             <SelectTrigger>
-                                <SelectValue placeholder="Status" />
+                                <SelectValue placeholder="Status">
+                                    {(value: string | null) => getTicketStatusLabel((value ?? 'new') as TicketStatus)}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 {STATUS_OPTIONS.map((value) => (
                                     <SelectItem key={value} value={value}>
-                                        {value}
+                                        {getTicketStatusLabel(value)}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -205,12 +231,16 @@ export default function TicketDetailPage() {
                             }
                         >
                             <SelectTrigger>
-                                <SelectValue placeholder="Priority" />
+                                <SelectValue placeholder="Priority">
+                                    {(value: string | null) =>
+                                        getTicketPriorityLabel((value ?? 'normal') as TicketPriority)
+                                    }
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 {PRIORITY_OPTIONS.map((value) => (
                                     <SelectItem key={value} value={value}>
-                                        {value}
+                                        {getTicketPriorityLabel(value)}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

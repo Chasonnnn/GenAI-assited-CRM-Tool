@@ -111,7 +111,7 @@ function AddOverrideDialog({
                                     {(value: string | null) => {
                                         if (!value) return "Select permission…"
                                         const permission = allPermissions?.find(p => p.key === value)
-                                        return permission?.label ?? value.replace(/_/g, " ")
+                                        return permission?.label ?? "Unknown permission"
                                     }}
                                 </SelectValue>
                             </SelectTrigger>

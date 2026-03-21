@@ -3,7 +3,7 @@
 import { useCallback, useReducer } from "react"
 
 import type { FormSchema } from "@/lib/api/forms"
-import { schemaToMetadata, schemaToPages, type BuilderFormPage } from "@/lib/forms/form-builder-document"
+import { schemaToMetadata } from "@/lib/forms/form-builder-document"
 
 type WorkspaceTab = "builder" | "settings"
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error"

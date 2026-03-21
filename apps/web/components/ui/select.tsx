@@ -27,23 +27,27 @@ function SelectValue({
   placeholder?: string
   children?: (value: string | null) => React.ReactNode
 }) {
+  if (typeof children === "function") {
+    return (
+      <SelectPrimitive.Value
+        data-slot="select-value"
+        className={cn("flex flex-1 text-left", className)}
+        placeholder={placeholder}
+        {...props}
+      >
+        {(value) => children(value as string | null)}
+      </SelectPrimitive.Value>
+    )
+  }
+
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
       className={cn("flex flex-1 text-left", className)}
+      placeholder={placeholder}
       {...props}
     >
-      {(value) => {
-        if (value == null) {
-          return <span className="text-muted-foreground">{placeholder}</span>
-        }
-        // If children is a render function, use it to transform the value to a label
-        if (typeof children === 'function') {
-          return children(value)
-        }
-        // Otherwise just display the raw value
-        return value
-      }}
+      {children}
     </SelectPrimitive.Value>
   )
 }

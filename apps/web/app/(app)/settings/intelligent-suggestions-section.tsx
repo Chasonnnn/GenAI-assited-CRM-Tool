@@ -81,7 +81,7 @@ function SuggestionStageInput({
           <SelectValue placeholder="Select stage">
             {(selected: string | null) => {
               if (!selected) return "Select stage"
-              return stageLabelByRef.get(selected) ?? selected.replaceAll("_", " ")
+              return stageLabelByRef.get(selected) ?? "Unknown stage"
             }}
           </SelectValue>
         </SelectTrigger>
@@ -164,7 +164,7 @@ function WorkflowRuleComposer({
                 <SelectValue placeholder="Select template">
                   {(selected: string | null) => {
                     if (!selected) return "Select template"
-                    return templateByKey.get(selected)?.name ?? selected.replaceAll("_", " ")
+                    return templateByKey.get(selected)?.name ?? "Unknown template"
                   }}
                 </SelectValue>
               </SelectTrigger>
@@ -618,7 +618,7 @@ function useIntelligentSuggestionsController() {
   const formatStageLabel = useCallback(
     (stageRef: string | null | undefined) => {
       if (!stageRef) return "N/A"
-      return stageLabelByRef.get(stageRef) ?? stageRef.replaceAll("_", " ")
+      return stageLabelByRef.get(stageRef) ?? "Unknown stage"
     },
     [stageLabelByRef],
   )

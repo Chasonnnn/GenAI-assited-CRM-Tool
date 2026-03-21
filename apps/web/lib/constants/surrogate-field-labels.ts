@@ -1,0 +1,40 @@
+export const SURROGATE_FIELD_LABELS: Record<string, string> = {
+    full_name: "Full Name",
+    email: "Email",
+    phone: "Phone",
+    state: "State",
+    date_of_birth: "Date of Birth",
+    race: "Race",
+    height_ft: "Height (ft)",
+    weight_lb: "Weight (lb)",
+    is_age_eligible: "Age Eligible",
+    is_citizen_or_pr: "Citizen or Permanent Resident",
+    has_child: "Has Child",
+    is_non_smoker: "Non-Smoker",
+    has_surrogate_experience: "Has Surrogate Experience",
+    num_deliveries: "Deliveries",
+    num_csections: "C-Sections",
+    source: "Source",
+    created_at: "Created At",
+    status_label: "Stage",
+    stage_id: "Stage",
+    is_priority: "Is Priority",
+    is_archived: "Is Archived",
+    owner_id: "Assigned User",
+    queue_id: "Queue",
+    owner_type: "Owner Type",
+    form_id: "Form",
+    status: "Status",
+    source_mode: "Submission Source",
+    match_status: "Match Status",
+    age: "Age",
+    bmi: "BMI",
+    meta_lead_id: "Meta Lead ID",
+    meta_ad_external_id: "Meta Ad External ID",
+    meta_form_id: "Meta Form ID",
+}
+
+export function getSurrogateFieldLabel(value: string | null | undefined): string | null {
+    if (!value) return null
+    return SURROGATE_FIELD_LABELS[value] ?? null
+}

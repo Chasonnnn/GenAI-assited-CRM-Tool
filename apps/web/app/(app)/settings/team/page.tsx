@@ -112,7 +112,7 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
                             <SelectTrigger id="role">
                                 <SelectValue placeholder="Select role">
                                     {(value: string | null) => {
-                                        return value ? ROLE_LABELS[value] || value : "Select role"
+                                        return value ? ROLE_LABELS[value] ?? "Unknown role" : "Select role"
                                     }}
                                 </SelectValue>
                             </SelectTrigger>

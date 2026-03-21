@@ -105,7 +105,7 @@ import { formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
-import type { StageSemantics } from "@/lib/api/pipelines"
+import type { Pipeline, StageSemantics } from "@/lib/api/pipelines"
 import type {
     MetaCrmDatasetEventMappingItem,
 } from "@/lib/api/meta-crm-dataset"
@@ -203,6 +203,24 @@ function buildRecommendedBucketByStage(
         }
     }
     return mapping
+}
+
+function buildStageLabelByKey(pipelines: Pipeline[] | null | undefined): Record<string, string> {
+    const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default) ?? pipelines?.[0]
+    if (!defaultPipeline?.stages?.length) {
+        return {}
+    }
+
+    const labels: Record<string, string> = {}
+    for (const stage of defaultPipeline.stages) {
+        if (stage.is_active === false) continue
+        const stageKey = (stage.stage_key ?? stage.slug ?? "").trim()
+        const stageLabel = stage.label?.trim()
+        if (!stageKey || !stageLabel) continue
+        labels[stageKey] = stageLabel
+    }
+
+    return labels
 }
 
 function inferZapierBucket(item: ZapierEventMappingItem): ZapierStageBucket | null {
@@ -1558,6 +1576,8 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
 function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: pipelines } = usePipelines()
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
+    const stageLabelByKey = buildStageLabelByKey(pipelines)
+    const getStageKeyLabel = (stageKey: string) => stageLabelByKey[stageKey] ?? "Unknown stage"
     const { data: settings, isLoading } = useZapierSettings()
     const { data: metaForms = [], isLoading: metaFormsLoading } = useMetaForms()
     const createInboundWebhook = useCreateZapierInboundWebhook()
@@ -2306,7 +2326,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                         className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
                                     >
                                         <div className="w-32 text-sm font-medium">
-                                            {item.stage_key.replace(/_/g, " ")}
+                                            {getStageKeyLabel(item.stage_key)}
                                         </div>
                                         <Select
                                             value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
@@ -2415,7 +2435,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     <SelectContent>
                                         {eventMapping.map((item) => (
                                             <SelectItem key={item.stage_key} value={item.stage_key}>
-                                                {item.stage_key.replace(/_/g, " ")}
+                                                {getStageKeyLabel(item.stage_key)}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -2622,6 +2642,8 @@ function MetaCrmDatasetMonitoringSection({ variant = "page" }: { variant?: "page
 function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: pipelines } = usePipelines()
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
+    const stageLabelByKey = buildStageLabelByKey(pipelines)
+    const getStageKeyLabel = (stageKey: string) => stageLabelByKey[stageKey] ?? "Unknown stage"
     const { data: settings, isLoading } = useMetaCrmDatasetSettings()
     const updateSettings = useUpdateMetaCrmDatasetSettings()
     const sendOutboundTest = useMetaCrmDatasetOutboundTest()
@@ -2878,7 +2900,7 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                 className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
                             >
                                 <div className="w-32 text-sm font-medium">
-                                    {item.stage_key.replace(/_/g, " ")}
+                                    {getStageKeyLabel(item.stage_key)}
                                 </div>
                                 <Select
                                     value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
@@ -3003,7 +3025,7 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                 <SelectContent>
                                     {metaForm.eventMapping.map((item) => (
                                         <SelectItem key={item.stage_key} value={item.stage_key}>
-                                            {item.stage_key.replace(/_/g, " ")}
+                                            {getStageKeyLabel(item.stage_key)}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

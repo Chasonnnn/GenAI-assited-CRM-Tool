@@ -372,7 +372,7 @@ export default function WorkflowExecutionsPage() {
                             {(value: string | null) => {
                                 if (!value || value === "all") return "All Workflows"
                                 const workflow = workflows?.find(w => w.id === value)
-                                return workflow?.name ?? value
+                                return workflow?.name ?? "Unknown workflow"
                             }}
                         </SelectValue>
                     </SelectTrigger>

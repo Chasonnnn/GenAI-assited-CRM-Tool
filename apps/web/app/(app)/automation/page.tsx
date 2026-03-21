@@ -81,6 +81,7 @@ import { getAppointments } from "@/lib/api/appointments"
 import { listMatches, type ListMatchesParams } from "@/lib/api/matches"
 import { getTasks, type TaskListParams } from "@/lib/api/tasks"
 import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
+import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
@@ -127,6 +128,10 @@ const triggerLabels: Record<string, string> = {
     appointment_completed: "Appointment Completed",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
+}
+
+function getConditionFieldLabel(value: string): string {
+    return getSurrogateFieldLabel(value) ?? conditionFieldLabels[value] ?? "Unknown field"
 }
 
 // Labels for condition fields
@@ -936,7 +941,7 @@ export default function AutomationPage() {
                             {(value: string | null) => {
                                 if (!value) return "Select value"
                                 const option = options.find((opt) => opt.value === value)
-                                return option?.label ?? value
+                                return option?.label ?? "Unknown option"
                             }}
                         </SelectValue>
                     </SelectTrigger>
@@ -1680,7 +1685,7 @@ export default function AutomationPage() {
                                                 {(value: string | null) => {
                                                     if (!value) return "Select trigger"
                                                     const trigger = options?.trigger_types.find(t => t.value === value)
-                                                    return trigger?.label ?? value
+                                                    return trigger?.label ?? triggerLabels[value] ?? "Unknown trigger"
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
@@ -1704,7 +1709,7 @@ export default function AutomationPage() {
                                                         {(value: string | null) => {
                                                             if (!value) return "Any stage"
                                                             const status = statusOptions.find((s) => s.id === value)
-                                                            return status?.label ?? value
+                                                            return status?.label ?? "Unknown stage"
                                                         }}
                                                     </SelectValue>
                                                 </SelectTrigger>
@@ -1727,7 +1732,7 @@ export default function AutomationPage() {
                                                         {(value: string | null) => {
                                                             if (!value) return "Any stage"
                                                             const status = statusOptions.find((s) => s.id === value)
-                                                            return status?.label ?? value
+                                                            return status?.label ?? "Unknown stage"
                                                         }}
                                                     </SelectValue>
                                                 </SelectTrigger>
@@ -1790,7 +1795,7 @@ export default function AutomationPage() {
                                                     {(value: string | null) => {
                                                         if (!value) return "Select form"
                                                         const form = formOptions.find((option) => option.value === value)
-                                                        return form?.label ?? value
+                                                        return form?.label ?? "Unknown form"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
@@ -1823,7 +1828,7 @@ export default function AutomationPage() {
                                                     {(value: string | null) => {
                                                         if (!value) return "Select form"
                                                         const form = formOptions.find((option) => option.value === value)
-                                                        return form?.label ?? value
+                                                        return form?.label ?? "Unknown form"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
@@ -1856,7 +1861,7 @@ export default function AutomationPage() {
                                                     {(value: string | null) => {
                                                         if (!value) return "Select form"
                                                         const form = formOptions.find((option) => option.value === value)
-                                                        return form?.label ?? value
+                                                        return form?.label ?? "Unknown form"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
@@ -1908,7 +1913,7 @@ export default function AutomationPage() {
                                                 <SelectContent>
                                                     {availableConditionFields.map((field) => (
                                                         <SelectItem key={field} value={field}>
-                                                            {conditionFieldLabels[field] || field}
+                                                            {getConditionFieldLabel(field)}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
@@ -1918,7 +1923,7 @@ export default function AutomationPage() {
                                             <div className="flex flex-wrap gap-2">
                                                 {selectedTriggerFields.map((field) => (
                                                     <Badge key={field} variant="secondary" className="gap-1">
-                                                        {conditionFieldLabels[field] || field}
+                                                        {getConditionFieldLabel(field)}
                                                         <button
                                                             type="button"
                                                             className="ml-1 text-xs"
@@ -1950,7 +1955,7 @@ export default function AutomationPage() {
                                                     {(value: string | null) => {
                                                         if (!value) return "Any user"
                                                         const user = userOptions.find((u) => u.id === value)
-                                                        return user?.display_name ?? value
+                                                        return user?.display_name ?? "Unknown user"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
@@ -2001,13 +2006,13 @@ export default function AutomationPage() {
                                                                 <SelectValue placeholder="Field">
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Field"
-                                                                        return conditionFieldLabels[value] || value
+                                                                        return getConditionFieldLabel(value)
                                                                     }}
                                                                 </SelectValue>
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 {availableConditionFields.map((f) => (
-                                                                    <SelectItem key={f} value={f}>{conditionFieldLabels[f] || f}</SelectItem>
+                                                                    <SelectItem key={f} value={f}>{getConditionFieldLabel(f)}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
@@ -2020,7 +2025,7 @@ export default function AutomationPage() {
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Operator"
                                                                         const operator = conditionOperators.find(o => o.value === value)
-                                                                        return operator?.label ?? value
+                                                                        return operator?.label ?? "Unknown operator"
                                                                     }}
                                                                 </SelectValue>
                                                             </SelectTrigger>
@@ -2086,7 +2091,7 @@ export default function AutomationPage() {
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Action type"
                                                                     const actionType = actionTypeOptions.find(a => a.value === value)
-                                                                    return actionType?.label ?? value
+                                                                    return actionType?.label ?? "Unknown action type"
                                                                 }}
                                                             </SelectValue>
                                                         </SelectTrigger>
@@ -2116,7 +2121,7 @@ export default function AutomationPage() {
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Select email template"
                                                                         const template = options?.email_templates.find(t => t.id === value)
-                                                                        return template?.name ?? value
+                                                                        return template?.name ?? "Unknown template"
                                                                     }}
                                                                 </SelectValue>
                                                             </SelectTrigger>
@@ -2165,7 +2170,7 @@ export default function AutomationPage() {
                                                                         {(value: string | null) => {
                                                                             if (!value) return "Select user"
                                                                             const user = userOptions.find((option) => option.id === value)
-                                                                            return user?.display_name ?? value
+                                                                            return user?.display_name ?? "Unknown user"
                                                                         }}
                                                                     </SelectValue>
                                                                 </SelectTrigger>
@@ -2318,7 +2323,7 @@ export default function AutomationPage() {
                                                             <SelectContent>
                                                                 {updateFields.map((field) => (
                                                                     <SelectItem key={field} value={field}>
-                                                                        {conditionFieldLabels[field] || field}
+                                                                        {getConditionFieldLabel(field)}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>

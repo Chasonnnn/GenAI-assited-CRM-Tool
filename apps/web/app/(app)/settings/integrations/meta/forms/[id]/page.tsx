@@ -37,6 +37,7 @@ import {
     type ColumnMappingDraft,
     type UnknownColumnBehavior,
 } from "@/lib/import-utils"
+import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 
 const TRANSFORM_OPTIONS = [
     { value: "", label: "None" },
@@ -396,13 +397,13 @@ export default function MetaFormMappingPage() {
                                                         >
                                                             <SelectValue placeholder="Select field" />
                                                         </SelectTrigger>
-                                                        <SelectContent>
-                                                            {data.available_fields.map((field) => (
-                                                                <SelectItem key={field} value={field}>
-                                                                    {field}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
+                                                            <SelectContent>
+                                                                {data.available_fields.map((field) => (
+                                                                    <SelectItem key={field} value={field}>
+                                                                    {getSurrogateFieldLabel(field) ?? "Unknown field"}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
                                                     </Select>
                                                 ) : mapping.action === "custom" ? (
                                                     <Input

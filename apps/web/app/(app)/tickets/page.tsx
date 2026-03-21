@@ -22,6 +22,32 @@ const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
 type TicketStatusFilter = TicketStatus | 'all'
 type TicketPriorityFilter = TicketPriority | 'all'
 
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+    new: 'New',
+    open: 'Open',
+    pending: 'Pending',
+    resolved: 'Resolved',
+    closed: 'Closed',
+    spam: 'Spam',
+}
+
+const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
+    low: 'Low',
+    normal: 'Normal',
+    high: 'High',
+    urgent: 'Urgent',
+}
+
+function getTicketStatusLabel(value: TicketStatusFilter | null | undefined): string {
+    if (!value || value === 'all') return 'All statuses'
+    return TICKET_STATUS_LABELS[value] ?? 'Unknown status'
+}
+
+function getTicketPriorityLabel(value: TicketPriorityFilter | null | undefined): string {
+    if (!value || value === 'all') return 'All priorities'
+    return TICKET_PRIORITY_LABELS[value] ?? 'Unknown priority'
+}
+
 export default function TicketsPage() {
     const router = useRouter()
     const { user } = useAuth()
@@ -115,13 +141,15 @@ export default function TicketsPage() {
                         onValueChange={(value) => setStatusFilter((value ?? 'all') as TicketStatusFilter)}
                     >
                         <SelectTrigger>
-                            <SelectValue placeholder="Status" />
+                            <SelectValue placeholder="Status">
+                                {(value: string | null) => getTicketStatusLabel((value ?? 'all') as TicketStatusFilter)}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All statuses</SelectItem>
                             {STATUS_OPTIONS.map((value) => (
                                 <SelectItem key={value} value={value}>
-                                    {value}
+                                    {getTicketStatusLabel(value)}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -133,13 +161,17 @@ export default function TicketsPage() {
                         }
                     >
                         <SelectTrigger>
-                            <SelectValue placeholder="Priority" />
+                            <SelectValue placeholder="Priority">
+                                {(value: string | null) =>
+                                    getTicketPriorityLabel((value ?? 'all') as TicketPriorityFilter)
+                                }
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All priorities</SelectItem>
                             {PRIORITY_OPTIONS.map((value) => (
                                 <SelectItem key={value} value={value}>
-                                    {value}
+                                    {getTicketPriorityLabel(value)}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -192,8 +224,8 @@ export default function TicketsPage() {
                                 >
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-sm font-semibold">{ticket.ticket_code}</span>
-                                        <Badge variant="secondary">{ticket.status}</Badge>
-                                        <Badge variant="outline">{ticket.priority}</Badge>
+                                        <Badge variant="secondary">{getTicketStatusLabel(ticket.status)}</Badge>
+                                        <Badge variant="outline">{getTicketPriorityLabel(ticket.priority)}</Badge>
                                         {ticket.surrogate_link_status === 'needs_review' && (
                                             <Badge variant="destructive">Needs review</Badge>
                                         )}

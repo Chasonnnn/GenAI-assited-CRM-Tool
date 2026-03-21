@@ -332,7 +332,7 @@ function AvailabilityRulesCard() {
                                                 <SelectValue>
                                                     {(value: string | null) => {
                                                         const opt = TIME_OPTIONS.find(t => t.value === value)
-                                                        return opt?.label ?? value
+                                                        return opt?.label ?? "Unknown time"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
@@ -353,7 +353,7 @@ function AvailabilityRulesCard() {
                                                 <SelectValue>
                                                     {(value: string | null) => {
                                                         const opt = TIME_OPTIONS.find(t => t.value === value)
-                                                        return opt?.label ?? value
+                                                        return opt?.label ?? "Unknown time"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>
@@ -388,7 +388,7 @@ function AvailabilityRulesCard() {
                                             "America/Denver": "Mountain Time",
                                             "UTC": "UTC",
                                         }
-                                        return labels[value ?? ""] ?? value
+                                        return labels[value ?? ""] ?? "Unknown timezone"
                                     }}
                                 </SelectValue>
                             </SelectTrigger>

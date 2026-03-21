@@ -721,7 +721,7 @@ export function MassEditStageModal({
                                                     {(value: string | null) => {
                                                         if (!value) return "Select a stage"
                                                         const stage = activeStages.find((s) => s.id === value)
-                                                        return stage?.label ?? value
+                                                        return stage?.label ?? "Unknown stage"
                                                     }}
                                                 </SelectValue>
                                             </SelectTrigger>

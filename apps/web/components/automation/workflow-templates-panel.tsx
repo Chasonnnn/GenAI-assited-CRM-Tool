@@ -472,7 +472,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Choose an email template"
                                                                     const template = emailTemplates.find((t: EmailTemplateListItem) => t.id === value)
-                                                                    return template?.name ?? value
+                                                                    return template?.name ?? "Unknown template"
                                                                 }}
                                                             </SelectValue>
                                                         </SelectTrigger>

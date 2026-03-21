@@ -236,7 +236,32 @@ export function useCreateSurrogate() {
 // ✅ TanStack Query for server data, Zustand for UI only
 const { data: surrogates } = useSurrogates({ status: "active" })
 const sidebarOpen = useUIStore(s => s.sidebarOpen)
+
+// ✅ For shadcn/base-ui Select, always map stored values to user-facing labels
+// Never let SelectValue fall back to raw ids/enums/slugs like "all", UUIDs, or internal keys
+const getSourceLabel = (value: string | null | undefined) =>
+    sourceLabelMap[value ?? "all"] ?? "All Sources"
+
+<Select value={sourceFilter} onValueChange={setSourceFilter}>
+    <SelectTrigger>
+        <SelectValue placeholder="All Sources">{(value) => getSourceLabel(value)}</SelectValue>
+    </SelectTrigger>
+</Select>
+
+<FilterChip label={`Source: ${getSourceLabel(sourceFilter)}`} />
 ```
+
+Dropdown/filter label rule:
+- If a control stores ids, enums, slugs, or sentinel values, define an explicit shared label helper or label map before rendering it.
+- Reuse that same helper everywhere the value appears: `SelectValue`, trigger text, active filter chips, badges, summaries, table cells, and empty/default states.
+- Default states must use human labels like `All Sources`, `All Queues`, `All Assignees`, or `No smart filter`, never raw stored values like `all`, `none`, UUIDs, or enum keys.
+- A filter UI is not complete until both the dropdown trigger and every related chip/badge show the same friendly label.
+
+Dropdown audit rule:
+- Our shared `SelectValue` renders the raw stored value unless a render function is provided. Treat every self-closing `SelectValue` as suspicious until verified.
+- When one dropdown leaks a raw value, audit the entire feature area and all sibling filters instead of fixing only the reported control.
+- For platform-wide audits, start with `rg -nU "<SelectValue[^>]*(/>|>\\s*</SelectValue>)" apps/web/app apps/web/components` and review every match whose `SelectItem` values are ids, enums, slugs, stage keys, queue ids, user ids, provider ids, or sentinel values.
+- Add or update tests for the trigger label and any related chip/badge/summary label whenever a dropdown bug is fixed.
 
 ---
 

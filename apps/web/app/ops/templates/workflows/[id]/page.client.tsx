@@ -35,6 +35,7 @@ import type { PlatformWorkflowTemplate } from "@/lib/api/platform"
 import type { ActionConfig, Condition } from "@/lib/api/workflows"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
+import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 import { US_STATES } from "@/lib/constants/us-states"
 import {
     ArrowLeftIcon,
@@ -71,6 +72,14 @@ const triggerLabels: Record<string, string> = {
 }
 
 const ICON_OPTIONS = ["template", "mail", "clock", "bell", "activity", "alert-circle"]
+const ICON_LABELS: Record<string, string> = {
+    template: "Template",
+    mail: "Mail",
+    clock: "Clock",
+    bell: "Bell",
+    activity: "Activity",
+    "alert-circle": "Alert Circle",
+}
 
 const conditionFieldLabels: Record<string, string> = {
     status_label: "Stage",
@@ -100,6 +109,10 @@ const conditionFieldLabels: Record<string, string> = {
     meta_lead_id: "Meta Lead ID",
     meta_ad_external_id: "Meta Ad External ID",
     meta_form_id: "Meta Form ID",
+}
+
+function getConditionFieldLabel(value: string): string {
+    return getSurrogateFieldLabel(value) ?? conditionFieldLabels[value] ?? "Unknown field"
 }
 
 const BOOLEAN_FIELDS = new Set([
@@ -739,7 +752,7 @@ export default function PlatformWorkflowTemplatePage() {
                             {(value: string | null) => {
                                 if (!value) return "Select value"
                                 const option = optionsForField.find((opt) => opt.value === value)
-                                return option?.label ?? value
+                                return option?.label ?? "Unknown option"
                             }}
                         </SelectValue>
                     </SelectTrigger>
@@ -1133,7 +1146,7 @@ export default function PlatformWorkflowTemplatePage() {
                                     <SelectContent>
                                         {ICON_OPTIONS.map((iconKey) => (
                                             <SelectItem key={iconKey} value={iconKey}>
-                                                {iconKey}
+                                                {ICON_LABELS[iconKey] ?? "Unknown icon"}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -1156,7 +1169,7 @@ export default function PlatformWorkflowTemplatePage() {
                                             {(value: string | null) => {
                                                 if (!value) return "Select trigger"
                                                 const trigger = triggerTypeOptions.find((t) => t.value === value)
-                                                return trigger?.label ?? value
+                                                return trigger?.label ?? triggerLabels[value] ?? "Unknown trigger"
                                             }}
                                         </SelectValue>
                                     </SelectTrigger>
@@ -1262,7 +1275,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                 {(value: string | null) => {
                                                     if (!value) return "Select form"
                                                     const form = formOptions.find((option) => option.value === value)
-                                                    return form?.label ?? value
+                                                    return form?.label ?? "Unknown form"
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
@@ -1299,7 +1312,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                 {(value: string | null) => {
                                                     if (!value) return "Any published form"
                                                     const form = formOptions.find((option) => option.value === value)
-                                                    return form?.label ?? value
+                                                    return form?.label ?? "Unknown form"
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
@@ -1337,7 +1350,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                 {(value: string | null) => {
                                                     if (!value) return "Any published form"
                                                     const form = formOptions.find((option) => option.value === value)
-                                                    return form?.label ?? value
+                                                    return form?.label ?? "Unknown form"
                                                 }}
                                             </SelectValue>
                                         </SelectTrigger>
@@ -1388,7 +1401,7 @@ export default function PlatformWorkflowTemplatePage() {
                                         <SelectContent>
                                             {conditionFields.map((field) => (
                                                 <SelectItem key={field} value={field}>
-                                                    {conditionFieldLabels[field] || field}
+                                                    {getConditionFieldLabel(field)}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -1397,7 +1410,7 @@ export default function PlatformWorkflowTemplatePage() {
                                         <div className="flex flex-wrap gap-2">
                                             {selectedTriggerFields.map((field) => (
                                                 <Badge key={field} variant="secondary" className="gap-1">
-                                                    {conditionFieldLabels[field] || field}
+                                                    {getConditionFieldLabel(field)}
                                                     <button
                                                         type="button"
                                                         className="ml-1 text-xs"
@@ -1474,14 +1487,14 @@ export default function PlatformWorkflowTemplatePage() {
                                                             <SelectValue placeholder="Field">
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Field"
-                                                                    return conditionFieldLabels[value] || value
+                                                                    return getConditionFieldLabel(value)
                                                                 }}
                                                             </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {conditionFields.map((field) => (
                                                                 <SelectItem key={field} value={field}>
-                                                                    {conditionFieldLabels[field] || field}
+                                                                    {getConditionFieldLabel(field)}
                                                                 </SelectItem>
                                                             ))}
                                                         </SelectContent>
@@ -1495,7 +1508,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                                 {(value: string | null) => {
                                                                     if (!value) return "Operator"
                                                                     const operator = conditionOperators.find((o) => o.value === value)
-                                                                    return operator?.label ?? value
+                                                                    return operator?.label ?? "Unknown operator"
                                                                 }}
                                                             </SelectValue>
                                                         </SelectTrigger>
@@ -1567,7 +1580,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                             {(value: string | null) => {
                                                                 if (!value) return "Action type"
                                                                 const actionType = actionTypeOptions.find((a) => a.value === value)
-                                                                return actionType?.label ?? value
+                                                                return actionType?.label ?? "Unknown action type"
                                                             }}
                                                         </SelectValue>
                                                     </SelectTrigger>
@@ -1641,7 +1654,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Select user"
                                                                         const user = userOptions.find((option) => option.id === value)
-                                                                        return user?.display_name ?? value
+                                                                        return user?.display_name ?? "Unknown user"
                                                                     }}
                                                                 </SelectValue>
                                                             </SelectTrigger>
@@ -1839,7 +1852,7 @@ export default function PlatformWorkflowTemplatePage() {
                                                             <SelectContent>
                                                                 {updateFields.map((field) => (
                                                                     <SelectItem key={field} value={field}>
-                                                                        {conditionFieldLabels[field] || field}
+                                                                        {getConditionFieldLabel(field)}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>

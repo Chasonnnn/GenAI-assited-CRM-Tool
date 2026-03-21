@@ -189,12 +189,12 @@ const getStageFilterLabel = (
     stages: Array<{ id: string; label: string }>
 ) => {
     if (!value || value === "all") return "All Stages"
-    return stages.find((stage) => stage.id === value)?.label ?? value
+    return stages.find((stage) => stage.id === value)?.label ?? "Unknown stage"
 }
 
 const getSourceFilterLabel = (value: string | null | undefined) => {
     if (!value || value === "all") return "All Sources"
-    return SOURCE_LABELS[value] ?? value
+    return SOURCE_LABELS[value] ?? "Unknown source"
 }
 
 const getQueueFilterLabel = (
@@ -202,7 +202,7 @@ const getQueueFilterLabel = (
     queues?: Array<{ id: string; name: string }>
 ) => {
     if (!value || value === "all") return "All Queues"
-    return queues?.find((queue) => queue.id === value)?.name ?? value
+    return queues?.find((queue) => queue.id === value)?.name ?? "Unknown queue"
 }
 
 const getAssigneeFilterLabel = (
@@ -210,12 +210,12 @@ const getAssigneeFilterLabel = (
     assignees?: Array<{ id: string; name: string }>
 ) => {
     if (!value || value === "all") return "All Assignees"
-    return assignees?.find((assignee) => assignee.id === value)?.name ?? value
+    return assignees?.find((assignee) => assignee.id === value)?.name ?? "Unknown assignee"
 }
 
 const getDynamicFilterLabel = (value: DynamicSurrogateFilter | null | undefined) => {
     if (!value) return "No smart filter"
-    return DYNAMIC_FILTER_LABELS[value]
+    return DYNAMIC_FILTER_LABELS[value] ?? "Unknown smart filter"
 }
 
 const filterDateFormatter = new Intl.DateTimeFormat("en-US", {
