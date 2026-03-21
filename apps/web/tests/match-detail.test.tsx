@@ -261,6 +261,22 @@ describe('MatchDetailPage', () => {
         const tabs = screen.getAllByRole('tab')
         expect(tabs.length).toBeGreaterThanOrEqual(2)
     })
+
+    it('renders the intended parent status label instead of the raw status slug', () => {
+        mockUseIntendedParent.mockReturnValue({
+            data: {
+                ...mockIP,
+                status: 'matched',
+                status_label: 'Connected',
+            },
+            isLoading: false,
+        })
+
+        render(<MatchDetailPage />)
+
+        expect(screen.getByText('Connected')).toBeInTheDocument()
+        expect(screen.queryByText(/^matched$/)).not.toBeInTheDocument()
+    })
 })
 
 describe('MatchDetailPage with different statuses', () => {

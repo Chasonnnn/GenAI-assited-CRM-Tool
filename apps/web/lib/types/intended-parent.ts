@@ -2,7 +2,7 @@
  * Intended Parent types
  */
 
-export type IntendedParentStatus = 'new' | 'ready_to_match' | 'matched' | 'delivered'
+export type IntendedParentStatus = string
 
 export interface IntendedParent {
     id: string
@@ -32,6 +32,10 @@ export interface IntendedParent {
     ip_clinic_fax: string | null
     ip_clinic_email: string | null
     status: IntendedParentStatus
+    stage_id?: string | null
+    stage_key?: string | null
+    stage_slug?: string | null
+    status_label?: string | null
     owner_type: 'user' | 'queue' | null
     owner_id: string | null
     owner_name: string | null
@@ -52,6 +56,10 @@ export interface IntendedParentListItem {
     budget: number | null
     partner_name: string | null
     status: IntendedParentStatus
+    stage_id?: string | null
+    stage_key?: string | null
+    stage_slug?: string | null
+    status_label?: string | null
     owner_type: 'user' | 'queue' | null
     owner_id: string | null
     owner_name: string | null
@@ -117,13 +125,15 @@ export interface IntendedParentUpdate {
 }
 
 export interface IntendedParentStatusUpdate {
-    status: IntendedParentStatus
+    stage_id: string
     reason?: string
     effective_at?: string
 }
 
 export interface IntendedParentStatusHistoryItem {
     id: string
+    old_stage_id?: string | null
+    new_stage_id?: string | null
     old_status: string | null
     new_status: string
     reason: string | null

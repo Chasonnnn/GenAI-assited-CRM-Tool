@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2Icon, UsersIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, PlusIcon, SearchIcon, AlertCircleIcon } from "lucide-react"
+import { Loader2Icon, UsersIcon, ArrowRightIcon, PlusIcon, SearchIcon, AlertCircleIcon } from "lucide-react"
 import { useMatches, useMatchStats, useCreateMatch, type MatchStatus, type MatchListItem } from "@/lib/hooks/use-matches"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
@@ -21,25 +21,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import { normalizeStageKey } from "@/lib/surrogate-stage-context"
-
-const STATUS_CONFIG: Record<MatchStatus, { label: string; color: string; icon?: React.ReactNode }> = {
-    proposed: { label: "Proposed", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" },
-    reviewing: { label: "Reviewing", color: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" },
-    accepted: { label: "Accepted", color: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", icon: <CheckCircleIcon className="size-3" /> },
-    cancel_pending: { label: "Cancellation Pending", color: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200", icon: <AlertCircleIcon className="size-3" /> },
-    rejected: { label: "Rejected", color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", icon: <XCircleIcon className="size-3" /> },
-    cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
-}
-
-const isMatchStatus = (value: string): value is MatchStatus =>
-    Object.prototype.hasOwnProperty.call(STATUS_CONFIG, value)
+import {
+    getMatchStatusBadgeClassName,
+    getMatchStatusLabel,
+    isMatchStatus,
+    MATCH_STATUS_DEFINITIONS,
+} from "@/lib/match-status-definitions"
 
 function StatusBadge({ status }: { status: MatchStatus }) {
-    const config = STATUS_CONFIG[status] || STATUS_CONFIG.proposed
     return (
-        <Badge variant="outline" className={`gap-1 ${config.color}`}>
-            {config.icon}
-            {config.label}
+        <Badge variant="outline" className={getMatchStatusBadgeClassName(status)}>
+            {getMatchStatusLabel(status)}
         </Badge>
     )
 }
@@ -399,25 +391,19 @@ export default function MatchesPage() {
                 <CardContent>
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
                         <TabsList className="mb-4">
-                            <TabsTrigger value="proposed">Proposed</TabsTrigger>
-                            <TabsTrigger value="reviewing">Reviewing</TabsTrigger>
-                            <TabsTrigger value="accepted">Accepted</TabsTrigger>
-                            <TabsTrigger value="rejected">Rejected</TabsTrigger>
+                            {MATCH_STATUS_DEFINITIONS.map((status) => (
+                                <TabsTrigger key={status.value} value={status.value}>
+                                    {status.label}
+                                </TabsTrigger>
+                            ))}
                             <TabsTrigger value="all">All</TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="proposed">
-                            <MatchTable status="proposed" search={debouncedSearch} />
-                        </TabsContent>
-                        <TabsContent value="reviewing">
-                            <MatchTable status="reviewing" search={debouncedSearch} />
-                        </TabsContent>
-                        <TabsContent value="accepted">
-                            <MatchTable status="accepted" search={debouncedSearch} />
-                        </TabsContent>
-                        <TabsContent value="rejected">
-                            <MatchTable status="rejected" search={debouncedSearch} />
-                        </TabsContent>
+                        {MATCH_STATUS_DEFINITIONS.map((status) => (
+                            <TabsContent key={status.value} value={status.value}>
+                                <MatchTable status={status.value} search={debouncedSearch} />
+                            </TabsContent>
+                        ))}
                         <TabsContent value="all">
                             <MatchTable search={debouncedSearch} />
                         </TabsContent>

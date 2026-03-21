@@ -32,29 +32,14 @@ import {
 } from "lucide-react"
 import { useMatches, useMatchStats, type MatchStatus, type ListMatchesParams } from "@/lib/hooks/use-matches"
 import { parseDateInput } from "@/lib/utils/date"
+import {
+    getMatchStatusBadgeClassName,
+    getMatchStatusLabel,
+    isMatchStatus,
+    MATCH_STATUS_DEFINITIONS,
+} from "@/lib/match-status-definitions"
 
-const STATUS_LABELS: Record<MatchStatus, string> = {
-    proposed: "Proposed",
-    reviewing: "Reviewing",
-    accepted: "Accepted",
-    cancel_pending: "Cancellation Pending",
-    rejected: "Rejected",
-    cancelled: "Cancelled",
-}
-
-const STATUS_COLORS: Record<MatchStatus, string> = {
-    proposed: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    reviewing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    accepted: "bg-green-500/10 text-green-500 border-green-500/20",
-    cancel_pending: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-    rejected: "bg-red-500/10 text-red-500 border-red-500/20",
-    cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-}
-
-const MATCH_STATUSES = ["proposed", "reviewing", "accepted", "cancel_pending", "rejected", "cancelled"] as const
-type MatchStatusFilter = (typeof MATCH_STATUSES)[number] | "all"
-const isMatchStatus = (value: string): value is MatchStatus =>
-    MATCH_STATUSES.includes(value as MatchStatus)
+type MatchStatusFilter = MatchStatus | "all"
 
 const parsePageParam = (value: string | null): number => {
     const parsed = Number(value)
@@ -204,7 +189,7 @@ export default function MatchesPage() {
                         <Card key={status}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    {STATUS_LABELS[status]}
+                                    {getMatchStatusLabel(status)}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -223,18 +208,18 @@ export default function MatchesPage() {
                             <SelectValue placeholder="All Stages">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All Stages"
-                                    if (isMatchStatus(value)) return STATUS_LABELS[value]
+                                    if (isMatchStatus(value)) return getMatchStatusLabel(value)
                                     return value
                                 }}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Stages</SelectItem>
-                            <SelectItem value="proposed">Proposed</SelectItem>
-                            <SelectItem value="reviewing">Reviewing</SelectItem>
-                            <SelectItem value="accepted">Accepted</SelectItem>
-                            <SelectItem value="rejected">Rejected</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                            {MATCH_STATUS_DEFINITIONS.map((status) => (
+                                <SelectItem key={status.value} value={status.value}>
+                                    {status.label}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                     <div className="flex-1" />
@@ -326,8 +311,8 @@ export default function MatchesPage() {
                                                         ? match.status
                                                         : "proposed"
                                                     return (
-                                                        <Badge className={STATUS_COLORS[status]}>
-                                                            {STATUS_LABELS[status]}
+                                                        <Badge className={getMatchStatusBadgeClassName(status)}>
+                                                            {getMatchStatusLabel(status)}
                                                         </Badge>
                                                     )
                                                 })()}

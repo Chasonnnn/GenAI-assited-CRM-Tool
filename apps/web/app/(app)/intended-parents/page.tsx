@@ -52,27 +52,16 @@ import {
     useIntendedParentCreatedDates,
     useCreateIntendedParent,
 } from "@/lib/hooks/use-intended-parents"
-import type { IntendedParentStatus, IntendedParentListItem } from "@/lib/types/intended-parent"
+import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
+import {
+    getIntendedParentStageOptions,
+    getIntendedParentStatusLabel,
+    getIntendedParentStatusStyle,
+} from "@/lib/intended-parent-stage-utils"
+import type { IntendedParentListItem } from "@/lib/types/intended-parent"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
-
-const STATUS_LABELS: Record<IntendedParentStatus, string> = {
-    new: "New",
-    ready_to_match: "Ready to Match",
-    matched: "Matched",
-    delivered: "Delivered",
-}
-
-const STATUS_COLORS: Record<IntendedParentStatus, string> = {
-    new: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    ready_to_match: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-    matched: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-    delivered: "bg-teal-500/10 text-teal-600 border-teal-500/20",
-}
-
-const STATUS_OPTIONS: IntendedParentStatus[] = ["new", "ready_to_match", "matched", "delivered"]
-const VALID_STATUSES = ["all", ...STATUS_OPTIONS]
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
     value !== null && VALID_DATE_RANGES.includes(value as DateRangePreset)
@@ -107,9 +96,7 @@ export default function IntendedParentsPage() {
 
     const [search, setSearch] = useState(urlSearch || "")
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
-    const [statusFilter, setStatusFilter] = useState<string>(
-        urlStatus && VALID_STATUSES.includes(urlStatus) ? urlStatus : "all"
-    )
+    const [statusFilter, setStatusFilter] = useState<string>(urlStatus || "all")
     const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
     const initialCustomRange = initialRange === "custom"
         ? {
@@ -231,9 +218,7 @@ export default function IntendedParentsPage() {
 
     // Sync state when URL changes (back/forward)
     useEffect(() => {
-        const nextStatus = searchParams.get("status") && VALID_STATUSES.includes(searchParams.get("status") as string)
-            ? searchParams.get("status") as string
-            : "all"
+        const nextStatus = searchParams.get("status") || "all"
         if (nextStatus !== statusFilter) {
             setStatusFilter(nextStatus)
         }
@@ -300,6 +285,7 @@ export default function IntendedParentsPage() {
         ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
     })
     const { data: stats } = useIntendedParentStats()
+    const { data: stageOptionsResponse } = useIntendedParentStatuses()
     const createMutation = useCreateIntendedParent()
 
     const handleSort = (column: string) => {
@@ -347,6 +333,7 @@ export default function IntendedParentsPage() {
     }
 
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
+    const statusOptions = getIntendedParentStageOptions(stageOptionsResponse?.statuses)
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -373,15 +360,17 @@ export default function IntendedParentsPage() {
                             <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
                         </CardContent>
                     </Card>
-                    {STATUS_OPTIONS.map((status) => (
-                        <Card key={status}>
+                    {statusOptions.map((status) => (
+                        <Card key={status.id}>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    {STATUS_LABELS[status]}
+                                    {status.label}
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats?.by_status[status] ?? 0}</div>
+                                <div className="text-2xl font-bold">
+                                    {stats?.by_status[status.stage_key] ?? 0}
+                                </div>
                             </CardContent>
                         </Card>
                     ))}
@@ -394,17 +383,20 @@ export default function IntendedParentsPage() {
                             <SelectValue placeholder="All Statuses">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All Statuses"
-                                    const status = STATUS_OPTIONS.find((option) => option === value)
-                                    return status ? STATUS_LABELS[status] : value
+                                    return getIntendedParentStatusLabel(
+                                        stageOptionsResponse?.statuses,
+                                        value,
+                                    )
                                 }}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Statuses</SelectItem>
-                            <SelectItem value="new">New</SelectItem>
-                            <SelectItem value="ready_to_match">Ready to Match</SelectItem>
-                            <SelectItem value="matched">Matched</SelectItem>
-                            <SelectItem value="delivered">Delivered</SelectItem>
+                            {statusOptions.map((status) => (
+                                <SelectItem key={status.id} value={status.stage_key}>
+                                    {status.label}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                     <DateRangePicker
@@ -489,8 +481,18 @@ export default function IntendedParentsPage() {
                                             <TableCell className="text-muted-foreground">{ip.state || "—"}</TableCell>
                                             <TableCell className="text-muted-foreground">{ip.partner_name || "—"}</TableCell>
                                             <TableCell>
-                                                <Badge className={STATUS_COLORS[ip.status]}>
-                                                    {STATUS_LABELS[ip.status]}
+                                                <Badge
+                                                    variant="outline"
+                                                    style={getIntendedParentStatusStyle(
+                                                        stageOptionsResponse?.statuses,
+                                                        ip.stage_key ?? ip.status,
+                                                    )}
+                                                >
+                                                    {getIntendedParentStatusLabel(
+                                                        stageOptionsResponse?.statuses,
+                                                        ip.stage_key ?? ip.status,
+                                                        ip.status_label,
+                                                    )}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">

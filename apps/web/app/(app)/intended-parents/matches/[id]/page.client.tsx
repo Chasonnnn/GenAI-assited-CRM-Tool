@@ -40,27 +40,13 @@ import { useSetAIContext } from "@/lib/context/ai-context"
 import { parseDateInput } from "@/lib/utils/date"
 import { formatRace } from "@/lib/formatters"
 import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
+import {
+    getMatchStatusBadgeClassName,
+    getMatchStatusLabel,
+} from "@/lib/match-status-definitions"
 import { MatchDetailOverviewTabs } from "./components/MatchDetailOverviewTabs"
 import { useMatchDetailTabState } from "./hooks/useMatchDetailTabState"
 import { useMatchDetailTabData } from "./hooks/useMatchDetailTabData"
-
-const STATUS_LABELS: Record<string, string> = {
-    proposed: "Proposed",
-    reviewing: "Reviewing",
-    accepted: "Accepted",
-    cancel_pending: "Cancellation Pending",
-    rejected: "Rejected",
-    cancelled: "Cancelled",
-}
-
-const STATUS_COLORS: Record<string, string> = {
-    proposed: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    reviewing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    accepted: "bg-green-500/10 text-green-500 border-green-500/20",
-    cancel_pending: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-    rejected: "bg-red-500/10 text-red-500 border-red-500/20",
-    cancelled: "bg-gray-500/10 text-gray-500 border-gray-500/20",
-}
 
 export default function MatchDetailPage() {
     const params = useParams<{ id: string }>()
@@ -310,8 +296,8 @@ export default function MatchDetailPage() {
                             )}
                         </div>
                         {/* Match Stage Badge */}
-                        <Badge className={STATUS_COLORS[match.status]}>
-                            {STATUS_LABELS[match.status]}
+                        <Badge className={getMatchStatusBadgeClassName(match.status)}>
+                            {getMatchStatusLabel(match.status)}
                         </Badge>
                         {/* Accept/Reject buttons for proposed/reviewing matches */}
                         {canChangeStatus && (match.status === 'proposed' || match.status === 'reviewing') && (
@@ -489,7 +475,9 @@ export default function MatchDetailPage() {
                                                             {ipData.full_name || "Intended Parent"}
                                                         </Link>
                                                     </h3>
-                                                    <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-0.5">{ipData.status}</Badge>
+                                                    <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-0.5">
+                                                        {ipData.status_label || ipData.status || "—"}
+                                                    </Badge>
                                                 </div>
                                             </div>
 

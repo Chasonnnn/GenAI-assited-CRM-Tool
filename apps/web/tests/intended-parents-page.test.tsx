@@ -40,6 +40,55 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useCreateIntendedParent: () => ({ mutateAsync: mockCreateIntendedParent, isPending: false }),
 }))
 
+vi.mock('@/lib/hooks/use-metadata', () => ({
+    useIntendedParentStatuses: () => ({
+        data: {
+            statuses: [
+                {
+                    id: 'stage-new',
+                    value: 'new',
+                    label: 'New',
+                    stage_key: 'new',
+                    stage_slug: 'new',
+                    stage_type: 'intake',
+                    color: '#3B82F6',
+                    order: 1,
+                },
+                {
+                    id: 'stage-ready',
+                    value: 'ready_to_match',
+                    label: 'Ready to Match',
+                    stage_key: 'ready_to_match',
+                    stage_slug: 'ready_to_match',
+                    stage_type: 'post_approval',
+                    color: '#F59E0B',
+                    order: 2,
+                },
+                {
+                    id: 'stage-matched',
+                    value: 'matched',
+                    label: 'Matched',
+                    stage_key: 'matched',
+                    stage_slug: 'matched',
+                    stage_type: 'post_approval',
+                    color: '#10B981',
+                    order: 3,
+                },
+                {
+                    id: 'stage-delivered',
+                    value: 'delivered',
+                    label: 'Delivered',
+                    stage_key: 'delivered',
+                    stage_slug: 'delivered',
+                    stage_type: 'post_approval',
+                    color: '#14B8A6',
+                    order: 4,
+                },
+            ],
+        },
+    }),
+}))
+
 describe('IntendedParentsPage', () => {
     beforeEach(() => {
         mockSearchParams.delete('page')
@@ -59,6 +108,10 @@ describe('IntendedParentsPage', () => {
                         state: 'CA',
                         budget: 50000,
                         status: 'new',
+                        stage_id: 'stage-new',
+                        stage_key: 'new',
+                        stage_slug: 'new',
+                        status_label: 'New',
                         owner_type: null,
                         owner_id: null,
                         owner_name: null,
