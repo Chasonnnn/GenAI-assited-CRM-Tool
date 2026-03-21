@@ -1,9 +1,11 @@
 """Surrogate service - business logic for surrogate operations."""
 
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 import logging
 from uuid import UUID
 
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
@@ -17,7 +19,7 @@ from app.db.enums import (
     OwnerType,
     Role,
 )
-from app.db.models import Surrogate, SurrogateStatusHistory, User
+from app.db.models import EmailLog, FormSubmission, MetaLead, Surrogate, SurrogateStatusHistory, User
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import InterviewOutcomeCreate, SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import (
@@ -36,6 +38,196 @@ logger = logging.getLogger(__name__)
 
 SURROGATE_NUMBER_COUNTER_FLOOR = 10000
 MAX_SURROGATE_CREATE_ATTEMPTS = 5
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+_LEAD_WARNING_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("email", ("email", "email_address", "emailaddress", "e_mail")),
+    (
+        "phone",
+        ("phone", "phone_number", "phone_number_1", "mobile_phone", "cell_phone", "mobile"),
+    ),
+    ("height_ft", ("height_ft", "height", "height_feet", "height_inches")),
+    ("weight_lb", ("weight_lb", "weight", "weight_lbs", "weight_pounds")),
+)
+
+
+def _normalize_json_key(value: str) -> str:
+    return value.lower().replace("-", "_").replace(" ", "_")
+
+
+def _coerce_raw_scalar(value: object) -> str | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, int | float | Decimal):
+        return str(value)
+    if isinstance(value, list):
+        parts = [part for item in value if (part := _coerce_raw_scalar(item))]
+        return ", ".join(parts) or None
+    return None
+
+
+def _find_json_value_by_key(payload: object, candidate_keys: tuple[str, ...]) -> str | None:
+    normalized_keys = {_normalize_json_key(key) for key in candidate_keys}
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if _normalize_json_key(str(key)) in normalized_keys:
+                coerced = _coerce_raw_scalar(value)
+                if coerced:
+                    return coerced
+        for value in payload.values():
+            nested = _find_json_value_by_key(value, candidate_keys)
+            if nested:
+                return nested
+    elif isinstance(payload, list):
+        for item in payload:
+            nested = _find_json_value_by_key(item, candidate_keys)
+            if nested:
+                return nested
+    return None
+
+
+def _has_valid_email(value: str | None) -> bool:
+    if not value or not value.strip():
+        return False
+    try:
+        _EMAIL_ADAPTER.validate_python(value)
+    except ValidationError:
+        return False
+    return True
+
+
+def _has_bounced_email_delivery(
+    db: Session,
+    surrogate: Surrogate,
+    *candidate_emails: str | None,
+) -> bool:
+    normalized_candidates = sorted(
+        {
+            value.strip().lower()
+            for value in candidate_emails
+            if isinstance(value, str) and _has_valid_email(value)
+        }
+    )
+    if not normalized_candidates:
+        return False
+
+    bounced_email = (
+        db.query(EmailLog.id)
+        .filter(
+            EmailLog.organization_id == surrogate.organization_id,
+            EmailLog.surrogate_id == surrogate.id,
+            func.lower(EmailLog.recipient_email).in_(normalized_candidates),
+            or_(EmailLog.resend_status == "bounced", EmailLog.bounced_at.isnot(None)),
+        )
+        .order_by(EmailLog.bounced_at.desc(), EmailLog.created_at.desc())
+        .first()
+    )
+    return bounced_email is not None
+
+
+def _has_valid_phone(value: str | None) -> bool:
+    if not value or not value.strip():
+        return False
+    try:
+        normalize_phone(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _has_valid_decimal(value: object | None) -> bool:
+    if value is None:
+        return False
+    try:
+        return Decimal(str(value)) > 0
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+
+
+def _has_valid_int(value: object | None) -> bool:
+    if value is None:
+        return False
+    try:
+        return int(value) > 0
+    except (ValueError, TypeError):
+        return False
+
+
+def _resolve_latest_lead_payload(db: Session, surrogate: Surrogate) -> dict:
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == surrogate.organization_id,
+            FormSubmission.surrogate_id == surrogate.id,
+        )
+        .order_by(FormSubmission.submitted_at.desc(), FormSubmission.created_at.desc())
+        .first()
+    )
+    if submission and isinstance(submission.answers_json, dict):
+        return submission.answers_json
+
+    if surrogate.meta_lead_id:
+        meta_lead = (
+            db.query(MetaLead)
+            .filter(
+                MetaLead.organization_id == surrogate.organization_id,
+                MetaLead.id == surrogate.meta_lead_id,
+            )
+            .first()
+        )
+        if meta_lead:
+            return meta_lead.field_data_raw or meta_lead.field_data or meta_lead.raw_payload or {}
+
+    return {}
+
+
+def build_lead_intake_warnings(db: Session, surrogate: Surrogate) -> list[dict[str, str]]:
+    raw_payload = _resolve_latest_lead_payload(db, surrogate)
+    if not raw_payload:
+        return []
+
+    warnings: list[dict[str, str]] = []
+    validators = {
+        "email": (surrogate.email, _has_valid_email),
+        "phone": (surrogate.phone, _has_valid_phone),
+        "height_ft": (surrogate.height_ft, _has_valid_decimal),
+        "weight_lb": (surrogate.weight_lb, _has_valid_int),
+    }
+
+    for field_key, candidate_keys in _LEAD_WARNING_KEYS:
+        raw_value = _find_json_value_by_key(raw_payload, candidate_keys)
+        if not raw_value:
+            continue
+
+        current_value, validator = validators[field_key]
+        if field_key == "email":
+            if validator(current_value) and not _has_bounced_email_delivery(
+                db,
+                surrogate,
+                current_value,
+                raw_value,
+            ):
+                continue
+        elif validator(current_value):
+            continue
+
+        issue = "missing_value"
+        if current_value is not None and (
+            not isinstance(current_value, str) or current_value.strip()
+        ):
+            issue = "invalid_value"
+
+        warnings.append(
+            {
+                "field_key": field_key,
+                "issue": issue,
+                "raw_value": raw_value,
+            }
+        )
+
+    return warnings
 
 
 def _parse_created_to_filter(value: str) -> tuple[datetime, bool]:
