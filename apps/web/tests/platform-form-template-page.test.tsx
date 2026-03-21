@@ -186,6 +186,71 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
     })
 
+    it("renders human-readable labels for inspector dropdown triggers across the template builder", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Add Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
+        fireEvent.click(await screen.findByRole("button", { name: /select email field/i }))
+        fireEvent.click(screen.getByRole("tab", { name: /^advanced$/i }))
+
+        const logicSection = screen.getByText("Logic").closest("section")
+        expect(logicSection).not.toBeNull()
+
+        const displayRuleSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[0]
+        expect(displayRuleSelect).toHaveTextContent("Always show")
+        expect(displayRuleSelect).not.toHaveTextContent("none")
+
+        fireEvent.mouseDown(displayRuleSelect)
+        const nameFieldOption = await screen.findByRole("option", { name: "Name" })
+        fireEvent.mouseMove(nameFieldOption)
+        fireEvent.click(nameFieldOption)
+
+        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Name")
+
+        const operatorSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[1]
+        fireEvent.mouseDown(operatorSelect)
+        const notEqualsOption = await screen.findByRole("option", { name: "Does not equal" })
+        fireEvent.mouseMove(notEqualsOption)
+        fireEvent.click(notEqualsOption)
+
+        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).toHaveTextContent("Does not equal")
+        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).not.toHaveTextContent("not_equals")
+
+        const mappingSection = screen.getByText("Mapping").closest("section")
+        expect(mappingSection).not.toBeNull()
+
+        const mappingSelect = within(mappingSection as HTMLElement).getByRole("combobox")
+        expect(mappingSelect).toHaveTextContent("None")
+        expect(mappingSelect).not.toHaveTextContent("none")
+
+        fireEvent.mouseDown(mappingSelect)
+        const fullNameMappingOption = await screen.findByRole("option", { name: "Full Name" })
+        fireEvent.mouseMove(fullNameMappingOption)
+        fireEvent.click(fullNameMappingOption)
+
+        expect(within(mappingSection as HTMLElement).getByRole("combobox")).toHaveTextContent("Full Name")
+        expect(within(mappingSection as HTMLElement).getByRole("combobox")).not.toHaveTextContent("full_name")
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Table field" }))
+        fireEvent.click(await screen.findByRole("button", { name: /select table field/i }))
+
+        const columnsSection = screen.getByText("Table setup").closest("section")
+        expect(columnsSection).not.toBeNull()
+
+        const columnTypeSelect = within(columnsSection as HTMLElement).getAllByRole("combobox")[0]
+        expect(columnTypeSelect).toHaveTextContent("Yes / No")
+        expect(columnTypeSelect).not.toHaveTextContent("radio")
+
+        fireEvent.mouseDown(columnTypeSelect)
+        const longTextOption = await screen.findByRole("option", { name: "Long text" })
+        fireEvent.mouseMove(longTextOption)
+        fireEvent.click(longTextOption)
+
+        expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Long text")
+        expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).not.toHaveTextContent("textarea")
+    })
+
     it("uses a persistent field browser, live edit canvas, and tabbed field settings rail", async () => {
         render(<PlatformFormTemplatePage />)
 

@@ -104,6 +104,52 @@ describe("FormBuilderPage", () => {
         expect(templateSelect).not.toHaveTextContent("none")
     })
 
+    it("renders human-readable labels for inspector dropdown triggers", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
+        fireEvent.click(await screen.findByRole("button", { name: /select email field/i }))
+        fireEvent.click(screen.getByRole("tab", { name: /^advanced$/i }))
+
+        const logicSection = screen.getByText("Logic").closest("section")
+        expect(logicSection).not.toBeNull()
+
+        const displayRuleSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[0]
+        expect(displayRuleSelect).toHaveTextContent("Always show")
+        expect(displayRuleSelect).not.toHaveTextContent("none")
+
+        fireEvent.mouseDown(displayRuleSelect)
+        const nameFieldOption = await screen.findByRole("option", { name: "Name" })
+        fireEvent.mouseMove(nameFieldOption)
+        fireEvent.click(nameFieldOption)
+
+        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Name")
+
+        const operatorSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[1]
+        fireEvent.mouseDown(operatorSelect)
+        const notEqualsOption = await screen.findByRole("option", { name: "Does not equal" })
+        fireEvent.mouseMove(notEqualsOption)
+        fireEvent.click(notEqualsOption)
+
+        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).toHaveTextContent("Does not equal")
+        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).not.toHaveTextContent("not_equals")
+
+        const mappingSection = screen.getByText("Mapping").closest("section")
+        expect(mappingSection).not.toBeNull()
+
+        const mappingSelect = within(mappingSection as HTMLElement).getByRole("combobox")
+        expect(mappingSelect).toHaveTextContent("None")
+        expect(mappingSelect).not.toHaveTextContent("none")
+
+        fireEvent.mouseDown(mappingSelect)
+        const fullNameMappingOption = await screen.findByRole("option", { name: "Full Name" })
+        fireEvent.mouseMove(fullNameMappingOption)
+        fireEvent.click(fullNameMappingOption)
+
+        expect(within(mappingSection as HTMLElement).getByRole("combobox")).toHaveTextContent("Full Name")
+        expect(within(mappingSection as HTMLElement).getByRole("combobox")).not.toHaveTextContent("full_name")
+    })
 
     it("uses a persistent field browser, live edit canvas, and docked settings rail", async () => {
         render(<FormBuilderPage />)

@@ -124,6 +124,24 @@ function buildCanvasField(field: BuilderFormField): FormField {
     }
 }
 
+const TABLE_COLUMN_TYPE_LABELS: Record<NonNullable<BuilderFormField["columns"]>[number]["type"], string> = {
+    text: "Text",
+    textarea: "Long text",
+    number: "Number",
+    date: "Date",
+    select: "Select",
+    radio: "Yes / No",
+}
+
+const SHOW_IF_OPERATOR_LABELS: Record<NonNullable<BuilderFormField["showIf"]>["operator"], string> = {
+    equals: "Equals",
+    not_equals: "Does not equal",
+    contains: "Contains",
+    not_contains: "Does not contain",
+    is_empty: "Is empty",
+    is_not_empty: "Is not empty",
+}
+
 function InspectorSection({
     title,
     description,
@@ -552,6 +570,22 @@ function FieldInspector({
     const [activeTab, setActiveTab] = React.useState("general")
     const settingsPanelClass =
         "w-full border-t border-border/70 bg-card p-4 xl:min-h-[58rem] xl:w-auto xl:self-stretch xl:overflow-y-auto xl:border-t-0 xl:border-l xl:p-6"
+    const selectedFieldId = selectedFieldData?.id ?? null
+    const conditionalFields = React.useMemo(
+        () => currentPage.fields.filter((field) => field.id !== selectedFieldId),
+        [currentPage.fields, selectedFieldId],
+    )
+    const fieldLabelMap = React.useMemo(
+        () =>
+            new Map(
+                conditionalFields.map((field) => [field.id, field.label.trim() || "Untitled field"] as const),
+            ),
+        [conditionalFields],
+    )
+    const mappingLabelMap = React.useMemo(
+        () => new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const)),
+        [mappingOptions],
+    )
 
     React.useEffect(() => {
         setActiveTab("general")
@@ -805,7 +839,13 @@ function FieldInspector({
                                                     }}
                                                 >
                                                     <SelectTrigger className="w-[130px]">
-                                                        <SelectValue />
+                                                        <SelectValue>
+                                                            {(value: string | null) =>
+                                                                TABLE_COLUMN_TYPE_LABELS[
+                                                                    (value as keyof typeof TABLE_COLUMN_TYPE_LABELS) ?? "text"
+                                                                ] ?? value ?? "Text"
+                                                            }
+                                                        </SelectValue>
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="text">Text</SelectItem>
@@ -890,17 +930,21 @@ function FieldInspector({
                                 }
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Show when..." />
+                                    <SelectValue placeholder="Show when...">
+                                        {(value: string | null) =>
+                                            value === "none"
+                                                ? "Always show"
+                                                : fieldLabelMap.get(value ?? "") ?? value ?? "Show when..."
+                                        }
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Always show</SelectItem>
-                                    {currentPage.fields
-                                        .filter((field) => field.id !== selectedFieldData.id)
-                                        .map((field) => (
-                                            <SelectItem key={field.id} value={field.id}>
-                                                {field.label || "Untitled field"}
-                                            </SelectItem>
-                                        ))}
+                                    {conditionalFields.map((field) => (
+                                        <SelectItem key={field.id} value={field.id}>
+                                            {field.label || "Untitled field"}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
 
@@ -915,7 +959,13 @@ function FieldInspector({
                                         }
                                     >
                                         <SelectTrigger>
-                                            <SelectValue />
+                                            <SelectValue>
+                                                {(value: string | null) =>
+                                                    SHOW_IF_OPERATOR_LABELS[
+                                                        (value as keyof typeof SHOW_IF_OPERATOR_LABELS) ?? "equals"
+                                                    ] ?? value ?? "Equals"
+                                                }
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="equals">Equals</SelectItem>
@@ -1041,7 +1091,13 @@ function FieldInspector({
                                 onValueChange={(value) => onMappingChange(selectedFieldData.id, value)}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select field" />
+                                    <SelectValue placeholder="Select field">
+                                        {(value: string | null) =>
+                                            value === "none"
+                                                ? "None"
+                                                : mappingLabelMap.get(value ?? "") ?? value ?? "Select field"
+                                        }
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">None</SelectItem>
