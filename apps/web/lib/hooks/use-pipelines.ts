@@ -5,6 +5,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as pipelinesApi from '../api/pipelines';
 import type {
+    PipelineDraft,
+    PipelineFeatureConfig,
     PipelineUpdate,
     StageCreate,
     StageUpdate,
@@ -15,8 +17,13 @@ export const pipelineKeys = {
     all: ['pipelines'] as const,
     list: () => [...pipelineKeys.all, 'list'] as const,
     detail: (id: string) => [...pipelineKeys.all, 'detail', id] as const,
+    semantics: (id: string) => [...pipelineKeys.all, 'semantics', id] as const,
+    dependencyGraph: (id: string) => [...pipelineKeys.all, 'dependency-graph', id] as const,
+    preview: (id: string, draftKey: string) => [...pipelineKeys.all, 'preview', id, draftKey] as const,
+    recommendedDraft: (id: string) => [...pipelineKeys.all, 'recommended-draft', id] as const,
     versions: (id: string) => [...pipelineKeys.all, 'versions', id] as const,
     default: () => [...pipelineKeys.all, 'default'] as const,
+    defaultSemantics: () => [...pipelineKeys.all, 'default-semantics'] as const,
     stages: (id: string) => [...pipelineKeys.all, 'stages', id] as const,
 };
 
@@ -38,11 +45,43 @@ export function useDefaultPipeline() {
     });
 }
 
+export function useDefaultPipelineSemantics() {
+    return useQuery({
+        queryKey: pipelineKeys.defaultSemantics(),
+        queryFn: pipelinesApi.getDefaultPipelineSemantics,
+    });
+}
+
 export function usePipeline(id: string | null) {
     return useQuery({
         queryKey: pipelineKeys.detail(id || ''),
         queryFn: () => pipelinesApi.getPipeline(id!),
         enabled: !!id,
+    });
+}
+
+export function usePipelineSemantics(id: string | null) {
+    return useQuery({
+        queryKey: pipelineKeys.semantics(id || ''),
+        queryFn: () => pipelinesApi.getPipelineSemantics(id!),
+        enabled: !!id,
+    });
+}
+
+export function usePipelineDependencyGraph(id: string | null) {
+    return useQuery({
+        queryKey: pipelineKeys.dependencyGraph(id || ''),
+        queryFn: () => pipelinesApi.getPipelineDependencyGraph(id!),
+        enabled: !!id,
+    });
+}
+
+export function usePipelineChangePreview(id: string | null, draft: PipelineDraft | null) {
+    const draftKey = draft ? JSON.stringify(draft) : '';
+    return useQuery({
+        queryKey: pipelineKeys.preview(id || '', draftKey),
+        queryFn: () => pipelinesApi.previewPipelineChanges(id!, draft!),
+        enabled: !!id && !!draft,
     });
 }
 
@@ -62,8 +101,15 @@ export function useCreatePipeline() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ name, stages }: { name: string; stages?: StageCreate[] }) =>
-            pipelinesApi.createPipeline(name, stages),
+        mutationFn: ({
+            name,
+            stages,
+            feature_config,
+        }: {
+            name: string;
+            stages?: StageCreate[];
+            feature_config?: PipelineFeatureConfig;
+        }) => pipelinesApi.createPipeline(name, stages, feature_config),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
         },
@@ -78,8 +124,11 @@ export function useUpdatePipeline() {
             pipelinesApi.updatePipeline(id, data),
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -103,8 +152,35 @@ export function useRollbackPipeline() {
             pipelinesApi.rollbackPipeline(id, version),
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+        },
+    });
+}
+
+export function useRecommendedPipelineDraft() {
+    return useMutation({
+        mutationFn: (id: string) => pipelinesApi.getRecommendedPipelineDraft(id),
+    });
+}
+
+export function useApplyPipelineDraft() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: PipelineDraft }) =>
+            pipelinesApi.applyPipelineDraft(id, data),
+        onSuccess: (_, { id }) => {
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.dependencyGraph(id) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -121,8 +197,11 @@ export function useCreateStage() {
             pipelinesApi.createStage(pipelineId, data),
         onSuccess: (_, { pipelineId }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -135,7 +214,10 @@ export function useUpdateStage() {
             pipelinesApi.updateStage(pipelineId, stageId, data),
         onSuccess: (_, { pipelineId }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -158,8 +240,11 @@ export function useDeleteStage() {
             pipelinesApi.deleteStage(pipelineId, stageId, migrateToStageId, expectedVersion),
         onSuccess: (_, { pipelineId }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -180,7 +265,10 @@ export function useReorderStages() {
             pipelinesApi.reorderStages(pipelineId, orderedStageIds, expectedVersion),
         onSuccess: (_, { pipelineId }) => {
             queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
             queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
