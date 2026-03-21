@@ -2,6 +2,55 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.90.46](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.45...surrogacy-crm-platform-v0.90.46) (2026-03-21)
+
+
+### Features
+
+* add dynamic pipeline analytics reporting ([7644f54](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7644f54b599992cc4d6ff619d8ba33f31627f33c))
+* add pipeline semantics backend platform ([51bfd2f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/51bfd2f35293a1af9986735c8b21d0a9e52e0beb))
+* add preset field previews to form builders ([5ad735b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5ad735bb0ea7a28158a6d57ccee4a1ad4773ea6c))
+* build draft-based pipeline settings editor ([71ee007](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/71ee007bbae44f565deb6f937de2933fc1610a09))
+* enrich surrogate history timeline ([53fbbf1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/53fbbf18cae748ae2e708766efe74725acf22006))
+* expand surrogate list and history api ([d368512](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d3685121b10b2ae71d515fd18e845db556ed0402))
+* simplify surrogate list filters ([090b10c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/090b10cd58412af89d465f3f77cfb2e7c26b44ed))
+
+
+### Bug Fixes
+
+* correct form list saved timestamps ([2b2accd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2b2accd46212d68e06b8e744d74fe0a30388d207))
+* derive campaign presets from pipeline semantics ([f22690f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f22690f06ab3da27255e6405435b3dc122959c98))
+* derive lead intake review warnings from source payloads ([520d0d6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/520d0d60764ac9731e8f4eb91fa87ac6535266a3))
+* drive surrogate ui behavior from stage semantics ([e9381ef](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9381ef5732236f8a04f8ffffe869bfff55b2c4a))
+* expose lead intake review warnings in surrogate detail ([7077cf1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7077cf155c8e2dc274561aa960c16b973c39a532))
+* flag bounced emails in surrogate intake warnings ([84c6418](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/84c6418d19ffc2ecfd5fa9fd50a8cecb22f83dd3))
+* generate surrogate contract dependencies ([8652257](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8652257e69c0279818aed35e016d23d8d5eb89db))
+* harden web previews and editor accessibility ([4f99ca7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f99ca7167b3fad358121474cd7ad8bfb3cb1c01))
+* move surrogate warning queries into service layer ([0956f3d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0956f3de5a06f00096a4f39989b795652a0e7f9a))
+* normalize dropdown labels across the app ([b59a5f6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b59a5f625058cd7e46b9b112443fa9f2eb56bf2d))
+* normalize public form option typography ([f188a6b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f188a6b0c839d6f2cc74c9bce5e2a9e43a180ccc))
+* normalize surrogate search query params ([0502232](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/050223239820e4f7f809b90ba887c7dad6788a0b))
+* patch frontend audit vulnerabilities ([12dd245](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/12dd2455b3055c621b5c0948d340775ea2832fae))
+* preserve custom date range on first apply ([615c62d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/615c62d34c37cc66a1cff1fc97afc3d9fbd7faee))
+* preserve pending profile edits in settings ([512b8fe](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/512b8fe592423c136b21b30289d2cc652535475e))
+* refresh generated surrogate contracts ([215b520](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/215b5204388bbaf6475c2e14de1071fd3ac8a42f))
+* remap pipeline changes across campaigns and workflows ([0f6f733](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0f6f733af7f41b676c0abf2c75b6001ff99d8904))
+* render journey exports from api html ([a3b2719](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a3b2719ee608f675c61e55b3843b71293a342a06))
+* render lead intake review card on surrogate overview ([8fad5e0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8fad5e0c8d3aa6a3117c71f456131b273aab8f40))
+* resolve automation stages from pipeline semantics ([c2a9b9c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2a9b9c590d0e56b311f4d7a139ab67bee894f2a))
+* return null for empty surrogate form state ([fbbd1ab](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fbbd1ab5bc779d99603f68eb3d5fccb458edb332))
+* simplify form template publish flow ([36f11fb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/36f11fb42cb74d8f76eb64d36b95cc8a357512d1))
+* soften intelligent suggestions filter styling ([16e0e02](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/16e0e02b42a48ec9da66a370e6c1f523ecdee7ae))
+* streamline surrogate filters and lead warnings ([f6b0848](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f6b0848ff9eba6f74eade1294a3a160a868484e8))
+* sync settings surfaces with pipeline semantics ([944036f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/944036f9f84dd61ec51522ff82957c72a4ca9e0b))
+* wire backend workflows to pipeline semantics ([6db5dc9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6db5dc98496a54bc60d7397ebeb9a5318c5eb165))
+
+
+### Maintenance
+
+* bump vulnerable api dependencies ([4927b3f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4927b3faf4524cb6394761e9f8f28fd7e0f1299e))
+* ignore local gstack workspace files ([30bfe60](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/30bfe60cac5e089ab0863694504892131e09e61c))
+
 ## [0.90.45](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.90.44...surrogacy-crm-platform-v0.90.45) (2026-03-16)
 
 
