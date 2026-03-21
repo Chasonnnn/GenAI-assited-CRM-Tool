@@ -89,7 +89,7 @@ export function FormBuilderFieldPreview({
             role="group"
             aria-label={`Preview answer for ${label}`}
             className={cn(
-                "pointer-events-none mt-3 rounded-2xl border border-border/60 bg-muted/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]",
+                "pointer-events-none mt-2 rounded-2xl border border-border/60 bg-muted/20 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]",
                 className,
             )}
         >
