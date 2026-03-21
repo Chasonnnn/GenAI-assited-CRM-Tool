@@ -608,7 +608,7 @@ export function sendFormIntakeLink(
     })
 }
 
-export function getSurrogateSubmission(formId: string, surrogateId: string): Promise<FormSubmissionRead> {
+export function getSurrogateSubmission(formId: string, surrogateId: string): Promise<FormSubmissionRead | null> {
     return api.get<FormSubmissionRead>(`/forms/${formId}/surrogates/${surrogateId}/submission`)
 }
 
@@ -711,7 +711,7 @@ export function restoreSharedPublicFormDraft(
 export function getSurrogateDraftStatus(
     formId: string,
     surrogateId: string,
-): Promise<FormDraftStatusRead> {
+): Promise<FormDraftStatusRead | null> {
     return api.get<FormDraftStatusRead>(`/forms/${formId}/surrogates/${surrogateId}/draft`)
 }
 

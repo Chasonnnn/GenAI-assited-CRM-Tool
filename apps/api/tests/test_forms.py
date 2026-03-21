@@ -192,6 +192,42 @@ async def test_form_submission_approval_updates_surrogate(
 
 
 @pytest.mark.asyncio
+async def test_surrogate_submission_and_draft_endpoints_return_null_when_empty(
+    authed_client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form_id, _link_id, _slug = await _create_published_form_and_shared_link(
+        authed_client=authed_client,
+        name="Empty Application Form",
+        schema={
+            "pages": [
+                {
+                    "title": "Basics",
+                    "fields": [
+                        {
+                            "key": "full_name",
+                            "label": "Full Name",
+                            "type": "text",
+                            "required": True,
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+
+    submission_res = await authed_client.get(
+        f"/forms/{form_id}/surrogates/{surrogate.id}/submission"
+    )
+    assert submission_res.status_code == 200
+    assert submission_res.json() is None
+
+    draft_res = await authed_client.get(f"/forms/{form_id}/surrogates/{surrogate.id}/draft")
+    assert draft_res.status_code == 200
+    assert draft_res.json() is None
+
+
+@pytest.mark.asyncio
 async def test_publish_form_auto_generates_default_shared_intake_link(authed_client, db, test_org):
     schema = {
         "pages": [

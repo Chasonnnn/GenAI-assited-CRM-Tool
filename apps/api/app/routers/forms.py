@@ -988,7 +988,7 @@ def list_form_submissions(
 
 @router.get(
     "/{form_id}/surrogates/{surrogate_id}/submission",
-    response_model=FormSubmissionRead,
+    response_model=FormSubmissionRead | None,
     dependencies=[Depends(require_permission(POLICIES["surrogates"].default))],
 )
 def get_surrogate_submission(
@@ -1009,7 +1009,7 @@ def get_surrogate_submission(
         db, session.org_id, form.id, surrogate.id
     )
     if not submission:
-        raise HTTPException(status_code=404, detail="Submission not found")
+        return None
     files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
     audit_service.log_phi_access(
         db=db,
@@ -1026,7 +1026,7 @@ def get_surrogate_submission(
 
 @router.get(
     "/{form_id}/surrogates/{surrogate_id}/draft",
-    response_model=FormDraftStatusRead,
+    response_model=FormDraftStatusRead | None,
     dependencies=[Depends(require_permission(POLICIES["surrogates"].default))],
 )
 def get_surrogate_draft_status(
@@ -1050,7 +1050,7 @@ def get_surrogate_draft_status(
         surrogate_id=surrogate.id,
     )
     if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
+        return None
 
     return FormDraftStatusRead(started_at=draft.started_at, updated_at=draft.updated_at)
 
