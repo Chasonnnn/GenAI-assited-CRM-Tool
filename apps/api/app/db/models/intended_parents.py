@@ -173,10 +173,10 @@ class IntendedParent(Base):
     notes_internal: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
 
     # Status & workflow
-    stage_id: Mapped[uuid.UUID | None] = mapped_column(
+    stage_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("pipeline_stages.id", ondelete="RESTRICT"),
-        nullable=True,
+        nullable=False,
     )
     status: Mapped[str] = mapped_column(
         String(50), server_default=text(f"'{DEFAULT_IP_STATUS.value}'"), nullable=False

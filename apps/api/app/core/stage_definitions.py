@@ -75,6 +75,9 @@ INTENDED_PARENT_STAGE_TYPE_MAP = {
     "delivered": "post_approval",
 }
 
+# Backward-compatible surrogate aggregate used by legacy generators and tests.
+STAGE_TYPE_MAP = dict(SURROGATE_STAGE_TYPE_MAP)
+
 SURROGATE_LABEL_OVERRIDES = {
     "on_hold": "On-Hold",
     "pre_qualified": "Pre-Qualified",

@@ -1,4 +1,4 @@
-from app.core.stage_definitions import DEFAULT_STAGE_ORDER, get_default_stage_defs
+from app.core.stage_definitions import DEFAULT_STAGE_ORDER, STAGE_TYPE_MAP, get_default_stage_defs
 
 
 def test_application_submitted_before_interview_scheduled() -> None:
@@ -51,3 +51,9 @@ def test_default_stage_defs_match_recommended_platform_labels() -> None:
     stage_defs = get_default_stage_defs()
 
     assert [(stage["stage_key"], stage["label"]) for stage in stage_defs] == expected_stages
+
+
+def test_stage_type_map_matches_default_surrogate_stage_defs() -> None:
+    stage_defs = get_default_stage_defs()
+
+    assert STAGE_TYPE_MAP == {stage["slug"]: stage["stage_type"] for stage in stage_defs}
