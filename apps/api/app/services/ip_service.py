@@ -384,6 +384,26 @@ def create_intended_parent(
     partner_email: str | None = None,
     pronouns: str | None = None,
     partner_pronouns: str | None = None,
+    date_of_birth: date | None = None,
+    partner_date_of_birth: date | None = None,
+    marital_status: str | None = None,
+    embryo_count: int | None = None,
+    pgs_tested: bool | None = None,
+    egg_source: str | None = None,
+    sperm_source: str | None = None,
+    trust_provider_name: str | None = None,
+    trust_primary_contact_name: str | None = None,
+    trust_email: str | None = None,
+    trust_phone: str | None = None,
+    trust_address_line1: str | None = None,
+    trust_address_line2: str | None = None,
+    trust_city: str | None = None,
+    trust_state: str | None = None,
+    trust_postal: str | None = None,
+    trust_case_reference: str | None = None,
+    trust_funding_status: str | None = None,
+    trust_portal_url: str | None = None,
+    trust_notes: str | None = None,
     address_line1: str | None = None,
     address_line2: str | None = None,
     city: str | None = None,
@@ -447,6 +467,26 @@ def create_intended_parent(
         partner_email_hash=partner_email_hash,
         pronouns=pronouns,
         partner_pronouns=partner_pronouns,
+        date_of_birth=date_of_birth,
+        partner_date_of_birth=partner_date_of_birth,
+        marital_status=marital_status,
+        embryo_count=embryo_count,
+        pgs_tested=pgs_tested,
+        egg_source=egg_source,
+        sperm_source=sperm_source,
+        trust_provider_name=trust_provider_name,
+        trust_primary_contact_name=trust_primary_contact_name,
+        trust_email=trust_email,
+        trust_phone=trust_phone,
+        trust_address_line1=trust_address_line1,
+        trust_address_line2=trust_address_line2,
+        trust_city=trust_city,
+        trust_state=trust_state,
+        trust_postal=trust_postal,
+        trust_case_reference=trust_case_reference,
+        trust_funding_status=trust_funding_status,
+        trust_portal_url=trust_portal_url,
+        trust_notes=trust_notes,
         address_line1=address_line1,
         address_line2=address_line2,
         city=city,
@@ -487,102 +527,120 @@ def update_intended_parent(
     ip: IntendedParent,
     user_id: UUID,
     *,
-    full_name: str | None = None,
-    email: str | None = None,
-    phone: str | None = None,
-    state: str | None = None,
-    budget: Decimal | None = None,
-    notes_internal: str | None = None,
-    owner_type: str | None = None,
-    owner_id: UUID | None = None,
-    partner_name: str | None = None,
-    partner_email: str | None = None,
-    pronouns: str | None = None,
-    partner_pronouns: str | None = None,
-    address_line1: str | None = None,
-    address_line2: str | None = None,
-    city: str | None = None,
-    postal: str | None = None,
-    ip_clinic_name: str | None = None,
-    ip_clinic_address_line1: str | None = None,
-    ip_clinic_address_line2: str | None = None,
-    ip_clinic_city: str | None = None,
-    ip_clinic_state: str | None = None,
-    ip_clinic_postal: str | None = None,
-    ip_clinic_phone: str | None = None,
-    ip_clinic_fax: str | None = None,
-    ip_clinic_email: str | None = None,
+    updates: dict[str, object],
 ) -> IntendedParent:
     """Update intended parent fields and bump last_activity."""
-    if full_name is not None:
-        ip.full_name = full_name
-        ip.full_name_normalized = normalize_search_text(full_name)
-    if email is not None:
-        normalized_email = normalize_email(email)
-        ip.email = normalized_email
-        ip.email_hash = hash_email(normalized_email)
-        ip.email_domain = extract_email_domain(normalized_email)
-    if phone is not None:
+    if "full_name" in updates:
+        full_name = updates["full_name"]
+        if isinstance(full_name, str) and full_name:
+            ip.full_name = full_name
+            ip.full_name_normalized = normalize_search_text(full_name)
+    if "email" in updates:
+        email = updates["email"]
+        if isinstance(email, str) and email:
+            normalized_email = normalize_email(email)
+            ip.email = normalized_email
+            ip.email_hash = hash_email(normalized_email)
+            ip.email_domain = extract_email_domain(normalized_email)
+    if "phone" in updates:
+        phone = updates["phone"]
         normalized_phone = normalize_phone(phone) if phone else None
         ip.phone = normalized_phone
         ip.phone_hash = hash_phone(normalized_phone) if normalized_phone else None
         ip.phone_last4 = extract_phone_last4(normalized_phone)
-    if state is not None:
-        ip.state = state
-    if budget is not None:
-        ip.budget = budget
-    if notes_internal is not None:
-        ip.notes_internal = notes_internal
-    if owner_type is not None:
-        ip.owner_type = owner_type
-    if owner_id is not None:
-        ip.owner_id = owner_id
+    if "state" in updates:
+        ip.state = updates["state"]
+    if "budget" in updates:
+        ip.budget = updates["budget"]
+    if "notes_internal" in updates:
+        ip.notes_internal = updates["notes_internal"]
+    if "owner_type" in updates:
+        ip.owner_type = updates["owner_type"]
+    if "owner_id" in updates:
+        ip.owner_id = updates["owner_id"]
 
-    # Partner
-    if partner_name is not None:
-        ip.partner_name = partner_name
-    if partner_email is not None:
+    if "partner_name" in updates:
+        ip.partner_name = updates["partner_name"]
+    if "partner_email" in updates:
+        partner_email = updates["partner_email"]
         normalized_partner_email = normalize_email(partner_email) if partner_email else None
         ip.partner_email = normalized_partner_email
         ip.partner_email_hash = (
             hash_email(normalized_partner_email) if normalized_partner_email else None
         )
 
-    # Pronouns
-    if pronouns is not None:
-        ip.pronouns = pronouns
-    if partner_pronouns is not None:
-        ip.partner_pronouns = partner_pronouns
+    if "pronouns" in updates:
+        ip.pronouns = updates["pronouns"]
+    if "partner_pronouns" in updates:
+        ip.partner_pronouns = updates["partner_pronouns"]
+    if "date_of_birth" in updates:
+        ip.date_of_birth = updates["date_of_birth"]
+    if "partner_date_of_birth" in updates:
+        ip.partner_date_of_birth = updates["partner_date_of_birth"]
+    if "marital_status" in updates:
+        ip.marital_status = updates["marital_status"]
+    if "embryo_count" in updates:
+        ip.embryo_count = updates["embryo_count"]
+    if "pgs_tested" in updates:
+        ip.pgs_tested = updates["pgs_tested"]
+    if "egg_source" in updates:
+        ip.egg_source = updates["egg_source"]
+    if "sperm_source" in updates:
+        ip.sperm_source = updates["sperm_source"]
+    if "trust_provider_name" in updates:
+        ip.trust_provider_name = updates["trust_provider_name"]
+    if "trust_primary_contact_name" in updates:
+        ip.trust_primary_contact_name = updates["trust_primary_contact_name"]
+    if "trust_email" in updates:
+        ip.trust_email = updates["trust_email"]
+    if "trust_phone" in updates:
+        ip.trust_phone = updates["trust_phone"]
+    if "trust_address_line1" in updates:
+        ip.trust_address_line1 = updates["trust_address_line1"]
+    if "trust_address_line2" in updates:
+        ip.trust_address_line2 = updates["trust_address_line2"]
+    if "trust_city" in updates:
+        ip.trust_city = updates["trust_city"]
+    if "trust_state" in updates:
+        ip.trust_state = updates["trust_state"]
+    if "trust_postal" in updates:
+        ip.trust_postal = updates["trust_postal"]
+    if "trust_case_reference" in updates:
+        ip.trust_case_reference = updates["trust_case_reference"]
+    if "trust_funding_status" in updates:
+        ip.trust_funding_status = updates["trust_funding_status"]
+    if "trust_portal_url" in updates:
+        ip.trust_portal_url = updates["trust_portal_url"]
+    if "trust_notes" in updates:
+        ip.trust_notes = updates["trust_notes"]
 
-    # Address
-    if address_line1 is not None:
-        ip.address_line1 = address_line1
-    if address_line2 is not None:
-        ip.address_line2 = address_line2
-    if city is not None:
-        ip.city = city
-    if postal is not None:
-        ip.postal = postal
+    if "address_line1" in updates:
+        ip.address_line1 = updates["address_line1"]
+    if "address_line2" in updates:
+        ip.address_line2 = updates["address_line2"]
+    if "city" in updates:
+        ip.city = updates["city"]
+    if "postal" in updates:
+        ip.postal = updates["postal"]
 
-    # IVF Clinic
-    if ip_clinic_name is not None:
-        ip.ip_clinic_name = ip_clinic_name
-    if ip_clinic_address_line1 is not None:
-        ip.ip_clinic_address_line1 = ip_clinic_address_line1
-    if ip_clinic_address_line2 is not None:
-        ip.ip_clinic_address_line2 = ip_clinic_address_line2
-    if ip_clinic_city is not None:
-        ip.ip_clinic_city = ip_clinic_city
-    if ip_clinic_state is not None:
-        ip.ip_clinic_state = ip_clinic_state
-    if ip_clinic_postal is not None:
-        ip.ip_clinic_postal = ip_clinic_postal
-    if ip_clinic_phone is not None:
-        ip.ip_clinic_phone = ip_clinic_phone
-    if ip_clinic_fax is not None:
-        ip.ip_clinic_fax = ip_clinic_fax
-    if ip_clinic_email is not None:
-        ip.ip_clinic_email = ip_clinic_email
+    if "ip_clinic_name" in updates:
+        ip.ip_clinic_name = updates["ip_clinic_name"]
+    if "ip_clinic_address_line1" in updates:
+        ip.ip_clinic_address_line1 = updates["ip_clinic_address_line1"]
+    if "ip_clinic_address_line2" in updates:
+        ip.ip_clinic_address_line2 = updates["ip_clinic_address_line2"]
+    if "ip_clinic_city" in updates:
+        ip.ip_clinic_city = updates["ip_clinic_city"]
+    if "ip_clinic_state" in updates:
+        ip.ip_clinic_state = updates["ip_clinic_state"]
+    if "ip_clinic_postal" in updates:
+        ip.ip_clinic_postal = updates["ip_clinic_postal"]
+    if "ip_clinic_phone" in updates:
+        ip.ip_clinic_phone = updates["ip_clinic_phone"]
+    if "ip_clinic_fax" in updates:
+        ip.ip_clinic_fax = updates["ip_clinic_fax"]
+    if "ip_clinic_email" in updates:
+        ip.ip_clinic_email = updates["ip_clinic_email"]
 
     ip.last_activity = datetime.now(timezone.utc)
     ip.updated_at = datetime.now(timezone.utc)

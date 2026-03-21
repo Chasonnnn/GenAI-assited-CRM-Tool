@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -25,7 +26,7 @@ from app.db.base import Base
 from app.db.enums import (
     DEFAULT_IP_STATUS,
 )
-from app.db.types import EncryptedString, EncryptedText
+from app.db.types import EncryptedDate, EncryptedString, EncryptedText
 
 if TYPE_CHECKING:
     from app.db.models import Organization, PipelineStage
@@ -133,6 +134,26 @@ class IntendedParent(Base):
     # Pronouns
     pronouns: Mapped[str | None] = mapped_column(String(50), nullable=True)
     partner_pronouns: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
+    partner_date_of_birth: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
+    marital_status: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embryo_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pgs_tested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    egg_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    sperm_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    trust_provider_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trust_primary_contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trust_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    trust_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    trust_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    trust_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    trust_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    trust_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    trust_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    trust_case_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trust_funding_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    trust_portal_url: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
+    trust_notes: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
 
     # IVF Clinic
     ip_clinic_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

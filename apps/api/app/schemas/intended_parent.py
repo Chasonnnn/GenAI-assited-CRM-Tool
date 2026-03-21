@@ -1,12 +1,26 @@
 """Pydantic schemas for Intended Parents."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.utils.normalization import normalize_phone, normalize_state
+
+EggSource = Literal["intended_mother", "egg_donor"]
+SpermSource = Literal["intended_father", "sperm_donor"]
+TrustFundingStatus = Literal["pending_funding", "funded", "needs_replenishment", "closed"]
+MaritalStatus = Literal[
+    "Single",
+    "Married",
+    "Partnered",
+    "Committed Relationship",
+    "Divorced",
+    "Separated",
+    "Widowed",
+]
 
 
 # =============================================================================
@@ -33,6 +47,26 @@ class IntendedParentCreate(BaseModel):
     # Pronouns
     pronouns: str | None = Field(None, max_length=50)
     partner_pronouns: str | None = Field(None, max_length=50)
+    date_of_birth: date | None = None
+    partner_date_of_birth: date | None = None
+    marital_status: MaritalStatus | None = None
+    embryo_count: int | None = Field(None, ge=0, le=99)
+    pgs_tested: bool | None = None
+    egg_source: EggSource | None = None
+    sperm_source: SpermSource | None = None
+    trust_provider_name: str | None = Field(None, max_length=255)
+    trust_primary_contact_name: str | None = Field(None, max_length=255)
+    trust_email: EmailStr | None = None
+    trust_phone: str | None = None
+    trust_address_line1: str | None = None
+    trust_address_line2: str | None = None
+    trust_city: str | None = Field(None, max_length=100)
+    trust_state: str | None = None
+    trust_postal: str | None = Field(None, max_length=20)
+    trust_case_reference: str | None = Field(None, max_length=255)
+    trust_funding_status: TrustFundingStatus | None = None
+    trust_portal_url: str | None = Field(None, max_length=2000)
+    trust_notes: str | None = Field(None, max_length=10000)
 
     # Address
     address_line1: str | None = None
@@ -61,16 +95,16 @@ class IntendedParentCreate(BaseModel):
     def normalize_state_field(cls, v: str | None) -> str | None:
         return normalize_state(v)  # Raises ValueError on invalid
 
-    @field_validator("ip_clinic_state", mode="before")
+    @field_validator("ip_clinic_state", "trust_state", mode="before")
     @classmethod
-    def normalize_ip_clinic_state(cls, v: str | None) -> str | None:
+    def normalize_optional_state(cls, v: str | None) -> str | None:
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return None
         return normalize_state(v)
 
-    @field_validator("ip_clinic_phone", "ip_clinic_fax", mode="before")
+    @field_validator("ip_clinic_phone", "ip_clinic_fax", "trust_phone", mode="before")
     @classmethod
-    def normalize_ip_clinic_phone(cls, v: str | None) -> str | None:
+    def normalize_optional_phone(cls, v: str | None) -> str | None:
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return None
         return normalize_phone(v)
@@ -95,6 +129,26 @@ class IntendedParentUpdate(BaseModel):
     # Pronouns
     pronouns: str | None = Field(None, max_length=50)
     partner_pronouns: str | None = Field(None, max_length=50)
+    date_of_birth: date | None = None
+    partner_date_of_birth: date | None = None
+    marital_status: MaritalStatus | None = None
+    embryo_count: int | None = Field(None, ge=0, le=99)
+    pgs_tested: bool | None = None
+    egg_source: EggSource | None = None
+    sperm_source: SpermSource | None = None
+    trust_provider_name: str | None = Field(None, max_length=255)
+    trust_primary_contact_name: str | None = Field(None, max_length=255)
+    trust_email: EmailStr | None = None
+    trust_phone: str | None = None
+    trust_address_line1: str | None = None
+    trust_address_line2: str | None = None
+    trust_city: str | None = Field(None, max_length=100)
+    trust_state: str | None = None
+    trust_postal: str | None = Field(None, max_length=20)
+    trust_case_reference: str | None = Field(None, max_length=255)
+    trust_funding_status: TrustFundingStatus | None = None
+    trust_portal_url: str | None = Field(None, max_length=2000)
+    trust_notes: str | None = Field(None, max_length=10000)
 
     # Address
     address_line1: str | None = None
@@ -123,16 +177,16 @@ class IntendedParentUpdate(BaseModel):
     def normalize_state_field(cls, v: str | None) -> str | None:
         return normalize_state(v)
 
-    @field_validator("ip_clinic_state", mode="before")
+    @field_validator("ip_clinic_state", "trust_state", mode="before")
     @classmethod
-    def normalize_ip_clinic_state(cls, v: str | None) -> str | None:
+    def normalize_optional_state(cls, v: str | None) -> str | None:
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return None
         return normalize_state(v)
 
-    @field_validator("ip_clinic_phone", "ip_clinic_fax", mode="before")
+    @field_validator("ip_clinic_phone", "ip_clinic_fax", "trust_phone", mode="before")
     @classmethod
-    def normalize_ip_clinic_phone(cls, v: str | None) -> str | None:
+    def normalize_optional_phone(cls, v: str | None) -> str | None:
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return None
         return normalize_phone(v)
@@ -183,6 +237,26 @@ class IntendedParentRead(BaseModel):
     # Pronouns
     pronouns: str | None = None
     partner_pronouns: str | None = None
+    date_of_birth: date | None = None
+    partner_date_of_birth: date | None = None
+    marital_status: str | None = None
+    embryo_count: int | None = None
+    pgs_tested: bool | None = None
+    egg_source: EggSource | None = None
+    sperm_source: SpermSource | None = None
+    trust_provider_name: str | None = None
+    trust_primary_contact_name: str | None = None
+    trust_email: str | None = None
+    trust_phone: str | None = None
+    trust_address_line1: str | None = None
+    trust_address_line2: str | None = None
+    trust_city: str | None = None
+    trust_state: str | None = None
+    trust_postal: str | None = None
+    trust_case_reference: str | None = None
+    trust_funding_status: TrustFundingStatus | None = None
+    trust_portal_url: str | None = None
+    trust_notes: str | None = None
 
     # Address
     address_line1: str | None = None

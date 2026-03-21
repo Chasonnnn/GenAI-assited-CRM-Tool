@@ -176,6 +176,26 @@ def create_intended_parent(
         partner_email=data.partner_email,
         pronouns=data.pronouns,
         partner_pronouns=data.partner_pronouns,
+        date_of_birth=data.date_of_birth,
+        partner_date_of_birth=data.partner_date_of_birth,
+        marital_status=data.marital_status,
+        embryo_count=data.embryo_count,
+        pgs_tested=data.pgs_tested,
+        egg_source=data.egg_source,
+        sperm_source=data.sperm_source,
+        trust_provider_name=data.trust_provider_name,
+        trust_primary_contact_name=data.trust_primary_contact_name,
+        trust_email=data.trust_email,
+        trust_phone=data.trust_phone,
+        trust_address_line1=data.trust_address_line1,
+        trust_address_line2=data.trust_address_line2,
+        trust_city=data.trust_city,
+        trust_state=data.trust_state,
+        trust_postal=data.trust_postal,
+        trust_case_reference=data.trust_case_reference,
+        trust_funding_status=data.trust_funding_status,
+        trust_portal_url=data.trust_portal_url,
+        trust_notes=data.trust_notes,
         address_line1=data.address_line1,
         address_line2=data.address_line2,
         city=data.city,
@@ -252,7 +272,9 @@ def update_intended_parent(
         raise HTTPException(status_code=404, detail="Intended parent not found")
 
     # Check for duplicate email if changing
-    if data.email:
+    update_fields = data.model_dump(exclude_unset=True)
+
+    if "email" in update_fields and data.email:
         normalized_email = normalize_email(data.email)
         if normalized_email != ip.email:
             existing = ip_service.get_ip_by_email(db, data.email, session.org_id)
@@ -266,33 +288,8 @@ def update_intended_parent(
         db,
         ip,
         user_id=session.user_id,
-        full_name=data.full_name,
-        email=data.email,
-        phone=data.phone,
-        state=data.state,
-        budget=data.budget,
-        notes_internal=data.notes_internal,
-        owner_type=data.owner_type,
-        owner_id=data.owner_id,
-        partner_name=data.partner_name,
-        partner_email=data.partner_email,
-        pronouns=data.pronouns,
-        partner_pronouns=data.partner_pronouns,
-        address_line1=data.address_line1,
-        address_line2=data.address_line2,
-        city=data.city,
-        postal=data.postal,
-        ip_clinic_name=data.ip_clinic_name,
-        ip_clinic_address_line1=data.ip_clinic_address_line1,
-        ip_clinic_address_line2=data.ip_clinic_address_line2,
-        ip_clinic_city=data.ip_clinic_city,
-        ip_clinic_state=data.ip_clinic_state,
-        ip_clinic_postal=data.ip_clinic_postal,
-        ip_clinic_phone=data.ip_clinic_phone,
-        ip_clinic_fax=data.ip_clinic_fax,
-        ip_clinic_email=data.ip_clinic_email,
+        updates=update_fields,
     )
-    update_fields = data.model_dump(exclude_unset=True)
     audit_service.log_event(
         db=db,
         org_id=session.org_id,
