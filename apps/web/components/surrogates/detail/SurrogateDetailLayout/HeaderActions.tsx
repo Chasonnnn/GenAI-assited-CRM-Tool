@@ -25,7 +25,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
-import { stageMatchesKey } from "@/lib/surrogate-stage-context"
+import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
 import { toast } from "sonner"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
 import {
@@ -68,15 +68,16 @@ export function HeaderActions() {
 
     // Determine if log contact button should be shown
     const currentStage = stageById.get(surrogate.stage_id)
-    const isOnHold = stageMatchesKey(
-        currentStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug },
-        "on_hold"
+    const isOnHold = stageUsesPauseBehavior(
+        currentStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug }
     )
     const workflowStage = effectiveStage ?? currentStage
     const isIntakeStage = workflowStage?.stage_type === "intake"
-    const contactedStage = stageOptions.find((stage) => stageMatchesKey(stage, "contacted"))
+    const contactedStage = stageOptions.find((stage) =>
+        stageHasCapability(stage, "counts_as_contacted")
+    )
     const interviewScheduledStage = stageOptions.find((stage) =>
-        stageMatchesKey(stage, "interview_scheduled")
+        stageHasCapability(stage, "tracks_interview_outcome")
     )
     const workflowStageOrder = workflowStage?.order ?? null
     const isAtOrBeforeContacted =
@@ -96,9 +97,9 @@ export function HeaderActions() {
     const canLogInterviewOutcome = canLogInteraction && !isOnHold && isAtOrAfterInterviewScheduled
 
     // Determine if propose match button should be shown
-    const isReadyToMatchStage = stageMatchesKey(
+    const isReadyToMatchStage = stageHasCapability(
         workflowStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug },
-        "ready_to_match"
+        "eligible_for_matching"
     )
     const isManagerRole = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
     const canProposeMatch = isManagerRole && !isOnHold && isReadyToMatchStage && !surrogate.is_archived

@@ -1,4 +1,10 @@
-import type { PipelineStage } from "@/lib/api/pipelines"
+import type {
+    PipelineFeatureConfig,
+    PipelineStage,
+    RoleStageRule,
+    StageCapabilityKey,
+    StageSemantics,
+} from "@/lib/api/pipelines"
 import type { SurrogateRead } from "@/lib/types/surrogate"
 
 const LEGACY_STAGE_KEY_ALIASES: Record<string, string> = {
@@ -9,6 +15,8 @@ type StageSemanticRef = {
     stage_key?: string | null | undefined
     slug?: string | null | undefined
     stage_slug?: string | null | undefined
+    stage_type?: string | null | undefined
+    semantics?: Partial<StageSemantics> | null | undefined
 }
 
 type SurrogateStageContextInput = Pick<
@@ -38,6 +46,131 @@ export interface SurrogateStageContext {
     isOnHold: boolean
 }
 
+function defaultStageSemantics(
+    stageKey: string | null,
+    stageType: string | null | undefined
+): StageSemantics {
+    const normalizedKey = normalizeStageKey(stageKey)
+    return {
+        capabilities: {
+            counts_as_contacted: !!normalizedKey && [
+                "contacted",
+                "pre_qualified",
+                "interview_scheduled",
+                "application_submitted",
+                "under_review",
+                "approved",
+            ].includes(normalizedKey),
+            eligible_for_matching: normalizedKey === "ready_to_match",
+            locks_match_state: !!normalizedKey && [
+                "matched",
+                "medical_clearance_passed",
+                "legal_clearance_passed",
+                "transfer_cycle",
+                "second_hcg_confirmed",
+                "heartbeat_confirmed",
+                "ob_care_established",
+                "anatomy_scanned",
+                "delivered",
+            ].includes(normalizedKey),
+            shows_pregnancy_tracking: !!normalizedKey && [
+                "heartbeat_confirmed",
+                "ob_care_established",
+                "anatomy_scanned",
+                "delivered",
+            ].includes(normalizedKey),
+            requires_delivery_details: normalizedKey === "delivered",
+            tracks_interview_outcome: !!normalizedKey && [
+                "interview_scheduled",
+                "under_review",
+                "approved",
+            ].includes(normalizedKey),
+        },
+        pause_behavior: normalizedKey === "on_hold" ? "resume_previous_stage" : "none",
+        terminal_outcome:
+            normalizedKey === "lost" ? "lost" : normalizedKey === "disqualified" ? "disqualified" : "none",
+        integration_bucket:
+            normalizedKey === "lost"
+                ? "lost"
+                : normalizedKey === "disqualified"
+                    ? "not_qualified"
+                    : normalizedKey && [
+                        "ready_to_match",
+                        "matched",
+                        "medical_clearance_passed",
+                        "legal_clearance_passed",
+                        "transfer_cycle",
+                        "second_hcg_confirmed",
+                        "heartbeat_confirmed",
+                        "ob_care_established",
+                        "anatomy_scanned",
+                        "delivered",
+                    ].includes(normalizedKey)
+                    ? "converted"
+                    : normalizedKey && [
+                        "pre_qualified",
+                        "interview_scheduled",
+                        "application_submitted",
+                        "under_review",
+                        "approved",
+                    ].includes(normalizedKey)
+                        ? "qualified"
+                        : normalizedKey && ["new_unread", "contacted"].includes(normalizedKey)
+                            ? "intake"
+                            : "none",
+        analytics_bucket: normalizedKey ?? (stageType === "paused" ? "on_hold" : null),
+        suggestion_profile_key: null,
+        requires_reason_on_enter: normalizedKey === "on_hold",
+    }
+}
+
+export function getStageSemantics(stage: StageSemanticRef | null | undefined): StageSemantics {
+    const stageKey = getStageSemanticKey(stage)
+    const base = defaultStageSemantics(stageKey, stage?.stage_type)
+    return {
+        ...base,
+        ...stage?.semantics,
+        capabilities: {
+            ...base.capabilities,
+            ...(stage?.semantics?.capabilities ?? {}),
+        },
+    }
+}
+
+export function stageHasCapability(
+    stage: StageSemanticRef | null | undefined,
+    capability: StageCapabilityKey
+): boolean {
+    return Boolean(getStageSemantics(stage).capabilities[capability])
+}
+
+export function stageRequiresReasonOnEnter(stage: StageSemanticRef | null | undefined): boolean {
+    return getStageSemantics(stage).requires_reason_on_enter
+}
+
+export function stageUsesPauseBehavior(stage: StageSemanticRef | null | undefined): boolean {
+    return getStageSemantics(stage).pause_behavior === "resume_previous_stage"
+}
+
+export function roleRuleMatchesStage(stage: PipelineStage, rule: RoleStageRule | undefined): boolean {
+    if (!rule) return false
+    const semanticKey = getStageSemanticKey(stage)
+    if (stage.stage_type && rule.stage_types.includes(stage.stage_type)) return true
+    if (semanticKey && rule.stage_keys.includes(semanticKey)) return true
+    return rule.capabilities.some((capability) => stageHasCapability(stage, capability))
+}
+
+export function canRoleAccessStage(
+    role: string | null | undefined,
+    stage: PipelineStage,
+    featureConfig: PipelineFeatureConfig | null | undefined,
+    mutation = false
+): boolean {
+    if (!role || !featureConfig) return true
+    const rules = mutation ? featureConfig.role_mutation : featureConfig.role_visibility
+    return roleRuleMatchesStage(stage, rules[role])
+}
+
 export function normalizeStageKey(value: string | null | undefined): string | null {
     const normalized = value?.trim().toLowerCase() ?? ""
     if (!normalized) return null
@@ -59,8 +192,7 @@ export function stageMatchesKey(
 }
 
 export function isTerminalStage(stage: StageSemanticRef | null | undefined): boolean {
-    const stageKey = getStageSemanticKey(stage)
-    return stageKey === "lost" || stageKey === "disqualified"
+    return getStageSemantics(stage).terminal_outcome !== "none"
 }
 
 export function getSurrogateStageContext(
@@ -88,7 +220,9 @@ export function getSurrogateStageContext(
         currentStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug }
     )
     const currentStageSlug = currentStage?.slug ?? surrogate.stage_slug ?? null
-    const isOnHold = currentStageKey === "on_hold"
+    const isOnHold = getStageSemantics(
+        currentStage ?? { stage_key: surrogate.stage_key, stage_slug: surrogate.stage_slug }
+    ).pause_behavior === "resume_previous_stage"
 
     const pausedFromStage = surrogate.paused_from_stage_id
         ? stageById.get(surrogate.paused_from_stage_id)

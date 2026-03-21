@@ -24,8 +24,11 @@ import {
 } from "@/lib/hooks/use-user-integrations"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAuth } from "@/lib/auth-context"
-import { ROLE_STAGE_VISIBILITY, type StageType } from "@/lib/constants/stages.generated"
-import { getStageSemanticKey, getSurrogateStageContext, stageMatchesKey } from "@/lib/surrogate-stage-context"
+import {
+    canRoleAccessStage,
+    getSurrogateStageContext,
+    stageHasCapability,
+} from "@/lib/surrogate-stage-context"
 import {
     formatMeetingTimeForInvite,
     toLocalIsoDateTime,
@@ -252,6 +255,16 @@ interface SurrogateDetailLayoutProviderProps {
 }
 
 export function SurrogateDetailLayoutProvider({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
+    return (
+        <React.Suspense fallback={null}>
+            <SurrogateDetailLayoutProviderContent surrogateId={surrogateId}>
+                {children}
+            </SurrogateDetailLayoutProviderContent>
+        </React.Suspense>
+    )
+}
+
+function SurrogateDetailLayoutProviderContent({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const segment = useSelectedLayoutSegment()
@@ -341,30 +354,19 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
     )
     const visibleStageOptions = useMemo(() => {
         if (!user?.role) return stageOptions
-        const rules = ROLE_STAGE_VISIBILITY[user.role]
-        if (!rules) return stageOptions
-        return stageOptions.filter((stage) => {
-            const stageType = stage.stage_type as StageType | null
-            return (
-                (stageType && rules.stageTypes.includes(stageType)) ||
-                rules.extraSlugs.includes(getStageSemanticKey(stage) ?? "")
-            )
-        })
-    }, [stageOptions, user?.role])
-
-    const matchedStage = useMemo(
-        () => stageOptions.find((stage) => stageMatchesKey(stage, "matched")),
-        [stageOptions]
-    )
+        return stageOptions.filter((stage) =>
+            canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)
+        )
+    }, [defaultPipeline?.feature_config, stageOptions, user?.role])
     const stageContext = useMemo(
         () => getSurrogateStageContext(surrogateData ?? null, stageById),
         [surrogateData, stageById]
     )
 
     const canViewJourney = useMemo(() => {
-        if (!stageContext.effectiveStage || !matchedStage) return false
-        return stageContext.effectiveStage.order >= matchedStage.order
-    }, [stageContext.effectiveStage, matchedStage])
+        if (!stageContext.effectiveStage) return false
+        return stageHasCapability(stageContext.effectiveStage, "locks_match_state")
+    }, [stageContext.effectiveStage])
 
     const stage = stageContext.currentStage
     const effectiveStage = stageContext.effectiveStage

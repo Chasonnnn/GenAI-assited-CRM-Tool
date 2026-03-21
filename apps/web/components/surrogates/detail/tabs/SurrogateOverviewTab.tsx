@@ -17,7 +17,7 @@ import { ClipboardCheckIcon, CopyIcon, InfoIcon, CheckIcon, UserIcon, XIcon } fr
 import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
 import { formatRace } from "@/lib/formatters"
-import { getSurrogateStageContext, stageMatchesKey } from "@/lib/surrogate-stage-context"
+import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
 
 export function SurrogateOverviewTab() {
     const params = useParams<{ id: string }>()
@@ -28,10 +28,6 @@ export function SurrogateOverviewTab() {
     const stageOptions = React.useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
     const stageById = React.useMemo(
         () => new Map(stageOptions.map((stage) => [stage.id, stage])),
-        [stageOptions]
-    )
-    const heartbeatStage = React.useMemo(
-        () => stageOptions.find((stage) => stageMatchesKey(stage, "heartbeat_confirmed")),
         [stageOptions]
     )
     const { data: activityData } = useSurrogateActivity(id)
@@ -54,11 +50,9 @@ export function SurrogateOverviewTab() {
     }
 
     const effectiveStage = stageContext.effectiveStage
-    const effectiveStageOrder = effectiveStage?.order ?? null
-    const isHeartbeatConfirmedOrLater = !!(
-        effectiveStageOrder !== null &&
-        heartbeatStage &&
-        effectiveStageOrder >= heartbeatStage.order
+    const isHeartbeatConfirmedOrLater = stageHasCapability(
+        effectiveStage ?? { stage_key: surrogateData.stage_key, stage_slug: surrogateData.stage_slug },
+        "shows_pregnancy_tracking"
     )
     const isTerminalIntakeOutcome =
         stageContext.effectiveStageKey === "lost" || stageContext.effectiveStageKey === "disqualified"

@@ -27,7 +27,11 @@ import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { stageMatchesKey } from "@/lib/surrogate-stage-context"
+import {
+    stageHasCapability,
+    stageRequiresReasonOnEnter,
+    stageUsesPauseBehavior,
+} from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
@@ -109,13 +113,13 @@ export function ChangeStageModal({
         () => stages.find(s => s.id === selectedStageId),
         [stages, selectedStageId]
     )
-    const isDeliveredStage = stageMatchesKey(selectedStage, "delivered")
-    const isOnHoldStage = stageMatchesKey(selectedStage, "on_hold")
+    const isDeliveredStage = stageHasCapability(selectedStage, "requires_delivery_details")
+    const isOnHoldStage = stageUsesPauseBehavior(selectedStage)
     const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
 
     const isResumeSelection = useMemo(() => {
         if (!selectedStage || !currentStage || !comparisonStage) return false
-        return stageMatchesKey(currentStage, "on_hold") && selectedStage.id === comparisonStage.id
+        return stageUsesPauseBehavior(currentStage) && selectedStage.id === comparisonStage.id
     }, [selectedStage, currentStage, comparisonStage])
 
     // Calculate if this is a regression (moving to earlier stage)
@@ -147,7 +151,8 @@ export function ChangeStageModal({
     }, [effectiveNow, selectedDate, hasTime, effectiveDateTime])
 
     // Check if reason is required
-    const reasonRequired = isRegression || isBackdated || isOnHoldStage
+    const reasonRequired =
+        isRegression || isBackdated || stageRequiresReasonOnEnter(selectedStage)
 
     // Validation
     const canSubmit = useMemo(() => {
