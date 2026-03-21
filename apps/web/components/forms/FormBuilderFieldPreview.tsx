@@ -4,16 +4,22 @@ import type { ReactNode } from "react"
 import { ChevronDownIcon, UploadIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import type { FieldType, FormFieldValidation } from "@/lib/api/forms"
+import type { FieldType, FormFieldColumn, FormFieldValidation } from "@/lib/api/forms"
 import { cn } from "@/lib/utils"
 
 type PreviewColumn = {
     id: string
     label: string
-    type: "text" | "number" | "date" | "select"
+    type: FormFieldColumn["type"]
     required: boolean
     options?: string[]
     validation?: FormFieldValidation | null
+}
+
+type PreviewRow = {
+    id: string
+    label: string
+    helpText?: string
 }
 
 type FormBuilderFieldPreviewProps = {
@@ -22,6 +28,7 @@ type FormBuilderFieldPreviewProps = {
     surrogateFieldMapping?: string | undefined
     options?: string[] | undefined
     columns?: PreviewColumn[] | undefined
+    rows?: PreviewRow[] | undefined
     className?: string
 }
 
@@ -73,6 +80,7 @@ export function FormBuilderFieldPreview({
     surrogateFieldMapping,
     options,
     columns,
+    rows,
     className,
 }: FormBuilderFieldPreviewProps) {
     const previewOptions = options && options.length > 0 ? options : ["Option 1", "Option 2"]
@@ -82,6 +90,13 @@ export function FormBuilderFieldPreview({
             : [
                 { id: "column-1", label: "Column 1", type: "text" as const, required: false },
                 { id: "column-2", label: "Column 2", type: "text" as const, required: false },
+            ]
+    const previewRows =
+        rows && rows.length > 0
+            ? rows
+            : [
+                { id: "row-1", label: "Item 1" },
+                { id: "row-2", label: "Item 2" },
             ]
 
     return (
@@ -180,6 +195,52 @@ export function FormBuilderFieldPreview({
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {type === "table" && (
+                <div className="space-y-2">
+                    {previewRows.slice(0, 2).map((row) => (
+                        <div key={row.id} className="rounded-2xl border border-border/70 bg-background/85 p-3">
+                            <div className="mb-3 text-sm font-medium text-foreground">{row.label}</div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                                {previewColumns.slice(0, 2).map((column) => (
+                                    <div key={column.id} className="space-y-2">
+                                        <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                            {column.label}
+                                        </div>
+                                        {column.type === "radio" ? (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {(column.options && column.options.length > 0 ? column.options : ["No", "Yes"])
+                                                    .slice(0, 2)
+                                                    .map((option) => (
+                                                        <PreviewBox key={option}>{option}</PreviewBox>
+                                                    ))}
+                                            </div>
+                                        ) : column.type === "textarea" ? (
+                                            <Textarea
+                                                disabled
+                                                placeholder="Add details"
+                                                className="min-h-20 resize-none rounded-xl border-border/70 bg-background/85 shadow-none"
+                                            />
+                                        ) : column.type === "select" ? (
+                                            <PreviewBox className="justify-between">
+                                                <span>Select</span>
+                                                <ChevronDownIcon className="size-4" />
+                                            </PreviewBox>
+                                        ) : (
+                                            <Input
+                                                disabled
+                                                type={column.type === "number" ? "number" : column.type === "date" ? "date" : "text"}
+                                                placeholder={column.label}
+                                                className="h-11 rounded-xl border-border/70 bg-background/85 shadow-none"
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

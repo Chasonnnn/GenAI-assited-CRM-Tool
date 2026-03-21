@@ -1416,6 +1416,10 @@ def _validate_field_value(field: FormField, value: Any) -> None:
         _validate_repeatable_table(field, value)
         return
 
+    if field_type == "table":
+        _validate_fixed_table(field, value)
+        return
+
     raise ValueError(f"Unsupported field type: {field_type}")
 
 
@@ -1444,9 +1448,49 @@ def _validate_repeatable_table(field: FormField, value: Any) -> None:
             _validate_table_column_value(field.label, column, column_value)
 
 
+def _validate_fixed_table(field: FormField, value: Any) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"Field '{field.label}' must be a list")
+
+    columns = field.columns or []
+    if not columns:
+        raise ValueError(f"Field '{field.label}' must define columns")
+
+    rows = field.rows or []
+    if not rows:
+        raise ValueError(f"Field '{field.label}' must define rows")
+
+    row_map: dict[str, dict[str, Any]] = {}
+    for row in value:
+        if not isinstance(row, dict):
+            raise ValueError(f"Field '{field.label}' rows must be objects")
+        row_key = row.get("row_key")
+        if not isinstance(row_key, str) or not row_key:
+            raise ValueError(f"Field '{field.label}' rows must include row_key")
+        row_map[row_key] = row
+
+    expected_row_keys = {row.key for row in rows}
+    unexpected_row_keys = set(row_map) - expected_row_keys
+    if unexpected_row_keys:
+        raise ValueError(f"Field '{field.label}' includes unexpected rows")
+
+    for row in rows:
+        submitted_row = row_map.get(row.key)
+        if submitted_row is None:
+            raise ValueError(f"Missing required row: {row.label}")
+
+        for column in columns:
+            column_value = submitted_row.get(column.key)
+            if column.required and (column_value is None or column_value == ""):
+                raise ValueError(f"Missing required value: {row.label} / {column.label}")
+            if column_value is None or column_value == "":
+                continue
+            _validate_table_column_value(field.label, column, column_value)
+
+
 def _validate_table_column_value(field_label: str, column: FormFieldColumn, value: Any) -> None:
     column_type = column.type
-    if column_type == "text":
+    if column_type in {"text", "textarea"}:
         if not isinstance(value, str):
             raise ValueError(f"Column '{column.label}' must be a string")
         return
@@ -1473,7 +1517,7 @@ def _validate_table_column_value(field_label: str, column: FormFieldColumn, valu
                 pass
         raise ValueError(f"Column '{column.label}' must be a date (YYYY-MM-DD)")
 
-    if column_type == "select":
+    if column_type in {"select", "radio"}:
         if not isinstance(value, str):
             raise ValueError(f"Column '{column.label}' must be a string")
         if column.options:

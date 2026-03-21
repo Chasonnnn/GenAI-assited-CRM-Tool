@@ -73,6 +73,169 @@ function serializeHeightSelection(feet: string, inches: string): string | null {
     return (Number(feet || 0) + Number(inches || 0) / 12).toFixed(2)
 }
 
+function normalizeFixedTableRows(
+    field: FormField,
+    value: PublicFormAnswerValue | undefined,
+): TableRow[] {
+    const configuredRows = field.rows || []
+    const existingRows = Array.isArray(value)
+        ? value.filter((item): item is TableRow => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+        : []
+    const existingByRowKey = new Map<string, TableRow>()
+
+    existingRows.forEach((row) => {
+        const rowKey = row.row_key
+        if (typeof rowKey === "string" && rowKey) {
+            existingByRowKey.set(rowKey, row)
+        }
+    })
+
+    return configuredRows.map((row) => ({
+        ...(existingByRowKey.get(row.key) || {}),
+        row_key: row.key,
+    }))
+}
+
+function FixedTableFieldInput({
+    field,
+    value,
+    requiredMark,
+    updateField,
+}: {
+    field: FormField
+    value: PublicFormAnswerValue | undefined
+    requiredMark: React.ReactNode
+    updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
+}) {
+    const columns = field.columns || []
+    const rows = React.useMemo(() => normalizeFixedTableRows(field, value), [field, value])
+
+    const updateCell = (rowKey: string, columnKey: string, nextValue: string) => {
+        const nextRows = rows.map((row) =>
+            row.row_key === rowKey ? { ...row, [columnKey]: nextValue } : row,
+        )
+        updateField(field.key, nextRows)
+    }
+
+    if (columns.length === 0 || (field.rows?.length ?? 0) === 0) {
+        return (
+            <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                <Label className="text-sm font-medium">
+                    {field.label} {requiredMark}
+                </Label>
+                <p className="text-sm text-stone-500">Configure rows and columns to use this table field.</p>
+            </div>
+        )
+    }
+
+    return (
+        <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div className="space-y-1">
+                <Label className="text-sm font-medium">
+                    {field.label} {requiredMark}
+                </Label>
+                {field.help_text ? <p className="text-xs text-stone-500">{field.help_text}</p> : null}
+            </div>
+
+            <div className="space-y-3">
+                {rows.map((row) => {
+                    const rowKey = typeof row.row_key === "string" ? row.row_key : ""
+                    const rowDefinition = field.rows?.find((item) => item.key === rowKey)
+                    const rowLabel = rowDefinition?.label || rowKey || "Row"
+                    const rowHelpText = rowDefinition?.help_text || ""
+
+                    return (
+                        <div
+                            key={rowKey || rowLabel}
+                            role="group"
+                            aria-label={`${rowLabel} row`}
+                            className="rounded-2xl border border-stone-200 bg-white p-4"
+                        >
+                            <div className="mb-3">
+                                <div className="text-base font-semibold text-stone-900">{rowLabel}</div>
+                                {rowHelpText ? <p className="mt-1 text-xs text-stone-500">{rowHelpText}</p> : null}
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                                {columns.map((column) => {
+                                    const cellValue = row[column.key]
+                                    const normalizedValue =
+                                        cellValue === null || cellValue === undefined ? "" : String(cellValue)
+                                    const options =
+                                        column.options && column.options.length > 0
+                                            ? column.options
+                                            : column.type === "radio"
+                                                ? [
+                                                      { label: "No", value: "no" },
+                                                      { label: "Yes", value: "yes" },
+                                                  ]
+                                                : []
+
+                                    return (
+                                        <div key={column.key} className="space-y-2">
+                                            <Label className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
+                                                {column.label}
+                                                {column.required ? <span className="text-red-500"> *</span> : null}
+                                            </Label>
+
+                                            {column.type === "radio" ? (
+                                                <div className="grid gap-2 sm:grid-cols-2">
+                                                    {options.map((option) => (
+                                                        <OptionCard
+                                                            key={option.value}
+                                                            selected={normalizedValue === option.value}
+                                                            onClick={() => updateCell(rowKey, column.key, option.value)}
+                                                            label={option.label}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            ) : column.type === "select" ? (
+                                                <select
+                                                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                                                    value={normalizedValue}
+                                                    onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
+                                                >
+                                                    <option value="">Select...</option>
+                                                    {options.map((option) => (
+                                                        <option key={option.value} value={option.value}>
+                                                            {option.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : column.type === "textarea" ? (
+                                                <Textarea
+                                                    value={normalizedValue}
+                                                    onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
+                                                    placeholder={column.label}
+                                                    className="min-h-24 rounded-xl border-stone-200 bg-white shadow-none"
+                                                />
+                                            ) : (
+                                                <Input
+                                                    type={
+                                                        column.type === "number"
+                                                            ? "number"
+                                                            : column.type === "date"
+                                                                ? "date"
+                                                                : "text"
+                                                    }
+                                                    value={normalizedValue}
+                                                    onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
+                                                    placeholder={column.label}
+                                                    className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                                                />
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
 function HeightFieldInput({
     field,
     value,
@@ -289,6 +452,17 @@ export function PublicFormFieldRenderer({
     if (field.type === "height") {
         return (
             <HeightFieldInput
+                field={field}
+                value={value}
+                requiredMark={requiredMark}
+                updateField={updateField}
+            />
+        )
+    }
+
+    if (field.type === "table") {
+        return (
+            <FixedTableFieldInput
                 field={field}
                 value={value}
                 requiredMark={requiredMark}

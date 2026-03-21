@@ -1,6 +1,8 @@
 import type {
     FieldType,
+    FormFieldColumn,
     FormFieldOption,
+    FormFieldRow,
     FormFieldValidation,
     FormSchema,
 } from "@/lib/api/forms"
@@ -23,10 +25,15 @@ export type BuilderFormField = {
     columns?: {
         id: string
         label: string
-        type: "text" | "number" | "date" | "select"
+        type: FormFieldColumn["type"]
         required: boolean
         options?: string[]
         validation?: FormFieldValidation | null
+    }[]
+    rows?: {
+        id: string
+        label: string
+        helpText: string
     }[]
     minRows?: number | null
     maxRows?: number | null
@@ -53,6 +60,17 @@ const toFieldOptions = (options?: string[]): FormFieldOption[] | null => {
     return options.map((option) => ({
         label: option,
         value: option,
+    }))
+}
+
+const toFieldRows = (
+    rows?: BuilderFormField["rows"],
+): FormFieldRow[] | null => {
+    if (!rows || rows.length === 0) return null
+    return rows.map((row) => ({
+        key: row.id,
+        label: row.label,
+        help_text: row.helpText || null,
     }))
 }
 
@@ -89,6 +107,7 @@ export function buildFormSchema(pages: BuilderFormPage[], metadata: BuilderSchem
                         validation: column.validation ?? null,
                     }))
                     : null,
+                rows: toFieldRows(field.rows),
                 min_rows: field.minRows ?? null,
                 max_rows: field.maxRows ?? null,
             })),
@@ -126,6 +145,11 @@ export function schemaToPages(schema: FormSchema, mappings: Map<string, string>)
                             : {}),
                     }
                     : null
+            const rows = field.rows?.map((row) => ({
+                id: row.key,
+                label: row.label,
+                helpText: row.help_text || "",
+            }))
             return {
                 id: field.key,
                 type: field.type,
@@ -136,6 +160,7 @@ export function schemaToPages(schema: FormSchema, mappings: Map<string, string>)
                 validation: field.validation ?? null,
                 showIf,
                 ...(columns && columns.length > 0 ? { columns } : {}),
+                ...(rows && rows.length > 0 ? { rows } : {}),
                 minRows: field.min_rows ?? null,
                 maxRows: field.max_rows ?? null,
                 ...(options ? { options } : {}),
@@ -179,6 +204,13 @@ export const buildColumnId = () => {
     return `col-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+export const buildRowId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID()
+    }
+    return `row-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export function createBuilderField(template: BuilderPaletteField): BuilderFormField {
     const fieldId = buildFieldId()
     const baseField: BuilderFormField = {
@@ -218,6 +250,32 @@ export function createBuilderField(template: BuilderPaletteField): BuilderFormFi
             ],
             minRows: 0,
             maxRows: null,
+        }
+    }
+
+    if (template.type === "table") {
+        return {
+            ...baseField,
+            columns: [
+                {
+                    id: buildColumnId(),
+                    label: "Response",
+                    type: "radio",
+                    required: true,
+                    options: ["No", "Yes"],
+                },
+                {
+                    id: buildColumnId(),
+                    label: "If yes, explain",
+                    type: "textarea",
+                    required: false,
+                },
+            ],
+            rows: [
+                { id: buildRowId(), label: "Item 1", helpText: "" },
+                { id: buildRowId(), label: "Item 2", helpText: "" },
+                { id: buildRowId(), label: "Item 3", helpText: "" },
+            ],
         }
     }
 

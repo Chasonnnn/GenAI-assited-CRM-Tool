@@ -21,6 +21,7 @@ FieldType = Literal[
     "file",
     "address",
     "repeatable_table",
+    "table",
     "height",
 ]
 FormPurpose = Literal["surrogate_application", "event_intake", "other"]
@@ -55,7 +56,7 @@ class FormFieldCondition(BaseModel):
     value: object | None = None
 
 
-TableColumnType = Literal["text", "number", "date", "select"]
+TableColumnType = Literal["text", "textarea", "number", "date", "select", "radio"]
 
 
 class FormFieldColumn(BaseModel):
@@ -65,6 +66,12 @@ class FormFieldColumn(BaseModel):
     required: bool = False
     options: list[FormFieldOption] | None = None
     validation: FormFieldValidation | None = None
+
+
+class FormFieldRow(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
+    help_text: str | None = None
 
 
 class FormField(BaseModel):
@@ -77,6 +84,7 @@ class FormField(BaseModel):
     help_text: str | None = None
     show_if: FormFieldCondition | None = None
     columns: list[FormFieldColumn] | None = None
+    rows: list[FormFieldRow] | None = None
     min_rows: int | None = Field(None, ge=0)
     max_rows: int | None = Field(None, ge=0)
 

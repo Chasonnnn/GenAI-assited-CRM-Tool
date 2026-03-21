@@ -217,7 +217,7 @@ def _generate_submission_html(
                 value_display = '<span class="masked">********</span>'
             else:
                 raw_value = answers.get(field_key)
-                if field_type == "repeatable_table":
+                if field_type in {"repeatable_table", "table"}:
                     value_display = _format_repeatable_table(raw_value, field)
                 else:
                     value_display = _format_value(raw_value)
@@ -711,6 +711,13 @@ def _format_repeatable_table(value: Any, field: dict[str, Any]) -> str:
         return '<span style="color: #94a3b8;">—</span>'
 
     columns = field.get("columns") or []
+    configured_rows = field.get("rows") or []
+    row_labels = {
+        row.get("key"): row.get("label") or row.get("key") or "Row"
+        for row in configured_rows
+        if row.get("key")
+    }
+
     if columns:
         column_defs = [
             (column.get("key") or "", column.get("label") or column.get("key") or "")
@@ -718,16 +725,24 @@ def _format_repeatable_table(value: Any, field: dict[str, Any]) -> str:
             if column.get("key")
         ]
     else:
-        column_defs = [(key, key) for key in rows[0].keys()]
+        column_defs = [(key, key) for key in rows[0].keys() if key != "row_key"]
 
     if not column_defs:
         return '<span style="color: #94a3b8;">—</span>'
 
-    header_html = "".join(f"<th>{html.escape(label)}</th>" for _, label in column_defs)
+    header_html = ""
+    if row_labels:
+        header_html += "<th>Item</th>"
+    header_html += "".join(f"<th>{html.escape(label)}</th>" for _, label in column_defs)
 
     body_rows = ""
     for row in rows:
-        cells = "".join(f"<td>{_format_table_cell(row.get(key))}</td>" for key, _ in column_defs)
+        cells = ""
+        row_key = row.get("row_key")
+        if row_labels:
+            row_label = row_labels.get(row_key) if isinstance(row_key, str) else None
+            cells += f"<td>{html.escape(row_label or '—')}</td>"
+        cells += "".join(f"<td>{_format_table_cell(row.get(key))}</td>" for key, _ in column_defs)
         body_rows += f"<tr>{cells}</tr>"
 
     return f"""

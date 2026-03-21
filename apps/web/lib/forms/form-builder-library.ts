@@ -46,6 +46,7 @@ const sharedFieldIcons: Record<FieldType, LucideIcon> = {
     file: FileIcon,
     address: HomeIcon,
     repeatable_table: ListIcon,
+    table: ListIcon,
     height: RulerIcon,
 }
 
@@ -234,6 +235,7 @@ export const CUSTOM_FIELD_GROUPS: BuilderPaletteGroup[] = [
         label: "Uploads and Tables",
         fields: [
             { key: "file", label: "File Upload", type: "file", icon: FileIcon },
+            { key: "table", label: "Table", type: "table", icon: ListIcon },
             {
                 key: "repeatable_table",
                 label: "Repeating Table",
@@ -263,6 +265,7 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
     file: "File upload",
     address: "Address",
     repeatable_table: "Repeating table",
+    table: "Table",
     height: "Height",
 }
 

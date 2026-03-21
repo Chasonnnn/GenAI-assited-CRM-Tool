@@ -318,6 +318,60 @@ def _create_published_form_with_repeatable_table(db, org_id, user_id):
     return form
 
 
+def _create_published_form_with_fixed_table(db, org_id, user_id):
+    schema = {
+        "pages": [
+            {
+                "title": "History",
+                "fields": [
+                    {
+                        "key": "pregnancy_conditions",
+                        "label": "Pregnancy conditions",
+                        "type": "table",
+                        "required": True,
+                        "rows": [
+                            {"key": "gestational_diabetes", "label": "Gestational Diabetes"},
+                            {"key": "preeclampsia", "label": "Preeclampsia"},
+                        ],
+                        "columns": [
+                            {
+                                "key": "status",
+                                "label": "Response",
+                                "type": "radio",
+                                "required": True,
+                                "options": [
+                                    {"label": "No", "value": "no"},
+                                    {"label": "Yes", "value": "yes"},
+                                ],
+                            },
+                            {
+                                "key": "details",
+                                "label": "If yes, explain",
+                                "type": "textarea",
+                                "required": False,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    form = form_service.create_form(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name="Fixed Table Form",
+        description="Fixed table test form",
+        schema=schema,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form_service.publish_form(db, form, user_id)
+    return form
+
+
 def _create_published_form_with_files(db, org_id, user_id, multiple: bool = False):
     file_fields = [
         {
@@ -692,6 +746,56 @@ def test_submission_validates_repeatable_table_rows(db, test_org, test_user, def
                     "delivery_date": "2020-01-01",
                     "babies": 1,
                 }
+            ]
+        },
+        files=[],
+    )
+    assert submission.id is not None
+
+
+def test_submission_validates_fixed_table_rows(db, test_org, test_user, default_stage):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_fixed_table(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    with pytest.raises(ValueError):
+        form_submission_service.create_submission(
+            db=db,
+            token=token_record,
+            form=form,
+            answers={
+                "pregnancy_conditions": [
+                    {"row_key": "gestational_diabetes", "status": "no", "details": ""},
+                ]
+            },
+            files=[],
+        )
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    submission = form_submission_service.create_submission(
+        db=db,
+        token=token_record,
+        form=form,
+        answers={
+            "pregnancy_conditions": [
+                {"row_key": "gestational_diabetes", "status": "no", "details": ""},
+                {"row_key": "preeclampsia", "status": "yes", "details": "Managed in 2018"},
             ]
         },
         files=[],

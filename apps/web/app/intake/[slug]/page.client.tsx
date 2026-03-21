@@ -924,6 +924,40 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             return null
         }
 
+        if (field.type === "table") {
+            if (!Array.isArray(value)) {
+                return `Please complete: ${field.label}`
+            }
+            const configuredRows = field.rows || []
+            const columns = field.columns || []
+            const submittedRows = new Map<string, TableRow>()
+
+            value.forEach((row) => {
+                if (!row || typeof row !== "object") {
+                    return
+                }
+                const rowKey = (row as TableRow).row_key
+                if (typeof rowKey === "string" && rowKey) {
+                    submittedRows.set(rowKey, row as TableRow)
+                }
+            })
+
+            for (const row of configuredRows) {
+                const submittedRow = submittedRows.get(row.key)
+                if (!submittedRow) {
+                    return `Please complete: ${row.label}`
+                }
+                for (const column of columns) {
+                    if (!column.required) continue
+                    const rowValue = submittedRow[column.key]
+                    if (rowValue === null || rowValue === undefined || rowValue === "") {
+                        return `Please complete: ${row.label} / ${column.label}`
+                    }
+                }
+            }
+            return null
+        }
+
         const validation = field.validation
         if (!validation) return null
 
@@ -1097,7 +1131,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         if (field.type === "date" && typeof value === "string") {
             return <span className="font-medium">{formatDate(value)}</span>
         }
-        if (field.type === "repeatable_table" && Array.isArray(value)) {
+        if ((field.type === "repeatable_table" || field.type === "table") && Array.isArray(value)) {
             return (
                 <span className="font-medium">
                     {value.length} row{value.length === 1 ? "" : "s"}

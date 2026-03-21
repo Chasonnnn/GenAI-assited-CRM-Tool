@@ -26,6 +26,7 @@ export type FieldType =
     | 'file'
     | 'address'
     | 'repeatable_table'
+    | 'table'
     | 'height'
 
 export interface FormFieldOption {
@@ -55,7 +56,7 @@ export interface FormFieldCondition {
     value?: unknown
 }
 
-export type TableColumnType = 'text' | 'number' | 'date' | 'select'
+export type TableColumnType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'radio'
 
 export interface FormFieldColumn {
     key: string
@@ -64,6 +65,12 @@ export interface FormFieldColumn {
     required?: boolean
     options?: FormFieldOption[] | null
     validation?: FormFieldValidation | null
+}
+
+export interface FormFieldRow {
+    key: string
+    label: string
+    help_text?: string | null
 }
 
 export interface FormField {
@@ -76,6 +83,7 @@ export interface FormField {
     help_text?: string | null
     show_if?: FormFieldCondition | null
     columns?: FormFieldColumn[] | null
+    rows?: FormFieldRow[] | null
     min_rows?: number | null
     max_rows?: number | null
 }

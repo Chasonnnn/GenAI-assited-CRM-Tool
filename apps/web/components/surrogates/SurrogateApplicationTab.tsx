@@ -122,9 +122,30 @@ function resolveTableColumns(
     return Object.keys(rows[0] || {}).map((key) => ({
         key,
         label: key,
-        type: "text",
+        type: "text" as const,
         required: false,
         options: null,
+    })).filter((column) => column.key !== "row_key")
+}
+
+function resolveFixedTableRows(
+    field: FormSchema["pages"][number]["fields"][number],
+    value: unknown,
+): TableRow[] {
+    const configuredRows = field.rows || []
+    const existingRows = normalizeTableRows(value)
+    const rowMap = new Map<string, TableRow>()
+
+    existingRows.forEach((row) => {
+        const rowKey = row.row_key
+        if (typeof rowKey === "string" && rowKey) {
+            rowMap.set(rowKey, row)
+        }
+    })
+
+    return configuredRows.map((row) => ({
+        ...(rowMap.get(row.key) || {}),
+        row_key: row.key,
     }))
 }
 
@@ -495,17 +516,20 @@ export function SurrogateApplicationTab({
         field: FormSchema["pages"][number]["fields"][number],
         value: unknown,
     ) => {
-        if (field.type === "repeatable_table") {
-            const rows = normalizeTableRows(value)
+        if (field.type === "repeatable_table" || field.type === "table") {
+            const isFixedTable = field.type === "table"
+            const rows = isFixedTable ? resolveFixedTableRows(field, value) : normalizeTableRows(value)
             const columns = resolveTableColumns(field, rows)
             const minRows = field.min_rows ?? 0
             const maxRows = field.max_rows ?? null
+            const configuredRows = field.rows || []
 
             if (columns.length === 0) {
                 return <span className="text-xs text-muted-foreground">No columns configured</span>
             }
 
             const addRow = () => {
+                if (isFixedTable) return
                 if (maxRows !== null && rows.length >= maxRows) return
                 const nextRow: TableRow = {}
                 columns.forEach((column) => {
@@ -522,6 +546,7 @@ export function SurrogateApplicationTab({
             }
 
             const removeRow = (rowIndex: number) => {
+                if (isFixedTable) return
                 if (rows.length <= minRows) return
                 const nextRows = rows.filter((_, index) => index !== rowIndex)
                 handleFieldChange(field.key, nextRows)
@@ -529,15 +554,28 @@ export function SurrogateApplicationTab({
 
             return (
                 <div className="space-y-2">
-                    {rows.length === 0 ? (
+                    {!isFixedTable && rows.length === 0 ? (
                         <p className="text-xs text-muted-foreground">No rows added yet.</p>
                     ) : (
                         <div className="space-y-2">
                             {rows.map((row, rowIndex) => (
                                 <div
-                                    key={`row-${rowIndex}`}
+                                    key={typeof row.row_key === "string" ? row.row_key : `row-${rowIndex}`}
                                     className="rounded-md border border-border p-2"
                                 >
+                                    {isFixedTable ? (
+                                        <div className="mb-2">
+                                            <div className="text-sm font-medium text-foreground">
+                                                {configuredRows.find((configuredRow) => configuredRow.key === row.row_key)?.label ||
+                                                    `Row ${rowIndex + 1}`}
+                                            </div>
+                                            {configuredRows.find((configuredRow) => configuredRow.key === row.row_key)?.help_text ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {configuredRows.find((configuredRow) => configuredRow.key === row.row_key)?.help_text}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
                                     <div className="grid gap-2 md:grid-cols-2">
                                         {columns.map((column) => {
                                             const cellValue = row[column.key]
@@ -550,7 +588,7 @@ export function SurrogateApplicationTab({
                                                     <Label className="text-xs text-muted-foreground">
                                                         {column.label}
                                                     </Label>
-                                                    {column.type === "select" ? (
+                                                    {column.type === "select" || column.type === "radio" ? (
                                                         <NativeSelect
                                                             value={valueText}
                                                             onChange={(e) =>
@@ -571,6 +609,14 @@ export function SurrogateApplicationTab({
                                                                 </NativeSelectOption>
                                                             ))}
                                                         </NativeSelect>
+                                                    ) : column.type === "textarea" ? (
+                                                        <Textarea
+                                                            value={valueText}
+                                                            onChange={(e) =>
+                                                                updateRow(rowIndex, column.key, e.target.value)
+                                                            }
+                                                            rows={3}
+                                                        />
                                                     ) : (
                                                         <Input
                                                             type={
@@ -591,33 +637,37 @@ export function SurrogateApplicationTab({
                                             )
                                         })}
                                     </div>
-                                    <div className="mt-2 flex justify-end">
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => removeRow(rowIndex)}
-                                            disabled={rows.length <= minRows}
-                                        >
-                                            Remove
-                                        </Button>
-                                    </div>
+                                    {!isFixedTable ? (
+                                        <div className="mt-2 flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => removeRow(rowIndex)}
+                                                disabled={rows.length <= minRows}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    ) : null}
                                 </div>
                             ))}
                         </div>
                     )}
-                    <div className="flex justify-end">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={addRow}
-                            disabled={maxRows !== null && rows.length >= maxRows}
-                        >
-                            <PlusIcon className="h-3.5 w-3.5 mr-1" />
-                            Add row
-                        </Button>
-                    </div>
+                    {!isFixedTable ? (
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addRow}
+                                disabled={maxRows !== null && rows.length >= maxRows}
+                            >
+                                <PlusIcon className="h-3.5 w-3.5 mr-1" />
+                                Add row
+                            </Button>
+                        </div>
+                    ) : null}
                 </div>
             )
         }
@@ -1016,8 +1066,9 @@ export function SurrogateApplicationTab({
         if (value === null || value === undefined || value === "") {
             return <span className="text-sm text-muted-foreground">—</span>
         }
-        if (field.type === "repeatable_table") {
-            const rows = normalizeTableRows(value)
+        if (field.type === "repeatable_table" || field.type === "table") {
+            const isFixedTable = field.type === "table"
+            const rows = isFixedTable ? resolveFixedTableRows(field, value) : normalizeTableRows(value)
             const columns = resolveTableColumns(field, rows)
             if (rows.length === 0 || columns.length === 0) {
                 return <span className="text-sm text-muted-foreground">—</span>
@@ -1027,6 +1078,7 @@ export function SurrogateApplicationTab({
                     <table className="w-full text-xs text-left border-collapse">
                         <thead>
                             <tr className="text-muted-foreground">
+                                {isFixedTable ? <th className="border-b border-border pb-1 pr-2">Item</th> : null}
                                 {columns.map((column) => (
                                     <th key={column.key} className="border-b border-border pb-1 pr-2">
                                         {column.label}
@@ -1036,7 +1088,12 @@ export function SurrogateApplicationTab({
                         </thead>
                         <tbody>
                             {rows.map((row, rowIndex) => (
-                                <tr key={`row-${rowIndex}`}>
+                                <tr key={typeof row.row_key === "string" ? row.row_key : `row-${rowIndex}`}>
+                                    {isFixedTable ? (
+                                        <td className="py-1 pr-2 align-top font-medium">
+                                            {field.rows?.find((configuredRow) => configuredRow.key === row.row_key)?.label || "—"}
+                                        </td>
+                                    ) : null}
                                     {columns.map((column) => (
                                         <td key={column.key} className="py-1 pr-2 align-top">
                                             {formatTableCellValue(row[column.key])}
@@ -1203,7 +1260,8 @@ export function SurrogateApplicationTab({
                                                     const isEditing = isEditMode && editingField === field.key
                                                     const hasEdit = editedValue !== undefined
                                                     const displayValue = hasEdit ? editedValue : originalValue
-                                                    const isTableField = field.type === "repeatable_table"
+                                                    const isTableField =
+                                                        field.type === "repeatable_table" || field.type === "table"
                                                     const fieldValueContent = getFieldValueContent(field, displayValue)
                                                     const editFieldContent = buildEditField(
                                                         field,

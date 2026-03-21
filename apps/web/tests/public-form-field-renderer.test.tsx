@@ -1,6 +1,6 @@
 import React from "react"
 import { describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 
 import type { FormField } from "@/lib/api/forms"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
@@ -199,5 +199,67 @@ describe("PublicFormFieldRenderer", () => {
         expect(screen.getByText("Asian")).toHaveClass("text-sm")
         expect(screen.getByText("Black")).toHaveClass("text-sm")
         expect(screen.getByText("Option 3")).toHaveClass("text-sm")
+    })
+
+    it("renders fixed table fields with per-row responses and notes", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "pregnancy_conditions",
+            label: "Pregnancy conditions",
+            type: "table",
+            rows: [
+                { key: "gestational_diabetes", label: "Gestational Diabetes" },
+                { key: "preeclampsia", label: "Preeclampsia" },
+            ],
+            columns: [
+                {
+                    key: "status",
+                    label: "Response",
+                    type: "radio",
+                    required: true,
+                    options: [
+                        { label: "No", value: "no" },
+                        { label: "Yes", value: "yes" },
+                    ],
+                },
+                {
+                    key: "details",
+                    label: "If yes, explain",
+                    type: "textarea",
+                    required: false,
+                },
+            ],
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={[
+                    { row_key: "gestational_diabetes", status: "no", details: "" },
+                    { row_key: "preeclampsia", status: "", details: "" },
+                ]}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+            />,
+        )
+
+        const diabetesRow = screen.getByRole("group", { name: /gestational diabetes row/i })
+        fireEvent.click(within(diabetesRow).getByRole("radio", { name: "Yes" }))
+
+        expect(updateField).toHaveBeenCalledWith(
+            "pregnancy_conditions",
+            expect.arrayContaining([
+                expect.objectContaining({
+                    row_key: "gestational_diabetes",
+                    status: "yes",
+                }),
+            ]),
+        )
+
+        expect(screen.getByText("Gestational Diabetes")).toBeInTheDocument()
+        expect(screen.getByText("Preeclampsia")).toBeInTheDocument()
+        expect(screen.getAllByText("If yes, explain").length).toBeGreaterThan(0)
     })
 })
