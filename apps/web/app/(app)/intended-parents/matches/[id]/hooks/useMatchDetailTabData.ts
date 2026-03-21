@@ -199,10 +199,10 @@ export function useMatchDetailTabData({
     }, [intendedParentFiles, surrogateFiles])
 
     const combinedTasks = useMemo<CombinedTask[]>(() => {
-        const tasks: CombinedTask[] = []
+        const taskMap = new Map<string, CombinedTask>()
 
         for (const surrogateTask of surrogateTasks?.items || []) {
-            tasks.push({
+            taskMap.set(surrogateTask.id, {
                 id: surrogateTask.id,
                 title: surrogateTask.title,
                 due_date: surrogateTask.due_date,
@@ -212,7 +212,16 @@ export function useMatchDetailTabData({
         }
 
         for (const intendedParentTask of intendedParentTasks?.items || []) {
-            tasks.push({
+            const existingTask = taskMap.get(intendedParentTask.id)
+            if (existingTask) {
+                taskMap.set(intendedParentTask.id, {
+                    ...existingTask,
+                    source: "match",
+                })
+                continue
+            }
+
+            taskMap.set(intendedParentTask.id, {
                 id: intendedParentTask.id,
                 title: intendedParentTask.title,
                 due_date: intendedParentTask.due_date,
@@ -221,7 +230,7 @@ export function useMatchDetailTabData({
             })
         }
 
-        return tasks
+        return Array.from(taskMap.values())
     }, [intendedParentTasks, surrogateTasks])
 
     const combinedActivity = useMemo<CombinedActivity[]>(() => {

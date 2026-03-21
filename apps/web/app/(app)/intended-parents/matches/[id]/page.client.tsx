@@ -230,9 +230,17 @@ export default function MatchDetailPage() {
     }
 
     // Handle Add Task
-    const handleAddTask = async (target: "surrogate" | "ip", data: TaskFormData) => {
+    const handleAddTask = async (target: "match" | "surrogate" | "ip", data: TaskFormData) => {
         try {
-            if (target === "surrogate" && match?.surrogate_id) {
+            if (target === "match") {
+                await createTaskMutation.mutateAsync({
+                    title: data.title,
+                    task_type: data.task_type,
+                    match_id: matchId,
+                    ...(data.description ? { description: data.description } : {}),
+                    ...(data.due_date ? { due_date: data.due_date } : {}),
+                })
+            } else if (target === "surrogate" && match?.surrogate_id) {
                 await createTaskMutation.mutateAsync({
                     title: data.title,
                     task_type: data.task_type,
@@ -543,6 +551,7 @@ export default function MatchDetailPage() {
                                     filteredActivity={filteredActivity}
                                     onTabChange={handleTabChange}
                                     onSourceFilterChange={handleSourceFilterChange}
+                                    onAddTask={() => setAddTaskDialogOpen(true)}
                                     onAddNote={() => setAddNoteDialogOpen(true)}
                                     onUploadFile={() => setUploadFileDialogOpen(true)}
                                     onDownloadFile={(attachmentId) => downloadAttachmentMutation.mutate(attachmentId)}

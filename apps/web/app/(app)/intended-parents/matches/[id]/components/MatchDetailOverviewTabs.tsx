@@ -42,6 +42,7 @@ type MatchDetailOverviewTabsProps = {
     filteredActivity: CombinedActivity[]
     onTabChange: (tab: TabType) => void
     onSourceFilterChange: (source: SourceFilter) => void
+    onAddTask: () => void
     onAddNote: () => void
     onUploadFile: () => void
     onDownloadFile: (attachmentId: string) => void
@@ -61,6 +62,7 @@ export function MatchDetailOverviewTabs({
     filteredActivity,
     onTabChange,
     onSourceFilterChange,
+    onAddTask,
     onAddNote,
     onUploadFile,
     onDownloadFile,
@@ -271,6 +273,15 @@ export function MatchDetailOverviewTabs({
 
                 {activeTab === "tasks" && (
                     <div className="space-y-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-8 text-xs mb-3"
+                            onClick={onAddTask}
+                        >
+                            <CheckSquareIcon className="size-3.5 mr-1.5" />
+                            Add Task
+                        </Button>
                         {filteredTasks.length > 0 ? (
                             filteredTasks.map((task) => (
                                 <div key={task.id} className="p-2 rounded bg-muted/30 flex items-center gap-2">

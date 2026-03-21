@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page.client'
 
@@ -95,9 +95,11 @@ vi.mock('@/lib/hooks/use-attachments', () => ({
 }))
 
 // Mock tasks hook
+const mockUseTasks = vi.fn()
+const mockCreateTaskMutateAsync = vi.fn()
 vi.mock('@/lib/hooks/use-tasks', () => ({
-    useTasks: () => ({ data: { items: [], total: 0 }, isLoading: false }),
-    useCreateTask: () => ({ mutateAsync: async () => ({}), isPending: false }),
+    useTasks: (params: unknown) => mockUseTasks(params),
+    useCreateTask: () => ({ mutateAsync: mockCreateTaskMutateAsync, isPending: false }),
     taskKeys: { lists: () => ['tasks', 'list'] },
 }))
 
@@ -129,6 +131,7 @@ describe('MatchDetailPage', () => {
         surrogate_name: 'Jane Doe',
         surrogate_number: 'S10001',
         ip_id: 'ip1',
+        intended_parent_id: 'ip1',
         ip_name: 'John Smith',
         status: 'proposed' as const,
         proposed_at: '2024-01-15T10:00:00Z',
@@ -203,6 +206,8 @@ describe('MatchDetailPage', () => {
         mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseTasks.mockReturnValue({ data: { items: [], total: 0 }, isLoading: false })
+        mockCreateTaskMutateAsync.mockResolvedValue({})
     })
 
     it('renders match page tabs', () => {
@@ -237,6 +242,62 @@ describe('MatchDetailPage', () => {
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: /files/i }))
         expect(screen.getByRole('button', { name: /upload file/i })).toBeInTheDocument()
+    })
+
+    it('shows add task button in overview tasks tab', () => {
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        expect(screen.getByRole('button', { name: /add task/i })).toBeInTheDocument()
+    })
+
+    it('defaults the add task dialog to match target', () => {
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add task/i }))
+
+        expect(screen.getByLabelText(/match \(both sides\)/i)).toBeChecked()
+    })
+
+    it('creates a match-scoped task from the overview tasks tab', async () => {
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add task/i }))
+        fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Coordinate next steps' } })
+        fireEvent.click(screen.getByRole('button', { name: /create task/i }))
+
+        await waitFor(() =>
+            expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({
+                title: 'Coordinate next steps',
+                task_type: 'other',
+                match_id: 'match1',
+            })
+        )
+    })
+
+    it('renders dual-linked tasks once with a match badge', () => {
+        const dualLinkedTask = {
+            id: 'task-match-1',
+            title: 'Coordinate next steps',
+            due_date: '2026-03-07',
+            is_completed: false,
+            intended_parent_id: 'ip1',
+        }
+
+        mockUseTasks.mockImplementation((params: { surrogate_id?: string; intended_parent_id?: string }) => {
+            if (params?.surrogate_id) {
+                return { data: { items: [dualLinkedTask], total: 1 }, isLoading: false }
+            }
+            if (params?.intended_parent_id) {
+                return { data: { items: [dualLinkedTask], total: 1 }, isLoading: false }
+            }
+            return { data: { items: [], total: 0 }, isLoading: false }
+        })
+
+        render(<MatchDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+
+        expect(screen.getAllByText('Coordinate next steps')).toHaveLength(1)
+        expect(screen.getByText('Match')).toBeInTheDocument()
     })
 
     it('displays surrogate name when loaded', () => {
@@ -335,6 +396,7 @@ describe('MatchDetailPage with different statuses', () => {
                 id: 'match1',
                 surrogate_id: 'surrogate1',
                 ip_id: 'ip1',
+                intended_parent_id: 'ip1',
                 surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
                 status: 'accepted',
@@ -354,6 +416,7 @@ describe('MatchDetailPage with different statuses', () => {
                 id: 'match1',
                 surrogate_id: 'surrogate1',
                 ip_id: 'ip1',
+                intended_parent_id: 'ip1',
                 surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
                 status: 'rejected',

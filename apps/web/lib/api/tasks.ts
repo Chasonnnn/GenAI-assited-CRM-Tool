@@ -30,6 +30,7 @@ export interface TaskListItem {
     description: string | null;
     task_type: TaskType;
     surrogate_id: string | null;
+    intended_parent_id: string | null;
     surrogate_number: string | null;
     owner_type: 'user' | 'queue';
     owner_id: string;
@@ -94,6 +95,7 @@ export interface TaskCreatePayload {
     title: string;
     description?: string;
     task_type?: TaskType;
+    match_id?: string;
     surrogate_id?: string;
     intended_parent_id?: string;
     owner_type?: 'user' | 'queue';

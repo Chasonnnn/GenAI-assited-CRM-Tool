@@ -29,7 +29,7 @@ import {
 interface AddTaskDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (target: "surrogate" | "ip", data: TaskFormData) => Promise<void>
+    onSubmit: (target: "match" | "surrogate" | "ip", data: TaskFormData) => Promise<void>
     isPending: boolean
     surrogateName: string
     ipName: string
@@ -58,7 +58,7 @@ export function AddTaskDialog({
     surrogateName,
     ipName,
 }: AddTaskDialogProps) {
-    const [target, setTarget] = useState<"surrogate" | "ip">("surrogate")
+    const [target, setTarget] = useState<"match" | "surrogate" | "ip">("match")
     const [title, setTitle] = useState("")
     const [description, setDescription] = useState("")
     const [taskType, setTaskType] = useState<TaskFormData["task_type"]>("other")
@@ -80,7 +80,7 @@ export function AddTaskDialog({
         setDescription("")
         setTaskType("other")
         setDueDate("")
-        setTarget("surrogate")
+        setTarget("match")
         onOpenChange(false)
     }
 
@@ -90,7 +90,7 @@ export function AddTaskDialog({
             setDescription("")
             setTaskType("other")
             setDueDate("")
-            setTarget("surrogate")
+            setTarget("match")
         }
         onOpenChange(isOpen)
     }
@@ -101,7 +101,7 @@ export function AddTaskDialog({
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
                     <DialogDescription>
-                        Create a new task for the Surrogate or Intended Parent.
+                        Create a task for the full match or assign it to one side only.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -111,10 +111,16 @@ export function AddTaskDialog({
                         <Label id="match-task-target-label">Assign to</Label>
                         <RadioGroup
                             value={target}
-                            onValueChange={(v) => setTarget(v as "surrogate" | "ip")}
+                            onValueChange={(v) => setTarget(v as "match" | "surrogate" | "ip")}
                             aria-labelledby="match-task-target-label"
-                            className="flex gap-4"
+                            className="flex flex-col gap-3"
                         >
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="match" id="task-target-match" />
+                                <Label htmlFor="task-target-match" className="font-normal cursor-pointer">
+                                    Match (both sides)
+                                </Label>
+                            </div>
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="surrogate" id="task-target-surrogate" />
                                 <Label htmlFor="task-target-surrogate" className="font-normal cursor-pointer">
