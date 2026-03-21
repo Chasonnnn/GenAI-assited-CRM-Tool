@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import SurrogatesPage from '../app/(app)/surrogates/page'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { SurrogatesPageClient as SurrogatesPage } from '../app/(app)/surrogates/page.client'
 
 // ============================================================================
 // Mocks
@@ -22,6 +22,7 @@ const mockUseAuth = vi.fn()
 vi.mock('next/navigation', () => ({
     useSearchParams: () => ({
         get: (key: string) => mockSearchParams.get(key),
+        has: (key: string) => mockSearchParams.has(key),
         toString: () => mockSearchParams.toString(),
     }),
     useRouter: () => ({
@@ -106,6 +107,7 @@ describe('SurrogatesPage', () => {
         mockSearchParams.delete('range')
         mockSearchParams.delete('from')
         mockSearchParams.delete('to')
+        mockSearchParams.delete('search')
         mockUseSurrogates.mockReset()
         mockUseArchiveSurrogate.mockReset()
         mockUseRestoreSurrogate.mockReset()
@@ -245,6 +247,24 @@ describe('SurrogatesPage', () => {
         expect(screen.getByRole('link', { name: '#S12345' })).toHaveAttribute(
             'href',
             '/surrogates/1?return_to=%2Fsurrogates%3Fstage%3Ds1%26q%3Djohn%26page%3D2',
+        )
+    })
+
+    it('hydrates legacy search params and normalizes them to q', async () => {
+        mockSearchParams.set('search', 'Local Warning')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByRole('textbox', { name: 'Search surrogates' })).toHaveValue('Local Warning')
+        expect(mockUseSurrogates).toHaveBeenCalledWith(expect.objectContaining({ q: 'Local Warning' }))
+
+        await waitFor(() =>
+            expect(mockRouterReplace).toHaveBeenCalledWith('/surrogates?q=Local+Warning', { scroll: false })
         )
     })
 
@@ -577,6 +597,27 @@ describe('SurrogatesPage', () => {
         expect(screen.queryByText('user-123')).not.toBeInTheDocument()
     })
 
+    it('hides intelligent smart-filter options when intelligent suggestions are unavailable', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
+        const smartFilterTrigger = screen.getAllByRole('combobox').at(-1)
+        expect(smartFilterTrigger).toBeDefined()
+        fireEvent.click(smartFilterTrigger!)
+
+        expect(screen.queryByText('New Unread Needs Follow-up')).not.toBeInTheDocument()
+        expect(screen.queryByText('Meeting Outcome Missing')).not.toBeInTheDocument()
+        expect(screen.queryByText('Pre-approval Stuck Cases')).not.toBeInTheDocument()
+        expect(screen.getByText('Attention Needed: Unreached Leads')).toBeInTheDocument()
+        expect(screen.getByText('Attention Needed: Stuck Leads')).toBeInTheDocument()
+    })
+
     it('applies priority-only immediately from More Filters', () => {
         mockUseSurrogates.mockReturnValue({
             data: { items: [], total: 0, pages: 0 },
@@ -627,6 +668,26 @@ describe('SurrogatesPage', () => {
 
         expect(screen.getByText('Priority Only')).toBeInTheDocument()
         expect(screen.getByText('Source: Manual')).toBeInTheDocument()
+    })
+
+    it('renders active chips for primary filters next to Reset', () => {
+        mockSearchParams.set('stage', 's1')
+        mockSearchParams.set('range', 'week')
+        mockSearchParams.set('q', 'alpha')
+        mockSearchParams.set('dynamic_filter', 'intelligent_any')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByText('Intelligent Suggestions')).toBeInTheDocument()
+        expect(screen.getByText('Stage: New Unread')).toBeInTheDocument()
+        expect(screen.getByText('Date: This Week')).toBeInTheDocument()
+        expect(screen.getByText('Search: alpha')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument()
     })
 
     it('sorts by updated_at when Last Modified header is clicked', () => {

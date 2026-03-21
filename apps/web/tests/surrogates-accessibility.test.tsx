@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import SurrogatesPage from '../app/(app)/surrogates/page'
+import { SurrogatesPageClient as SurrogatesPage } from '../app/(app)/surrogates/page.client'
 import { SurrogateOverviewTab } from '../components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { InlineEditField } from '../components/inline-edit-field'
 import { InlineDateField } from '../components/inline-date-field'
