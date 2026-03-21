@@ -1023,9 +1023,9 @@ export default function SurrogatesPage() {
                                     onClick={handleIntelligentSuggestionToggle}
                                     disabled={isFilterPending}
                                     className={cn(
-                                        "border-sky-400/30 bg-background/90 text-sky-100 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_0_18px_-10px_rgba(56,189,248,0.95)] hover:border-sky-300/45 hover:bg-background hover:text-white hover:shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_24px_-10px_rgba(56,189,248,1)]",
+                                        "border-sky-400/30 bg-background/90 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_0_18px_-10px_rgba(56,189,248,0.95)] hover:border-sky-300/45 hover:bg-background hover:shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_24px_-10px_rgba(56,189,248,1)]",
                                         dynamicFilter === "intelligent_any" &&
-                                            "border-sky-300/60 bg-background text-white shadow-[0_0_0_1px_rgba(125,211,252,0.24),0_0_28px_-8px_rgba(56,189,248,1)]"
+                                            "border-sky-300/60 bg-background shadow-[0_0_0_1px_rgba(125,211,252,0.24),0_0_28px_-8px_rgba(56,189,248,1)]"
                                     )}
                                 >
                                     Intelligent Suggestions ({intelligentSuggestionCount})
