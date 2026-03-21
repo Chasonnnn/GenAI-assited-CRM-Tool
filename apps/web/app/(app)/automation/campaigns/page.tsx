@@ -238,45 +238,53 @@ export default function CampaignsPage() {
                       label: "Intake",
                       stageIds: stageOptions
                           .filter((stage) =>
-                              [
-                                  "new_unread",
-                                  "contacted",
-                                  "pre_qualified",
-                                  "interview_scheduled",
-                                  "application_submitted",
-                                  "under_review",
-                              ].includes(("stage_key" in stage ? stage.stage_key : stage.id).toString())
+                              "stage_key" in stage &&
+                              (stage.category ?? stage.stage_type) === "intake"
                           )
                           .map((stage) => stage.id),
                   },
                   {
-                      key: "surrogate-match",
-                      label: "Match Ready+",
+                      key: "surrogate-post-approval",
+                      label: "Post-Approval",
                       stageIds: stageOptions
                           .filter((stage) =>
-                              [
-                                  "approved",
-                                  "ready_to_match",
-                                  "matched",
-                                  "medical_clearance_passed",
-                                  "legal_clearance_passed",
-                              ].includes(("stage_key" in stage ? stage.stage_key : stage.id).toString())
+                              "stage_key" in stage &&
+                              (stage.category ?? stage.stage_type) === "post_approval" &&
+                              !stage.semantics?.capabilities.shows_pregnancy_tracking
                           )
                           .map((stage) => stage.id),
                   },
                   {
                       key: "surrogate-pregnancy",
-                      label: "Pregnancy+",
+                      label: "Pregnancy",
                       stageIds: stageOptions
                           .filter((stage) =>
-                              [
-                                  "transfer_cycle",
-                                  "second_hcg_confirmed",
-                                  "heartbeat_confirmed",
-                                  "ob_care_established",
-                                  "anatomy_scanned",
-                                  "delivered",
-                              ].includes(("stage_key" in stage ? stage.stage_key : stage.id).toString())
+                              "stage_key" in stage &&
+                              Boolean(
+                                  stage.semantics?.capabilities.shows_pregnancy_tracking ||
+                                      stage.semantics?.capabilities.requires_delivery_details,
+                              )
+                          )
+                          .map((stage) => stage.id),
+                  },
+                  {
+                      key: "surrogate-paused",
+                      label: "Paused",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              "stage_key" in stage &&
+                              stage.semantics?.pause_behavior === "resume_previous_stage"
+                          )
+                          .map((stage) => stage.id),
+                  },
+                  {
+                      key: "surrogate-terminal",
+                      label: "Terminal",
+                      stageIds: stageOptions
+                          .filter((stage) =>
+                              "stage_key" in stage &&
+                              stage.semantics?.terminal_outcome &&
+                              stage.semantics.terminal_outcome !== "none"
                           )
                           .map((stage) => stage.id),
                   },
