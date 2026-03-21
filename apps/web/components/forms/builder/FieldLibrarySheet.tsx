@@ -60,7 +60,7 @@ function FieldTile({
             aria-label={buildTileAriaLabel(field, isPreset)}
             onClick={() => onInsertField(field)}
             className={cn(
-                "group flex min-h-0 flex-col items-start gap-2.5 rounded-2xl border border-transparent px-2 py-2.5 text-left transition-colors",
+                "group flex min-h-0 flex-col items-center gap-1.5 rounded-xl border border-transparent px-1.5 py-2 text-center transition-colors",
                 isPreset
                     ? "hover:bg-sky-50/75 focus-visible:border-sky-200"
                     : "hover:bg-emerald-50/70 focus-visible:border-emerald-200",
@@ -68,15 +68,15 @@ function FieldTile({
         >
             <span
                 className={cn(
-                    "flex size-14 items-center justify-center rounded-[18px] border transition-transform group-hover:scale-[1.02]",
+                    "flex size-12 items-center justify-center rounded-2xl border transition-transform group-hover:scale-[1.02]",
                     isPreset
                         ? "border-sky-200/90 bg-sky-50/70 text-slate-900"
                         : "border-emerald-200/90 bg-emerald-50/65 text-slate-900",
                 )}
             >
-                <Icon className="size-[18px]" aria-hidden="true" />
+                <Icon className="size-4" aria-hidden="true" />
             </span>
-            <span className="pr-1 text-[15px] font-medium leading-snug text-slate-900">{field.label}</span>
+            <span className="w-full text-[13px] font-medium leading-tight text-slate-900">{field.label}</span>
         </button>
     )
 }
@@ -180,7 +180,7 @@ export function FieldLibrarySheet({
                                                 <h3 className="text-[15px] font-semibold tracking-tight text-slate-950">
                                                     {section.label}
                                                 </h3>
-                                                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
+                                                <div className="grid grid-cols-4 gap-x-1.5 gap-y-2.5">
                                                     {section.fields.map((field) => (
                                                         <FieldTile
                                                             key={`${section.id}-${field.key}`}
