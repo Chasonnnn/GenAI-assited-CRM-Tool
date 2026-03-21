@@ -432,47 +432,6 @@ export default function IntendedParentDetailPage() {
                             </CardContent>
                         </Card>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Marital Status</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Select
-                                    value={ip.marital_status ?? "__none__"}
-                                    onValueChange={async (value) => {
-                                        await updateDetailField({
-                                            marital_status: value === "__none__" ? null : value,
-                                        })
-                                    }}
-                                    disabled={updateMutation.isPending}
-                                >
-                                    <SelectTrigger aria-label="Marital status" className="w-full sm:w-[240px]">
-                                        <SelectValue placeholder="Not provided">
-                                            {(value: string | null) =>
-                                                maritalStatusOptions.find((option) => option.value === value)?.label ??
-                                                "Not provided"
-                                            }
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="__none__">Not provided</SelectItem>
-                                        {maritalStatusOptions.map((option) => (
-                                            <SelectItem key={option.value} value={option.value}>
-                                                {option.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </CardContent>
-                        </Card>
-
-                        <TrustInfoCard
-                            intendedParent={ip}
-                            onUpdate={async (data) => {
-                                await updateDetailField(data)
-                            }}
-                        />
-
                         {/* Partner Info */}
                         {(ip.partner_name ||
                             ip.partner_email ||
@@ -523,6 +482,47 @@ export default function IntendedParentDetailPage() {
                                 </CardContent>
                             </Card>
                         )}
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Marital Status</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Select
+                                    value={ip.marital_status ?? "__none__"}
+                                    onValueChange={async (value) => {
+                                        await updateDetailField({
+                                            marital_status: value === "__none__" ? null : value,
+                                        })
+                                    }}
+                                    disabled={updateMutation.isPending}
+                                >
+                                    <SelectTrigger aria-label="Marital status" className="w-full sm:w-[240px]">
+                                        <SelectValue placeholder="Not provided">
+                                            {(value: string | null) =>
+                                                maritalStatusOptions.find((option) => option.value === value)?.label ??
+                                                "Not provided"
+                                            }
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__none__">Not provided</SelectItem>
+                                        {maritalStatusOptions.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </CardContent>
+                        </Card>
+
+                        <TrustInfoCard
+                            intendedParent={ip}
+                            onUpdate={async (data) => {
+                                await updateDetailField(data)
+                            }}
+                        />
 
                         <IntendedParentClinicCard
                             intendedParent={ip}

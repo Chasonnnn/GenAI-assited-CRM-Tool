@@ -285,6 +285,18 @@ describe('IntendedParentDetailPage', () => {
         expect(screen.getByText("Aug 9, 1991")).toBeInTheDocument()
     })
 
+    it("renders partner details above marital status in the detail tab", () => {
+        render(<IntendedParentDetailPage />)
+
+        const partnerCardTitle = screen.getByText("Partner")
+        const maritalStatusCardTitle = screen.getByText("Marital Status")
+
+        expect(
+            partnerCardTitle.compareDocumentPosition(maritalStatusCardTitle) &
+                Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy()
+    })
+
     it("renders fixed trust info on the detail page", () => {
         render(<IntendedParentDetailPage />)
 
