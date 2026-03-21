@@ -8,6 +8,8 @@ import { schemaToMetadata } from "@/lib/forms/form-builder-document"
 type WorkspaceTab = "builder" | "settings" | "submissions"
 type SubmissionHistoryFilter = "all" | "pending" | "processed"
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error"
+type CanvasMode = "compose" | "preview"
+type PreviewDevice = "desktop" | "mobile"
 
 type AutomationBuilderState = {
     hasHydrated: boolean
@@ -36,7 +38,11 @@ type AutomationBuilderState = {
     isPublishing: boolean
     useOrgLogo: boolean
     customLogoUrl: string
-    isMobilePreview: boolean
+    canvasMode: CanvasMode
+    previewDevice: PreviewDevice
+    fieldLibraryOpen: boolean
+    fieldLibrarySearch: string
+    fieldLibraryCategory: string
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
 }
@@ -78,7 +84,11 @@ const buildInitialState = (isNewForm: boolean): AutomationBuilderState => ({
     isPublishing: false,
     useOrgLogo: false,
     customLogoUrl: "",
-    isMobilePreview: false,
+    canvasMode: "compose",
+    previewDevice: "desktop",
+    fieldLibraryOpen: false,
+    fieldLibrarySearch: "",
+    fieldLibraryCategory: "all",
     autoSaveStatus: "idle",
     lastSavedAt: null,
 })

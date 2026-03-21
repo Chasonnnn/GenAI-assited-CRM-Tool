@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeftIcon, EyeIcon, Loader2Icon, SmartphoneIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, EyeIcon, Loader2Icon, Trash2Icon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,6 @@ type DeleteAction = {
 type FormBuilderHeaderProps = {
     backAriaLabel: string
     formName: string
-    isMobilePreview: boolean
     isPublished: boolean
     isPublishing: boolean
     isSaving: boolean
@@ -25,7 +24,6 @@ type FormBuilderHeaderProps = {
     onBack: () => void
     onFormNameChange: (value: string) => void
     onPreview: () => void
-    onToggleMobilePreview: () => void
     onSave: () => void
     onPublish: () => void
     publishDisabled?: boolean
@@ -35,7 +33,6 @@ type FormBuilderHeaderProps = {
 export function FormBuilderHeader({
     backAriaLabel,
     formName,
-    isMobilePreview,
     isPublished,
     isPublishing,
     isSaving,
@@ -44,7 +41,6 @@ export function FormBuilderHeader({
     onBack,
     onFormNameChange,
     onPreview,
-    onToggleMobilePreview,
     onSave,
     onPublish,
     publishDisabled = false,
@@ -92,14 +88,6 @@ export function FormBuilderHeader({
                 <Button variant="outline" size="sm" onClick={onPreview}>
                     <EyeIcon className="mr-2 size-4" />
                     Preview
-                </Button>
-                <Button
-                    variant={isMobilePreview ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={onToggleMobilePreview}
-                >
-                    <SmartphoneIcon className="mr-2 size-4" />
-                    Mobile
                 </Button>
                 {autoSaveLabel ? (
                     <span

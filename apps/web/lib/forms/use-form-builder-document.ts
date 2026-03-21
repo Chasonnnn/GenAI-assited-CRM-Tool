@@ -380,6 +380,28 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         })
     }, [activePage, selectField])
 
+    const handleRenamePage = useCallback((pageId: number, name: string) => {
+        setPages((prev) =>
+            prev.map((page) => (page.id === pageId ? { ...page, name } : page)),
+        )
+    }, [])
+
+    const handleMovePage = useCallback((pageId: number, direction: "up" | "down") => {
+        setPages((prev) => {
+            const currentIndex = prev.findIndex((page) => page.id === pageId)
+            if (currentIndex === -1) return prev
+
+            const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1
+            if (targetIndex < 0 || targetIndex >= prev.length) return prev
+
+            const nextPages = [...prev]
+            const [movedPage] = nextPages.splice(currentIndex, 1)
+            if (!movedPage) return prev
+            nextPages.splice(targetIndex, 0, movedPage)
+            return nextPages
+        })
+    }, [])
+
     const addOption = useCallback((fieldId: string) => {
         appendOptionKey(fieldId)
         const existing = selectedFieldData?.options ?? []
@@ -429,6 +451,8 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         handleMappingChange,
         handleAddPage,
         handleDuplicatePage,
+        handleRenamePage,
+        handleMovePage,
         deletePage,
         addOption,
         removeOption,

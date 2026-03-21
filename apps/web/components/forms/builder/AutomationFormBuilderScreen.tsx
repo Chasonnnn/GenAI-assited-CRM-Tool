@@ -48,7 +48,6 @@ export function AutomationFormBuilderScreen({
             <FormBuilderHeader
                 backAriaLabel="Back to forms"
                 formName={controller.state.formName}
-                isMobilePreview={controller.state.isMobilePreview}
                 isPublished={controller.state.isPublished}
                 isPublishing={controller.state.isPublishing}
                 isSaving={controller.state.isSaving}
@@ -57,7 +56,6 @@ export function AutomationFormBuilderScreen({
                 onBack={controller.onBack}
                 onFormNameChange={controller.onFormNameChange}
                 onPreview={controller.handlePreview}
-                onToggleMobilePreview={controller.onToggleMobilePreview}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
                 publishDisabled={controller.state.isPublished}

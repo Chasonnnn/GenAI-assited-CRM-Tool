@@ -7,6 +7,8 @@ import { schemaToMetadata } from "@/lib/forms/form-builder-document"
 
 type WorkspaceTab = "builder" | "settings"
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error"
+type CanvasMode = "compose" | "preview"
+type PreviewDevice = "desktop" | "mobile"
 
 type TemplateBuilderState = {
     hasHydrated: boolean
@@ -22,7 +24,11 @@ type TemplateBuilderState = {
     isPublished: boolean
     isSaving: boolean
     isPublishing: boolean
-    isMobilePreview: boolean
+    canvasMode: CanvasMode
+    previewDevice: PreviewDevice
+    fieldLibraryOpen: boolean
+    fieldLibrarySearch: string
+    fieldLibraryCategory: string
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
     showPublishDialog: boolean
@@ -60,7 +66,11 @@ const buildInitialState = (isNewForm: boolean): TemplateBuilderState => ({
     isPublished: false,
     isSaving: false,
     isPublishing: false,
-    isMobilePreview: false,
+    canvasMode: "compose",
+    previewDevice: "desktop",
+    fieldLibraryOpen: false,
+    fieldLibrarySearch: "",
+    fieldLibraryCategory: "all",
     autoSaveStatus: "idle",
     lastSavedAt: null,
     showPublishDialog: false,

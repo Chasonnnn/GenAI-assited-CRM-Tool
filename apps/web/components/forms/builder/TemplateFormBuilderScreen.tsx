@@ -77,7 +77,6 @@ export function TemplateFormBuilderScreen({
             <FormBuilderHeader
                 backAriaLabel="Back to form templates"
                 formName={controller.state.formName}
-                isMobilePreview={controller.state.isMobilePreview}
                 isPublished={controller.state.isPublished}
                 isPublishing={controller.state.isPublishing}
                 isSaving={controller.state.isSaving}
@@ -86,7 +85,6 @@ export function TemplateFormBuilderScreen({
                 onBack={controller.onBack}
                 onFormNameChange={controller.onFormNameChange}
                 onPreview={controller.handlePreview}
-                onToggleMobilePreview={controller.onToggleMobilePreview}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
                 publishDisabled={controller.state.isPublished}

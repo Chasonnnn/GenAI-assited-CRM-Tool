@@ -78,6 +78,8 @@ export function useTemplateFormBuilderPage() {
         handleMappingChange,
         handleAddPage,
         handleDuplicatePage,
+        handleRenamePage,
+        handleMovePage,
         deletePage,
         addOption,
         removeOption,
@@ -464,6 +466,8 @@ export function useTemplateFormBuilderPage() {
             syncOptionKeys,
             addOption,
             removeOption,
+            handleRenamePage,
+            handleMovePage,
         }),
         [
             activePage,
@@ -485,7 +489,9 @@ export function useTemplateFormBuilderPage() {
             handleFieldDragStart,
             handleInsertField,
             handleMappingChange,
+            handleMovePage,
             handleRemoveColumn,
+            handleRenamePage,
             handleShowIfChange,
             handleUpdateColumn,
             handleUpdateField,
@@ -514,16 +520,25 @@ export function useTemplateFormBuilderPage() {
         surrogateFieldMappings,
         workspaceDocument,
         workspaceProps: {
-            paletteWidthClass: "xl:w-[320px]",
-            canvasWidthClass: state.isMobilePreview ? "max-w-sm" : "max-w-4xl",
-            canvasFrameClass: state.isMobilePreview
-                ? "rounded-[32px] border border-border bg-card p-6 shadow-sm"
-                : "rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8",
-            canvasScaleClass: state.isMobilePreview ? "origin-top scale-[0.96]" : "",
-            canvasTypographyClass: state.isMobilePreview
-                ? "text-[0.95rem] [&_input]:text-sm [&_textarea]:text-sm [&_label]:text-xs [&_p]:text-xs"
-                : "",
+            desktopCanvasWidthClass: "max-w-4xl",
+            mobileCanvasWidthClass: "max-w-sm",
+            canvasFrameClass: "rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8",
             mappingOptions: surrogateFieldMappings,
+            formName: state.formName,
+            formDescription: state.formDescription,
+            publicTitle: state.publicTitle,
+            resolvedLogoUrl,
+            privacyNotice: state.privacyNotice,
+            canvasMode: state.canvasMode,
+            previewDevice: state.previewDevice,
+            fieldLibraryOpen: state.fieldLibraryOpen,
+            fieldLibrarySearch: state.fieldLibrarySearch,
+            fieldLibraryCategory: state.fieldLibraryCategory,
+            onCanvasModeChange: (value: "compose" | "preview") => patchState({ canvasMode: value }),
+            onPreviewDeviceChange: (value: "desktop" | "mobile") => patchState({ previewDevice: value }),
+            onFieldLibraryOpenChange: (open: boolean) => patchState({ fieldLibraryOpen: open }),
+            onFieldLibrarySearchChange: (value: string) => patchState({ fieldLibrarySearch: value }),
+            onFieldLibraryCategoryChange: (value: string) => patchState({ fieldLibraryCategory: value }),
             document: workspaceDocument,
         },
         formSettingsProps: {
@@ -556,7 +571,6 @@ export function useTemplateFormBuilderPage() {
         onWorkspaceTabChange: (value: string) =>
             patchState({ workspaceTab: value as typeof state.workspaceTab }),
         onFormNameChange: (value: string) => patchState({ formName: value }),
-        onToggleMobilePreview: () => patchState({ isMobilePreview: !state.isMobilePreview }),
         onDeletePageDialogOpenChange: (open: boolean) => {
             patchState({ showDeletePageDialog: open })
             if (!open) {
