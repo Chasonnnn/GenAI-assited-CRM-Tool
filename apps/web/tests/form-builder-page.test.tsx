@@ -90,6 +90,21 @@ describe("FormBuilderPage", () => {
         expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
     })
 
+    it("renders human-readable labels for automation settings dropdown triggers", () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
+
+        const purposeSelect = screen.getByRole("combobox", { name: "Form Purpose" })
+        expect(purposeSelect).toHaveTextContent("Surrogate Application")
+        expect(purposeSelect).not.toHaveTextContent("surrogate_application")
+
+        const templateSelect = screen.getByRole("combobox", { name: "Default application email template" })
+        expect(templateSelect).toHaveTextContent("No default template")
+        expect(templateSelect).not.toHaveTextContent("none")
+    })
+
+
     it("uses a persistent field browser, live edit canvas, and docked settings rail", async () => {
         render(<FormBuilderPage />)
 

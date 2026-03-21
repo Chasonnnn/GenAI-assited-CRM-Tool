@@ -15,6 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
+const FORM_PURPOSE_LABELS: Record<FormPurpose, string> = {
+    surrogate_application: "Surrogate Application",
+    event_intake: "Event Intake",
+    other: "Other",
+}
+
 type AutomationFormSettingsPanelProps = {
     formName: string
     formDescription: string
@@ -96,6 +102,8 @@ export function AutomationFormSettingsPanel({
     onMaxFileCountChange,
     onAllowedMimeTypesTextChange,
 }: AutomationFormSettingsPanelProps) {
+    const templateNameById = new Map(emailTemplates.map((template) => [template.id, template.name] as const))
+
     return (
         <div className="mx-auto max-w-5xl">
             <div className="rounded-[28px] border border-border/80 bg-card p-6 shadow-sm sm:p-8">
@@ -137,7 +145,13 @@ export function AutomationFormSettingsPanel({
                             onValueChange={(value) => onFormPurposeChange(value as FormPurpose)}
                         >
                             <SelectTrigger id="settings-form-purpose">
-                                <SelectValue placeholder="Select purpose" />
+                                <SelectValue placeholder="Select purpose">
+                                    {(value: string | null) =>
+                                        FORM_PURPOSE_LABELS[(value as FormPurpose | null) ?? "surrogate_application"] ??
+                                        value ??
+                                        "Select purpose"
+                                    }
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="surrogate_application">Surrogate Application</SelectItem>
@@ -256,7 +270,13 @@ export function AutomationFormSettingsPanel({
                                 onValueChange={(value) => onDefaultTemplateChange(value === "none" ? "" : value)}
                             >
                                 <SelectTrigger id="settings-default-template">
-                                    <SelectValue placeholder="Select template" />
+                                    <SelectValue placeholder="Select template">
+                                        {(value: string | null) =>
+                                            value === "none"
+                                                ? "No default template"
+                                                : templateNameById.get(value ?? "") ?? value ?? "Select template"
+                                        }
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">No default template</SelectItem>
