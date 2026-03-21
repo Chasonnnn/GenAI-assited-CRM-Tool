@@ -10,11 +10,11 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 import type { TemplateFormBuilderPageController } from "@/lib/forms/use-template-form-builder-page"
 
 import { DeletePageDialog } from "@/components/forms/builder/DeletePageDialog"
 import { FormBuilderHeader } from "@/components/forms/builder/FormBuilderHeader"
+import { TemplateFormPublishDialog } from "@/components/forms/builder/TemplateFormPublishDialog"
 import { FormBuilderWorkspace } from "@/components/forms/builder/FormBuilderWorkspace"
 import { FormBuilderWorkspaceTabs } from "@/components/forms/builder/FormBuilderWorkspaceTabs"
 import { TemplateFormSettingsPanel } from "@/components/forms/builder/TemplateFormSettingsPanel"
@@ -126,15 +126,11 @@ export function TemplateFormBuilderScreen({
                 <TemplateFormSettingsPanel {...controller.formSettingsProps} />
             </div>
 
-            <PublishDialog
+            <TemplateFormPublishDialog
                 open={controller.state.showPublishDialog}
                 onOpenChange={controller.onPublishDialogOpenChange}
                 onPublish={controller.confirmPublish}
                 isLoading={controller.state.isPublishing}
-                title="Publish Form Template"
-                description="Publish this form template to org libraries. Draft edits stay private until you re-publish."
-                defaultPublishAll={controller.templateData?.is_published_globally ?? true}
-                initialOrgIds={controller.templateData?.target_org_ids ?? []}
             />
 
             <DeletePageDialog

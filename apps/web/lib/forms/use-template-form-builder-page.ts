@@ -375,7 +375,7 @@ export function useTemplateFormBuilderPage() {
         patchState({ showPublishDialog: true })
     }, [pages, patchState, state.formName])
 
-    const confirmPublish = useCallback(async (publishAll: boolean, orgIds: string[]) => {
+    const confirmPublish = useCallback(async () => {
         patchState({ isPublishing: true })
         try {
             const savedTemplate = await queueSave(draftPayload)
@@ -383,8 +383,8 @@ export function useTemplateFormBuilderPage() {
             await publishTemplateMutation.mutateAsync({
                 id: savedTemplate.id,
                 payload: {
-                    publish_all: publishAll,
-                    org_ids: publishAll ? null : orgIds,
+                    publish_all: true,
+                    org_ids: null,
                 },
             })
             patchState({

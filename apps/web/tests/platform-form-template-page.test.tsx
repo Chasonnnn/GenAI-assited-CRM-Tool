@@ -255,4 +255,16 @@ describe("PlatformFormTemplatePage", () => {
         expect(within(dobPreview).getByText("Year")).toBeInTheDocument()
     })
 
+    it("uses a simple global publish confirmation for form templates", async () => {
+        render(<PlatformFormTemplatePage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: /add name field/i }))
+        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
+
+        expect(await screen.findByText("Publish Form Template")).toBeInTheDocument()
+        expect(screen.getByText(/every organization library/i)).toBeInTheDocument()
+        expect(screen.queryByText("Publish to all organizations")).not.toBeInTheDocument()
+        expect(screen.queryByText("Publish to selected organizations")).not.toBeInTheDocument()
+    })
+
 })
