@@ -141,14 +141,16 @@ export function DateRangePicker({
         }}>
             <PopoverTrigger
                 className={cn(
-                    "inline-flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground w-44",
+                    "inline-flex max-w-full min-w-[13rem] items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground",
                     className
                 )}
                 aria-label={ariaLabel}
             >
-                <CalendarIcon className="size-4" aria-hidden="true" />
-                {getDisplayLabel()}
-                <ChevronDownIcon className="size-4 opacity-50" aria-hidden="true" />
+                <CalendarIcon className="size-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-left whitespace-nowrap">
+                    {getDisplayLabel()}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 opacity-50" aria-hidden="true" />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
                 {!showCalendar ? (

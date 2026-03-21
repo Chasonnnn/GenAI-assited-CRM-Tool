@@ -161,6 +161,22 @@ function SetterHarness() {
 }
 
 describe("DateRangePicker", () => {
+    it("uses a stable minimum trigger width for custom date ranges", async () => {
+        render(<SetterHarness />)
+
+        const startDate = new Date()
+        startDate.setDate(11)
+        const endDate = new Date()
+        endDate.setDate(13)
+        const expectedLabel = `${shortDateLabel(startDate)} - ${shortDateLabel(endDate)}`
+
+        selectCustomRange(startDate, endDate)
+
+        const trigger = await screen.findByRole("button", { name: new RegExp(expectedLabel, "i") })
+        expect(trigger).toHaveClass("min-w-[13rem]")
+        expect(trigger).not.toHaveClass("w-44")
+    })
+
     it("keeps the first applied custom range in sync with the trigger label", async () => {
         render(<SurrogatesDateRangeHarness />)
 
