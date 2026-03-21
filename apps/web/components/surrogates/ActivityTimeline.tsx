@@ -559,7 +559,7 @@ export function ActivityTimeline({
 }: ActivityTimelineProps) {
     const [showFullJourney, setShowFullJourney] = useState(false)
     const [openStageIds, setOpenStageIds] = useState<Set<string>>(() => new Set())
-    const prevShowFullJourney = useRef(showFullJourney)
+    const lastSyncedOpenStageId = useRef<string | null | undefined>(undefined)
 
     // Fetch stage history
     const { data: stageHistory = [] } = useSurrogateHistory(surrogateId)
@@ -576,32 +576,18 @@ export function ActivityTimeline({
         [stageGroups, showFullJourney, effectiveStageId, currentStageId]
     )
 
-    const autoOpenStageIds = useMemo(
-        () =>
-            stageGroups
-                .filter(
-                    (stage) =>
-                        (stage.isCurrent &&
-                            (stage.activityCount > 0 ||
-                                (stage.isTerminal && !!stage.transitionLabel))) ||
-                        stage.isBackdated
-                )
-                .map((stage) => stage.id),
-        [stageGroups]
+    const defaultOpenStageId = useMemo(
+        () => stageGroups.find((stage) => stage.id === currentStageId)?.id ?? null,
+        [stageGroups, currentStageId]
     )
 
     useEffect(() => {
-        if (openStageIds.size === 0 && autoOpenStageIds.length > 0) {
-            setOpenStageIds(new Set(autoOpenStageIds))
+        if (lastSyncedOpenStageId.current === defaultOpenStageId) {
+            return
         }
-    }, [autoOpenStageIds, openStageIds.size])
-
-    useEffect(() => {
-        const toggled = prevShowFullJourney.current !== showFullJourney
-        prevShowFullJourney.current = showFullJourney
-        if (!toggled) return
-        setOpenStageIds(new Set(autoOpenStageIds))
-    }, [showFullJourney, autoOpenStageIds])
+        lastSyncedOpenStageId.current = defaultOpenStageId
+        setOpenStageIds(defaultOpenStageId ? new Set([defaultOpenStageId]) : new Set())
+    }, [defaultOpenStageId])
 
     // Task categorization
     const { overdueTasks, upcomingTasks } = useMemo(() => {

@@ -103,6 +103,62 @@ describe('ActivityTimeline', () => {
         mockUseSurrogateHistory.mockReturnValue({ data: [] })
     })
 
+    it('shows only the current stage details by default', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'Contacted', order: 1, slug: 'contacted' }),
+            makeStage({ id: 's2', label: 'Pre-Qualified', order: 2, slug: 'pre_qualified' }),
+        ]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [
+                makeHistory({
+                    id: 'h1',
+                    to_stage_id: 's1',
+                    to_label_snapshot: 'Contacted',
+                    changed_at: '2024-01-10T00:00:00.000Z',
+                    effective_at: '2024-01-05T00:00:00.000Z',
+                    recorded_at: '2024-01-10T00:00:00.000Z',
+                }),
+                makeHistory({
+                    id: 'h2',
+                    from_stage_id: 's1',
+                    to_stage_id: 's2',
+                    from_label_snapshot: 'Contacted',
+                    to_label_snapshot: 'Pre-Qualified',
+                    changed_at: '2024-02-01T00:00:00.000Z',
+                    effective_at: '2024-02-01T00:00:00.000Z',
+                    recorded_at: '2024-02-01T00:00:00.000Z',
+                }),
+            ],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a1',
+                details: { preview: 'Backdated stage note' },
+                created_at: '2024-01-20T00:00:00.000Z',
+            }),
+            makeActivity({
+                id: 'a2',
+                details: { preview: 'Current stage note' },
+                created_at: '2024-02-03T00:00:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s2"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText('Current stage note')).toBeInTheDocument()
+        expect(screen.queryByText('Backdated stage note')).not.toBeInTheDocument()
+    })
+
     it('expands a non-current stage when clicked', () => {
         const stages = [
             makeStage({ id: 's1', label: 'New Unread', order: 1 }),
@@ -144,6 +200,74 @@ describe('ActivityTimeline', () => {
         fireEvent.click(stageButton!)
 
         expect(screen.getByText('Stage 2 note')).toBeInTheDocument()
+    })
+
+    it('keeps other stages collapsed after collapsing the current stage and opening another one', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'Contacted', order: 1, slug: 'contacted' }),
+            makeStage({ id: 's2', label: 'Pre-Qualified', order: 2, slug: 'pre_qualified' }),
+        ]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [
+                makeHistory({
+                    id: 'h1',
+                    to_stage_id: 's1',
+                    to_label_snapshot: 'Contacted',
+                    changed_at: '2024-01-01T00:00:00.000Z',
+                    effective_at: '2024-01-01T00:00:00.000Z',
+                    recorded_at: '2024-01-01T00:00:00.000Z',
+                }),
+                makeHistory({
+                    id: 'h2',
+                    from_stage_id: 's1',
+                    to_stage_id: 's2',
+                    from_label_snapshot: 'Contacted',
+                    to_label_snapshot: 'Pre-Qualified',
+                    changed_at: '2024-02-01T00:00:00.000Z',
+                    effective_at: '2024-02-01T00:00:00.000Z',
+                    recorded_at: '2024-02-01T00:00:00.000Z',
+                }),
+            ],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a1',
+                details: { preview: 'Earlier stage note' },
+                created_at: '2024-01-15T00:00:00.000Z',
+            }),
+            makeActivity({
+                id: 'a2',
+                details: { preview: 'Current stage note' },
+                created_at: '2024-02-03T00:00:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s2"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        const currentStageButton = screen.getByText('Pre-Qualified').closest('button')
+        const previousStageButton = screen.getByText('Contacted').closest('button')
+
+        expect(currentStageButton).toBeTruthy()
+        expect(previousStageButton).toBeTruthy()
+        expect(screen.getByText('Current stage note')).toBeInTheDocument()
+        expect(screen.queryByText('Earlier stage note')).not.toBeInTheDocument()
+
+        fireEvent.click(currentStageButton!)
+        expect(screen.queryByText('Current stage note')).not.toBeInTheDocument()
+
+        fireEvent.click(previousStageButton!)
+        expect(screen.getByText('Earlier stage note')).toBeInTheDocument()
+        expect(screen.queryByText('Current stage note')).not.toBeInTheDocument()
     })
 
     it('buckets activities using effective_at when backdated', () => {
