@@ -22,9 +22,9 @@ def test_dependency_pins_meet_security_fix_floors():
             None,
         )
 
-        assert (
-            pinned_dependency is not None
-        ), f"Expected an explicit {dependency_name}== pin in pyproject.toml"
+        assert pinned_dependency is not None, (
+            f"Expected an explicit {dependency_name}== pin in pyproject.toml"
+        )
 
         pinned_version = pinned_dependency.split("==", 1)[1].strip()
         assert Version(pinned_version) >= Version(minimum_version)

@@ -58,9 +58,7 @@ MATCH_STATUS_DEFINITIONS = [
     },
 ]
 
-MATCH_STATUS_BY_VALUE = {
-    definition["value"]: definition for definition in MATCH_STATUS_DEFINITIONS
-}
+MATCH_STATUS_BY_VALUE = {definition["value"]: definition for definition in MATCH_STATUS_DEFINITIONS}
 
 
 def get_match_status_definition(status: str) -> dict[str, object] | None:

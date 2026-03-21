@@ -33,4 +33,3 @@ async def test_list_intended_parents_sorts_by_partner_name(authed_client):
 
     partner_names = [item["partner_name"] for item in list_res.json()["items"][:2]]
     assert partner_names == ["Amy Partner", "Zed Partner"]
-

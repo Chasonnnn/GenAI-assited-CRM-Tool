@@ -11,9 +11,7 @@ from app.services import surrogate_service
 from app.utils.normalization import normalize_identifier
 
 
-def test_create_surrogate_repairs_stale_counter_drift_and_records_alert(
-    db, test_org, test_user
-):
+def test_create_surrogate_repairs_stale_counter_drift_and_records_alert(db, test_org, test_user):
     first = surrogate_service.create_surrogate(
         db,
         test_org.id,
@@ -95,7 +93,9 @@ async def test_create_surrogate_duplicate_email_conflict_returns_409(authed_clie
         )
         raise IntegrityError("insert", {}, orig)
 
-    monkeypatch.setattr(surrogates_write.surrogate_service, "create_surrogate", _raise_duplicate_email)
+    monkeypatch.setattr(
+        surrogates_write.surrogate_service, "create_surrogate", _raise_duplicate_email
+    )
 
     response = await authed_client.post(
         "/surrogates",
@@ -110,16 +110,16 @@ async def test_create_surrogate_duplicate_email_conflict_returns_409(authed_clie
 
 
 @pytest.mark.asyncio
-async def test_create_surrogate_number_conflict_returns_retryable_error(
-    authed_client, monkeypatch
-):
+async def test_create_surrogate_number_conflict_returns_retryable_error(authed_client, monkeypatch):
     from app.routers import surrogates_write
 
     def _raise_number_conflict(*_args, **_kwargs):
         orig = SimpleNamespace(diag=SimpleNamespace(constraint_name="uq_surrogate_number"))
         raise IntegrityError("insert", {}, orig)
 
-    monkeypatch.setattr(surrogates_write.surrogate_service, "create_surrogate", _raise_number_conflict)
+    monkeypatch.setattr(
+        surrogates_write.surrogate_service, "create_surrogate", _raise_number_conflict
+    )
 
     response = await authed_client.post(
         "/surrogates",

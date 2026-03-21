@@ -19,7 +19,14 @@ from app.db.enums import (
     OwnerType,
     Role,
 )
-from app.db.models import EmailLog, FormSubmission, MetaLead, Surrogate, SurrogateStatusHistory, User
+from app.db.models import (
+    EmailLog,
+    FormSubmission,
+    MetaLead,
+    Surrogate,
+    SurrogateStatusHistory,
+    User,
+)
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import InterviewOutcomeCreate, SurrogateCreate, SurrogateUpdate
 from app.utils.normalization import (
@@ -1991,10 +1998,7 @@ def list_surrogate_activity(
         .filter(*activity_filters)
     )
 
-    activity_rows = (
-        base_query.order_by(SurrogateActivityLog.created_at.desc())
-        .all()
-    )
+    activity_rows = base_query.order_by(SurrogateActivityLog.created_at.desc()).all()
     status_history_rows = (
         db.query(
             SurrogateStatusHistory,
@@ -2163,9 +2167,7 @@ def list_surrogate_activity(
                     "effective_at": history.effective_at.isoformat()
                     if history.effective_at
                     else None,
-                    "recorded_at": history.recorded_at.isoformat()
-                    if history.recorded_at
-                    else None,
+                    "recorded_at": history.recorded_at.isoformat() if history.recorded_at else None,
                     "requested_at": history.requested_at.isoformat()
                     if history.requested_at
                     else None,
@@ -2175,9 +2177,7 @@ def list_surrogate_activity(
                     "approved_by_name": user_name_by_id.get(str(history.approved_by_user_id))
                     if history.approved_by_user_id
                     else None,
-                    "approved_at": history.approved_at.isoformat()
-                    if history.approved_at
-                    else None,
+                    "approved_at": history.approved_at.isoformat() if history.approved_at else None,
                     "is_undo": history.is_undo,
                     "request_id": str(history.request_id) if history.request_id else None,
                 },
