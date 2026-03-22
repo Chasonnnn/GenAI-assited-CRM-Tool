@@ -306,6 +306,7 @@ export default function CSVImportPage() {
                                                                             retryMutation.isPending ||
                                                                             runInlineMutation.isPending
                                                                         }
+                                                                        aria-label="Import actions"
                                                                     >
                                                                         <MoreHorizontalIcon className="size-4" />
                                                                     </Button>
