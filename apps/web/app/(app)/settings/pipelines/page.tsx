@@ -40,6 +40,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { formatRelativeTime } from "@/lib/formatters"
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import type {
     PipelineChangePreview,
     PipelineDependencyGraph,
@@ -1617,19 +1618,29 @@ export default function PipelinesSettingsPage() {
     const deleteStageState =
         deleteStageOverride?.contextKey === editorContextKey ? deleteStageOverride.value : null
     const currentDraft = draft ?? baselineDraft
-    const hasChanges = useMemo(() => {
-        if (!baselineDraft || !currentDraft) return false
-        return stringifyDraft(baselineDraft) !== stringifyDraft(currentDraft)
-    }, [baselineDraft, currentDraft])
+    const debouncedDraft = useDebouncedValue(currentDraft, 1200)
+    const draftIsDebounced = currentDraft === debouncedDraft
+
+    const baselineFingerprint = useMemo(() => {
+        if (!baselineDraft) return ""
+        return stringifyDraft(baselineDraft)
+    }, [baselineDraft])
+
+    const debouncedFingerprint = useMemo(() => {
+        if (!debouncedDraft) return ""
+        return stringifyDraft(debouncedDraft)
+    }, [debouncedDraft])
+
+    const hasChanges = !draftIsDebounced || debouncedFingerprint !== baselineFingerprint
     const previewDraft = useMemo(() => {
-        if (!currentDraft || !hasChanges) return null
+        if (!debouncedDraft || debouncedFingerprint === baselineFingerprint) return null
         return {
-            ...buildApiDraft(currentDraft),
+            ...buildApiDraft(debouncedDraft),
             ...(pipeline?.current_version
                 ? { expected_version: pipeline.current_version }
                 : {}),
         }
-    }, [currentDraft, hasChanges, pipeline?.current_version])
+    }, [debouncedDraft, debouncedFingerprint, baselineFingerprint, pipeline?.current_version])
     const previewQuery = usePipelineChangePreview(defaultPipeline?.id || null, previewDraft, entityType)
     const preview: PipelineChangePreview | null = previewQuery.data ?? null
     const dependencyGraph = preview?.dependency_graph ?? dependencyGraphQuery.data ?? null

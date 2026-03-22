@@ -1,0 +1,3 @@
+## 2025-02-19 - Pipeline Settings Draft Preview Debounce
+**Learning:** Found an instance of `JSON.stringify` blocking the main thread during typing on the pipeline settings page because it was recalculating a full pipeline draft hash on every keystroke, leading to `usePipelineChangePreview` running non-stop.
+**Action:** Applied the `debouncedPayload` caching pattern using `useDebouncedValue` to correctly wait for input typing to finish before generating the diff footprint and submitting API queries, massively improving UI snappiness during typing, while continuing to provide instant `isDirty` UI feedback via reference equality check.
