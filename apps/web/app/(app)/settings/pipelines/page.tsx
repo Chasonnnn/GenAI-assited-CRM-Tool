@@ -219,7 +219,12 @@ const SUGGESTION_PROFILE_OPTIONS = [
 ]
 
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    // ⚡ Bolt: Replace JSON.parse(JSON.stringify(value)) with structuredClone
+    // structuredClone is natively supported in all modern browsers and Node environments.
+    // It avoids allocating intermediate serialized string memory and provides better
+    // fidelity (correctly handles Sets, Maps, Dates, and circular references) when deep
+    // cloning complex pipeline draft states.
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
