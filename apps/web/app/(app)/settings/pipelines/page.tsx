@@ -219,7 +219,9 @@ const SUGGESTION_PROFILE_OPTIONS = [
 ]
 
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    // ⚡ Bolt: Use native structuredClone for deep cloning state objects.
+    // Impact: Avoids allocating intermediate serialized string memory and correctly handles complex objects (Sets, Maps, Dates).
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
