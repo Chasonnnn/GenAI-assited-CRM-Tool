@@ -142,7 +142,7 @@ export function AttentionNeededPanel() {
                                             current === "attention" ? "upcoming" : "attention"
                                         ))
                                     }}
-                                    className="inline-flex items-center gap-2 text-base font-semibold text-foreground hover:text-foreground/80"
+                                    className="inline-flex items-center gap-2 text-base font-semibold text-foreground hover:text-foreground/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                     aria-expanded={attentionOpen}
                                 >
                                     Attention Needed
@@ -290,7 +290,7 @@ export function AttentionNeededPanel() {
                                             current === "upcoming" ? "attention" : "upcoming"
                                         ))
                                     }}
-                                    className="inline-flex items-center gap-2 text-base font-semibold text-foreground hover:text-foreground/80"
+                                    className="inline-flex items-center gap-2 text-base font-semibold text-foreground hover:text-foreground/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                     aria-expanded={upcomingOpen}
                                 >
                                     Upcoming This Week
