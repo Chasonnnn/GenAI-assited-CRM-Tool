@@ -97,6 +97,7 @@
       "flatted": "3.4.2",
       "markdown-it": "14.1.1",
       "minimatch": "10.2.3",
+      "picomatch": ">=4.0.4",
       "rollup": "4.59.0"
     },
     "packageExtensions": {
