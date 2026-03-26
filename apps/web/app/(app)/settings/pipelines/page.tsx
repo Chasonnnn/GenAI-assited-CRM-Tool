@@ -219,7 +219,7 @@ const SUGGESTION_PROFILE_OPTIONS = [
 ]
 
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
