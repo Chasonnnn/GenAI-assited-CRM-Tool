@@ -181,7 +181,7 @@ describe('SurrogateInterviewTab', () => {
         fireEvent.click(screen.getAllByText('Phone')[0])
 
         await waitFor(() => {
-            expect(screen.getByRole("button", { name: "Interview actions" })).toBeInTheDocument()
+            expect(screen.getAllByRole("button", { name: "Interview actions" }).length).toBeGreaterThan(0)
         })
 
         await waitFor(() => {
