@@ -37,6 +37,28 @@ describe("Dependency security guards", () => {
         expect(compareVersions(flattedOverride!, "3.4.0")).toBeGreaterThanOrEqual(0)
     })
 
+    it("pins brace-expansion to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const braceExpansionOverride = packageJson.pnpm?.overrides?.["brace-expansion"]
+
+        expect(braceExpansionOverride).toBeDefined()
+        expect(compareVersions(braceExpansionOverride!, "5.0.5")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins picomatch to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const picomatchOverride = packageJson.pnpm?.overrides?.picomatch
+
+        expect(picomatchOverride).toBeDefined()
+        expect(compareVersions(picomatchOverride!, "4.0.4")).toBeGreaterThanOrEqual(0)
+    })
+
     it("resolves only non-vulnerable flatted versions in pnpm-lock.yaml", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
@@ -48,6 +70,34 @@ describe("Dependency security guards", () => {
 
         for (const resolvedVersion of resolvedVersions) {
             expect(compareVersions(resolvedVersion, "3.4.0")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable brace-expansion versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}brace-expansion@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "5.0.5")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable picomatch versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}picomatch@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "4.0.4")).toBeGreaterThanOrEqual(0)
         }
     })
 })
