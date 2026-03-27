@@ -10,6 +10,11 @@ from app.core.stage_definitions import (
     SURROGATE_PIPELINE_ENTITY,
     canonicalize_stage_key,
     get_default_stage_defs,
+    get_protected_system_stage_defs,
+    get_required_semantic_stage_keys,
+    get_stage_protection,
+    get_stage_protection_metadata,
+    get_system_stage_key,
     normalize_pipeline_entity_type,
 )
 from app.db.models import (
@@ -20,6 +25,7 @@ from app.db.models import (
     OrgIntelligentSuggestionRule,
     Pipeline,
     PipelineStage,
+    StatusChangeRequest,
     Surrogate,
     ZapierWebhookSettings,
 )
@@ -67,6 +73,152 @@ def stage_matches_key(stage: PipelineStage | None, stage_key: str | None) -> boo
     return get_stage_semantic_key(stage) == normalized_target
 
 
+def stage_matches_system_role(
+    stage: PipelineStage | None,
+    system_role: str | None,
+    entity_type: str | None = None,
+) -> bool:
+    stage_key = get_system_stage_key(entity_type, system_role)
+    return stage_matches_key(stage, stage_key)
+
+
+def _default_stage_position_map(entity_type: str) -> dict[str, int]:
+    return {
+        _normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"]): index
+        for index, stage_def in enumerate(get_default_stage_defs(entity_type))
+    }
+
+
+def _normalize_stage_semantics_payload(
+    *,
+    entity_type: str,
+    stage_key: str,
+    slug: str,
+    stage_type: str,
+    semantics: dict | None,
+    stage_label: str,
+) -> dict[str, object]:
+    normalized_semantics = pipeline_semantics_service.get_stage_semantics(
+        {
+            "entity_type": entity_type,
+            "stage_key": stage_key,
+            "slug": slug,
+            "stage_type": stage_type,
+            "semantics": semantics,
+        }
+    )
+    errors = pipeline_change_service.get_reserved_lifecycle_semantics_errors(
+        stage_key=stage_key,
+        stage_label=stage_label,
+        semantics=normalized_semantics,
+        entity_type=entity_type,
+    )
+    if errors:
+        raise ValueError(errors[0])
+    return normalized_semantics.model_dump(mode="json")
+
+
+def _protected_stage_update_errors(
+    stage: PipelineStage,
+    *,
+    entity_type: str,
+    slug: str | None = None,
+    label: str | None = None,
+    color: str | None = None,
+    order: int | None = None,
+    stage_type: str | None = None,
+    semantics: dict | None = None,
+) -> list[str]:
+    if not get_stage_protection(stage.stage_key, entity_type):
+        return []
+
+    attempted_fields: list[str] = []
+    if slug is not None and _normalize_slug(slug) != stage.slug:
+        attempted_fields.append("slug")
+    if label is not None and label != stage.label:
+        attempted_fields.append("label")
+    if color is not None and color != stage.color:
+        attempted_fields.append("color")
+    if order is not None and order != stage.order:
+        attempted_fields.append("order")
+    if stage_type is not None and pipeline_change_service.normalize_stage_category(stage_type) != stage.stage_type:
+        attempted_fields.append("category")
+    if semantics is not None:
+        next_semantics = pipeline_semantics_service.get_stage_semantics(
+            {
+                "entity_type": entity_type,
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "stage_type": stage.stage_type,
+                "semantics": semantics,
+            }
+        ).model_dump(mode="json")
+        current_semantics = pipeline_semantics_service.get_stage_semantics(stage).model_dump(
+            mode="json"
+        )
+        if next_semantics != current_semantics:
+            attempted_fields.append("semantics")
+    return attempted_fields
+
+
+def _protected_stage_layout_errors(
+    pipeline: Pipeline,
+    stages: list[dict[str, object]],
+) -> list[str]:
+    current_protected_stage_keys = [
+        stage.stage_key
+        for stage in sorted(
+            (stage for stage in pipeline.stages if stage.is_active),
+            key=lambda stage: stage.order,
+        )
+        if get_stage_protection(stage.stage_key, pipeline.entity_type)
+    ]
+    return pipeline_change_service.validate_protected_stage_layout(
+        stages,
+        entity_type=pipeline.entity_type,
+        current_protected_stage_keys=current_protected_stage_keys,
+    )
+
+
+def _protected_stage_draft_errors(
+    pipeline: Pipeline,
+    stages: list[dict[str, object]],
+) -> list[str]:
+    errors = _protected_stage_layout_errors(pipeline, stages)
+    draft_stage_by_key = {
+        str(stage["stage_key"]): stage for stage in stages if stage.get("stage_key")
+    }
+
+    for existing_stage in pipeline.stages:
+        if not existing_stage.is_active or not get_stage_protection(
+            existing_stage.stage_key, pipeline.entity_type
+        ):
+            continue
+
+        draft_stage = draft_stage_by_key.get(existing_stage.stage_key)
+        if draft_stage is None or not draft_stage.get("is_active", True):
+            errors.append(
+                f"Stage '{existing_stage.label}' is a protected system stage and cannot be removed or deactivated."
+            )
+            continue
+
+        attempted_fields = _protected_stage_update_errors(
+            existing_stage,
+            entity_type=pipeline.entity_type,
+            slug=str(draft_stage.get("slug") or existing_stage.slug),
+            label=str(draft_stage.get("label") or existing_stage.label),
+            color=str(draft_stage.get("color") or existing_stage.color),
+            stage_type=str(draft_stage.get("category") or draft_stage.get("stage_type") or existing_stage.stage_type),
+            semantics=draft_stage.get("semantics") if isinstance(draft_stage.get("semantics"), dict) else None,
+        )
+        if attempted_fields:
+            errors.append(
+                f"Stage '{existing_stage.label}' is a protected system stage and cannot be modified ({', '.join(attempted_fields)})."
+            )
+
+    return list(dict.fromkeys(errors))
+
+
 def _merge_required_stage_defs(stage_defs: list[dict], entity_type: str) -> list[dict]:
     """Ensure required system stages exist in a sensible order."""
     normalized_defs = [dict(stage) for stage in stage_defs]
@@ -74,22 +226,26 @@ def _merge_required_stage_defs(stage_defs: list[dict], entity_type: str) -> list
         _normalize_stage_key(stage.get("stage_key") or stage.get("slug"))
         for stage in normalized_defs
     }
+    default_positions = _default_stage_position_map(entity_type)
 
-    if entity_type == SURROGATE_PIPELINE_ENTITY and "on_hold" not in existing_keys:
-        on_hold_def = next(
-            stage
-            for stage in get_default_stage_defs(entity_type)
-            if stage["stage_key"] == "on_hold"
-        )
+    for stage_def in get_protected_system_stage_defs(entity_type):
+        stage_key = _normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"])
+        if stage_key in existing_keys:
+            continue
         insert_at = next(
             (
                 index
                 for index, stage in enumerate(normalized_defs)
-                if stage.get("stage_type") == "terminal"
+                if default_positions.get(
+                    _normalize_stage_key(stage.get("stage_key") or stage.get("slug")),
+                    float("inf"),
+                )
+                > default_positions.get(stage_key, float("inf"))
             ),
             len(normalized_defs),
         )
-        normalized_defs.insert(insert_at, dict(on_hold_def))
+        normalized_defs.insert(insert_at, dict(stage_def))
+        existing_keys.add(stage_key)
 
     for order, stage in enumerate(normalized_defs, start=1):
         stage["order"] = order
@@ -100,27 +256,32 @@ def _merge_required_stage_defs(stage_defs: list[dict], entity_type: str) -> list
 def _merge_missing_stage_defs(
     existing_stages: list[PipelineStage],
     missing_defs: list[dict[str, object]],
+    entity_type: str,
 ) -> list[PipelineStage | dict[str, object]]:
-    """Insert missing required stages while preserving terminal placement."""
+    """Insert missing required stages while preserving default protected-stage order."""
     ordered_items: list[PipelineStage | dict[str, object]] = sorted(
         existing_stages,
         key=lambda stage: stage.order,
     )
+    default_positions = _default_stage_position_map(entity_type)
 
     for stage_def in missing_defs:
         stage_key = _normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"])
-        if stage_key == "on_hold":
-            insert_at = next(
-                (
-                    index
-                    for index, stage in enumerate(ordered_items)
-                    if isinstance(stage, PipelineStage) and stage.stage_type == "terminal"
-                ),
-                len(ordered_items),
-            )
-            ordered_items.insert(insert_at, stage_def)
-            continue
-        ordered_items.append(stage_def)
+        insert_at = next(
+            (
+                index
+                for index, stage in enumerate(ordered_items)
+                if default_positions.get(
+                    _normalize_stage_key(
+                        stage.stage_key if isinstance(stage, PipelineStage) else stage.get("stage_key") or stage.get("slug")
+                    ),
+                    float("inf"),
+                )
+                > default_positions.get(stage_key, float("inf"))
+            ),
+            len(ordered_items),
+        )
+        ordered_items.insert(insert_at, stage_def)
 
     return ordered_items
 
@@ -152,7 +313,13 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
     }
 
 
-def _serialize_stage(stage: PipelineStage) -> dict[str, object]:
+def _serialize_stage(
+    stage: PipelineStage,
+    entity_type: str | None = None,
+) -> dict[str, object]:
+    normalized_entity_type = entity_type or getattr(
+        getattr(stage, "pipeline", None), "entity_type", None
+    )
     return {
         "id": stage.id,
         "stage_key": _normalize_stage_key(stage.stage_key or stage.slug),
@@ -164,6 +331,7 @@ def _serialize_stage(stage: PipelineStage) -> dict[str, object]:
         "stage_type": stage.stage_type,
         "is_active": stage.is_active,
         "semantics": pipeline_semantics_service.get_stage_semantics(stage).model_dump(mode="json"),
+        **get_stage_protection_metadata(stage.stage_key or stage.slug, normalized_entity_type),
     }
 
 
@@ -309,10 +477,19 @@ def _build_default_feature_config_for_stages(
 
 def _validate_pipeline_configuration(db: Session, pipeline: Pipeline) -> None:
     db.flush()
-    active_stages = [stage for stage in pipeline.stages if stage.is_active]
+    active_stages = sorted(
+        (stage for stage in pipeline.stages if stage.is_active),
+        key=lambda stage: stage.order,
+    )
+    layout_errors = _protected_stage_layout_errors(
+        pipeline,
+        [_serialize_stage(stage, pipeline.entity_type) for stage in active_stages],
+    )
+    if layout_errors:
+        raise ValueError("; ".join(layout_errors))
     feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
     pipeline_change_service.validate_guarded_invariants(
-        [_serialize_stage(stage) for stage in active_stages],
+        [_serialize_stage(stage, pipeline.entity_type) for stage in active_stages],
         feature_config,
         pipeline.entity_type,
     )
@@ -399,10 +576,7 @@ def get_or_create_default_pipeline(
         for stage in pipeline.stages
         if not stage.deleted_at
     }
-    required_stage_keys = {
-        _normalize_stage_key(stage.get("stage_key") or stage["slug"])
-        for stage in get_default_stage_defs(pipeline.entity_type)
-    }
+    required_stage_keys = get_required_semantic_stage_keys(pipeline.entity_type)
     if required_stage_keys - existing_stage_keys:
         sync_missing_stages(db, pipeline, user_id)
         db.refresh(pipeline)
@@ -462,7 +636,7 @@ def sync_missing_stages(
     existing_stage_keys = {s.stage_key for s in active_stages}
 
     # Find missing stage keys
-    default_defs = get_default_stage_defs(pipeline.entity_type)
+    default_defs = get_protected_system_stage_defs(pipeline.entity_type)
     missing = [
         d
         for d in default_defs
@@ -472,7 +646,7 @@ def sync_missing_stages(
     if not missing:
         return 0
 
-    ordered_items = _merge_missing_stage_defs(active_stages, missing)
+    ordered_items = _merge_missing_stage_defs(active_stages, missing, pipeline.entity_type)
 
     for index, item in enumerate(ordered_items, start=1):
         if isinstance(item, PipelineStage):
@@ -867,6 +1041,22 @@ def get_stage_by_key(db: Session, pipeline_id: UUID, stage_key: str) -> Pipeline
     )
 
 
+def get_stage_by_system_role(
+    db: Session,
+    pipeline_id: UUID,
+    system_role: str,
+    entity_type: str | None = None,
+) -> PipelineStage | None:
+    resolved_entity_type = entity_type
+    if not resolved_entity_type:
+        pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+        resolved_entity_type = pipeline.entity_type if pipeline else None
+    stage_key = get_system_stage_key(resolved_entity_type, system_role)
+    if not stage_key:
+        return None
+    return get_stage_by_key(db, pipeline_id, stage_key)
+
+
 def get_stage_by_slug(db: Session, pipeline_id: UUID, slug: str) -> PipelineStage | None:
     """Get a stage by slug, with stage_key fallback for dynamic resolution."""
     normalized_slug = _normalize_slug(slug)
@@ -1037,15 +1227,14 @@ def create_stage(
         color=color,
         stage_type=stage_type,
         order=order,
-        semantics=pipeline_semantics_service.get_stage_semantics(
-            {
-                "entity_type": pipeline_entity_type,
-                "stage_key": stage_key,
-                "slug": normalized_slug,
-                "stage_type": stage_type,
-                "semantics": semantics,
-            }
-        ).model_dump(mode="json"),
+        semantics=_normalize_stage_semantics_payload(
+            entity_type=pipeline_entity_type,
+            stage_key=stage_key,
+            slug=normalized_slug,
+            stage_type=stage_type,
+            semantics=semantics,
+            stage_label=label,
+        ),
         is_intake_stage=stage_type == "intake",
         is_active=True,
     )
@@ -1082,6 +1271,20 @@ def update_stage(
     pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
 
     label_changed = False
+    attempted_fields = _protected_stage_update_errors(
+        stage,
+        entity_type=pipeline_entity_type,
+        slug=slug,
+        label=label,
+        color=color,
+        order=order,
+        stage_type=stage_type,
+        semantics=semantics,
+    )
+    if attempted_fields:
+        raise ValueError(
+            f"Stage '{stage.label}' is a protected system stage and cannot be modified ({', '.join(attempted_fields)})."
+        )
 
     if slug is not None:
         normalized_slug = _normalize_slug(slug)
@@ -1109,15 +1312,14 @@ def update_stage(
         stage.is_intake_stage = normalized_stage_type == "intake"
 
     if semantics is not None:
-        stage.semantics = pipeline_semantics_service.get_stage_semantics(
-            {
-                "entity_type": pipeline_entity_type,
-                "stage_key": stage.stage_key,
-                "slug": stage.slug,
-                "stage_type": stage.stage_type,
-                "semantics": semantics,
-            }
-        ).model_dump(mode="json")
+        stage.semantics = _normalize_stage_semantics_payload(
+            entity_type=pipeline_entity_type,
+            stage_key=stage.stage_key,
+            slug=stage.slug,
+            stage_type=stage.stage_type,
+            semantics=semantics,
+            stage_label=stage.label,
+        )
 
     stage.updated_at = datetime.now(timezone.utc)
     if pipeline:
@@ -1148,6 +1350,10 @@ def delete_stage(
     """
     if stage.id == migrate_to_stage_id:
         raise ValueError("Cannot migrate cases to the same stage")
+    pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
+    pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
+    if get_stage_protection(stage.stage_key, pipeline_entity_type):
+        raise ValueError(f"Stage '{stage.label}' is a protected system stage and cannot be deleted.")
 
     # Validate migrate_to stage
     target = get_stage_by_id(db, migrate_to_stage_id)
@@ -1158,7 +1364,6 @@ def delete_stage(
     if target.pipeline_id != stage.pipeline_id:
         raise ValueError("Target stage must be in the same pipeline")
 
-    pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     migrated = 0
     if pipeline and pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
         migrated = (
@@ -1182,6 +1387,19 @@ def delete_stage(
                 }
             )
         )
+        (
+            db.query(Surrogate)
+            .filter(Surrogate.paused_from_stage_id == stage.id)
+            .update({Surrogate.paused_from_stage_id: migrate_to_stage_id})
+        )
+
+    pending_request_query = db.query(StatusChangeRequest).filter(
+        StatusChangeRequest.organization_id == pipeline.organization_id,
+        StatusChangeRequest.entity_type == pipeline_entity_type,
+        StatusChangeRequest.status == "pending",
+        StatusChangeRequest.target_stage_id == stage.id,
+    )
+    pending_request_query.update({StatusChangeRequest.target_stage_id: migrate_to_stage_id})
 
     # Soft-delete stage
     stage.is_active = False
@@ -1220,9 +1438,28 @@ def reorder_stages(
     for i, stage_id in enumerate(ordered_ids):
         if stage_id not in stage_map:
             raise ValueError(f"Stage ID {stage_id} not found or not active")
-        stage_map[stage_id].order = i + 1
-
     pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+    ordered_stage_payload = [
+        _serialize_stage(stage_map[stage_id], pipeline.entity_type if pipeline else None)
+        for stage_id in ordered_ids
+    ]
+    layout_errors = pipeline_change_service.validate_protected_stage_layout(
+        ordered_stage_payload,
+        entity_type=pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY,
+        current_protected_stage_keys=[
+            stage.stage_key
+            for stage in stages
+            if get_stage_protection(
+                stage.stage_key,
+                pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY,
+            )
+        ],
+    )
+    if layout_errors:
+        raise ValueError("; ".join(layout_errors))
+
+    for i, stage_id in enumerate(ordered_ids):
+        stage_map[stage_id].order = i + 1
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
@@ -1288,6 +1525,10 @@ def build_pipeline_draft_preview(
             entity_type=pipeline.entity_type,
         )
     )
+    normalization_errors = list(normalization_errors) + _protected_stage_draft_errors(
+        pipeline,
+        normalized_stages,
+    )
     remap_by_key = {
         normalize_stage_ref(item.get("removed_stage_key")): normalize_stage_ref(
             item.get("target_stage_key")
@@ -1305,7 +1546,9 @@ def build_pipeline_draft_preview(
         after_feature_config,
         remap_by_key,
     )
-    before_stages = [_serialize_stage(stage) for stage in pipeline.stages if stage.is_active]
+    before_stages = [
+        _serialize_stage(stage, pipeline.entity_type) for stage in pipeline.stages if stage.is_active
+    ]
     dependency_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
     preview = pipeline_change_service.build_pipeline_change_preview(
         dependency_graph=dependency_graph,
@@ -1587,6 +1830,28 @@ def apply_pipeline_draft(
                         }
                     )
                 )
+
+        if target_stage is not None and pipeline.entity_type != INTENDED_PARENT_PIPELINE_ENTITY:
+            (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.organization_id == pipeline.organization_id,
+                    Surrogate.paused_from_stage_id == stage.id,
+                )
+                .update({Surrogate.paused_from_stage_id: target_stage.id})
+            )
+
+        if target_stage is not None:
+            (
+                db.query(StatusChangeRequest)
+                .filter(
+                    StatusChangeRequest.organization_id == pipeline.organization_id,
+                    StatusChangeRequest.entity_type == pipeline.entity_type,
+                    StatusChangeRequest.status == "pending",
+                    StatusChangeRequest.target_stage_id == stage.id,
+                )
+                .update({StatusChangeRequest.target_stage_id: target_stage.id})
+            )
 
         stage.is_active = False
         stage.deleted_at = datetime.now(timezone.utc)

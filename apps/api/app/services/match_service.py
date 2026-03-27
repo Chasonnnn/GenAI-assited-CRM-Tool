@@ -17,6 +17,8 @@ from app.db.models import (
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 from sqlalchemy.exc import IntegrityError
 
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
+
 
 def generate_match_number(db: Session, org_id: UUID) -> str:
     """
@@ -464,7 +466,11 @@ def accept_match(
                 org_id,
                 actor_user_id,
             ).id
-        matched_stage = pipeline_service.get_stage_by_key(db, pipeline_id, "matched")
+        matched_stage = pipeline_service.get_stage_by_system_role(
+            db,
+            pipeline_id,
+            "matched",
+        )
         if matched_stage:
             surrogate_service.change_status(
                 db=db,
@@ -488,9 +494,18 @@ def accept_match(
         from app.services import intended_parent_status_service
 
         current_ip_stage = intended_parent_status_service.get_current_stage(db, ip)
-        if current_ip_stage.stage_key != "matched":
+        if not pipeline_service.stage_matches_system_role(
+            current_ip_stage,
+            "matched",
+            INTENDED_PARENT_PIPELINE_ENTITY,
+        ):
             ip_pipeline_id = current_ip_stage.pipeline_id
-            matched_ip_stage = pipeline_service.get_stage_by_key(db, ip_pipeline_id, "matched")
+            matched_ip_stage = pipeline_service.get_stage_by_system_role(
+                db,
+                ip_pipeline_id,
+                "matched",
+                INTENDED_PARENT_PIPELINE_ENTITY,
+            )
             if matched_ip_stage:
                 intended_parent_status_service.apply_status_change(
                     db=db,

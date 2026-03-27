@@ -8,10 +8,16 @@ from app.core.stage_definitions import (
     INTENDED_PARENT_PIPELINE_ENTITY,
     SURROGATE_PIPELINE_ENTITY,
     canonicalize_stage_key,
+    get_default_stage_defs,
+    get_stage_protection,
     get_required_semantic_stage_keys,
     normalize_pipeline_entity_type,
 )
-from app.schemas.pipeline_semantics import PipelineFeatureConfig
+from app.schemas.pipeline_semantics import (
+    PipelineFeatureConfig,
+    StageSemantics,
+    get_reserved_lifecycle_semantic_keys,
+)
 from app.services import pipeline_semantics_service
 
 VALID_STAGE_CATEGORIES = {"intake", "post_approval", "paused", "terminal"}
@@ -25,6 +31,69 @@ def normalize_stage_category(value: str | None) -> str:
 def normalize_stage_key(value: str | None) -> str | None:
     normalized = canonicalize_stage_key(str(value or "").strip())
     return normalized or None
+
+
+def get_reserved_lifecycle_semantics_errors(
+    *,
+    stage_key: str | None,
+    stage_label: str,
+    semantics: StageSemantics,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
+) -> list[str]:
+    if get_stage_protection(stage_key, entity_type):
+        return []
+    platform_stage_keys = {
+        normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"])
+        for stage_def in get_default_stage_defs(entity_type)
+    }
+    if stage_key in platform_stage_keys:
+        return []
+    reserved_keys = get_reserved_lifecycle_semantic_keys(semantics)
+    if not reserved_keys:
+        return []
+    return [
+        f"Custom stage '{stage_label}' cannot use reserved lifecycle semantics: "
+        + ", ".join(reserved_keys)
+        + "."
+    ]
+
+
+def validate_protected_stage_layout(
+    stages: list[dict[str, Any]],
+    *,
+    entity_type: str = SURROGATE_PIPELINE_ENTITY,
+    current_protected_stage_keys: list[str] | None = None,
+) -> list[str]:
+    protected_stage_keys = get_required_semantic_stage_keys(entity_type)
+    active_stage_keys = [
+        stage["stage_key"]
+        for stage in stages
+        if stage.get("is_active", True) and stage.get("stage_key")
+    ]
+    if not active_stage_keys:
+        return []
+
+    errors: list[str] = []
+    if active_stage_keys[0] not in protected_stage_keys or active_stage_keys[-1] not in protected_stage_keys:
+        errors.append("Custom stages must stay between protected system stages.")
+
+    draft_protected_stage_keys = [
+        stage_key for stage_key in active_stage_keys if stage_key in protected_stage_keys
+    ]
+    missing_required_keys = sorted(protected_stage_keys - set(draft_protected_stage_keys))
+    if missing_required_keys:
+        errors.append(
+            "Pipelines must keep these protected system stages active: "
+            + ", ".join(missing_required_keys)
+        )
+
+    if (
+        current_protected_stage_keys is not None
+        and draft_protected_stage_keys != current_protected_stage_keys
+    ):
+        errors.append("Protected system stages cannot be reordered.")
+
+    return list(dict.fromkeys(errors))
 
 
 def _replace_stage_keys(values: list[str], remap_by_key: dict[str, str | None]) -> list[str]:
@@ -166,26 +235,37 @@ def normalize_stage_drafts(
         if declared_order != index:
             auto_fixes.append("Stage order normalized to match the draft order.")
 
+        stage_label = str(raw_stage.get("label") or "").strip() or raw_slug or stage_key or f"Stage {index}"
+        normalized_semantics = pipeline_semantics_service.get_stage_semantics(
+            {
+                "entity_type": entity_type,
+                "stage_key": stage_key,
+                "slug": raw_slug,
+                "stage_type": category,
+                "semantics": raw_stage.get("semantics"),
+            }
+        )
+        errors.extend(
+            get_reserved_lifecycle_semantics_errors(
+                stage_key=stage_key,
+                stage_label=stage_label,
+                semantics=normalized_semantics,
+                entity_type=entity_type,
+            )
+        )
+
         normalized_stages.append(
             {
                 "id": getattr(existing_stage, "id", None) or raw_stage.get("id"),
                 "stage_key": stage_key,
                 "slug": raw_slug,
-                "label": str(raw_stage.get("label") or "").strip() or raw_slug or stage_key,
+                "label": stage_label,
                 "color": str(raw_stage.get("color") or "#6B7280").strip() or "#6B7280",
                 "order": index,
                 "category": category,
                 "stage_type": category,
                 "is_active": bool(raw_stage.get("is_active", True)),
-                "semantics": pipeline_semantics_service.get_stage_semantics(
-                    {
-                        "entity_type": entity_type,
-                        "stage_key": stage_key,
-                        "slug": raw_slug,
-                        "stage_type": category,
-                        "semantics": raw_stage.get("semantics"),
-                    }
-                ).model_dump(mode="json"),
+                "semantics": normalized_semantics.model_dump(mode="json"),
             }
         )
 
@@ -239,15 +319,14 @@ def validate_guarded_invariants(
             raise ValueError("A delivery stage cannot also be a terminal lost/disqualified stage")
 
     active_stage_keys = {stage["stage_key"] for stage in stages if stage.get("is_active", True)}
-    if normalized_entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
-        missing_required_keys = sorted(
-            get_required_semantic_stage_keys(INTENDED_PARENT_PIPELINE_ENTITY) - active_stage_keys
+    missing_required_keys = sorted(
+        get_required_semantic_stage_keys(normalized_entity_type) - active_stage_keys
+    )
+    if missing_required_keys:
+        raise ValueError(
+            "Pipelines must keep these protected system stages active: "
+            + ", ".join(missing_required_keys)
         )
-        if missing_required_keys:
-            raise ValueError(
-                "Intended parent pipelines must keep these semantic stages active: "
-                + ", ".join(missing_required_keys)
-            )
     for milestone in feature_config.journey.milestones:
         missing_keys = [
             stage_key

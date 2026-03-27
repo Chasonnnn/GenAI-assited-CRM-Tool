@@ -210,7 +210,11 @@ def approve_request(
                 org_id,
                 admin_user_id,
             ).id
-        ready_stage = pipeline_service.get_stage_by_key(db, pipeline_id, "ready_to_match")
+        ready_stage = pipeline_service.get_stage_by_system_role(
+            db,
+            pipeline_id,
+            "handoff",
+        )
         if not ready_stage:
             raise ValueError("Ready to match stage not found")
 
@@ -238,7 +242,7 @@ def approve_request(
             requested_at=request.requested_at,
         )
 
-        ready_ip_stage = pipeline_service.get_stage_by_key(
+        ready_ip_stage = pipeline_service.get_stage_by_system_role(
             db,
             pipeline_service.get_or_create_default_pipeline(
                 db,
@@ -246,7 +250,8 @@ def approve_request(
                 admin_user_id,
                 entity_type="intended_parent",
             ).id,
-            "ready_to_match",
+            "handoff",
+            "intended_parent",
         )
         if not ready_ip_stage:
             raise ValueError("Ready to match stage not found")

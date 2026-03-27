@@ -106,6 +106,10 @@ class StageRead(BaseModel):
     stage_type: str
     is_active: bool
     semantics: StageSemantics
+    is_locked: bool
+    system_role: str | None
+    lock_reason: str | None
+    locked_fields: list[str]
 
     model_config = {"from_attributes": True}
 

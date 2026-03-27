@@ -1714,7 +1714,11 @@ def list_claim_queue(
         return [], 0
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
-    approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
+    approved_stage = pipeline_service.get_stage_by_system_role(
+        db,
+        pipeline.id,
+        "approval_gate",
+    )
     if not approved_stage:
         return [], 0
 

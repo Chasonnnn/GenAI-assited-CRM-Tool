@@ -21,7 +21,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY
+from app.core.stage_definitions import (
+    SURROGATE_PIPELINE_ENTITY,
+    get_stage_protection,
+)
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -180,6 +183,29 @@ class PipelineStage(Base):
     @category.setter
     def category(self, value: str) -> None:
         self.stage_type = value
+
+    @property
+    def is_locked(self) -> bool:
+        entity_type = getattr(getattr(self, "pipeline", None), "entity_type", None)
+        return get_stage_protection(self.stage_key or self.slug, entity_type) is not None
+
+    @property
+    def system_role(self) -> str | None:
+        entity_type = getattr(getattr(self, "pipeline", None), "entity_type", None)
+        protection = get_stage_protection(self.stage_key or self.slug, entity_type)
+        return protection.system_role if protection else None
+
+    @property
+    def lock_reason(self) -> str | None:
+        entity_type = getattr(getattr(self, "pipeline", None), "entity_type", None)
+        protection = get_stage_protection(self.stage_key or self.slug, entity_type)
+        return protection.lock_reason if protection else None
+
+    @property
+    def locked_fields(self) -> list[str]:
+        entity_type = getattr(getattr(self, "pipeline", None), "entity_type", None)
+        protection = get_stage_protection(self.stage_key or self.slug, entity_type)
+        return list(protection.locked_fields) if protection else []
 
 
 # =============================================================================

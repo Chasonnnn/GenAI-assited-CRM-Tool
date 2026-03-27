@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from app.utils.presentation import humanize_identifier
 
 SURROGATE_PIPELINE_ENTITY = "surrogate"
@@ -10,6 +12,27 @@ VALID_PIPELINE_ENTITY_TYPES = {
     SURROGATE_PIPELINE_ENTITY,
     INTENDED_PARENT_PIPELINE_ENTITY,
 }
+
+
+SYSTEM_STAGE_LOCKED_FIELDS = (
+    "slug",
+    "label",
+    "color",
+    "order",
+    "category",
+    "stage_type",
+    "semantics",
+    "is_active",
+    "delete",
+    "duplicate",
+)
+
+
+@dataclass(frozen=True)
+class ProtectedSystemStageDefinition:
+    system_role: str
+    lock_reason: str
+    locked_fields: tuple[str, ...] = SYSTEM_STAGE_LOCKED_FIELDS
 
 
 # Default stage colors (matching Surrogacy Force conventions)
@@ -102,9 +125,64 @@ LEGACY_STAGE_KEY_ALIASES = {
     "qualified": "pre_qualified",
 }
 
+PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
+    SURROGATE_PIPELINE_ENTITY: {
+        "new_unread": ProtectedSystemStageDefinition(
+            system_role="intake_entry",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "approved": ProtectedSystemStageDefinition(
+            system_role="approval_gate",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "ready_to_match": ProtectedSystemStageDefinition(
+            system_role="handoff",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "matched": ProtectedSystemStageDefinition(
+            system_role="matched",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "on_hold": ProtectedSystemStageDefinition(
+            system_role="pause",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "delivered": ProtectedSystemStageDefinition(
+            system_role="delivered",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "lost": ProtectedSystemStageDefinition(
+            system_role="lost",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "disqualified": ProtectedSystemStageDefinition(
+            system_role="disqualified",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+    },
+    INTENDED_PARENT_PIPELINE_ENTITY: {
+        "new": ProtectedSystemStageDefinition(
+            system_role="intake_entry",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "ready_to_match": ProtectedSystemStageDefinition(
+            system_role="handoff",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "matched": ProtectedSystemStageDefinition(
+            system_role="matched",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+        "delivered": ProtectedSystemStageDefinition(
+            system_role="delivered",
+            lock_reason="This is a protected system stage used by platform workflows.",
+        ),
+    },
+}
+
 REQUIRED_SYSTEM_STAGE_KEYS_BY_ENTITY = {
-    SURROGATE_PIPELINE_ENTITY: {"on_hold"},
-    INTENDED_PARENT_PIPELINE_ENTITY: set(),
+    entity_type: set(stage_map.keys())
+    for entity_type, stage_map in PROTECTED_SYSTEM_STAGES_BY_ENTITY.items()
 }
 
 DEFAULT_STAGE_ORDER_BY_ENTITY = {
@@ -151,10 +229,7 @@ def normalize_pipeline_entity_type(value: str | None) -> str:
 
 def get_required_semantic_stage_keys(entity_type: str | None = None) -> set[str]:
     normalized_entity_type = normalize_pipeline_entity_type(entity_type)
-    return {
-        canonicalize_stage_key(stage_key)
-        for stage_key in DEFAULT_STAGE_ORDER_BY_ENTITY[normalized_entity_type]
-    }
+    return get_protected_system_stage_keys(normalized_entity_type)
 
 
 def canonicalize_stage_key(value: str | None) -> str:
@@ -163,14 +238,74 @@ def canonicalize_stage_key(value: str | None) -> str:
     return LEGACY_STAGE_KEY_ALIASES.get(normalized, normalized)
 
 
+def get_protected_system_stage_keys(entity_type: str | None = None) -> set[str]:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    return {
+        canonicalize_stage_key(stage_key)
+        for stage_key in PROTECTED_SYSTEM_STAGES_BY_ENTITY[normalized_entity_type]
+    }
+
+
+def get_protected_system_stage_defs(entity_type: str | None = None) -> list[dict[str, object]]:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    protected_stage_keys = get_protected_system_stage_keys(normalized_entity_type)
+    return [
+        stage_def
+        for stage_def in get_default_stage_defs(normalized_entity_type)
+        if canonicalize_stage_key(stage_def.get("stage_key") or stage_def["slug"])
+        in protected_stage_keys
+    ]
+
+
+def get_stage_protection(
+    stage_key_or_slug: str | None,
+    entity_type: str | None = None,
+) -> ProtectedSystemStageDefinition | None:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    normalized_stage_key = canonicalize_stage_key(stage_key_or_slug)
+    return PROTECTED_SYSTEM_STAGES_BY_ENTITY[normalized_entity_type].get(normalized_stage_key)
+
+
+def get_stage_protection_metadata(
+    stage_key_or_slug: str | None,
+    entity_type: str | None = None,
+) -> dict[str, object]:
+    protection = get_stage_protection(stage_key_or_slug, entity_type)
+    if not protection:
+        return {
+            "is_locked": False,
+            "system_role": None,
+            "lock_reason": None,
+            "locked_fields": [],
+        }
+    return {
+        "is_locked": True,
+        "system_role": protection.system_role,
+        "lock_reason": protection.lock_reason,
+        "locked_fields": list(protection.locked_fields),
+    }
+
+
+def get_system_stage_key(
+    entity_type: str | None,
+    system_role: str | None,
+) -> str | None:
+    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
+    normalized_role = str(system_role or "").strip().lower()
+    if not normalized_role:
+        return None
+    for stage_key, definition in PROTECTED_SYSTEM_STAGES_BY_ENTITY[normalized_entity_type].items():
+        if definition.system_role == normalized_role:
+            return stage_key
+    return None
+
+
 def is_required_system_stage(
     stage_key_or_slug: str | None,
     entity_type: str | None = None,
 ) -> bool:
     """Return whether a stage key/slug is reserved for system workflows."""
-    normalized_entity_type = normalize_pipeline_entity_type(entity_type)
-    required_stage_keys = REQUIRED_SYSTEM_STAGE_KEYS_BY_ENTITY[normalized_entity_type]
-    return canonicalize_stage_key(stage_key_or_slug) in required_stage_keys
+    return get_stage_protection(stage_key_or_slug, entity_type) is not None
 
 
 def get_default_stage_defs(entity_type: str | None = None) -> list[dict[str, object]]:

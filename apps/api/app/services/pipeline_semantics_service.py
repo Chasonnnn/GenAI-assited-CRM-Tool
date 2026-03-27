@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.stage_definitions import canonicalize_stage_key
+from app.core.stage_definitions import canonicalize_stage_key, get_stage_protection_metadata
 from app.db.models import Pipeline, PipelineStage
 from app.schemas.pipeline_semantics import (
     PipelineFeatureConfig,
@@ -184,7 +184,10 @@ def can_role_access_stage(
     return role_rule_matches_stage(stage, rule)
 
 
-def serialize_stage_snapshot(stage: PipelineSemanticsStageSnapshot) -> dict[str, Any]:
+def serialize_stage_snapshot(
+    stage: PipelineSemanticsStageSnapshot,
+    entity_type: str | None = None,
+) -> dict[str, Any]:
     return {
         "id": stage.id,
         "stage_key": stage.stage_key,
@@ -196,6 +199,7 @@ def serialize_stage_snapshot(stage: PipelineSemanticsStageSnapshot) -> dict[str,
         "stage_type": stage.stage_type,
         "is_active": stage.is_active,
         "semantics": stage.semantics.model_dump(mode="json"),
+        **get_stage_protection_metadata(stage.stage_key, entity_type),
     }
 
 
@@ -205,5 +209,7 @@ def serialize_pipeline_semantics_snapshot(snapshot: PipelineSemanticsSnapshot) -
         "entity_type": snapshot.entity_type,
         "version": snapshot.version,
         "feature_config": snapshot.feature_config.model_dump(mode="json"),
-        "stages": [serialize_stage_snapshot(stage) for stage in snapshot.stages],
+        "stages": [
+            serialize_stage_snapshot(stage, snapshot.entity_type) for stage in snapshot.stages
+        ],
     }

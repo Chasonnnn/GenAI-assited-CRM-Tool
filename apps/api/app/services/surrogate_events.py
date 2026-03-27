@@ -102,7 +102,7 @@ def handle_status_changed(
                 },
             )
 
-    if pipeline_service.stage_matches_key(new_stage, "approved"):
+    if pipeline_service.stage_matches_system_role(new_stage, "approval_gate"):
         try:
             pool_queue = queue_service.get_or_create_surrogate_pool_queue(
                 db, surrogate.organization_id

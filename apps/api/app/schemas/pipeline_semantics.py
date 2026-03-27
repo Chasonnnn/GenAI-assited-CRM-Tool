@@ -25,6 +25,13 @@ PauseBehavior = Literal["none", "resume_previous_stage"]
 TerminalOutcome = Literal["none", "lost", "disqualified"]
 IntegrationBucket = Literal["none", "intake", "qualified", "converted", "lost", "not_qualified"]
 
+RESERVED_LIFECYCLE_CAPABILITIES = {
+    "eligible_for_matching",
+    "locks_match_state",
+    "shows_pregnancy_tracking",
+    "requires_delivery_details",
+}
+
 
 class StageCapabilities(BaseModel):
     counts_as_contacted: bool = False
@@ -399,3 +406,16 @@ def normalize_feature_config(
 
 def default_custom_stage_label(stage_key: str) -> str:
     return humanize_identifier(canonicalize_stage_key(stage_key))
+
+
+def get_reserved_lifecycle_semantic_keys(semantics: StageSemantics) -> list[str]:
+    reserved_keys = [
+        capability
+        for capability in RESERVED_LIFECYCLE_CAPABILITIES
+        if getattr(semantics.capabilities, capability)
+    ]
+    if semantics.pause_behavior != "none":
+        reserved_keys.append("pause_behavior")
+    if semantics.terminal_outcome != "none":
+        reserved_keys.append("terminal_outcome")
+    return reserved_keys
