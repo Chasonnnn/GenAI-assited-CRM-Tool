@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.3...surrogacy-crm-platform-v0.91.4) (2026-03-27)
+
+
+### Bug Fixes
+
+* align outbound stage mappings with pipeline stages ([6d7253b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6d7253b577e6d3a4b57fa3e6b6077c1bfb21004e))
+* harden legacy pipeline hydration ([57272e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/57272e9ead19bcbe49b655cb69f60af03b9e2dc3))
+* pin vulnerable web transitive deps ([e8f4a72](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e8f4a725f80a3516ab491087bcbcfcd10c4a3101))
+* protect system pipeline stages ([381e7b0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/381e7b0c8777d00291a4b5497400b86cc77d6c44))
+* resolve match queue labels from pipeline semantics ([65ee471](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/65ee4719cfdd56ce336e19375f03029cbe339beb))
+* roll surrogate last modified forward on activity ([8d112c3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8d112c30abe24a18db546d3cde81128e06009f8f))
+* sync integration mappings with pipeline stages ([1882dbc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1882dbcc286da30341d560f5fa6a709b9fb83b89))
+
+
+### Maintenance
+
+* bump vulnerable api dependencies ([e747cf7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e747cf7ab3ab90384b71fa4774139c89114454fe))
+
 ## [0.91.3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.2...surrogacy-crm-platform-v0.91.3) (2026-03-22)
 
 
