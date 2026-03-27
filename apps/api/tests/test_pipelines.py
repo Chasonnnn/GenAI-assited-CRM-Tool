@@ -98,6 +98,73 @@ async def test_list_pipelines_authed(authed_client: AsyncClient):
     assert isinstance(response.json(), list)
 
 
+def test_get_or_create_default_pipeline_prunes_legacy_feature_config_refs(db, test_org):
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        entity_type="surrogate",
+        name="Legacy Pipeline",
+        is_default=True,
+        current_version=1,
+        feature_config={},
+    )
+    db.add(pipeline)
+    db.flush()
+
+    db.add(
+        PipelineStage(
+            id=uuid.uuid4(),
+            pipeline_id=pipeline.id,
+            stage_key="new_unread",
+            slug="new_unread",
+            label="New Unread",
+            color="#3B82F6",
+            stage_type="intake",
+            order=1,
+            is_active=True,
+        )
+    )
+    db.flush()
+
+    hydrated = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    active_stage_keys = {
+        stage.stage_key for stage in hydrated.stages if stage.is_active and not stage.deleted_at
+    }
+
+    for milestone in hydrated.feature_config["journey"]["milestones"]:
+        assert set(milestone["mapped_stage_keys"]).issubset(active_stage_keys)
+    assert set(hydrated.feature_config["analytics"]["funnel_stage_keys"]).issubset(active_stage_keys)
+    assert set(hydrated.feature_config["analytics"]["performance_stage_keys"]).issubset(
+        active_stage_keys
+    )
+
+
+def test_create_stage_clamps_custom_stage_order_between_protected_anchors(db, test_org, test_user):
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+
+    stage = pipeline_service.create_stage(
+        db=db,
+        pipeline_id=pipeline.id,
+        slug=f"custom_{uuid.uuid4().hex[:6]}",
+        label="Custom Stage",
+        color="#6B7280",
+        stage_type="intake",
+        order=0,
+        user_id=test_user.id,
+    )
+
+    active_stage_keys = [
+        current_stage.stage_key
+        for current_stage in sorted(
+            (current_stage for current_stage in pipeline.stages if current_stage.is_active),
+            key=lambda current_stage: current_stage.order,
+        )
+    ]
+    assert active_stage_keys[0] == "new_unread"
+    assert active_stage_keys[-1] == "disqualified"
+    assert active_stage_keys[1] == stage.stage_key
+
+
 @pytest.mark.asyncio
 async def test_recommended_pipeline_draft_matches_platform_default_stage_order(
     authed_client: AsyncClient,
