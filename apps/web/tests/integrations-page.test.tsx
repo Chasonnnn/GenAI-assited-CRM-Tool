@@ -270,6 +270,22 @@ const pipelineData = [
     },
 ]
 
+const createPipelineData = (...stages: Array<{
+    id: string
+    stage_key: string
+    slug: string
+    label: string
+    stage_type: string
+    is_active?: boolean
+    semantics?: { integration_bucket?: string }
+}>) => [
+    {
+        id: "pipeline-1",
+        is_default: true,
+        stages,
+    },
+]
+
 vi.mock('@/lib/hooks/use-ops', () => ({
     useIntegrationHealth: () => mockUseIntegrationHealth(),
 }))
@@ -658,6 +674,57 @@ describe('IntegrationsPage', () => {
         })
     })
 
+    it('syncs zapier stage mapping rows with the live pipeline even when saved settings are stale', () => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            event_mapping: [
+                { stage_key: 'new_unread', event_name: 'Lead', enabled: true, bucket: null },
+                { stage_key: 'pre_qualified', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+            ],
+        }
+        mockUsePipelines.mockReturnValue({
+            data: createPipelineData(
+                {
+                    id: "stage-1",
+                    stage_key: "new_unread",
+                    slug: "new_unread",
+                    label: "New Unread",
+                    stage_type: "intake",
+                    is_active: true,
+                    semantics: { integration_bucket: "intake" },
+                },
+                {
+                    id: "stage-2",
+                    stage_key: "contacted",
+                    slug: "contacted",
+                    label: "Contacted",
+                    stage_type: "intake",
+                    is_active: true,
+                    semantics: { integration_bucket: "intake" },
+                },
+                {
+                    id: "stage-3",
+                    stage_key: "pre_qualified",
+                    slug: "pre_qualified",
+                    label: "Pre Qualified",
+                    stage_type: "intake",
+                    is_active: true,
+                    semantics: { integration_bucket: "qualified" },
+                },
+            ),
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByText('New Unread')).toBeInTheDocument()
+        expect(within(dialog).getByText('Contacted')).toBeInTheDocument()
+        expect(within(dialog).getByText('Pre Qualified')).toBeInTheDocument()
+    })
+
     it('uses the active zapier form when sending a test lead', async () => {
         mockZapierTestLead.mockResolvedValue({
             status: 'converted',
@@ -738,6 +805,57 @@ describe('IntegrationsPage', () => {
             send_hashed_pii: true,
             test_event_code: 'TEST999',
         }))
+    })
+
+    it('syncs Meta CRM dataset stage mapping rows with the live pipeline even when saved settings are stale', () => {
+        metaCrmDatasetSettingsData = {
+            ...createMetaCrmDatasetSettingsData(),
+            event_mapping: [
+                { stage_key: 'new_unread', event_name: 'Lead', enabled: true, bucket: null },
+                { stage_key: 'pre_qualified', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
+            ],
+        }
+        mockUsePipelines.mockReturnValue({
+            data: createPipelineData(
+                {
+                    id: "stage-1",
+                    stage_key: "new_unread",
+                    slug: "new_unread",
+                    label: "New Unread",
+                    stage_type: "intake",
+                    is_active: true,
+                    semantics: { integration_bucket: "intake" },
+                },
+                {
+                    id: "stage-2",
+                    stage_key: "contacted",
+                    slug: "contacted",
+                    label: "Contacted",
+                    stage_type: "intake",
+                    is_active: true,
+                    semantics: { integration_bucket: "intake" },
+                },
+                {
+                    id: "stage-3",
+                    stage_key: "pre_qualified",
+                    slug: "pre_qualified",
+                    label: "Pre Qualified",
+                    stage_type: "intake",
+                    is_active: true,
+                    semantics: { integration_bucket: "qualified" },
+                },
+            ),
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByText('New Unread')).toBeInTheDocument()
+        expect(within(dialog).getByText('Contacted')).toBeInTheDocument()
+        expect(within(dialog).getByText('Pre Qualified')).toBeInTheDocument()
     })
 
     it('sends Meta CRM dataset tests and retries failed monitoring events', async () => {

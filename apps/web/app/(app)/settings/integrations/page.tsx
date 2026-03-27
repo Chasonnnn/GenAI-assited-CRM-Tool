@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -171,6 +171,68 @@ const isZapierStageBucket = (value: unknown): value is ZapierStageBucket =>
     value === "converted" ||
     value === "lost" ||
     value === "not_qualified"
+
+type StageEventMappingLike = {
+    stage_key: string
+    event_name: string
+    enabled: boolean
+    bucket?: ZapierStageBucket | null
+}
+
+function buildDefaultStageEventMappingItem<T extends StageEventMappingLike>(
+    stageKey: string,
+    bucket: ZapierStageBucket | null,
+): T {
+    if (bucket) {
+        return {
+            stage_key: stageKey,
+            event_name: ZAPIER_BUCKET_EVENT_NAME[bucket],
+            enabled: true,
+            bucket,
+        } as T
+    }
+    return {
+        stage_key: stageKey,
+        event_name: "",
+        enabled: false,
+        bucket: null,
+    } as T
+}
+
+function mergeEventMappingWithPipelineStages<T extends StageEventMappingLike>(
+    eventMapping: T[] | null | undefined,
+    pipelines: Pipeline[] | null | undefined,
+): T[] {
+    const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default) ?? pipelines?.[0]
+    if (!defaultPipeline?.stages?.length) {
+        return [...(eventMapping ?? [])]
+    }
+
+    const byStageKey = new Map((eventMapping ?? []).map((item) => [item.stage_key, item]))
+    const merged: T[] = []
+
+    for (const stage of defaultPipeline.stages) {
+        if (stage.is_active === false) continue
+        const stageKey = (stage.stage_key ?? stage.slug ?? "").trim()
+        if (!stageKey) continue
+
+        const existing = byStageKey.get(stageKey)
+        if (existing) {
+            merged.push(existing)
+            continue
+        }
+
+        const stageBucket = getStageSemantics(stage).integration_bucket
+        merged.push(
+            buildDefaultStageEventMappingItem(
+                stageKey,
+                isZapierStageBucket(stageBucket) ? stageBucket : null,
+            ) as T,
+        )
+    }
+
+    return merged
+}
 
 function buildRecommendedBucketByStage(
     pipelines:
@@ -1642,15 +1704,20 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
 
     useEffect(() => {
         if (!settings) return
+        const mergedEventMapping = mergeEventMappingWithPipelineStages(
+            settings.event_mapping || [],
+            pipelines,
+        )
         setOutboundUrl(settings.outbound_webhook_url || '')
         setOutboundEnabled(Boolean(settings.outbound_enabled))
         setSendHashedPii(Boolean(settings.send_hashed_pii))
-        setEventMapping(settings.event_mapping || [])
-        const firstStage = settings.event_mapping?.[0]?.stage_key
-        if (firstStage) {
-            setSelectedOutboundStage(firstStage)
-        }
-    }, [settings])
+        setEventMapping(mergedEventMapping)
+        setSelectedOutboundStage((current) =>
+            current && mergedEventMapping.some((item) => item.stage_key === current)
+                ? current
+                : mergedEventMapping[0]?.stage_key || ''
+        )
+    }, [settings, pipelines])
 
     useEffect(() => {
         const activeZapierForms = metaForms.filter(
@@ -2663,6 +2730,10 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
 
     useEffect(() => {
         if (!settings) return
+        const mergedEventMapping = mergeEventMappingWithPipelineStages(
+            settings.event_mapping || [],
+            pipelines,
+        )
         setMetaForm((current) => ({
             ...current,
             datasetId: settings.dataset_id || "",
@@ -2670,15 +2741,15 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
             enabled: Boolean(settings.enabled),
             crmName: settings.crm_name || "Surrogacy Force CRM",
             sendHashedPii: Boolean(settings.send_hashed_pii),
-            eventMapping: settings.event_mapping || [],
+            eventMapping: mergedEventMapping,
             testEventCode: settings.test_event_code || "",
             selectedStage:
                 current.selectedStage
-                && settings.event_mapping?.some((item) => item.stage_key === current.selectedStage)
+                && mergedEventMapping.some((item) => item.stage_key === current.selectedStage)
                     ? current.selectedStage
-                    : settings.event_mapping?.[0]?.stage_key || "",
+                    : mergedEventMapping[0]?.stage_key || "",
         }))
-    }, [settings])
+    }, [settings, pipelines])
 
     const updateMetaForm = <K extends keyof MetaCrmDatasetFormState>(field: K, value: MetaCrmDatasetFormState[K]) => {
         setMetaForm((current) => ({ ...current, [field]: value }))
@@ -3568,8 +3639,12 @@ export default function IntegrationsPage() {
     const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
     const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
+    const mergedZapierEventMapping = useMemo(
+        () => mergeEventMappingWithPipelineStages(zapierSettings?.event_mapping, pipelines),
+        [zapierSettings?.event_mapping, pipelines],
+    )
     const zapierMappingHealth = getZapierMappingHealth(
-        zapierSettings?.event_mapping,
+        mergedZapierEventMapping,
         recommendedBucketByStage,
     )
     const zapierMappingBadgeLabel = zapierMappingHealth.isHealthy
