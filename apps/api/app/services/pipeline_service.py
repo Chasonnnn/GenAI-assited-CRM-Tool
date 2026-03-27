@@ -11,7 +11,6 @@ from app.core.stage_definitions import (
     canonicalize_stage_key,
     get_default_stage_defs,
     get_protected_system_stage_defs,
-    get_required_semantic_stage_keys,
     get_stage_protection,
     get_stage_protection_metadata,
     get_system_stage_key,
@@ -30,6 +29,7 @@ from app.db.models import (
     ZapierWebhookSettings,
 )
 from app.schemas.pipeline_semantics import (
+    PipelineFeatureConfig,
     default_pipeline_feature_config,
     default_stage_semantics,
 )
@@ -359,15 +359,6 @@ def _derive_stage_category(stage: PipelineStage) -> str:
 
 def _ensure_pipeline_semantics_defaults(db: Session, pipeline: Pipeline) -> bool:
     dirty = False
-    if not isinstance(pipeline.feature_config, dict) or not pipeline.feature_config:
-        pipeline.feature_config = default_pipeline_feature_config(pipeline.entity_type)
-        dirty = True
-    else:
-        normalized_feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
-        normalized_payload = normalized_feature_config.model_dump(mode="json")
-        if normalized_payload != pipeline.feature_config:
-            pipeline.feature_config = normalized_payload
-            dirty = True
 
     for stage in pipeline.stages:
         normalized_stage_key = _normalize_stage_key(stage.stage_key or stage.slug)
@@ -389,6 +380,23 @@ def _ensure_pipeline_semantics_defaults(db: Session, pipeline: Pipeline) -> bool
             stage.semantics = normalized_semantics
             dirty = True
 
+    if not isinstance(pipeline.feature_config, dict) or not pipeline.feature_config:
+        normalized_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+            {
+                "entity_type": pipeline.entity_type,
+                "feature_config": default_pipeline_feature_config(pipeline.entity_type),
+            }
+        )
+    else:
+        normalized_feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline)
+    normalized_payload = _prune_feature_config_for_stage_defs(
+        normalized_feature_config,
+        _normalized_stage_defs_for_pipeline(pipeline),
+    )
+    if normalized_payload != pipeline.feature_config:
+        pipeline.feature_config = normalized_payload
+        dirty = True
+
     if dirty:
         db.flush()
     return dirty
@@ -405,6 +413,13 @@ def _build_default_feature_config_for_stages(
             "feature_config": default_pipeline_feature_config(entity_type),
         }
     )
+    return _prune_feature_config_for_stage_defs(feature_config, stage_defs)
+
+
+def _prune_feature_config_for_stage_defs(
+    feature_config: PipelineFeatureConfig,
+    stage_defs: list[dict[str, object]],
+) -> dict[str, object]:
     active_stage_keys = {
         _normalize_stage_key(stage.get("stage_key") or stage.get("slug"))
         for stage in stage_defs
@@ -446,7 +461,11 @@ def _build_default_feature_config_for_stages(
         feature_config.analytics.conversion_stage_key = (
             feature_config.analytics.performance_stage_keys[-1]
             if feature_config.analytics.performance_stage_keys
-            else None
+            else (
+                feature_config.analytics.funnel_stage_keys[-1]
+                if feature_config.analytics.funnel_stage_keys
+                else None
+            )
         )
     feature_config.role_visibility = {
         role: rule.model_copy(
@@ -473,6 +492,76 @@ def _build_default_feature_config_for_stages(
         for role, rule in feature_config.role_mutation.items()
     }
     return feature_config.model_dump(mode="json")
+
+
+def _normalized_stage_defs_for_pipeline(pipeline: Pipeline) -> list[dict[str, object]]:
+    return [
+        {
+            "stage_key": _normalize_stage_key(stage.stage_key or stage.slug),
+            "slug": stage.slug,
+            "is_active": stage.is_active,
+        }
+        for stage in pipeline.stages
+    ]
+
+
+def _resolve_custom_stage_insert_order(
+    pipeline: Pipeline,
+    requested_order: int | None,
+) -> int:
+    active_stages = sorted(
+        (stage for stage in pipeline.stages if stage.is_active),
+        key=lambda stage: stage.order,
+    )
+    if not active_stages:
+        return 1
+
+    protected_positions = [
+        index + 1
+        for index, stage in enumerate(active_stages)
+        if get_stage_protection(stage.stage_key or stage.slug, pipeline.entity_type)
+    ]
+    if len(protected_positions) >= 2:
+        min_order = protected_positions[0] + 1
+        max_order = protected_positions[-1]
+    elif protected_positions:
+        min_order = protected_positions[0] + 1
+        max_order = len(active_stages) + 1
+    else:
+        min_order = 1
+        max_order = len(active_stages) + 1
+
+    desired_order = requested_order if requested_order is not None else max_order
+    return max(min_order, min(desired_order, max_order))
+
+
+def _insert_stage_at_order(
+    pipeline: Pipeline,
+    stage: PipelineStage,
+    order: int,
+) -> None:
+    active_stages = sorted(
+        (existing_stage for existing_stage in pipeline.stages if existing_stage.is_active),
+        key=lambda existing_stage: existing_stage.order,
+    )
+    insert_at = max(1, min(order, len(active_stages) + 1))
+    for existing_stage in active_stages:
+        if existing_stage.id == stage.id:
+            continue
+        if existing_stage.order >= insert_at:
+            existing_stage.order += 1
+    stage.order = insert_at
+
+
+def _normalize_existing_stage_orders(pipeline: Pipeline) -> None:
+    for order, stage in enumerate(
+        sorted(
+            (existing_stage for existing_stage in pipeline.stages if existing_stage.is_active),
+            key=lambda existing_stage: existing_stage.order,
+        ),
+        start=1,
+    ):
+        stage.order = order
 
 
 def _validate_pipeline_configuration(db: Session, pipeline: Pipeline) -> None:
@@ -570,15 +659,26 @@ def get_or_create_default_pipeline(
         db.refresh(pipeline)
         return pipeline
 
+    legacy_requires_full_default_sync = (
+        not isinstance(pipeline.feature_config, dict) or not pipeline.feature_config
+    )
     changed = _ensure_pipeline_semantics_defaults(db, pipeline)
     existing_stage_keys = {
         _normalize_stage_key(stage.stage_key or stage.slug)
         for stage in pipeline.stages
         if not stage.deleted_at
     }
-    required_stage_keys = get_required_semantic_stage_keys(pipeline.entity_type)
+    required_stage_defs = (
+        get_default_stage_defs(pipeline.entity_type)
+        if legacy_requires_full_default_sync
+        else get_protected_system_stage_defs(pipeline.entity_type)
+    )
+    required_stage_keys = {
+        _normalize_stage_key(stage_def.get("stage_key") or stage_def["slug"])
+        for stage_def in required_stage_defs
+    }
     if required_stage_keys - existing_stage_keys:
-        sync_missing_stages(db, pipeline, user_id)
+        sync_missing_stages(db, pipeline, user_id, stage_defs=required_stage_defs)
         db.refresh(pipeline)
         return pipeline
 
@@ -625,6 +725,7 @@ def sync_missing_stages(
     db: Session,
     pipeline: Pipeline,
     user_id: UUID | None = None,
+    stage_defs: list[dict[str, object]] | None = None,
 ) -> int:
     """
     Add missing default stages to an existing pipeline.
@@ -636,7 +737,7 @@ def sync_missing_stages(
     existing_stage_keys = {s.stage_key for s in active_stages}
 
     # Find missing stage keys
-    default_defs = get_protected_system_stage_defs(pipeline.entity_type)
+    default_defs = stage_defs or get_protected_system_stage_defs(pipeline.entity_type)
     missing = [
         d
         for d in default_defs
@@ -1208,16 +1309,19 @@ def create_stage(
     if existing_key:
         raise ValueError(f"Stage key '{stage_key}' already exists in this pipeline")
 
-    # Auto-calculate order if not provided
-    if order is None:
-        max_order = (
-            db.query(PipelineStage)
-            .filter(
-                PipelineStage.pipeline_id == pipeline_id,
+    if pipeline:
+        order = _resolve_custom_stage_insert_order(pipeline, order)
+    else:
+        # Auto-calculate order if not provided
+        if order is None:
+            max_order = (
+                db.query(PipelineStage)
+                .filter(
+                    PipelineStage.pipeline_id == pipeline_id,
+                )
+                .count()
             )
-            .count()
-        )
-        order = max_order + 1
+            order = max_order + 1
 
     stage = PipelineStage(
         pipeline_id=pipeline_id,
@@ -1241,7 +1345,10 @@ def create_stage(
     db.add(stage)
     db.flush()
     if pipeline:
-        pipeline.stages.append(stage)
+        if all(existing_stage.id != stage.id for existing_stage in pipeline.stages):
+            pipeline.stages.append(stage)
+        _insert_stage_at_order(pipeline, stage, order)
+        _normalize_existing_stage_orders(pipeline)
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
         _bump_pipeline_version(db, pipeline, user_id, f"Added stage {normalized_slug}")
