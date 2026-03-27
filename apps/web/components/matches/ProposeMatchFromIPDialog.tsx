@@ -11,7 +11,11 @@ import { Loader2Icon, HeartHandshakeIcon, AlertCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
-import { normalizeStageKey } from "@/lib/surrogate-stage-context"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+import {
+    getEligibleForMatchingStageLabel,
+    isEligibleForMatchingCandidate,
+} from "@/lib/match-pipeline-stage-utils"
 
 interface ProposeMatchFromIPDialogProps {
     open: boolean
@@ -32,23 +36,22 @@ export function ProposeMatchFromIPDialog({
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
-    // Only fetch surrogates in ready_to_match status
     const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({
         per_page: 100
     })
+    const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
     const createMatch = useCreateMatch()
 
-    // Filter to only ready_to_match surrogates (prefer stage_slug when available)
+    const eligibleStageLabel = useMemo(
+        () => getEligibleForMatchingStageLabel(surrogatePipeline?.stages),
+        [surrogatePipeline?.stages],
+    )
     const eligibleSurrogates = useMemo(() => {
         if (!surrogatesData?.items) return []
-        return surrogatesData.items.filter((s) => {
-            const stageKey = normalizeStageKey(s.stage_key ?? s.stage_slug ?? null)
-            if (stageKey) {
-                return stageKey === "ready_to_match"
-            }
-            return s.status_label?.toLowerCase() === "ready to match"
-        })
-    }, [surrogatesData])
+        return surrogatesData.items.filter((surrogate) =>
+            isEligibleForMatchingCandidate(surrogate, surrogatePipeline?.stages),
+        )
+    }, [surrogatesData, surrogatePipeline?.stages])
 
     const handleSubmit = async () => {
         if (!selectedSurrogateId) return
@@ -100,7 +103,7 @@ export function ProposeMatchFromIPDialog({
                     )}
 
                     <div className="space-y-2">
-                        <Label htmlFor="surrogate-select">Surrogate (Ready to Match Only)</Label>
+                        <Label htmlFor="surrogate-select">{`Surrogate (${eligibleStageLabel} Only)`}</Label>
                         {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
@@ -108,7 +111,7 @@ export function ProposeMatchFromIPDialog({
                             </div>
                         ) : eligibleSurrogates.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
-                                No surrogates are currently in "Ready to Match" status.
+                                {`No surrogates are currently in "${eligibleStageLabel}" status.`}
                             </div>
                         ) : (
                             <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>

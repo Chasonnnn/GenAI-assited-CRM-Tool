@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
-import { normalizeStageKey } from "@/lib/surrogate-stage-context"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+import {
+    getEligibleForMatchingStageLabel,
+    isEligibleForMatchingCandidate,
+} from "@/lib/match-pipeline-stage-utils"
 import {
     getMatchStatusBadgeClassName,
     getMatchStatusLabel,
@@ -101,16 +105,20 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
     const queryClient = useQueryClient()
     const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({ per_page: 100 })
     const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
+    const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
     const createMatch = useCreateMatch()
 
-    // Filter surrogates to ready_to_match status
-    const eligibleSurrogates = surrogatesData?.items?.filter((s) => {
-        const stageKey = normalizeStageKey(s.stage_key ?? s.stage_slug ?? null)
-        if (stageKey) {
-            return stageKey === "ready_to_match"
-        }
-        return s.status_label?.toLowerCase() === "ready to match"
-    }) || []
+    const eligibleStageLabel = useMemo(
+        () => getEligibleForMatchingStageLabel(surrogatePipeline?.stages),
+        [surrogatePipeline?.stages],
+    )
+    const eligibleSurrogates = useMemo(
+        () =>
+            surrogatesData?.items?.filter((surrogate) =>
+                isEligibleForMatchingCandidate(surrogate, surrogatePipeline?.stages),
+            ) ?? [],
+        [surrogatesData?.items, surrogatePipeline?.stages],
+    )
 
     const handleSubmit = async () => {
         if (!selectedSurrogateId || !selectedIpId) return
@@ -168,7 +176,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
 
                     {/* Surrogate Selector */}
                     <div className="space-y-2">
-                        <Label>Surrogate (Ready to Match Only)</Label>
+                        <Label>{`Surrogate (${eligibleStageLabel} Only)`}</Label>
                         {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
@@ -176,7 +184,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                             </div>
                         ) : eligibleSurrogates.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
-                                No surrogates are currently in "Ready to Match" status.
+                                {`No surrogates are currently in "${eligibleStageLabel}" status.`}
                             </div>
                         ) : (
                             <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>
