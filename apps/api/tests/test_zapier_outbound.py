@@ -34,12 +34,15 @@ async def test_zapier_outbound_settings_update(authed_client):
     assert data["outbound_webhook_url"] == payload["outbound_webhook_url"]
     assert data["outbound_secret_configured"] is True
     assert data["send_hashed_pii"] is True
-    assert all(m["stage_key"] != "new_unread" for m in data["event_mapping"])
-    assert any(m["stage_key"] == "pre_qualified" and m["enabled"] for m in data["event_mapping"])
-    assert any(
-        m["stage_key"] == "pre_qualified" and m.get("bucket") == "qualified"
-        for m in data["event_mapping"]
-    )
+    by_stage = {item["stage_key"]: item for item in data["event_mapping"]}
+    assert by_stage["new_unread"]["event_name"] == "Lead"
+    assert by_stage["new_unread"]["enabled"] is True
+    assert by_stage["new_unread"]["bucket"] is None
+    assert by_stage["contacted"]["event_name"] == ""
+    assert by_stage["contacted"]["enabled"] is False
+    assert by_stage["contacted"]["bucket"] is None
+    assert by_stage["pre_qualified"]["enabled"] is True
+    assert by_stage["pre_qualified"]["bucket"] == "qualified"
 
     res2 = await authed_client.get("/integrations/zapier/settings")
     assert res2.status_code == 200
@@ -270,7 +273,7 @@ def test_enqueue_stage_event_includes_click_id_and_customer_fields(db, test_org,
     assert payload["fbc"] == "fb.1.1772942400.persisted-click-id"
 
 
-def test_normalize_event_mapping_expands_meta_status_ranges():
+def test_normalize_event_mapping_expands_meta_status_ranges(db, test_org):
     from app.services import zapier_settings_service
 
     mapping = zapier_settings_service.normalize_event_mapping(
@@ -278,11 +281,16 @@ def test_normalize_event_mapping_expands_meta_status_ranges():
             {"stage_key": "new_unread", "event_name": "Lead", "enabled": True},
             {"stage_key": "pre_qualified", "event_name": "PreQualifiedLead", "enabled": True},
             {"stage_key": "matched", "event_name": "ConvertedLead", "enabled": True},
-        ]
+        ],
+        db=db,
+        organization_id=test_org.id,
     )
     by_stage = {item["stage_key"]: item for item in mapping}
 
-    assert "new_unread" not in by_stage
+    assert by_stage["new_unread"]["event_name"] == "Lead"
+    assert by_stage["new_unread"]["bucket"] is None
+    assert by_stage["contacted"]["event_name"] == ""
+    assert by_stage["contacted"]["enabled"] is False
     assert by_stage["pre_qualified"]["event_name"] == "Qualified"
     assert by_stage["pre_qualified"]["bucket"] == "qualified"
     assert by_stage["application_submitted"]["event_name"] == "Qualified"
@@ -297,6 +305,18 @@ def test_normalize_event_mapping_expands_meta_status_ranges():
 
 def test_resolve_meta_stage_bucket_uses_configured_mapping():
     from app.services import zapier_settings_service
+
+    mapping = zapier_settings_service.normalize_event_mapping(
+        [
+            {
+                "stage_key": "new_unread",
+                "event_name": "Qualified",
+                "bucket": "qualified",
+                "enabled": True,
+            }
+        ]
+    )
+    assert zapier_settings_service.resolve_meta_stage_bucket("new_unread", mapping) == "qualified"
 
     mapping = zapier_settings_service.normalize_event_mapping(
         [
@@ -324,7 +344,7 @@ def test_resolve_meta_stage_bucket_uses_configured_mapping():
 
 
 def test_build_default_event_mapping_uses_pipeline_semantics(db, test_org):
-    from app.services import pipeline_service, zapier_settings_service
+    from app.services import pipeline_semantics_service, pipeline_service, zapier_settings_service
 
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
     approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
@@ -344,8 +364,12 @@ def test_build_default_event_mapping_uses_pipeline_semantics(db, test_org):
     db.commit()
 
     mapping = zapier_settings_service.build_default_event_mapping(db, test_org.id)
+    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
     by_stage = {item["stage_key"]: item for item in mapping}
 
+    assert set(by_stage) == {stage.stage_key for stage in snapshot.stages if stage.is_active}
     assert by_stage["approved"]["bucket"] == "converted"
     assert by_stage["approved"]["event_name"] == "Converted"
-    assert "new_unread" not in by_stage
+    assert by_stage["new_unread"]["bucket"] is None
+    assert by_stage["new_unread"]["event_name"] == ""
+    assert by_stage["new_unread"]["enabled"] is False

@@ -39,8 +39,17 @@ def default_crm_name() -> str:
     return DEFAULT_CRM_NAME
 
 
-def normalize_event_mapping(mapping: list[dict] | None) -> list[dict]:
-    return zapier_settings_service.normalize_event_mapping(mapping)
+def normalize_event_mapping(
+    mapping: list[dict] | None,
+    *,
+    db: Session | None = None,
+    organization_id: uuid.UUID | None = None,
+) -> list[dict]:
+    return zapier_settings_service.normalize_event_mapping(
+        mapping,
+        db=db,
+        organization_id=organization_id,
+    )
 
 
 def get_settings(db: Session, organization_id: uuid.UUID) -> MetaCrmDatasetSettings | None:
@@ -65,7 +74,11 @@ def get_or_create_settings(db: Session, organization_id: uuid.UUID) -> MetaCrmDa
         if not settings_row.crm_name:
             settings_row.crm_name = DEFAULT_CRM_NAME
         if not settings_row.event_mapping:
-            settings_row.event_mapping = normalize_event_mapping(None)
+            settings_row.event_mapping = normalize_event_mapping(
+                None,
+                db=db,
+                organization_id=organization_id,
+            )
         return settings_row
 
     settings_row = MetaCrmDatasetSettings(
@@ -73,7 +86,7 @@ def get_or_create_settings(db: Session, organization_id: uuid.UUID) -> MetaCrmDa
         crm_name=DEFAULT_CRM_NAME,
         enabled=False,
         send_hashed_pii=False,
-        event_mapping=normalize_event_mapping(None),
+        event_mapping=normalize_event_mapping(None, db=db, organization_id=organization_id),
     )
     db.add(settings_row)
     db.commit()
@@ -108,7 +121,11 @@ def update_settings(
     if send_hashed_pii is not None:
         settings_row.send_hashed_pii = send_hashed_pii
     if event_mapping is not None:
-        settings_row.event_mapping = normalize_event_mapping(event_mapping)
+        settings_row.event_mapping = normalize_event_mapping(
+            event_mapping,
+            db=db,
+            organization_id=organization_id,
+        )
     if test_event_code is not None:
         stripped = test_event_code.strip()
         settings_row.test_event_code = stripped or None

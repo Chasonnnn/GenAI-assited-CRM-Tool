@@ -187,7 +187,7 @@ def get_settings(
 ):
     settings = zapier_settings_service.get_or_create_settings(db, session.org_id)
     inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
-    return _serialize_settings(settings, inbound_webhooks)
+    return _serialize_settings(db, session.org_id, settings, inbound_webhooks)
 
 
 @router.post("/settings/rotate-secret", response_model=RotateSecretResponse)
@@ -328,7 +328,7 @@ def update_outbound_settings(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     inbound_webhooks = zapier_settings_service.list_inbound_webhooks(db, session.org_id)
-    return _serialize_settings(settings, inbound_webhooks)
+    return _serialize_settings(db, session.org_id, settings, inbound_webhooks)
 
 
 @router.post("/test-lead", response_model=ZapierTestLeadResponse)
@@ -452,7 +452,11 @@ def send_outbound_test(
     if not settings.outbound_enabled:
         raise HTTPException(status_code=400, detail="Outbound webhook is disabled.")
 
-    mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
+    mapping = zapier_settings_service.normalize_event_mapping(
+        settings.outbound_event_mapping,
+        db=db,
+        organization_id=session.org_id,
+    )
     stage_key = data.stage_key or (mapping[0]["stage_key"] if mapping else None)
     if not stage_key:
         raise HTTPException(status_code=400, detail="No stage mapping available.")
@@ -545,10 +549,16 @@ def retry_outbound_event(
 
 
 def _serialize_settings(
+    db: Session,
+    organization_id: UUID,
     settings,
     inbound_webhooks: list,
 ) -> ZapierSettingsResponse:
-    mapping = zapier_settings_service.normalize_event_mapping(settings.outbound_event_mapping)
+    mapping = zapier_settings_service.normalize_event_mapping(
+        settings.outbound_event_mapping,
+        db=db,
+        organization_id=organization_id,
+    )
     inbound_payload = [
         ZapierInboundWebhookResponse(
             webhook_id=inbound.webhook_id,

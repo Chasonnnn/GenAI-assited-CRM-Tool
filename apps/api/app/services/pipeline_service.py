@@ -1399,7 +1399,9 @@ def _apply_external_stage_remaps(
                     item.pop("stage_slug", None)
                 remapped.append(item)
             meta_settings.event_mapping = meta_crm_dataset_settings_service.normalize_event_mapping(
-                remapped
+                remapped,
+                db=db,
+                organization_id=pipeline.organization_id,
             )
 
     campaigns = (

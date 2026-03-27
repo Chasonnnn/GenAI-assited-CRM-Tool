@@ -180,7 +180,7 @@ def test_status_changed_workflow_send_zapier_conversion_event_skips_when_outboun
     assert job is None
 
 
-def test_status_changed_workflow_send_zapier_conversion_event_skips_new_unread_stage(
+def test_status_changed_workflow_send_zapier_conversion_event_allows_explicit_new_unread_mapping(
     db, test_org, test_user
 ):
     from app.services import zapier_settings_service
@@ -239,9 +239,8 @@ def test_status_changed_workflow_send_zapier_conversion_event_skips_new_unread_s
 
     assert len(executions) == 1
     assert executions[0].status == WorkflowExecutionStatus.SUCCESS.value
-    assert executions[0].actions_executed[0]["queued"] is False
-    assert executions[0].actions_executed[0]["skipped"] is True
-    assert "not mapped" in str(executions[0].actions_executed[0]["description"]).lower()
+    assert executions[0].actions_executed[0]["action_type"] == "send_zapier_conversion_event"
+    assert executions[0].actions_executed[0]["queued"] is True
 
     job = (
         db.query(Job)
@@ -252,7 +251,9 @@ def test_status_changed_workflow_send_zapier_conversion_event_skips_new_unread_s
         .order_by(Job.created_at.desc())
         .first()
     )
-    assert job is None
+    assert job is not None
+    assert job.payload["data"]["event_name"] == "Qualified"
+    assert job.payload["data"]["stage_key"] == "new_unread"
 
 
 def test_status_changed_workflow_conversion_event_fans_out_to_zapier_and_meta_dataset(

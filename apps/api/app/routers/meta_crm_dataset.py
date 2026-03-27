@@ -118,7 +118,7 @@ def get_settings(
     ),
 ):
     settings = meta_crm_dataset_settings_service.get_or_create_settings(db, session.org_id)
-    return _serialize_settings(settings)
+    return _serialize_settings(db, session.org_id, settings)
 
 
 @router.patch("/settings", response_model=MetaCrmDatasetSettingsResponse)
@@ -145,7 +145,7 @@ def update_settings(
         ),
         test_event_code=data.test_event_code,
     )
-    return _serialize_settings(settings)
+    return _serialize_settings(db, session.org_id, settings)
 
 
 @router.post("/test-outbound", response_model=MetaCrmDatasetTestResponse)
@@ -158,7 +158,11 @@ def send_test_outbound(
     ),
 ):
     settings = meta_crm_dataset_settings_service.get_or_create_settings(db, session.org_id)
-    mapping = meta_crm_dataset_settings_service.normalize_event_mapping(settings.event_mapping)
+    mapping = meta_crm_dataset_settings_service.normalize_event_mapping(
+        settings.event_mapping,
+        db=db,
+        organization_id=session.org_id,
+    )
     stage_key = data.stage_key or (mapping[0]["stage_key"] if mapping else None)
     if not stage_key:
         raise HTTPException(status_code=400, detail="stage_key is required")
@@ -251,7 +255,11 @@ def retry_event(
     return _serialize_event(event)
 
 
-def _serialize_settings(settings) -> MetaCrmDatasetSettingsResponse:
+def _serialize_settings(
+    db: Session,
+    organization_id: UUID,
+    settings,
+) -> MetaCrmDatasetSettingsResponse:
     return MetaCrmDatasetSettingsResponse(
         dataset_id=settings.dataset_id,
         access_token_configured=bool(settings.access_token_encrypted),
@@ -259,7 +267,9 @@ def _serialize_settings(settings) -> MetaCrmDatasetSettingsResponse:
         crm_name=settings.crm_name or meta_crm_dataset_settings_service.default_crm_name(),
         send_hashed_pii=bool(settings.send_hashed_pii),
         event_mapping=meta_crm_dataset_settings_service.normalize_event_mapping(
-            settings.event_mapping
+            settings.event_mapping,
+            db=db,
+            organization_id=organization_id,
         ),
         test_event_code=settings.test_event_code,
     )

@@ -263,7 +263,11 @@ def enqueue_stage_event(
             stage_label=stage_label,
         )
 
-    mapping = zapier_settings_service.normalize_event_mapping(settings_row.event_mapping)
+    mapping = zapier_settings_service.normalize_event_mapping(
+        settings_row.event_mapping,
+        db=db,
+        organization_id=surrogate.organization_id,
+    )
     mapping_item = resolve_mapping_item(mapping, stage_key)
     if not mapping_item:
         return _skip_event(

@@ -38,7 +38,13 @@ async def test_meta_crm_dataset_settings_update(authed_client):
     assert data["crm_name"] == "Surrogacy Force CRM"
     assert data["send_hashed_pii"] is True
     assert data["test_event_code"] == "TEST123"
-    assert all(m["stage_key"] != "new_unread" for m in data["event_mapping"])
+    by_stage = {item["stage_key"]: item for item in data["event_mapping"]}
+    assert by_stage["new_unread"]["event_name"] == "Lead"
+    assert by_stage["new_unread"]["enabled"] is True
+    assert by_stage["new_unread"]["bucket"] is None
+    assert by_stage["contacted"]["event_name"] == ""
+    assert by_stage["contacted"]["enabled"] is False
+    assert by_stage["contacted"]["bucket"] is None
 
     res2 = await authed_client.get("/integrations/meta/crm-dataset/settings")
     assert res2.status_code == 200

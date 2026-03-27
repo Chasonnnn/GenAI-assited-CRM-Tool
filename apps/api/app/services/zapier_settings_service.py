@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.stage_definitions import canonicalize_stage_key
+from app.core.stage_definitions import canonicalize_stage_key, get_default_stage_defs
 from app.core.url_validation import validate_outbound_webhook_url
 from app.db.models import ZapierInboundWebhook, ZapierWebhookSettings
 from app.services import oauth_service, pipeline_semantics_service, pipeline_service
@@ -26,7 +26,6 @@ QUALIFIED_BUCKET = "qualified"
 CONVERTED_BUCKET = "converted"
 LOST_BUCKET = "lost"
 NOT_QUALIFIED_BUCKET = "not_qualified"
-UNSUPPORTED_OUTBOUND_STAGE_KEYS = {"new_unread"}
 
 QUALIFIED_STAGE_KEYS = {
     "pre_qualified",
@@ -64,106 +63,6 @@ EVENT_NAME_BY_BUCKET = {
     NOT_QUALIFIED_BUCKET: NOT_QUALIFIED_EVENT_NAME,
 }
 
-DEFAULT_EVENT_MAPPING = [
-    {
-        "stage_key": "pre_qualified",
-        "event_name": QUALIFIED_EVENT_NAME,
-        "enabled": True,
-        "bucket": QUALIFIED_BUCKET,
-    },
-    {
-        "stage_key": "interview_scheduled",
-        "event_name": QUALIFIED_EVENT_NAME,
-        "enabled": True,
-        "bucket": QUALIFIED_BUCKET,
-    },
-    {
-        "stage_key": "application_submitted",
-        "event_name": QUALIFIED_EVENT_NAME,
-        "enabled": True,
-        "bucket": QUALIFIED_BUCKET,
-    },
-    {
-        "stage_key": "under_review",
-        "event_name": QUALIFIED_EVENT_NAME,
-        "enabled": True,
-        "bucket": QUALIFIED_BUCKET,
-    },
-    {
-        "stage_key": "approved",
-        "event_name": QUALIFIED_EVENT_NAME,
-        "enabled": True,
-        "bucket": QUALIFIED_BUCKET,
-    },
-    {
-        "stage_key": "ready_to_match",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "matched",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "medical_clearance_passed",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "legal_clearance_passed",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "transfer_cycle",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "second_hcg_confirmed",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "heartbeat_confirmed",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "ob_care_established",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "anatomy_scanned",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {
-        "stage_key": "delivered",
-        "event_name": CONVERTED_EVENT_NAME,
-        "enabled": True,
-        "bucket": CONVERTED_BUCKET,
-    },
-    {"stage_key": "lost", "event_name": LOST_EVENT_NAME, "enabled": True, "bucket": LOST_BUCKET},
-    {
-        "stage_key": "disqualified",
-        "event_name": NOT_QUALIFIED_EVENT_NAME,
-        "enabled": True,
-        "bucket": NOT_QUALIFIED_BUCKET,
-    },
-]
-
 
 def build_default_event_mapping(
     db: Session,
@@ -173,20 +72,12 @@ def build_default_event_mapping(
     snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
     mapping: list[dict] = []
     for stage in snapshot.stages:
-        if not stage.is_active or stage.stage_key in UNSUPPORTED_OUTBOUND_STAGE_KEYS:
+        if not stage.is_active:
             continue
-        bucket = stage.semantics.integration_bucket
-        event_name = event_name_for_bucket(bucket)
-        if not event_name:
+        stage_key = canonicalize_stage_key(stage.stage_key)
+        if not stage_key:
             continue
-        mapping.append(
-            {
-                "stage_key": stage.stage_key,
-                "event_name": event_name,
-                "enabled": True,
-                "bucket": bucket,
-            }
-        )
+        mapping.append(_default_mapping_item(stage_key, stage.semantics.integration_bucket))
     return mapping or [dict(item) for item in DEFAULT_EVENT_MAPPING]
 
 
@@ -230,6 +121,25 @@ def event_name_for_bucket(bucket: str | None) -> str | None:
     return EVENT_NAME_BY_BUCKET.get(bucket)
 
 
+def _default_mapping_item(stage_key: str, bucket: str | None) -> dict[str, str | bool | None]:
+    normalized_bucket = _normalize_bucket(bucket)
+    return {
+        "stage_key": stage_key,
+        "event_name": EVENT_NAME_BY_BUCKET.get(normalized_bucket, ""),
+        "enabled": normalized_bucket is not None,
+        "bucket": normalized_bucket,
+    }
+
+
+DEFAULT_EVENT_MAPPING = [
+    _default_mapping_item(
+        str(stage_def["stage_key"]),
+        DEFAULT_BUCKET_BY_STAGE_KEY.get(str(stage_def["stage_key"])),
+    )
+    for stage_def in get_default_stage_defs()
+]
+
+
 def _resolve_bucket_from_mapping_item(stage_key: str, item: dict) -> str | None:
     if not bool(item.get("enabled", True)):
         return None
@@ -249,8 +159,6 @@ def resolve_meta_stage_bucket(
     """Return a canonical funnel bucket for Meta CAPI-style webhook events."""
     normalized = canonicalize_stage_key(stage_key)
     if not normalized:
-        return None
-    if normalized in UNSUPPORTED_OUTBOUND_STAGE_KEYS:
         return None
 
     if mapping:
@@ -518,7 +426,7 @@ def normalize_event_mapping(
             continue
         stage_ref = str(item.get("stage_key") or item.get("stage_slug") or "").strip()
         stage_key = canonicalize_stage_key(stage_ref)
-        if not stage_key or stage_key in UNSUPPORTED_OUTBOUND_STAGE_KEYS:
+        if not stage_key:
             continue
         event_name = str(item.get("event_name") or "").strip()
         bucket = _normalize_bucket(str(item.get("bucket") or "").strip())
