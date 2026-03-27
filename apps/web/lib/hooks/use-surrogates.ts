@@ -382,6 +382,7 @@ export function useLogInterviewOutcome() {
         onSuccess: (_, { surrogateId }) => {
             queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
             queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
         },
     });
 }

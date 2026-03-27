@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
-import { surrogateKeys, useChangeSurrogateStatus } from "@/lib/hooks/use-surrogates"
+import {
+    contactAttemptKeys,
+    surrogateKeys,
+    useChangeSurrogateStatus,
+    useCreateContactAttempt,
+    useLogInterviewOutcome,
+} from "@/lib/hooks/use-surrogates"
 
 type MutationOptions = {
     onSuccess?: (response: unknown, variables: unknown) => void
@@ -54,6 +60,56 @@ describe("surrogate mutation hooks", () => {
         })
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ["tasks", "list"],
+        })
+    })
+
+    it("invalidates surrogate lists after logging an interview outcome", () => {
+        useLogInterviewOutcome()
+
+        capturedOptions?.onSuccess?.(
+            {},
+            {
+                surrogateId: "surrogate-1",
+                data: { interview_id: "interview-1", outcome: "pass" },
+            }
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.activity("surrogate-1"),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.detail("surrogate-1"),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.lists(),
+        })
+    })
+
+    it("invalidates surrogate lists after logging a contact attempt", () => {
+        useCreateContactAttempt()
+
+        capturedOptions?.onSuccess?.(
+            {},
+            {
+                surrogateId: "surrogate-1",
+                data: {
+                    contact_methods: ["phone"],
+                    outcome: "no_answer",
+                },
+            }
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: contactAttemptKeys.all("surrogate-1"),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.detail("surrogate-1"),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.activity("surrogate-1"),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.lists(),
         })
     })
 })

@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy import update as sql_update
 
 from app.db.models import EmailLog, Form, FormSubmission, MetaLead, Surrogate, SurrogateActivityLog
+from app.db.enums import SurrogateActivityType
 
 
 @pytest.mark.asyncio
@@ -164,6 +165,78 @@ async def test_surrogates_list_supports_updated_at_sorting(authed_client, db):
     assert asc_res.status_code == 200, asc_res.text
     asc_ids = [item["id"] for item in asc_res.json()["items"]]
     assert asc_ids.index(first_id) < asc_ids.index(second_id)
+
+
+@pytest.mark.asyncio
+async def test_surrogates_list_supports_last_modified_sorting(authed_client, db, test_org):
+    first_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Last Modified First",
+            "email": f"last-modified-first-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert first_res.status_code == 201, first_res.text
+    first_id = first_res.json()["id"]
+
+    second_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Last Modified Second",
+            "email": f"last-modified-second-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert second_res.status_code == 201, second_res.text
+    second_id = second_res.json()["id"]
+
+    first_updated_at = datetime(2030, 1, 2, 9, 0, tzinfo=timezone.utc)
+    second_updated_at = datetime(2030, 1, 3, 9, 0, tzinfo=timezone.utc)
+    first_activity_at = datetime(2030, 1, 4, 9, 0, tzinfo=timezone.utc)
+
+    db.execute(text("ALTER TABLE surrogates DISABLE TRIGGER ALL"))
+    try:
+        db.execute(
+            sql_update(Surrogate)
+            .where(Surrogate.id == uuid.UUID(first_id))
+            .values(updated_at=first_updated_at)
+        )
+        db.execute(
+            sql_update(Surrogate)
+            .where(Surrogate.id == uuid.UUID(second_id))
+            .values(updated_at=second_updated_at)
+        )
+        db.commit()
+    finally:
+        db.execute(text("ALTER TABLE surrogates ENABLE TRIGGER ALL"))
+        db.commit()
+
+    db.add(
+        SurrogateActivityLog(
+            organization_id=test_org.id,
+            surrogate_id=uuid.UUID(first_id),
+            activity_type=SurrogateActivityType.CONTACT_ATTEMPT.value,
+            actor_user_id=None,
+            details={"source": "test"},
+            created_at=first_activity_at,
+        )
+    )
+    db.commit()
+
+    desc_res = await authed_client.get(
+        "/surrogates",
+        params={"sort_by": "last_modified_at", "sort_order": "desc"},
+    )
+    assert desc_res.status_code == 200, desc_res.text
+    desc_ids = [item["id"] for item in desc_res.json()["items"]]
+    assert desc_ids.index(first_id) < desc_ids.index(second_id)
+
+    asc_res = await authed_client.get(
+        "/surrogates",
+        params={"sort_by": "last_modified_at", "sort_order": "asc"},
+    )
+    assert asc_res.status_code == 200, asc_res.text
+    asc_ids = [item["id"] for item in asc_res.json()["items"]]
+    assert asc_ids.index(second_id) < asc_ids.index(first_id)
 
 
 @pytest.mark.asyncio

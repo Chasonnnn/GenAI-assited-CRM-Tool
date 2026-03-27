@@ -703,7 +703,7 @@ describe('SurrogatesPage', () => {
         expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument()
     })
 
-    it('sorts by updated_at when Last Modified header is clicked', () => {
+    it('sorts by last_modified_at when Last Modified header is clicked', () => {
         mockUseSurrogates.mockReturnValue({
             data: {
                 items: [
@@ -744,12 +744,12 @@ describe('SurrogatesPage', () => {
 
         expect(mockUseSurrogates).toHaveBeenLastCalledWith(
             expect.objectContaining({
-                sort_by: 'updated_at',
+                sort_by: 'last_modified_at',
             })
         )
     })
 
-    it('renders Last Modified from updated_at instead of last_activity_at', () => {
+    it('renders Last Modified from the latest of updated_at and last_activity_at', () => {
         mockUseSurrogates.mockReturnValue({
             data: {
                 items: [
@@ -789,5 +789,47 @@ describe('SurrogatesPage', () => {
 
         expect(screen.getByText('Feb 02, 2024')).toBeInTheDocument()
         expect(screen.queryByText('Jan 01, 2024')).not.toBeInTheDocument()
+    })
+
+    it('renders Last Modified from last_activity_at when activity is newer than updated_at', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: '1',
+                        surrogate_number: 'S12345',
+                        full_name: 'John Doe',
+                        stage_id: 's1',
+                        stage_slug: 'new_unread',
+                        stage_type: 'intake',
+                        status_label: 'New Unread',
+                        source: 'manual',
+                        email: 'john@example.com',
+                        phone: null,
+                        state: null,
+                        race: null,
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Owner',
+                        created_at: '2024-03-03T12:00:00.000Z',
+                        updated_at: '2024-02-02T12:00:00.000Z',
+                        last_activity_at: '2024-04-04T12:00:00.000Z',
+                        is_priority: false,
+                        is_archived: false,
+                        age: null,
+                        bmi: null,
+                    },
+                ],
+                total: 1,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByText('Apr 04, 2024')).toBeInTheDocument()
+        expect(screen.queryByText('Feb 02, 2024')).not.toBeInTheDocument()
     })
 })

@@ -44,6 +44,18 @@ function formatDate(dateString: string | null | undefined): string {
     }).format(date)
 }
 
+function getLastModifiedAt(
+    updatedAt: string | null | undefined,
+    lastActivityAt: string | null | undefined,
+): string | null {
+    if (!updatedAt) return lastActivityAt ?? null
+    if (!lastActivityAt) return updatedAt
+
+    return parseDateInput(lastActivityAt).getTime() > parseDateInput(updatedAt).getTime()
+        ? lastActivityAt
+        : updatedAt
+}
+
 // Get initials from name
 function getInitials(name: string | null): string {
     if (!name) return "?"
@@ -312,7 +324,7 @@ export function SurrogatesPageClient() {
     const effectiveUrlOwnerId = canFilterByAssignee ? urlOwnerId : null
     const initialDynamicFilter = isDynamicSurrogateFilter(urlDynamicFilter) ? urlDynamicFilter : null
     const initialPriorityOnly = urlPriority === "only"
-    const initialSortBy = urlSortBy || null
+    const initialSortBy = urlSortBy === "updated_at" ? "last_modified_at" : urlSortBy || null
     const initialSortOrder = parseSortOrderParam(urlSortOrder)
 
     const [stageFilter, setStageFilter] = useState<string>(urlStage || "all")
@@ -1535,7 +1547,7 @@ export function SurrogatesPageClient() {
                                         <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Assigned To</TableHead>
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="updated_at" label="Last Modified" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="last_modified_at" label="Last Modified" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -1619,7 +1631,12 @@ export function SurrogatesPageClient() {
                                                     {formatDate(surrogateItem.created_at)}
                                                 </TableCell>
                                                 <TableCell className={mutedCellClass}>
-                                                    {formatDate(surrogateItem.updated_at)}
+                                                    {formatDate(
+                                                        getLastModifiedAt(
+                                                            surrogateItem.updated_at,
+                                                            surrogateItem.last_activity_at,
+                                                        )
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>

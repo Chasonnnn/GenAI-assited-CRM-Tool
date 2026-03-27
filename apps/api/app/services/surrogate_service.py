@@ -24,6 +24,7 @@ from app.db.models import (
     FormSubmission,
     MetaLead,
     Surrogate,
+    SurrogateActivityLog,
     SurrogateStatusHistory,
     User,
 )
@@ -1617,6 +1618,22 @@ def list_surrogates(
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
     )
 
+    latest_activity_subquery = None
+    if sort_by == "last_modified_at":
+        latest_activity_subquery = (
+            select(
+                SurrogateActivityLog.surrogate_id.label("surrogate_id"),
+                func.max(SurrogateActivityLog.created_at).label("last_activity_at"),
+            )
+            .where(SurrogateActivityLog.organization_id == org_id)
+            .group_by(SurrogateActivityLog.surrogate_id)
+            .subquery()
+        )
+        query = query.outerjoin(
+            latest_activity_subquery,
+            latest_activity_subquery.c.surrogate_id == Surrogate.id,
+        )
+
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
@@ -1628,9 +1645,14 @@ def list_surrogates(
         "created_at": Surrogate.created_at,
         "updated_at": Surrogate.updated_at,
     }
+    if latest_activity_subquery is not None:
+        sortable_columns["last_modified_at"] = func.greatest(
+            Surrogate.updated_at,
+            func.coalesce(latest_activity_subquery.c.last_activity_at, Surrogate.updated_at),
+        )
 
     if sort_by and sort_by in sortable_columns:
-        if sort_by in {"created_at", "updated_at"}:
+        if sort_by in {"created_at", "updated_at", "last_modified_at"}:
             query = query.order_by(order_func(sortable_columns[sort_by]), order_func(Surrogate.id))
         else:
             query = query.order_by(order_func(sortable_columns[sort_by]))

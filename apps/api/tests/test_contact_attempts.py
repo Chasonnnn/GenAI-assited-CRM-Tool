@@ -79,6 +79,38 @@ async def test_contact_attempt_reached_updates_stage_and_status(authed_client, d
 
 
 @pytest.mark.asyncio
+async def test_contact_attempt_updates_surrogate_last_modified(authed_client, db):
+    case_res = await authed_client.post(
+        "/surrogates",
+        json={"full_name": "Contact Modified", "email": "contact-modified@example.com"},
+    )
+    assert case_res.status_code == 201, case_res.text
+    surrogate_id = case_res.json()["id"]
+
+    case = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate_id)).first()
+    assert case is not None
+    before_modified_at = datetime.now(timezone.utc) - timedelta(days=30)
+    case.updated_at = before_modified_at
+    db.commit()
+
+    attempt_res = await authed_client.post(
+        f"/surrogates/{surrogate_id}/contact-attempts",
+        json={"contact_methods": ["phone"], "outcome": "no_answer"},
+    )
+    assert attempt_res.status_code == 201, attempt_res.text
+
+    db.refresh(case)
+    assert case.updated_at is not None
+    assert case.updated_at > before_modified_at
+
+    list_res = await authed_client.get("/surrogates")
+    assert list_res.status_code == 200, list_res.text
+    match = next((item for item in list_res.json()["items"] if item["id"] == surrogate_id), None)
+    assert match is not None
+    assert datetime.fromisoformat(match["updated_at"].replace("Z", "+00:00")) > before_modified_at
+
+
+@pytest.mark.asyncio
 async def test_manual_stage_change_sets_contact_status(authed_client, db):
     case_res = await authed_client.post(
         "/surrogates",
@@ -111,6 +143,45 @@ async def test_manual_stage_change_sets_contact_status(authed_client, db):
     db.refresh(case)
     assert case.contact_status == ContactStatus.REACHED.value
     assert case.contacted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_manual_stage_change_updates_surrogate_last_modified(authed_client, db):
+    case_res = await authed_client.post(
+        "/surrogates",
+        json={"full_name": "Stage Modified", "email": "stage-modified@example.com"},
+    )
+    assert case_res.status_code == 201, case_res.text
+    surrogate_id = case_res.json()["id"]
+
+    case = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate_id)).first()
+    assert case is not None
+    current_stage = db.query(PipelineStage).filter(PipelineStage.id == case.stage_id).first()
+    assert current_stage is not None
+
+    contacted_stage = (
+        db.query(PipelineStage)
+        .filter(
+            PipelineStage.pipeline_id == current_stage.pipeline_id,
+            PipelineStage.slug == "contacted",
+        )
+        .first()
+    )
+    assert contacted_stage is not None
+
+    before_modified_at = datetime.now(timezone.utc) - timedelta(days=30)
+    case.updated_at = before_modified_at
+    db.commit()
+
+    change_res = await authed_client.patch(
+        f"/surrogates/{surrogate_id}/status",
+        json={"stage_id": str(contacted_stage.id)},
+    )
+    assert change_res.status_code == 200, change_res.text
+
+    db.refresh(case)
+    assert case.updated_at is not None
+    assert case.updated_at > before_modified_at
 
 
 @pytest.mark.asyncio
