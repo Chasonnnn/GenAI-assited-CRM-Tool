@@ -84,6 +84,10 @@ export interface PipelineStage {
     stage_type: StageType;
     is_active: boolean;
     semantics?: StageSemantics;
+    is_locked?: boolean;
+    system_role?: string | null;
+    lock_reason?: string | null;
+    locked_fields?: string[];
 }
 
 export interface StageCreate {

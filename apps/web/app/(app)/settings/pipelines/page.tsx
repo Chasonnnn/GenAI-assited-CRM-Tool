@@ -47,6 +47,7 @@ import type {
     PipelineEntityType,
     PipelineFeatureConfig,
     PipelineRequiredRemap,
+    PipelineStageDependency,
     PipelineStage,
     PipelineStageRemap,
     StageCapabilityKey,
@@ -123,6 +124,14 @@ const STAGE_CATEGORIES: StageType[] = [
     "paused",
     "terminal",
 ]
+
+const CUSTOM_STAGE_CATEGORIES: StageType[] = ["intake", "post_approval"]
+const RESERVED_CAPABILITY_KEYS = new Set<StageCapabilityKey>([
+    "eligible_for_matching",
+    "locks_match_state",
+    "shows_pregnancy_tracking",
+    "requires_delivery_details",
+])
 
 const CAPABILITY_LABELS: Array<{
     key: StageCapabilityKey
@@ -351,6 +360,10 @@ function normalizeEditableStage(
         ...stage,
         category,
         stage_type: category,
+        is_locked: stage.is_locked ?? false,
+        system_role: stage.system_role ?? null,
+        lock_reason: stage.lock_reason ?? null,
+        locked_fields: stage.locked_fields ?? [],
         semantics: deepClone(getStageSemanticsForEntity(entityType, stage)),
     }
 }
@@ -577,6 +590,22 @@ function getPresetOptions(
     stage: EditableStage,
     entityType: PipelineEntityType,
 ): Array<{ value: BehaviorPreset; label: string }> {
+    if (!stage.is_locked) {
+        if (stage.category === "intake") {
+            if (entityType === "intended_parent") {
+                return [
+                    { value: "intake", label: "Intake" },
+                    { value: "custom", label: "Custom" },
+                ]
+            }
+            return [
+                { value: "intake", label: "Intake" },
+                { value: "contacted", label: "Contacted" },
+                { value: "custom", label: "Custom" },
+            ]
+        }
+        return [{ value: "custom", label: "Custom" }]
+    }
     if (stage.category === "paused") {
         return [
             { value: "pause", label: "Pause" },
@@ -669,11 +698,18 @@ function applyLocalFeatureConfigRemap(
 function buildNewStage(
     draft: PipelineDraftState,
     entityType: PipelineEntityType,
+    insertIndex: number,
 ): EditableStage {
     const existingKeys = new Set(draft.stages.map((stage) => stage.stage_key))
     const existingSlugs = new Set(draft.stages.map((stage) => stage.slug))
     const stageKey = ensureUniqueIdentifier("custom_stage", existingKeys)
     const slug = ensureUniqueIdentifier(stageKey, existingSlugs)
+    const previousStage = draft.stages[insertIndex - 1]
+    const nextStage = draft.stages[insertIndex]
+    const category: StageType =
+        previousStage?.stage_type === "post_approval" || nextStage?.stage_type === "post_approval"
+            ? "post_approval"
+            : "intake"
     const base: EditableStage = {
         id: createLocalId(),
         stage_key: stageKey,
@@ -681,13 +717,17 @@ function buildNewStage(
         label: "New Stage",
         color: "#6B7280",
         order: draft.stages.length + 1,
-        category: "intake",
-        stage_type: "intake",
+        category,
+        stage_type: category,
         is_active: true,
+        is_locked: false,
+        system_role: null,
+        lock_reason: null,
+        locked_fields: [],
         semantics: getStageSemanticsForEntity(entityType, {
             stage_key: stageKey,
             slug,
-            stage_type: "intake",
+            stage_type: category,
         }),
     }
     return base
@@ -705,7 +745,20 @@ function buildDuplicateStage(source: EditableStage, draft: PipelineDraftState): 
         slug,
         label: `${source.label} Copy`,
         order: draft.stages.length + 1,
+        is_locked: false,
+        system_role: null,
+        lock_reason: null,
+        locked_fields: [],
     }
+}
+
+function getDefaultStageInsertIndex(stages: EditableStage[]): number {
+    for (let index = stages.length - 1; index >= 0; index -= 1) {
+        if (!stages[index]?.is_locked) {
+            return index + 1
+        }
+    }
+    return Math.max(stages.length - 1, 0)
 }
 
 function getDependencyByStageKey(
@@ -815,12 +868,588 @@ function VersionHistory({
     )
 }
 
+type StageChangeHandler = (updater: (stage: EditableStage) => EditableStage) => void
+type PipelineSelectOption = {
+    value: string
+    label: string
+}
+
+const EMPTY_SELECT_SENTINEL = "__empty_select_value__"
+
+function normalizeSelectValue(value: string | null | undefined): string {
+    return value && value.length > 0 ? value : EMPTY_SELECT_SENTINEL
+}
+
+function denormalizeSelectValue(value: string | null | undefined): string {
+    return !value || value === EMPTY_SELECT_SENTINEL ? "" : value
+}
+
+function getSelectOptionLabel(options: PipelineSelectOption[], value: string | null): string {
+    const normalizedValue = normalizeSelectValue(value)
+    return (
+        options.find((option) => normalizeSelectValue(option.value) === normalizedValue)?.label
+        ?? ""
+    )
+}
+
+function PipelineSelectField({
+    id,
+    label,
+    ariaLabel,
+    value,
+    options,
+    onValueChange,
+    disabled = false,
+    srOnlyLabel = false,
+}: {
+    id: string
+    label: string
+    ariaLabel?: string
+    value: string | null | undefined
+    options: PipelineSelectOption[]
+    onValueChange: (value: string) => void
+    disabled?: boolean
+    srOnlyLabel?: boolean
+}) {
+    return (
+        <div className="space-y-2 text-sm">
+            <Label htmlFor={id} className={srOnlyLabel ? "sr-only" : "font-medium"}>
+                {label}
+            </Label>
+            <Select
+                value={normalizeSelectValue(value)}
+                onValueChange={(nextValue) => onValueChange(denormalizeSelectValue(nextValue))}
+                disabled={disabled}
+            >
+                <SelectTrigger id={id} aria-label={ariaLabel ?? label} className="h-9 w-full">
+                    <SelectValue placeholder={label}>
+                        {(nextValue: string | null) => getSelectOptionLabel(options, nextValue)}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {options.map((option) => (
+                        <SelectItem
+                            key={normalizeSelectValue(option.value)}
+                            value={normalizeSelectValue(option.value)}
+                        >
+                            {option.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+}
+
+function StageDependencyBadges({
+    dependency,
+    entityType,
+}: {
+    dependency: PipelineStageDependency
+    entityType: PipelineEntityType
+}) {
+    return (
+        <div className="mt-3 flex flex-wrap gap-2">
+            {dependency.surrogate_count > 0 ? (
+                <Badge variant="outline">
+                    {getEntityRecordLabel(entityType, dependency.surrogate_count)}
+                </Badge>
+            ) : null}
+            {entityType === "surrogate" && dependency.journey_milestone_slugs.length > 0 ? (
+                <Badge variant="outline">
+                    Journey: {dependency.journey_milestone_slugs.join(", ")}
+                </Badge>
+            ) : null}
+            {entityType === "surrogate" && dependency.analytics_funnel ? (
+                <Badge variant="outline">Analytics funnel</Badge>
+            ) : null}
+            {entityType === "surrogate" && dependency.integration_refs.length > 0 ? (
+                <Badge variant="outline">
+                    Integrations: {dependency.integration_refs.join(", ")}
+                </Badge>
+            ) : null}
+            {dependency.campaign_refs.length > 0 ? (
+                <Badge variant="outline">Campaigns: {dependency.campaign_refs.length}</Badge>
+            ) : null}
+            {dependency.workflow_refs.length > 0 ? (
+                <Badge variant="outline">Workflows: {dependency.workflow_refs.length}</Badge>
+            ) : null}
+        </div>
+    )
+}
+
+function StageSummaryFields({
+    stage,
+    index,
+    isExpanded,
+    onStageChange,
+    onToggleDetails,
+    onDuplicateStage,
+    onRequestDeleteStage,
+}: {
+    stage: EditableStage
+    index: number
+    isExpanded: boolean
+    onStageChange: StageChangeHandler
+    onToggleDetails: () => void
+    onDuplicateStage: () => void
+    onRequestDeleteStage: () => void
+}) {
+    const stageCategoryOptions = (stage.is_locked ? STAGE_CATEGORIES : CUSTOM_STAGE_CATEGORIES).map(
+        (category) => ({
+            value: category,
+            label: category.replaceAll("_", " "),
+        }),
+    )
+
+    return (
+        <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.1fr)_152px_168px]">
+            <Input
+                value={stage.label}
+                disabled={stage.is_locked}
+                onChange={(event) =>
+                    onStageChange((current) => ({
+                        ...current,
+                        label: event.target.value,
+                    }))
+                }
+                placeholder="Label"
+                className="h-9 truncate"
+            />
+            <Input
+                value={stage.slug}
+                disabled={stage.is_locked}
+                onChange={(event) =>
+                    onStageChange((current) => {
+                        const slug = normalizeIdentifier(event.target.value)
+                        return {
+                            ...current,
+                            slug,
+                            stage_key: isUuidLike(current.id) ? current.stage_key : slug || current.stage_key,
+                        }
+                    })
+                }
+                className="h-9 truncate font-mono text-sm"
+                aria-label="Stage slug"
+            />
+            <PipelineSelectField
+                id={`stage-category-${stage.id}`}
+                label="Stage category"
+                ariaLabel="Stage category"
+                value={stage.category}
+                options={stageCategoryOptions}
+                disabled={Boolean(stage.is_locked)}
+                srOnlyLabel
+                onValueChange={(value) =>
+                    onStageChange((current) => ({
+                        ...current,
+                        category: value as StageType,
+                        stage_type: value as StageType,
+                    }))
+                }
+            />
+            <div className="flex min-h-9 w-full items-center justify-center overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs">
+                <div className="flex min-w-0 items-center justify-center gap-1">
+                    <Badge variant="outline" className="shrink-0 tabular-nums">
+                        #{index + 1}
+                    </Badge>
+                    {stage.is_locked ? (
+                        <Badge variant="secondary" className="shrink-0" aria-label="System stage">
+                            Locked
+                        </Badge>
+                    ) : null}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="size-7 shrink-0 sm:size-8"
+                        onClick={onToggleDetails}
+                        aria-expanded={isExpanded}
+                        aria-controls={`stage-details-${stage.id}`}
+                        aria-label={`${isExpanded ? "Hide" : "Edit"} details for ${stage.label}`}
+                        title={isExpanded ? "Hide details" : "Edit details"}
+                    >
+                        {isExpanded ? (
+                            <ChevronUpIcon className="size-4" aria-hidden="true" />
+                        ) : (
+                            <ChevronDownIcon className="size-4" aria-hidden="true" />
+                        )}
+                    </Button>
+                    {!stage.is_locked ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="size-7 shrink-0 sm:size-8"
+                            onClick={onDuplicateStage}
+                            aria-label={`Duplicate ${stage.label}`}
+                        >
+                            <CopyIcon className="size-4" aria-hidden="true" />
+                        </Button>
+                    ) : null}
+                    {!stage.is_locked ? (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="size-7 shrink-0 sm:size-8"
+                            onClick={onRequestDeleteStage}
+                            aria-label={`Remove ${stage.label}`}
+                        >
+                            <Trash2Icon className="size-4" aria-hidden="true" />
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function StageSemanticsFields({
+    entityType,
+    stage,
+    onStageChange,
+}: {
+    entityType: PipelineEntityType
+    stage: EditableStage
+    onStageChange: StageChangeHandler
+}) {
+    const updateSemantics = (updater: (semantics: StageSemantics) => StageSemantics) => {
+        onStageChange((current) => ({
+            ...current,
+            semantics: updater(current.semantics),
+        }))
+    }
+    const behaviorPresetOptions = getPresetOptions(stage, entityType)
+    const integrationBucketOptions: PipelineSelectOption[] = [
+        { value: "none", label: "Not tracked" },
+        { value: "intake", label: "Intake" },
+        { value: "qualified", label: "Qualified" },
+        { value: "converted", label: "Converted" },
+        { value: "lost", label: "Lost" },
+        { value: "not_qualified", label: "Not qualified" },
+    ]
+    const pauseBehaviorOptions: PipelineSelectOption[] = [
+        { value: "none", label: "None" },
+        { value: "resume_previous_stage", label: "Resume previous stage" },
+    ]
+    const terminalOutcomeOptions: PipelineSelectOption[] = [
+        { value: "none", label: "None" },
+        { value: "lost", label: "Lost" },
+        { value: "disqualified", label: "Disqualified" },
+    ]
+    const suggestionProfileOptions: PipelineSelectOption[] = SUGGESTION_PROFILE_OPTIONS.map((option) => ({
+        value: option,
+        label: option || "None",
+    }))
+
+    return (
+        <div className="grid gap-4 lg:grid-cols-2">
+            <PipelineSelectField
+                id={`behavior-preset-${stage.id}`}
+                label="Behavior preset"
+                ariaLabel={`Behavior preset for ${stage.label}`}
+                value={getBehaviorPreset(stage, entityType)}
+                options={behaviorPresetOptions}
+                disabled={Boolean(stage.is_locked)}
+                onValueChange={(value) => {
+                    const preset = value as BehaviorPreset
+                    onStageChange((current) => ({
+                        ...current,
+                        semantics: buildPresetSemantics(current, preset, entityType),
+                    }))
+                }}
+            />
+            {entityType === "surrogate" ? (
+                <PipelineSelectField
+                    id={`integration-bucket-${stage.id}`}
+                    label="Integration bucket"
+                    ariaLabel={`Integration bucket for ${stage.label}`}
+                    value={stage.semantics.integration_bucket}
+                    options={integrationBucketOptions}
+                    disabled={Boolean(stage.is_locked)}
+                    onValueChange={(value) =>
+                        updateSemantics((semantics) => ({
+                            ...semantics,
+                            integration_bucket: value as StageSemantics["integration_bucket"],
+                        }))
+                    }
+                />
+            ) : null}
+            <PipelineSelectField
+                id={`pause-behavior-${stage.id}`}
+                label="Pause behavior"
+                ariaLabel={`Pause behavior for ${stage.label}`}
+                value={stage.semantics.pause_behavior}
+                options={pauseBehaviorOptions}
+                disabled
+                onValueChange={(value) =>
+                    updateSemantics((semantics) => ({
+                        ...semantics,
+                        pause_behavior: value as StageSemantics["pause_behavior"],
+                    }))
+                }
+            />
+            <PipelineSelectField
+                id={`terminal-outcome-${stage.id}`}
+                label="Terminal outcome"
+                ariaLabel={`Terminal outcome for ${stage.label}`}
+                value={stage.semantics.terminal_outcome}
+                options={terminalOutcomeOptions}
+                disabled
+                onValueChange={(value) =>
+                    updateSemantics((semantics) => ({
+                        ...semantics,
+                        terminal_outcome: value as StageSemantics["terminal_outcome"],
+                    }))
+                }
+            />
+            {entityType === "surrogate" ? (
+                <>
+                    <PipelineSelectField
+                        id={`suggestion-profile-${stage.id}`}
+                        label="Suggestion profile"
+                        ariaLabel={`Suggestion profile for ${stage.label}`}
+                        value={stage.semantics.suggestion_profile_key}
+                        options={suggestionProfileOptions}
+                        disabled={Boolean(stage.is_locked)}
+                        onValueChange={(value) =>
+                            updateSemantics((semantics) => ({
+                                ...semantics,
+                                suggestion_profile_key: value || null,
+                            }))
+                        }
+                    />
+                    <label className="space-y-2 text-sm" htmlFor={`analytics-bucket-${stage.id}`}>
+                        <span className="font-medium">Analytics bucket</span>
+                        <Input
+                            id={`analytics-bucket-${stage.id}`}
+                            value={stage.semantics.analytics_bucket ?? ""}
+                            disabled={stage.is_locked}
+                            onChange={(event) =>
+                                updateSemantics((semantics) => ({
+                                    ...semantics,
+                                    analytics_bucket: event.target.value.trim() || null,
+                                }))
+                            }
+                            placeholder="analytics bucket"
+                            className="h-9"
+                            aria-label={`Analytics bucket for ${stage.label}`}
+                        />
+                    </label>
+                </>
+            ) : null}
+        </div>
+    )
+}
+
+function StageCapabilitiesEditor({
+    entityType,
+    stage,
+    onStageChange,
+}: {
+    entityType: PipelineEntityType
+    stage: EditableStage
+    onStageChange: StageChangeHandler
+}) {
+    const updateSemantics = (updater: (semantics: StageSemantics) => StageSemantics) => {
+        onStageChange((current) => ({
+            ...current,
+            semantics: updater(current.semantics),
+        }))
+    }
+
+    return (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {getVisibleCapabilityLabels(entityType).map((capability) => (
+                <label
+                    key={capability.key}
+                    className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm"
+                >
+                    <input
+                        type="checkbox"
+                        checked={stage.semantics.capabilities[capability.key]}
+                        disabled={stage.is_locked || RESERVED_CAPABILITY_KEYS.has(capability.key)}
+                        onChange={(event) =>
+                            updateSemantics((semantics) => ({
+                                ...semantics,
+                                capabilities: {
+                                    ...semantics.capabilities,
+                                    [capability.key]: event.target.checked,
+                                },
+                            }))
+                        }
+                        aria-label={capability.label}
+                        className="mt-1"
+                    />
+                    <span className="space-y-1">
+                        <span className="block font-medium">{capability.label}</span>
+                        <span className="block text-xs text-muted-foreground">
+                            {capability.description}
+                        </span>
+                    </span>
+                </label>
+            ))}
+            <label className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
+                <input
+                    type="checkbox"
+                    checked={stage.semantics.requires_reason_on_enter}
+                    disabled={stage.is_locked}
+                    onChange={(event) =>
+                        updateSemantics((semantics) => ({
+                            ...semantics,
+                            requires_reason_on_enter: event.target.checked,
+                        }))
+                    }
+                    aria-label="Require reason on enter"
+                    className="mt-1"
+                />
+                <span className="space-y-1">
+                    <span className="block font-medium">Require reason on enter</span>
+                    <span className="block text-xs text-muted-foreground">
+                        Prompts users for a reason when moving into this stage.
+                    </span>
+                </span>
+            </label>
+        </div>
+    )
+}
+
+function StageDetailsPanel({
+    entityType,
+    stage,
+    onStageChange,
+}: {
+    entityType: PipelineEntityType
+    stage: EditableStage
+    onStageChange: StageChangeHandler
+}) {
+    return (
+        <div id={`stage-details-${stage.id}`} className="mt-4 space-y-4">
+            {stage.is_locked ? (
+                <p className="text-sm text-muted-foreground">
+                    Locked because platform workflows depend on it. Existing org-specific label,
+                    color, and ordering are frozen as-is.
+                </p>
+            ) : null}
+            <label htmlFor={`stage-key-${stage.id}`} className="space-y-2 text-sm">
+                <span className="font-medium">Stage key</span>
+                <Input
+                    id={`stage-key-${stage.id}`}
+                    value={stage.stage_key}
+                    readOnly
+                    disabled
+                    className="h-9 bg-muted font-mono text-xs"
+                    title="Stage key is immutable after creation"
+                    aria-label="Stage key"
+                />
+            </label>
+            <StageSemanticsFields
+                entityType={entityType}
+                stage={stage}
+                onStageChange={onStageChange}
+            />
+            <StageCapabilitiesEditor
+                entityType={entityType}
+                stage={stage}
+                onStageChange={onStageChange}
+            />
+        </div>
+    )
+}
+
+function StageCard({
+    entityType,
+    stage,
+    index,
+    dependency,
+    isExpanded,
+    isDragging,
+    onStageChange,
+    onToggleDetails,
+    onDuplicateStage,
+    onRequestDeleteStage,
+    onDragStart,
+    onDragOver,
+    onDragEnd,
+}: {
+    entityType: PipelineEntityType
+    stage: EditableStage
+    index: number
+    dependency: PipelineStageDependency | undefined
+    isExpanded: boolean
+    isDragging: boolean
+    onStageChange: StageChangeHandler
+    onToggleDetails: () => void
+    onDuplicateStage: () => void
+    onRequestDeleteStage: () => void
+    onDragStart: () => void
+    onDragOver: (event: React.DragEvent) => void
+    onDragEnd: () => void
+}) {
+    return (
+        <div
+            draggable={!stage.is_locked}
+            onDragStart={() => !stage.is_locked && onDragStart()}
+            onDragOver={onDragOver}
+            onDragEnd={onDragEnd}
+            className={`rounded-xl border bg-card p-4 ${isDragging ? "opacity-60" : ""}`}
+        >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                <div className="flex items-center gap-3">
+                    {stage.is_locked ? (
+                        <div className="size-4" aria-hidden="true" />
+                    ) : (
+                        <GripVerticalIcon
+                            className="size-4 cursor-grab text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                    )}
+                    <input
+                        id={`stage-color-${stage.id}`}
+                        name={`stage-color-${stage.id}`}
+                        type="color"
+                        value={stage.color}
+                        disabled={stage.is_locked}
+                        onChange={(event) =>
+                            onStageChange((current) => ({
+                                ...current,
+                                color: event.target.value,
+                            }))
+                        }
+                        className="h-9 w-9 cursor-pointer rounded border disabled:cursor-not-allowed"
+                        aria-label={`Stage ${index + 1} color`}
+                    />
+                </div>
+                <StageSummaryFields
+                    stage={stage}
+                    index={index}
+                    isExpanded={isExpanded}
+                    onStageChange={onStageChange}
+                    onToggleDetails={onToggleDetails}
+                    onDuplicateStage={onDuplicateStage}
+                    onRequestDeleteStage={onRequestDeleteStage}
+                />
+            </div>
+            {dependency && isExpanded ? (
+                <StageDependencyBadges dependency={dependency} entityType={entityType} />
+            ) : null}
+            {isExpanded ? (
+                <StageDetailsPanel
+                    entityType={entityType}
+                    stage={stage}
+                    onStageChange={onStageChange}
+                />
+            ) : null}
+        </div>
+    )
+}
+
 function StageEditor({
     entityType,
     stages,
     dependencyGraph,
     onChange,
-    onAddStage,
     onDuplicateStage,
     onRequestDeleteStage,
 }: {
@@ -828,7 +1457,6 @@ function StageEditor({
     stages: EditableStage[]
     dependencyGraph: PipelineDependencyGraph | null | undefined
     onChange: (stages: EditableStage[]) => void
-    onAddStage: () => void
     onDuplicateStage: (stageKey: string) => void
     onRequestDeleteStage: (stageKey: string) => void
 }) {
@@ -882,408 +1510,35 @@ function StageEditor({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-                <Button type="button" variant="outline" onClick={onAddStage}>
-                    <PlusIcon className="mr-2 size-4" aria-hidden="true" />
-                    Add Stage
-                </Button>
-            </div>
-
             {stages.map((stage, index) => {
                 const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
                 const isExpanded = expandedStageIds[stage.id] ?? false
                 return (
-                    <div
+                    <StageCard
                         key={stage.id}
-                        draggable
+                        entityType={entityType}
+                        stage={stage}
+                        index={index}
+                        dependency={dependency}
+                        isExpanded={isExpanded}
+                        isDragging={dragIndex === index}
+                        onStageChange={(updater) => updateStage(index, updater)}
+                        onToggleDetails={() => toggleStageDetails(stage.id)}
+                        onDuplicateStage={() => onDuplicateStage(stage.stage_key)}
+                        onRequestDeleteStage={() => onRequestDeleteStage(stage.stage_key)}
                         onDragStart={() => handleDragStart(index)}
                         onDragOver={(event) => handleDragOver(event, index)}
                         onDragEnd={handleDragEnd}
-                        className={`rounded-xl border bg-card p-4 ${dragIndex === index ? "opacity-60" : ""}`}
-                    >
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                            <div className="flex items-center gap-3">
-                                <GripVerticalIcon
-                                    className="size-4 cursor-grab text-muted-foreground"
-                                    aria-hidden="true"
-                                />
-                                <input
-                                    id={`stage-color-${stage.id}`}
-                                    name={`stage-color-${stage.id}`}
-                                    type="color"
-                                    value={stage.color}
-                                    onChange={(event) =>
-                                        updateStage(index, (current) => ({
-                                            ...current,
-                                            color: event.target.value,
-                                        }))
-                                    }
-                                    className="h-9 w-9 cursor-pointer rounded border"
-                                    aria-label={`Stage ${index + 1} color`}
-                                />
-                            </div>
-
-                            <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
-                                <Input
-                                    value={stage.label}
-                                    onChange={(event) =>
-                                        updateStage(index, (current) => ({
-                                            ...current,
-                                            label: event.target.value,
-                                        }))
-                                    }
-                                    placeholder="Label"
-                                    className="h-9"
-                                />
-                                <Input
-                                    value={stage.slug}
-                                    onChange={(event) =>
-                                        updateStage(index, (current) => {
-                                            const slug = normalizeIdentifier(event.target.value)
-                                            return {
-                                                ...current,
-                                                slug,
-                                                stage_key: isUuidLike(current.id)
-                                                    ? current.stage_key
-                                                    : slug || current.stage_key,
-                                            }
-                                        })
-                                    }
-                                    className="h-9 font-mono text-sm"
-                                    aria-label="Stage slug"
-                                />
-                                <label className="space-y-2 text-sm">
-                                    <span className="sr-only">Stage category</span>
-                                    <select
-                                        value={stage.category}
-                                        onChange={(event) =>
-                                            updateStage(index, (current) => ({
-                                                ...current,
-                                                category: event.target.value as StageType,
-                                                stage_type: event.target.value as StageType,
-                                            }))
-                                        }
-                                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                        aria-label="Stage category"
-                                    >
-                                        {STAGE_CATEGORIES.map((category) => (
-                                            <option key={category} value={category}>
-                                                {category.replaceAll("_", " ")}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <div className="flex min-h-9 items-center justify-center overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs">
-                                    <div className="flex min-w-0 items-center justify-center gap-0.5 sm:gap-1">
-                                        <Badge variant="outline" className="shrink-0 tabular-nums">
-                                            #{index + 1}
-                                        </Badge>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            className="size-7 shrink-0 sm:size-8"
-                                            onClick={() => toggleStageDetails(stage.id)}
-                                            aria-expanded={isExpanded}
-                                            aria-controls={`stage-details-${stage.id}`}
-                                            aria-label={`${isExpanded ? "Hide" : "Edit"} details for ${stage.label}`}
-                                            title={isExpanded ? "Hide details" : "Edit details"}
-                                        >
-                                            {isExpanded ? (
-                                                <ChevronUpIcon className="size-4" aria-hidden="true" />
-                                            ) : (
-                                                <ChevronDownIcon className="size-4" aria-hidden="true" />
-                                            )}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            className="size-7 shrink-0 sm:size-8"
-                                            onClick={() => onDuplicateStage(stage.stage_key)}
-                                            aria-label={`Duplicate ${stage.label}`}
-                                        >
-                                            <CopyIcon className="size-4" aria-hidden="true" />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            className="size-7 shrink-0 sm:size-8"
-                                            onClick={() => onRequestDeleteStage(stage.stage_key)}
-                                            aria-label={`Remove ${stage.label}`}
-                                        >
-                                            <Trash2Icon className="size-4" aria-hidden="true" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {dependency && isExpanded ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {dependency.surrogate_count > 0 ? (
-                                    <Badge variant="outline">
-                                        {getEntityRecordLabel(entityType, dependency.surrogate_count)}
-                                    </Badge>
-                                ) : null}
-                                {entityType === "surrogate" && dependency.journey_milestone_slugs.length > 0 ? (
-                                    <Badge variant="outline">
-                                        Journey: {dependency.journey_milestone_slugs.join(", ")}
-                                    </Badge>
-                                ) : null}
-                                {entityType === "surrogate" && dependency.analytics_funnel ? (
-                                    <Badge variant="outline">Analytics funnel</Badge>
-                                ) : null}
-                                {entityType === "surrogate" && dependency.integration_refs.length > 0 ? (
-                                    <Badge variant="outline">
-                                        Integrations: {dependency.integration_refs.join(", ")}
-                                    </Badge>
-                                ) : null}
-                                {dependency.campaign_refs.length > 0 ? (
-                                    <Badge variant="outline">
-                                        Campaigns: {dependency.campaign_refs.length}
-                                    </Badge>
-                                ) : null}
-                                {dependency.workflow_refs.length > 0 ? (
-                                    <Badge variant="outline">
-                                        Workflows: {dependency.workflow_refs.length}
-                                    </Badge>
-                                ) : null}
-                            </div>
-                        ) : null}
-
-                        {isExpanded ? (
-                            <div id={`stage-details-${stage.id}`} className="mt-4 space-y-4">
-                                <label className="space-y-2 text-sm">
-                                    <span className="font-medium">Stage key</span>
-                                    <Input
-                                        value={stage.stage_key}
-                                        readOnly
-                                        disabled
-                                        className="h-9 bg-muted font-mono text-xs"
-                                        title="Stage key is immutable after creation"
-                                        aria-label="Stage key"
-                                    />
-                                </label>
-                                <div className="grid gap-4 lg:grid-cols-2">
-                                    <label className="space-y-2 text-sm">
-                                        <span className="font-medium">Behavior preset</span>
-                                        <select
-                                            value={getBehaviorPreset(stage, entityType)}
-                                            onChange={(event) => {
-                                                const preset = event.target.value as BehaviorPreset
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: buildPresetSemantics(
-                                                        current,
-                                                        preset,
-                                                        entityType,
-                                                    ),
-                                                }))
-                                            }}
-                                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                            aria-label={`Behavior preset for ${stage.label}`}
-                                        >
-                                            {getPresetOptions(stage, entityType).map((option) => (
-                                                <option key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    {entityType === "surrogate" ? (
-                                        <label className="space-y-2 text-sm">
-                                            <span className="font-medium">Integration bucket</span>
-                                            <select
-                                                value={stage.semantics.integration_bucket}
-                                                onChange={(event) =>
-                                                    updateStage(index, (current) => ({
-                                                        ...current,
-                                                        semantics: {
-                                                            ...current.semantics,
-                                                            integration_bucket:
-                                                                event.target.value as StageSemantics["integration_bucket"],
-                                                        },
-                                                    }))
-                                                }
-                                                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                                aria-label={`Integration bucket for ${stage.label}`}
-                                            >
-                                                <option value="none">Not tracked</option>
-                                                <option value="intake">Intake</option>
-                                                <option value="qualified">Qualified</option>
-                                                <option value="converted">Converted</option>
-                                                <option value="lost">Lost</option>
-                                                <option value="not_qualified">Not qualified</option>
-                                            </select>
-                                        </label>
-                                    ) : null}
-                                    <label className="space-y-2 text-sm">
-                                        <span className="font-medium">Pause behavior</span>
-                                        <select
-                                            value={stage.semantics.pause_behavior}
-                                            onChange={(event) =>
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: {
-                                                        ...current.semantics,
-                                                        pause_behavior:
-                                                            event.target.value as StageSemantics["pause_behavior"],
-                                                    },
-                                                }))
-                                            }
-                                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                            aria-label={`Pause behavior for ${stage.label}`}
-                                        >
-                                            <option value="none">None</option>
-                                            <option value="resume_previous_stage">
-                                                Resume previous stage
-                                            </option>
-                                        </select>
-                                    </label>
-                                    <label className="space-y-2 text-sm">
-                                        <span className="font-medium">Terminal outcome</span>
-                                        <select
-                                            value={stage.semantics.terminal_outcome}
-                                            onChange={(event) =>
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: {
-                                                        ...current.semantics,
-                                                        terminal_outcome:
-                                                            event.target.value as StageSemantics["terminal_outcome"],
-                                                    },
-                                                }))
-                                            }
-                                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                            aria-label={`Terminal outcome for ${stage.label}`}
-                                        >
-                                            <option value="none">None</option>
-                                            <option value="lost">Lost</option>
-                                            <option value="disqualified">Disqualified</option>
-                                        </select>
-                                    </label>
-                                    {entityType === "surrogate" ? (
-                                        <>
-                                            <label className="space-y-2 text-sm">
-                                                <span className="font-medium">Suggestion profile</span>
-                                                <select
-                                                    value={stage.semantics.suggestion_profile_key ?? ""}
-                                                    onChange={(event) =>
-                                                        updateStage(index, (current) => ({
-                                                            ...current,
-                                                            semantics: {
-                                                                ...current.semantics,
-                                                                suggestion_profile_key: event.target.value || null,
-                                                            },
-                                                        }))
-                                                    }
-                                                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                                    aria-label={`Suggestion profile for ${stage.label}`}
-                                                >
-                                                    {SUGGESTION_PROFILE_OPTIONS.map((option) => (
-                                                        <option key={option || "none"} value={option}>
-                                                            {option || "None"}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </label>
-                                            <label
-                                                className="space-y-2 text-sm"
-                                                htmlFor={`analytics-bucket-${stage.id}`}
-                                            >
-                                                <span className="font-medium">Analytics bucket</span>
-                                                <Input
-                                                    id={`analytics-bucket-${stage.id}`}
-                                                    value={stage.semantics.analytics_bucket ?? ""}
-                                                    onChange={(event) =>
-                                                        updateStage(index, (current) => ({
-                                                            ...current,
-                                                            semantics: {
-                                                                ...current.semantics,
-                                                                analytics_bucket:
-                                                                    event.target.value.trim() || null,
-                                                            },
-                                                        }))
-                                                    }
-                                                    placeholder="analytics bucket"
-                                                    className="h-9"
-                                                    aria-label={`Analytics bucket for ${stage.label}`}
-                                                />
-                                            </label>
-                                        </>
-                                    ) : null}
-                                </div>
-
-                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                    {getVisibleCapabilityLabels(entityType).map((capability) => (
-                                        <label
-                                            key={capability.key}
-                                            className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={stage.semantics.capabilities[capability.key]}
-                                                onChange={(event) =>
-                                                    updateStage(index, (current) => ({
-                                                        ...current,
-                                                        semantics: {
-                                                            ...current.semantics,
-                                                            capabilities: {
-                                                                ...current.semantics.capabilities,
-                                                                [capability.key]: event.target.checked,
-                                                            },
-                                                        },
-                                                    }))
-                                                }
-                                                aria-label={capability.label}
-                                                className="mt-1"
-                                            />
-                                            <span className="space-y-1">
-                                                <span className="block font-medium">{capability.label}</span>
-                                                <span className="block text-xs text-muted-foreground">
-                                                    {capability.description}
-                                                </span>
-                                            </span>
-                                        </label>
-                                    ))}
-                                    <label className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
-                                        <input
-                                            type="checkbox"
-                                            checked={stage.semantics.requires_reason_on_enter}
-                                            onChange={(event) =>
-                                                updateStage(index, (current) => ({
-                                                    ...current,
-                                                    semantics: {
-                                                        ...current.semantics,
-                                                        requires_reason_on_enter: event.target.checked,
-                                                    },
-                                                }))
-                                            }
-                                            aria-label="Require reason on enter"
-                                            className="mt-1"
-                                        />
-                                        <span className="space-y-1">
-                                            <span className="block font-medium">Require reason on enter</span>
-                                            <span className="block text-xs text-muted-foreground">
-                                                Prompts users for a reason when moving into this stage.
-                                            </span>
-                                        </span>
-                                    </label>
-                                </div>
-                            </div>
-                        ) : null}
-                    </div>
+                    />
                 )
             })}
 
             <Alert>
                 <InfoIcon className="size-4" aria-hidden="true" />
                 <AlertDescription>
-                    Drag stages to reorder. Slugs remain editable, stage keys stay immutable, and
-                    downstream behaviors resolve from stage semantics and stage key instead of the
-                    slug.
+                    System stages are locked. Custom stages can be inserted between existing stages,
+                    stage keys stay immutable, and downstream behaviors resolve from stage
+                    semantics and stage key instead of the slug.
                 </AlertDescription>
             </Alert>
         </div>
@@ -1523,6 +1778,13 @@ function DeleteStageDialog({
     const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
     const requirements = getDeleteRequirements(dependencyGraph, stage.stage_key, entityType)
     const targetOptions = stages.filter((candidate) => candidate.stage_key !== stage.stage_key)
+    const remapTargetOptions: PipelineSelectOption[] = [
+        { value: "", label: "No remap" },
+        ...targetOptions.map((targetStage) => ({
+            value: targetStage.stage_key,
+            label: targetStage.label,
+        })),
+    ]
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1555,27 +1817,19 @@ function DeleteStageDialog({
                         </Alert>
                     ) : null}
 
-                    <label className="space-y-2 text-sm">
-                        <span className="font-medium">Remap target stage</span>
-                        <select
-                            value={state.targetStageKey}
-                            onChange={(event) =>
-                                onStateChange({
-                                    ...state,
-                                    targetStageKey: event.target.value,
-                                })
-                            }
-                            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                            aria-label="Remap target stage"
-                        >
-                            <option value="">No remap</option>
-                            {targetOptions.map((targetStage) => (
-                                <option key={targetStage.stage_key} value={targetStage.stage_key}>
-                                    {targetStage.label}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                    <PipelineSelectField
+                        id={`remap-target-${stage.id}`}
+                        label="Remap target stage"
+                        ariaLabel="Remap target stage"
+                        value={state.targetStageKey}
+                        options={remapTargetOptions}
+                        onValueChange={(value) =>
+                            onStateChange({
+                                ...state,
+                                targetStageKey: value,
+                            })
+                        }
+                    />
                 </div>
 
                 <DialogFooter>
@@ -1591,7 +1845,345 @@ function DeleteStageDialog({
     )
 }
 
-export default function PipelinesSettingsPage() {
+function PipelinePageIntro({ showSurrogateEditors }: { showSurrogateEditors: boolean }) {
+    return (
+        <div className="max-w-3xl">
+            <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
+            <p className="text-sm text-muted-foreground">
+                {showSurrogateEditors
+                    ? "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
+                    : "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."}
+            </p>
+        </div>
+    )
+}
+
+function PipelineEditorCard({
+    entityType,
+    pipelineName,
+    pipelineVersion,
+    entityLabel,
+    showSurrogateEditors,
+    hasChanges,
+    isResetPending,
+    stages,
+    dependencyGraph,
+    onResetToRecommended,
+    onStagesChange,
+    onAddStage,
+    onDuplicateStage,
+    onRequestDeleteStage,
+}: {
+    entityType: PipelineEntityType
+    pipelineName: string
+    pipelineVersion: number
+    entityLabel: string
+    showSurrogateEditors: boolean
+    hasChanges: boolean
+    isResetPending: boolean
+    stages: EditableStage[]
+    dependencyGraph: PipelineDependencyGraph | null
+    onResetToRecommended: () => void
+    onStagesChange: (stages: EditableStage[]) => void
+    onAddStage: () => void
+    onDuplicateStage: (stageKey: string) => void
+    onRequestDeleteStage: (stageKey: string) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-2">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            {pipelineName}
+                            <Badge variant="outline">v{pipelineVersion}</Badge>
+                            {entityLabel ? <Badge variant="secondary">{entityLabel}</Badge> : null}
+                        </CardTitle>
+                        <CardDescription>
+                            {showSurrogateEditors
+                                ? "Stage keys are immutable. Slugs, category, order, and semantics stay org-configurable, and downstream features refresh from the pipeline snapshot."
+                                : "Stage keys are immutable. Slugs, category, order, and stage semantics stay org-configurable, and downstream match and campaign behavior refresh from the pipeline snapshot."}
+                        </CardDescription>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" onClick={onAddStage}>
+                            <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                            Add Custom Stage
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onResetToRecommended}
+                            disabled={isResetPending}
+                        >
+                            {isResetPending ? (
+                                <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                            ) : (
+                                <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
+                            )}
+                            Reset to Default
+                        </Button>
+                        {hasChanges ? (
+                            <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                                Unsaved changes
+                            </Badge>
+                        ) : null}
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <StageEditor
+                    entityType={entityType}
+                    stages={stages}
+                    dependencyGraph={dependencyGraph}
+                    onChange={onStagesChange}
+                    onDuplicateStage={onDuplicateStage}
+                    onRequestDeleteStage={onRequestDeleteStage}
+                />
+            </CardContent>
+        </Card>
+    )
+}
+
+function SurrogatePipelineSections({
+    stages,
+    featureConfig,
+    onFeatureConfigChange,
+}: {
+    stages: EditableStage[]
+    featureConfig: PipelineFeatureConfig
+    onFeatureConfigChange: (featureConfig: PipelineFeatureConfig) => void
+}) {
+    return (
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Journey Mapping</CardTitle>
+                    <CardDescription>
+                        Milestone membership drives the journey timeline, exports, and
+                        completion state from live pipeline config.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <JourneyMilestonesEditor
+                        stages={stages}
+                        featureConfig={featureConfig}
+                        onChange={onFeatureConfigChange}
+                    />
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Analytics Funnel</CardTitle>
+                    <CardDescription>
+                        Choose which live stages participate in analytics funnel reporting and
+                        preserve the pipeline order in the response.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <AnalyticsFunnelEditor
+                        stages={stages}
+                        featureConfig={featureConfig}
+                        onChange={onFeatureConfigChange}
+                    />
+                </CardContent>
+            </Card>
+        </>
+    )
+}
+
+function ImpactPreviewCard({
+    isLoading,
+    impactAreas,
+    safeAutoFixes,
+    requiredRemaps,
+    validationErrors,
+    blockingIssues,
+}: {
+    isLoading: boolean
+    impactAreas: ImpactArea[]
+    safeAutoFixes: string[]
+    requiredRemaps: PipelineRequiredRemap[]
+    validationErrors: string[]
+    blockingIssues: string[]
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-base">Impact Preview</CardTitle>
+                <CardDescription>
+                    Server-validated preview of the pipeline-connected areas that will refresh or
+                    change when this draft is saved.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {isLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                        Refreshing preview...
+                    </div>
+                ) : impactAreas.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                        {impactAreas.map((area) => (
+                            <Badge key={area} variant="outline">
+                                {IMPACT_LABELS[area]}
+                            </Badge>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No downstream impact detected yet.</p>
+                )}
+
+                {safeAutoFixes.length > 0 ? (
+                    <Alert>
+                        <InfoIcon className="size-4" aria-hidden="true" />
+                        <AlertDescription>{safeAutoFixes.join(" ")}</AlertDescription>
+                    </Alert>
+                ) : null}
+
+                {requiredRemaps.length > 0 ? (
+                    <Alert variant="destructive">
+                        <TriangleAlertIcon className="size-4" aria-hidden="true" />
+                        <AlertDescription>
+                            <div className="space-y-2">
+                                <p className="font-medium">These removals still need a remap target:</p>
+                                <ul className="list-disc space-y-1 pl-5">
+                                    {requiredRemaps.map((item) => (
+                                        <li key={item.stage_key}>
+                                            {item.label}:{" "}
+                                            {item.reasons
+                                                .map((reason) => REMAP_REASON_LABELS[reason] ?? reason)
+                                                .join(", ")}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+
+                {validationErrors.length > 0 || blockingIssues.length > 0 ? (
+                    <Alert variant="destructive">
+                        <TriangleAlertIcon className="size-4" aria-hidden="true" />
+                        <AlertDescription>
+                            <div className="space-y-2">
+                                <p className="font-medium">Fix these guarded invariants before saving:</p>
+                                <ul className="list-disc space-y-1 pl-5">
+                                    {[...validationErrors, ...blockingIssues].map((error) => (
+                                        <li key={error}>{error}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+            </CardContent>
+        </Card>
+    )
+}
+
+function DraftActionsCard({
+    isSaving,
+    isPreviewLoading,
+    hasValidationErrors,
+    hasBlockingIssues,
+    onSave,
+    onDiscard,
+}: {
+    isSaving: boolean
+    isPreviewLoading: boolean
+    hasValidationErrors: boolean
+    hasBlockingIssues: boolean
+    onSave: () => void
+    onDiscard: () => void
+}) {
+    return (
+        <Card>
+            <CardContent className="pt-6">
+                <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button
+                        onClick={onSave}
+                        disabled={isPreviewLoading || hasValidationErrors || hasBlockingIssues || isSaving}
+                        className="flex-1"
+                    >
+                        {isSaving ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                            <SaveIcon className="mr-2 size-4" aria-hidden="true" />
+                        )}
+                        Save Changes
+                    </Button>
+                    <Button variant="outline" onClick={onDiscard}>
+                        Discard
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function PipelineSidebar({
+    entityType,
+    onEntityTypeChange,
+    pipelineId,
+    onRollback,
+    canRollback,
+}: {
+    entityType: PipelineEntityType
+    onEntityTypeChange: (entityType: PipelineEntityType) => void
+    pipelineId: string | null
+    onRollback: (version: number) => void
+    canRollback: boolean
+}) {
+    const entityDescription = getEntityDescription(entityType)
+
+    return (
+        <div className="space-y-6" data-testid="pipelines-sidebar">
+            <div className="space-y-2">
+                <Label htmlFor="pipeline-entity">Entity</Label>
+                <Select value={entityType} onValueChange={(value) => value && onEntityTypeChange(value as PipelineEntityType)}>
+                    <SelectTrigger id="pipeline-entity" className="w-full">
+                        <SelectValue placeholder="Select entity">
+                            {(value: string | null) => getEntityLabel(value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {PIPELINE_ENTITY_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {entityDescription ? (
+                    <p className="text-xs text-muted-foreground">{entityDescription}</p>
+                ) : null}
+            </div>
+
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <HistoryIcon className="size-4" aria-hidden="true" />
+                        Version History
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {pipelineId ? (
+                        <VersionHistory
+                            pipelineId={pipelineId}
+                            entityType={entityType}
+                            onRollback={onRollback}
+                            canRollback={canRollback}
+                        />
+                    ) : null}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+function usePipelineSettingsEditor() {
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
     const [entityType, setEntityType] = useState<PipelineEntityType>("surrogate")
@@ -1678,25 +2270,35 @@ export default function PipelinesSettingsPage() {
 
     const handleAddStage = () => {
         if (!currentDraft) return
-        updateDraft((current) => ({
-            ...current,
-            stages: [...current.stages, buildNewStage(current, entityType)],
-        }))
+        updateDraft((current) => {
+            const insertIndex = getDefaultStageInsertIndex(current.stages)
+            const nextStages = [...current.stages]
+            nextStages.splice(insertIndex, 0, buildNewStage(current, entityType, insertIndex))
+            return {
+                ...current,
+                stages: nextStages.map((stage, index) => ({ ...stage, order: index + 1 })),
+            }
+        })
     }
 
     const handleDuplicateStage = (stageKey: string) => {
         if (!currentDraft) return
-        const source = currentDraft.stages.find((stage) => stage.stage_key === stageKey)
-        if (!source) return
-        updateDraft((current) => ({
-            ...current,
-            stages: [...current.stages, buildDuplicateStage(source, current)],
-        }))
+        const sourceIndex = currentDraft.stages.findIndex((stage) => stage.stage_key === stageKey)
+        const source = currentDraft.stages[sourceIndex]
+        if (!source || source.is_locked) return
+        updateDraft((current) => {
+            const nextStages = [...current.stages]
+            nextStages.splice(sourceIndex + 1, 0, buildDuplicateStage(source, current))
+            return {
+                ...current,
+                stages: nextStages.map((stage, index) => ({ ...stage, order: index + 1 })),
+            }
+        })
     }
 
     const handleRequestDeleteStage = (stageKey: string) => {
         const stage = currentStages.find((item) => item.stage_key === stageKey)
-        if (!stage) return
+        if (!stage || stage.is_locked) return
         setScopedDeleteStageState({ stageKey, targetStageKey: "" })
     }
 
@@ -1788,14 +2390,6 @@ export default function PipelinesSettingsPage() {
         }
     }
 
-    if (isLoading) {
-        return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
-            </div>
-        )
-    }
-
     const selectedDeleteStage = deleteStageState
         ? currentStages.find((stage) => stage.stage_key === deleteStageState.stageKey)
         : undefined
@@ -1804,19 +2398,95 @@ export default function PipelinesSettingsPage() {
     const blockingIssues = preview?.blocking_issues ?? []
     const requiredRemaps = preview?.required_remaps ?? []
     const entityLabel = getEntityLabel(entityType)
-    const entityDescription = getEntityDescription(entityType)
     const showSurrogateEditors = entityType === "surrogate"
+
+    return {
+        entityType,
+        setEntityType,
+        isDeveloper,
+        isLoading,
+        pipeline,
+        currentStages,
+        currentFeatureConfig,
+        dependencyGraph,
+        deleteStageState,
+        selectedDeleteStage,
+        impactAreas,
+        validationErrors,
+        blockingIssues,
+        requiredRemaps,
+        safeAutoFixes: preview?.safe_auto_fixes ?? [],
+        entityLabel,
+        showSurrogateEditors,
+        hasChanges,
+        isResetPending: recommendedDraft.isPending,
+        isSaving: applyDraft.isPending,
+        isPreviewLoading: previewQuery.isLoading,
+        setDeleteStageState: setScopedDeleteStageState,
+        handleAddStage,
+        handleDuplicateStage,
+        handleRequestDeleteStage,
+        handleConfirmDeleteStage,
+        handleDeleteStageDialogOpenChange: (open: boolean) => {
+            if (!open) setScopedDeleteStageState(null)
+        },
+        handleReset,
+        handleResetToRecommended,
+        handleRollback,
+        handleSave,
+        updateDraftFeatureConfig,
+        updateDraftStages,
+    }
+}
+
+export default function PipelinesSettingsPage() {
+    const {
+        entityType,
+        setEntityType,
+        isDeveloper,
+        isLoading,
+        pipeline,
+        currentStages,
+        currentFeatureConfig,
+        dependencyGraph,
+        deleteStageState,
+        selectedDeleteStage,
+        impactAreas,
+        validationErrors,
+        blockingIssues,
+        requiredRemaps,
+        safeAutoFixes,
+        entityLabel,
+        showSurrogateEditors,
+        hasChanges,
+        isResetPending,
+        isSaving,
+        isPreviewLoading,
+        setDeleteStageState,
+        handleAddStage,
+        handleDuplicateStage,
+        handleRequestDeleteStage,
+        handleConfirmDeleteStage,
+        handleDeleteStageDialogOpenChange,
+        handleReset,
+        handleResetToRecommended,
+        handleRollback,
+        handleSave,
+        updateDraftFeatureConfig,
+        updateDraftStages,
+    } = usePipelineSettingsEditor()
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-1 items-center justify-center p-6">
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+        )
+    }
 
     return (
         <div className="mx-auto flex max-w-6xl flex-1 flex-col gap-6 p-6">
-            <div className="max-w-3xl">
-                <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
-                <p className="text-sm text-muted-foreground">
-                    {showSurrogateEditors
-                        ? "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
-                        : "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."}
-                </p>
-            </div>
+            <PipelinePageIntro showSurrogateEditors={showSurrogateEditors} />
 
             <DeleteStageDialog
                 entityType={entityType}
@@ -1825,257 +2495,68 @@ export default function PipelinesSettingsPage() {
                 dependencyGraph={dependencyGraph}
                 open={Boolean(deleteStageState)}
                 state={deleteStageState}
-                onOpenChange={(open) => {
-                    if (!open) setScopedDeleteStageState(null)
-                }}
-                onStateChange={setScopedDeleteStageState}
+                onOpenChange={handleDeleteStageDialogOpenChange}
+                onStateChange={setDeleteStageState}
                 onConfirm={handleConfirmDeleteStage}
             />
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                                <div className="space-y-2">
-                                    <CardTitle className="flex items-center gap-2 text-lg">
-                                        {pipeline?.name || "Default Pipeline"}
-                                        <Badge variant="outline">v{pipeline?.current_version || 1}</Badge>
-                                        {entityLabel ? <Badge variant="secondary">{entityLabel}</Badge> : null}
-                                    </CardTitle>
-                                    <CardDescription>
-                                        {showSurrogateEditors
-                                            ? "Stage keys are immutable. Slugs, category, order, and semantics stay org-configurable, and downstream features refresh from the pipeline snapshot."
-                                            : "Stage keys are immutable. Slugs, category, order, and stage semantics stay org-configurable, and downstream match and campaign behavior refresh from the pipeline snapshot."}
-                                    </CardDescription>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={handleResetToRecommended}
-                                        disabled={recommendedDraft.isPending}
-                                    >
-                                        {recommendedDraft.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />
-                                        ) : (
-                                            <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
-                                        )}
-                                        Reset to Default
-                                    </Button>
-                                    {hasChanges ? (
-                                        <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                                            Unsaved changes
-                                        </Badge>
-                                    ) : null}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <StageEditor
-                                entityType={entityType}
-                                stages={currentStages}
-                                dependencyGraph={dependencyGraph}
-                                onChange={updateDraftStages}
-                                onAddStage={handleAddStage}
-                                onDuplicateStage={handleDuplicateStage}
-                                onRequestDeleteStage={handleRequestDeleteStage}
-                            />
-                        </CardContent>
-                    </Card>
+                    <PipelineEditorCard
+                        entityType={entityType}
+                        pipelineName={pipeline?.name || "Default Pipeline"}
+                        pipelineVersion={pipeline?.current_version || 1}
+                        entityLabel={entityLabel}
+                        showSurrogateEditors={showSurrogateEditors}
+                        hasChanges={hasChanges}
+                        isResetPending={isResetPending}
+                        stages={currentStages}
+                        dependencyGraph={dependencyGraph}
+                        onResetToRecommended={handleResetToRecommended}
+                        onStagesChange={updateDraftStages}
+                        onAddStage={handleAddStage}
+                        onDuplicateStage={handleDuplicateStage}
+                        onRequestDeleteStage={handleRequestDeleteStage}
+                    />
 
                     {showSurrogateEditors && currentFeatureConfig ? (
-                        <>
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Journey Mapping</CardTitle>
-                                    <CardDescription>
-                                        Milestone membership drives the journey timeline, exports, and
-                                        completion state from live pipeline config.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <JourneyMilestonesEditor
-                                        stages={currentStages}
-                                        featureConfig={currentFeatureConfig}
-                                        onChange={updateDraftFeatureConfig}
-                                    />
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Analytics Funnel</CardTitle>
-                                    <CardDescription>
-                                        Choose which live stages participate in analytics funnel
-                                        reporting and preserve the pipeline order in the response.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <AnalyticsFunnelEditor
-                                        stages={currentStages}
-                                        featureConfig={currentFeatureConfig}
-                                        onChange={updateDraftFeatureConfig}
-                                    />
-                                </CardContent>
-                            </Card>
-                        </>
+                        <SurrogatePipelineSections
+                            stages={currentStages}
+                            featureConfig={currentFeatureConfig}
+                            onFeatureConfigChange={updateDraftFeatureConfig}
+                        />
                     ) : null}
 
                     {hasChanges ? (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Impact Preview</CardTitle>
-                                <CardDescription>
-                                    Server-validated preview of the pipeline-connected areas that will
-                                    refresh or change when this draft is saved.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {previewQuery.isLoading ? (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
-                                        Refreshing preview...
-                                    </div>
-                                ) : impactAreas.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                        {impactAreas.map((area) => (
-                                            <Badge key={area} variant="outline">
-                                                {IMPACT_LABELS[area]}
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                        No downstream impact detected yet.
-                                    </p>
-                                )}
-
-                                {preview?.safe_auto_fixes.length ? (
-                                    <Alert>
-                                        <InfoIcon className="size-4" aria-hidden="true" />
-                                        <AlertDescription>
-                                            {preview.safe_auto_fixes.join(" ")}
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
-
-                                {requiredRemaps.length > 0 ? (
-                                    <Alert variant="destructive">
-                                        <TriangleAlertIcon className="size-4" aria-hidden="true" />
-                                        <AlertDescription>
-                                            <div className="space-y-2">
-                                                <p className="font-medium">These removals still need a remap target:</p>
-                                                <ul className="list-disc space-y-1 pl-5">
-                                                    {requiredRemaps.map((item: PipelineRequiredRemap) => (
-                                                        <li key={item.stage_key}>
-                                                            {item.label}: {item.reasons.map((reason) => REMAP_REASON_LABELS[reason] ?? reason).join(", ")}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
-
-                                {validationErrors.length > 0 || blockingIssues.length > 0 ? (
-                                    <Alert variant="destructive">
-                                        <TriangleAlertIcon className="size-4" aria-hidden="true" />
-                                        <AlertDescription>
-                                            <div className="space-y-2">
-                                                <p className="font-medium">
-                                                    Fix these guarded invariants before saving:
-                                                </p>
-                                                <ul className="list-disc space-y-1 pl-5">
-                                                    {[...validationErrors, ...blockingIssues].map((error) => (
-                                                        <li key={error}>{error}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        </AlertDescription>
-                                    </Alert>
-                                ) : null}
-                            </CardContent>
-                        </Card>
+                        <ImpactPreviewCard
+                            isLoading={isPreviewLoading}
+                            impactAreas={impactAreas}
+                            safeAutoFixes={safeAutoFixes}
+                            requiredRemaps={requiredRemaps}
+                            validationErrors={validationErrors}
+                            blockingIssues={blockingIssues}
+                        />
                     ) : null}
 
                     {hasChanges ? (
-                        <Card>
-                            <CardContent className="pt-6">
-                                <div className="flex flex-col gap-3 sm:flex-row">
-                                    <Button
-                                        onClick={handleSave}
-                                        disabled={
-                                            previewQuery.isLoading
-                                            || validationErrors.length > 0
-                                            || blockingIssues.length > 0
-                                            || applyDraft.isPending
-                                        }
-                                        className="flex-1"
-                                    >
-                                        {applyDraft.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />
-                                        ) : (
-                                            <SaveIcon className="mr-2 size-4" aria-hidden="true" />
-                                        )}
-                                        Save Changes
-                                    </Button>
-                                    <Button variant="outline" onClick={handleReset}>
-                                        Discard
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <DraftActionsCard
+                            isSaving={isSaving}
+                            isPreviewLoading={isPreviewLoading}
+                            hasValidationErrors={validationErrors.length > 0}
+                            hasBlockingIssues={blockingIssues.length > 0}
+                            onSave={handleSave}
+                            onDiscard={handleReset}
+                        />
                     ) : null}
                 </div>
 
-                <div className="space-y-6" data-testid="pipelines-sidebar">
-                    <div className="space-y-2">
-                        <Label htmlFor="pipeline-entity">Entity</Label>
-                        <Select
-                            value={entityType}
-                            onValueChange={(value) => {
-                                if (!value) return
-                                setEntityType(value as PipelineEntityType)
-                            }}
-                        >
-                            <SelectTrigger id="pipeline-entity" className="w-full">
-                                <SelectValue placeholder="Select entity">
-                                    {(value: string | null) => getEntityLabel(value)}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {PIPELINE_ENTITY_OPTIONS.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {entityDescription ? (
-                            <p className="text-xs text-muted-foreground">{entityDescription}</p>
-                        ) : null}
-                    </div>
-
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <HistoryIcon className="size-4" aria-hidden="true" />
-                                Version History
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {pipeline ? (
-                                <VersionHistory
-                                    pipelineId={pipeline.id}
-                                    entityType={entityType}
-                                    onRollback={handleRollback}
-                                    canRollback={isDeveloper}
-                                />
-                            ) : null}
-                        </CardContent>
-                    </Card>
-                </div>
+                <PipelineSidebar
+                    entityType={entityType}
+                    onEntityTypeChange={setEntityType}
+                    pipelineId={pipeline?.id ?? null}
+                    onRollback={handleRollback}
+                    canRollback={isDeveloper}
+                />
             </div>
         </div>
     )

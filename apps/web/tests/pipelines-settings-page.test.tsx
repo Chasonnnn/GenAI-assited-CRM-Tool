@@ -12,6 +12,19 @@ const mockRollbackPipeline = vi.fn()
 const mockApplyPipelineDraft = vi.fn()
 const mockUseRecommendedPipelineDraft = vi.fn()
 
+const LOCKED_STAGE_FIELDS = [
+    "slug",
+    "label",
+    "color",
+    "order",
+    "category",
+    "stage_type",
+    "semantics",
+    "is_active",
+    "delete",
+    "duplicate",
+]
+
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
@@ -48,6 +61,10 @@ const pipelineFixture = {
             order: 1,
             stage_type: "intake" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "intake_entry",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -74,6 +91,10 @@ const pipelineFixture = {
             order: 2,
             stage_type: "intake" as const,
             is_active: true,
+            is_locked: false,
+            system_role: null,
+            lock_reason: null,
+            locked_fields: [],
             semantics: {
                 capabilities: {
                     counts_as_contacted: true,
@@ -100,6 +121,10 @@ const pipelineFixture = {
             order: 3,
             stage_type: "paused" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "pause",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -126,6 +151,10 @@ const pipelineFixture = {
             order: 4,
             stage_type: "terminal" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "lost",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -187,6 +216,10 @@ const intendedParentPipelineFixture = {
             order: 1,
             stage_type: "intake" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "intake_entry",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -213,6 +246,10 @@ const intendedParentPipelineFixture = {
             order: 2,
             stage_type: "post_approval" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "handoff",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -239,6 +276,10 @@ const intendedParentPipelineFixture = {
             order: 3,
             stage_type: "post_approval" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "matched",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -265,6 +306,10 @@ const intendedParentPipelineFixture = {
             order: 4,
             stage_type: "post_approval" as const,
             is_active: true,
+            is_locked: true,
+            system_role: "delivered",
+            lock_reason: "This is a protected system stage used by platform workflows.",
+            locked_fields: LOCKED_STAGE_FIELDS,
             semantics: {
                 capabilities: {
                     counts_as_contacted: false,
@@ -430,9 +475,9 @@ describe("PipelinesSettingsPage", () => {
         render(<PipelinesSettingsPage />)
 
         expect(screen.getByText("Pipeline Settings")).toBeInTheDocument()
-        expect(screen.getAllByLabelText("Stage slug")[0]).toBeEnabled()
+        expect(screen.getAllByLabelText("Stage slug")[1]).toBeEnabled()
         expect(screen.queryByLabelText("Stage key")).not.toBeInTheDocument()
-        expect(screen.getAllByLabelText("Stage category")[0]).toBeEnabled()
+        expect(screen.getAllByLabelText("Stage category")[1]).toBeEnabled()
         expect(
             screen.getByText(/downstream behaviors resolve from stage semantics and stage key instead of the slug/i),
         ).toBeInTheDocument()
@@ -440,6 +485,24 @@ describe("PipelinesSettingsPage", () => {
         fireEvent.click(screen.getByRole("button", { name: /edit details for new unread/i }))
 
         expect(screen.getByLabelText("Stage key")).toBeDisabled()
+    })
+
+    it("renders protected stages as locked system stages and disables their controls", () => {
+        render(<PipelinesSettingsPage />)
+
+        expect(screen.getByDisplayValue("New Unread")).toBeDisabled()
+        expect(screen.getAllByLabelText("Stage slug")[0]).toBeDisabled()
+        expect(screen.getAllByLabelText("Stage category")[0]).toBeDisabled()
+        expect(screen.queryByRole("button", { name: /duplicate new unread/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /remove new unread/i })).not.toBeInTheDocument()
+        expect(screen.getAllByLabelText("System stage").length).toBeGreaterThan(0)
+
+        fireEvent.click(screen.getByRole("button", { name: /edit details for new unread/i }))
+
+        expect(screen.getByLabelText(/behavior preset for new unread/i)).toBeDisabled()
+        expect(
+            screen.getByText(/locked because platform workflows depend on it/i),
+        ).toBeInTheDocument()
     })
 
     it("keeps the stage action buttons centered inside their action box", () => {
@@ -452,7 +515,7 @@ describe("PipelinesSettingsPage", () => {
 
         expect(actionGroup).toHaveClass("items-center", "justify-center")
         expect(actionBox).toHaveClass("justify-center", "overflow-hidden")
-        expect(editorGrid?.className).toContain("lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_auto]")
+        expect(editorGrid?.className).toContain("lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.1fr)_152px_168px]")
     })
 
     it("stacks the entity selector with version history in the sidebar column", () => {
@@ -526,7 +589,9 @@ describe("PipelinesSettingsPage", () => {
     it("adds a stage and saves through applyPipelineDraft", async () => {
         render(<PipelinesSettingsPage />)
 
-        fireEvent.click(screen.getByRole("button", { name: /add stage/i }))
+        expect(screen.getAllByRole("button", { name: "Add Custom Stage" })).toHaveLength(1)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
         const labelInputs = screen.getAllByPlaceholderText("Label")
         const slugInputs = screen.getAllByLabelText("Stage slug")
         fireEvent.change(labelInputs[labelInputs.length - 1] as HTMLInputElement, {
@@ -559,9 +624,10 @@ describe("PipelinesSettingsPage", () => {
         render(<PipelinesSettingsPage />)
 
         fireEvent.click(screen.getByRole("button", { name: /remove contacted/i }))
-        fireEvent.change(screen.getByLabelText("Remap target stage"), {
-            target: { value: "new_unread" },
-        })
+        fireEvent.mouseDown(screen.getByRole("combobox", { name: "Remap target stage" }))
+        const remapOption = await screen.findByRole("option", { name: "New Unread" })
+        fireEvent.mouseMove(remapOption)
+        fireEvent.click(remapOption)
         fireEvent.click(screen.getByRole("button", { name: /confirm removal/i }))
 
         fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
