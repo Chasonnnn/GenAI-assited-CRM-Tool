@@ -13,7 +13,8 @@ def test_dependency_pins_meet_security_fix_floors():
 
     expected_minimums = {
         "pyjwt": "2.12.0",
-        "pypdf": "6.9.1",
+        "pypdf": "6.9.2",
+        "requests": "2.33.0",
     }
 
     for dependency_name, minimum_version in expected_minimums.items():
