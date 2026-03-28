@@ -3083,22 +3083,23 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <Input
-                                    value={item.event_name}
-                                    onChange={(event) => {
-                                        updateEventMapping((current) => {
-                                            const next = [...current]
-                                            const existing = next[index]
-                                            if (!existing) return current
-                                            next[index] = { ...existing, event_name: event.target.value }
-                                            return next
-                                        })
-                                    }}
-                                    placeholder="Event name"
-                                    name={`meta-crm-dataset-event-${item.stage_key}`}
-                                    autoComplete="off"
-                                    disabled={isZapierStageBucket(item.bucket)}
-                                />
+                                {!isZapierStageBucket(item.bucket) ? (
+                                    <Input
+                                        value={item.event_name}
+                                        onChange={(event) => {
+                                            updateEventMapping((current) => {
+                                                const next = [...current]
+                                                const existing = next[index]
+                                                if (!existing) return current
+                                                next[index] = { ...existing, event_name: event.target.value }
+                                                return next
+                                            })
+                                        }}
+                                        placeholder="Event name"
+                                        name={`meta-crm-dataset-event-${item.stage_key}`}
+                                        autoComplete="off"
+                                    />
+                                ) : null}
                                 <div className="flex items-center gap-2">
                                     <Switch
                                         checked={item.enabled}
