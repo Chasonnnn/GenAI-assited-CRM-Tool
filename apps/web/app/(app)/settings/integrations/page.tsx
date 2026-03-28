@@ -166,6 +166,8 @@ const ZAPIER_BUCKET_OPTIONS: Array<{ value: ZapierStageBucket; label: string }> 
     { value: "not_qualified", label: "Not Qualified" },
 ]
 
+const UNTRACKED_BUCKET_VALUE = "__none__"
+
 const isZapierStageBucket = (value: unknown): value is ZapierStageBucket =>
     value === "qualified" ||
     value === "converted" ||
@@ -283,6 +285,52 @@ function buildStageLabelByKey(pipelines: Pipeline[] | null | undefined): Record<
     }
 
     return labels
+}
+
+function getSelectOptionLabel(
+    options: ReadonlyArray<{ value: string; label: string }>,
+    value: string | null | undefined,
+): string {
+    if (!value) return ""
+    return options.find((option) => option.value === value)?.label ?? ""
+}
+
+function getBucketSelectLabel(value: string | null | undefined): string {
+    if (value === UNTRACKED_BUCKET_VALUE) return "Not Tracked"
+    return getSelectOptionLabel(ZAPIER_BUCKET_OPTIONS, value)
+}
+
+function getWebhookSelectLabel(
+    webhooks:
+        | Array<{
+            webhook_id: string
+            label?: string | null
+        }>
+        | null
+        | undefined,
+    value: string | null | undefined,
+): string {
+    if (!value) return ""
+    const webhook = webhooks?.find((item) => item.webhook_id === value)
+    if (!webhook) return ""
+    return webhook.label || `Webhook ${webhook.webhook_id.slice(0, 8)}`
+}
+
+function getEligibleSenderLabel(
+    senders:
+        | Array<{
+            user_id: string
+            display_name: string
+            gmail_email: string
+        }>
+        | null
+        | undefined,
+    value: string | null | undefined,
+): string {
+    if (!value) return ""
+    const sender = senders?.find((item) => item.user_id === value)
+    if (!sender) return ""
+    return `${sender.display_name} (${sender.gmail_email})`
 }
 
 function inferZapierBucket(item: ZapierEventMappingItem): ZapierStageBucket | null {
@@ -689,7 +737,9 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                             }}
                         >
                             <SelectTrigger id="ai-provider">
-                                <SelectValue placeholder="Select provider" />
+                                <SelectValue placeholder="Select provider">
+                                    {(value: string | null) => getSelectOptionLabel(AI_PROVIDERS, value)}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 {AI_PROVIDERS.map((providerOption) => (
@@ -918,7 +968,19 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                         <Label htmlFor="ai-model">Model</Label>
                         <Select value={aiForm.model} onValueChange={(value) => updateAiForm("model", value || "")}>
                             <SelectTrigger id="ai-model">
-                                <SelectValue placeholder="Select model (optional)" />
+                                <SelectValue placeholder="Select model (optional)">
+                                    {(value: string | null) =>
+                                        value
+                                            ? getSelectOptionLabel(
+                                                selectedProviderModels.map((model) => ({
+                                                    value: model,
+                                                    label: model,
+                                                })),
+                                                value,
+                                            )
+                                            : ""
+                                    }
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 {selectedProviderModels.map((selectedModel) => (
@@ -1417,7 +1479,9 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                                     onValueChange={(v) => updateEmailForm("defaultSender", v ?? "", true)}
                                 >
                                     <SelectTrigger id="gmail-sender">
-                                        <SelectValue placeholder={eligibleSendersLoading ? "Loading senders…" : "Select admin with Gmail connected"} />
+                                        <SelectValue placeholder={eligibleSendersLoading ? "Loading senders…" : "Select admin with Gmail connected"}>
+                                            {(value: string | null) => getEligibleSenderLabel(eligibleSenders, value)}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         {eligibleSenders?.map((sender) => (
@@ -2212,7 +2276,9 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 <Label>Webhook</Label>
                                 <Select value={fieldPasteWebhookId} onValueChange={(value) => setFieldPasteWebhookId(value ?? "")}>
                                     <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-72"} aria-label="Select webhook">
-                                        <SelectValue placeholder="Select webhook" />
+                                        <SelectValue placeholder="Select webhook">
+                                            {(value: string | null) => getWebhookSelectLabel(settings?.inbound_webhooks, value)}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         {settings.inbound_webhooks.map((webhook) => (
@@ -2395,13 +2461,13 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                         <div className="w-32 text-sm font-medium">
                                             {getStageKeyLabel(item.stage_key)}
                                         </div>
-                                        <Select
-                                            value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
+                                <Select
+                                            value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
                                             onValueChange={(value) => {
                                                 const next = [...eventMapping]
                                                 const existing = next[index]
                                                 if (!existing) return
-                                                if (value === "__none__") {
+                                                if (value === UNTRACKED_BUCKET_VALUE) {
                                                     next[index] = {
                                                         ...existing,
                                                         bucket: null,
@@ -2421,10 +2487,12 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                             }}
                                         >
                                             <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
-                                                <SelectValue placeholder="Bucket" />
+                                                <SelectValue placeholder="Bucket">
+                                                    {(value: string | null) => getBucketSelectLabel(value)}
+                                                </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="__none__">Not Tracked</SelectItem>
+                                                <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
                                                 {ZAPIER_BUCKET_OPTIONS.map((option) => (
                                                     <SelectItem key={option.value} value={option.value}>
                                                         {option.label}
@@ -2432,20 +2500,21 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        <Input
-                                            value={item.event_name}
-                                            onChange={(event) => {
-                                                const next = [...eventMapping]
-                                                const existing = next[index]
-                                                if (!existing) return
-                                                next[index] = { ...existing, event_name: event.target.value }
-                                                setEventMapping(next)
-                                            }}
-                                            placeholder="Event name"
-                                            name={`zapier-event-${item.stage_key}`}
-                                            autoComplete="off"
-                                            disabled={isZapierStageBucket(item.bucket)}
-                                        />
+                                        {!isZapierStageBucket(item.bucket) ? (
+                                            <Input
+                                                value={item.event_name}
+                                                onChange={(event) => {
+                                                    const next = [...eventMapping]
+                                                    const existing = next[index]
+                                                    if (!existing) return
+                                                    next[index] = { ...existing, event_name: event.target.value }
+                                                    setEventMapping(next)
+                                                }}
+                                                placeholder="Event name"
+                                                name={`zapier-event-${item.stage_key}`}
+                                                autoComplete="off"
+                                            />
+                                        ) : null}
                                         <div className="flex items-center gap-2">
                                             <Switch
                                                 checked={item.enabled}
@@ -2497,7 +2566,9 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                     onValueChange={(value) => setSelectedOutboundStage(value ?? '')}
                                 >
                                     <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select stage">
-                                        <SelectValue placeholder="Select stage" />
+                                        <SelectValue placeholder="Select stage">
+                                            {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         {eventMapping.map((item) => (
@@ -2974,13 +3045,13 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                     {getStageKeyLabel(item.stage_key)}
                                 </div>
                                 <Select
-                                    value={isZapierStageBucket(item.bucket) ? item.bucket : "__none__"}
+                                    value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
                                     onValueChange={(value) => {
                                         updateEventMapping((current) => {
                                             const next = [...current]
                                             const existing = next[index]
                                             if (!existing) return current
-                                            if (value === "__none__") {
+                                            if (value === UNTRACKED_BUCKET_VALUE) {
                                                 next[index] = {
                                                     ...existing,
                                                     bucket: null,
@@ -2999,10 +3070,12 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                     }}
                                 >
                                     <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
-                                        <SelectValue placeholder="Bucket" />
+                                        <SelectValue placeholder="Bucket">
+                                            {(value: string | null) => getBucketSelectLabel(value)}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="__none__">Not Tracked</SelectItem>
+                                        <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
                                         {ZAPIER_BUCKET_OPTIONS.map((option) => (
                                             <SelectItem key={option.value} value={option.value}>
                                                 {option.label}
@@ -3091,7 +3164,9 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                                 onValueChange={(value) => updateMetaForm("selectedStage", value ?? "")}
                             >
                                 <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select Meta CRM dataset stage">
-                                    <SelectValue placeholder="Select stage" />
+                                    <SelectValue placeholder="Select stage">
+                                        {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {metaForm.eventMapping.map((item) => (

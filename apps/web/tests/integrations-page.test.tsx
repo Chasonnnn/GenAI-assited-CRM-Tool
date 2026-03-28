@@ -720,9 +720,9 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
 
         const dialog = screen.getByRole('dialog')
-        expect(within(dialog).getByText('New Unread')).toBeInTheDocument()
-        expect(within(dialog).getByText('Contacted')).toBeInTheDocument()
-        expect(within(dialog).getByText('Pre Qualified')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/enable new_unread event/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/enable contacted event/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/enable pre_qualified event/i)).toBeInTheDocument()
     })
 
     it('uses the active zapier form when sending a test lead', async () => {
@@ -853,9 +853,59 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
 
         const dialog = screen.getByRole('dialog')
-        expect(within(dialog).getByText('New Unread')).toBeInTheDocument()
-        expect(within(dialog).getByText('Contacted')).toBeInTheDocument()
-        expect(within(dialog).getByText('Pre Qualified')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/enable new_unread meta crm dataset event/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/enable contacted meta crm dataset event/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText(/enable pre_qualified meta crm dataset event/i)).toBeInTheDocument()
+    })
+
+    it('shows friendly bucket and stage labels in the Zapier dialog and hides redundant tracked event fields', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const disqualifiedRow = within(dialog)
+            .getByText('Disqualified')
+            .closest('div.rounded-md.border.p-3')
+
+        expect(disqualifiedRow).not.toBeNull()
+        expect(within(disqualifiedRow as HTMLElement).getByRole('combobox')).toHaveTextContent('Not Qualified')
+        expect(within(disqualifiedRow as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument()
+        expect(
+            within(dialog).getByRole('combobox', { name: /select stage/i }),
+        ).toHaveTextContent('New Unread')
+
+        const newUnreadRow = within(dialog)
+            .getByLabelText(/enable new_unread event/i)
+            .closest('div.rounded-md.border.p-3')
+
+        expect(newUnreadRow).not.toBeNull()
+        expect(within(newUnreadRow as HTMLElement).getByRole('textbox')).toBeInTheDocument()
+    })
+
+    it('shows friendly bucket and stage labels in the Meta CRM dialog and hides redundant tracked event fields', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+
+        const dialog = screen.getByRole('dialog')
+        const disqualifiedRow = within(dialog)
+            .getByText('Disqualified')
+            .closest('div.rounded-md.border.p-3')
+
+        expect(disqualifiedRow).not.toBeNull()
+        expect(within(disqualifiedRow as HTMLElement).getByRole('combobox')).toHaveTextContent('Not Qualified')
+        expect(within(disqualifiedRow as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument()
+        expect(
+            within(dialog).getByRole('combobox', { name: /select meta crm dataset stage/i }),
+        ).toHaveTextContent('New Unread')
+
+        const newUnreadRow = within(dialog)
+            .getByLabelText(/enable new_unread meta crm dataset event/i)
+            .closest('div.rounded-md.border.p-3')
+
+        expect(newUnreadRow).not.toBeNull()
+        expect(within(newUnreadRow as HTMLElement).getByRole('textbox')).toBeInTheDocument()
     })
 
     it('sends Meta CRM dataset tests and retries failed monitoring events', async () => {
