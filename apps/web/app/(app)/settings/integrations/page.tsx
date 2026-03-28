@@ -2603,7 +2603,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         </CardContent>
                     </Card>
                 </TabsContent>
-                <TabsContent value="monitoring">
+                <TabsContent value="monitoring" keepMounted>
                     <ZapierMonitoringSection variant={variant} />
                 </TabsContent>
             </Tabs>
@@ -3547,7 +3547,7 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                     </div>
                 </TabsContent>
 
-                <TabsContent value="monitoring">
+                <TabsContent value="monitoring" keepMounted>
                     <MetaCrmDatasetMonitoringSection variant={variant} />
                 </TabsContent>
             </Tabs>
@@ -3794,7 +3794,10 @@ export default function IntegrationsPage() {
                 <div>
                     <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
                     <p className="mb-4 text-sm text-muted-foreground">Connect your personal accounts to enable features like Zoom appointments and email sending.</p>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div
+                        data-testid="personal-integrations-grid"
+                        className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+                    >
                         {/* Zoom */}
                         <Card>
                             <CardHeader className="pb-3">
@@ -3998,7 +4001,10 @@ export default function IntegrationsPage() {
                             </AlertDescription>
                         </Alert>
                     ) : null}
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div
+                        data-testid="organization-integrations-grid"
+                        className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+                    >
                         {/* AI */}
                         <Card>
                             <CardHeader className="pb-3">
@@ -4304,7 +4310,10 @@ export default function IntegrationsPage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    <div
+                        data-testid="system-integrations-grid"
+                        className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
+                    >
                         {healthData?.map((integration) => {
                             const typeConfig = integrationTypeConfig[integration.integration_type] || {
                                 icon: ServerIcon,

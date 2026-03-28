@@ -618,6 +618,14 @@ describe('IntegrationsPage', () => {
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Needs Review')
     })
 
+    it('uses wider card grids across personal, organization, and system integrations', () => {
+        render(<IntegrationsPage />)
+
+        expect(screen.getByTestId('personal-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+        expect(screen.getByTestId('organization-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+        expect(screen.getByTestId('system-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+    })
+
     it('shows healthy mapping badge when recommended zapier mapping is configured', () => {
         zapierSettingsData = {
             ...createZapierSettingsData(),
@@ -643,6 +651,15 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByTestId('zapier-mapping-health-dialog-badge')).toHaveTextContent('Mapping Needs Review')
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
+    })
+
+    it('keeps the Zapier monitoring panel mounted to avoid remount flashing on tab switches', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByText('Recent delivery health')).toBeInTheDocument()
     })
 
     it('passes a real lead id to the outbound zapier test action', async () => {
@@ -805,6 +822,15 @@ describe('IntegrationsPage', () => {
             send_hashed_pii: true,
             test_event_code: 'TEST999',
         }))
+    })
+
+    it('keeps the Meta monitoring panel mounted to avoid remount flashing on tab switches', () => {
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(within(dialog).getByText('Recent delivery health')).toBeInTheDocument()
     })
 
     it('syncs Meta CRM dataset stage mapping rows with the live pipeline even when saved settings are stale', () => {
