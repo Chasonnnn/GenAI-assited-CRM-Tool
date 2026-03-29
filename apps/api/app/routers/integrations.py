@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.async_utils import run_async
 from app.core.config import settings
 from app.core.deps import get_db, get_current_session, require_csrf_header
+from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
     generate_oauth_nonce,
@@ -153,6 +154,7 @@ def disconnect_integration(
 
 
 @router.get("/gmail/connect")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def gmail_connect(
     request: Request,
     response: Response,
@@ -190,6 +192,7 @@ def gmail_connect(
 
 
 @router.get("/gmail/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def gmail_callback(
     request: Request,
     code: str,
@@ -316,6 +319,7 @@ def gmail_connection_status(
 
 
 @router.get("/google-calendar/connect")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def google_calendar_connect(
     request: Request,
     response: Response,
@@ -349,6 +353,7 @@ def google_calendar_connect(
 
 
 @router.get("/google-calendar/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def google_calendar_callback(
     request: Request,
     code: str,
@@ -636,6 +641,7 @@ async def sync_google_calendar_now(
 
 
 @router.get("/gcp/connect")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def gcp_connect(
     request: Request,
     response: Response,
@@ -669,6 +675,7 @@ def gcp_connect(
 
 
 @router.get("/gcp/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def gcp_callback(
     request: Request,
     code: str,
@@ -859,6 +866,7 @@ async def get_google_calendar_events(
 
 
 @router.get("/zoom/connect")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def zoom_connect(
     request: Request,
     response: Response,
@@ -893,6 +901,7 @@ def zoom_connect(
 
 
 @router.get("/zoom/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def zoom_callback(
     request: Request,
     code: str,
