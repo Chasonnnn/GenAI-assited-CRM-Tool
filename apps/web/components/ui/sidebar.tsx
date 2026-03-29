@@ -265,15 +265,15 @@ function SidebarTrigger({
       variant="ghost"
       size="icon-sm"
       className={cn(className)}
+      aria-label="Toggle Sidebar"
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <PanelLeftIcon
+      <PanelLeftIcon aria-hidden="true"
       />
-      <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
 }
