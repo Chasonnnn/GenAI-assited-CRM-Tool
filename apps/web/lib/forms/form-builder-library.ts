@@ -21,8 +21,10 @@ export type BuilderPaletteField = {
     helperText?: string
     required?: boolean
     surrogateFieldMapping?: string
-    options?: string[]
+    options?: BuilderOption[]
 }
+
+export type BuilderOption = string | { label: string; value: string }
 
 export type BuilderPaletteGroup = {
     id: string
@@ -175,6 +177,18 @@ export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
                 icon: CheckSquareIcon,
                 surrogateFieldMapping: "has_surrogate_experience",
                 options: ["Yes", "No"],
+            },
+            {
+                key: "journey_timing_preference",
+                label: "When would you like to start your surrogacy journey?",
+                type: "radio",
+                icon: CheckSquareIcon,
+                surrogateFieldMapping: "journey_timing_preference",
+                options: [
+                    { label: "0–3 months", value: "months_0_3" },
+                    { label: "3–6 months", value: "months_3_6" },
+                    { label: "Still deciding", value: "still_deciding" },
+                ],
             },
             {
                 key: "num_deliveries",

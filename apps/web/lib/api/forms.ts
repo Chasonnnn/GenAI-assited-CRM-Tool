@@ -173,6 +173,7 @@ export const DEFAULT_FORM_SURROGATE_FIELD_OPTIONS: FormSurrogateFieldOption[] = 
     { value: "has_child", label: "Has Child" },
     { value: "is_non_smoker", label: "Non-Smoker" },
     { value: "has_surrogate_experience", label: "Surrogate Experience" },
+    { value: "journey_timing_preference", label: "Journey Timing" },
     { value: "num_deliveries", label: "Number of Deliveries" },
     { value: "num_csections", label: "Number of C-Sections" },
     { value: "is_priority", label: "Priority" },

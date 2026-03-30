@@ -6,7 +6,7 @@ import type {
     FormFieldValidation,
     FormSchema,
 } from "@/lib/api/forms"
-import type { BuilderPaletteField } from "@/lib/forms/form-builder-library"
+import type { BuilderOption, BuilderPaletteField } from "@/lib/forms/form-builder-library"
 
 export type BuilderFormField = {
     id: string
@@ -15,7 +15,7 @@ export type BuilderFormField = {
     helperText: string
     required: boolean
     surrogateFieldMapping: string
-    options?: string[]
+    options?: BuilderOption[]
     validation?: FormFieldValidation | null
     showIf?: {
         fieldKey: string
@@ -55,11 +55,35 @@ export type BuilderSchemaMetadata = {
 
 export const FALLBACK_FORM_PAGE: BuilderFormPage = { id: 1, name: "Page 1", fields: [] }
 
-const toFieldOptions = (options?: string[]): FormFieldOption[] | null => {
+export function getBuilderOptionLabel(option: BuilderOption) {
+    return typeof option === "string" ? option : option.label
+}
+
+export function getBuilderOptionValue(option: BuilderOption) {
+    return typeof option === "string" ? option : option.value
+}
+
+export function updateBuilderOptionLabel(option: BuilderOption, label: string): BuilderOption {
+    return typeof option === "string" ? label : { ...option, label }
+}
+
+const toBuilderOptions = (options?: FormFieldOption[] | null): BuilderOption[] | undefined => {
+    if (!options || options.length === 0) return undefined
+    return options.map((option) =>
+        option.label === option.value
+            ? option.label
+            : {
+                label: option.label,
+                value: option.value,
+            },
+    )
+}
+
+const toFieldOptions = (options?: BuilderOption[]): FormFieldOption[] | null => {
     if (!options || options.length === 0) return null
     return options.map((option) => ({
-        label: option,
-        value: option,
+        label: getBuilderOptionLabel(option),
+        value: getBuilderOptionValue(option),
     }))
 }
 
@@ -123,7 +147,7 @@ export function schemaToPages(schema: FormSchema, mappings: Map<string, string>)
         id: index + 1,
         name: page.title || `Page ${index + 1}`,
         fields: page.fields.map((field) => {
-            const options = field.options?.map((option) => option.label || option.value)
+            const options = toBuilderOptions(field.options)
             const columns = field.columns?.map((column) => {
                 const columnOptions = column.options?.map((option) => option.label || option.value)
                 return {
@@ -223,7 +247,10 @@ export function createBuilderField(template: BuilderPaletteField): BuilderFormFi
     }
 
     if (template.options && template.options.length > 0) {
-        return { ...baseField, options: [...template.options] }
+        return {
+            ...baseField,
+            options: template.options.map((option) => (typeof option === "string" ? option : { ...option })),
+        }
     }
 
     if (["select", "multiselect", "radio"].includes(template.type)) {

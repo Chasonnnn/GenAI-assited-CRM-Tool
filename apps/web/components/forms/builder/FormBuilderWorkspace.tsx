@@ -16,8 +16,11 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { FormField, FormFieldValidation, FormSurrogateFieldOption } from "@/lib/api/forms"
 import {
+    getBuilderOptionLabel,
+    getBuilderOptionValue,
     parseOptionalInt,
     parseOptionalNumber,
+    updateBuilderOptionLabel,
     type BuilderFormField,
     type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
@@ -96,7 +99,10 @@ function buildCanvasField(field: BuilderFormField): FormField {
         label: field.label,
         type: field.type,
         required: field.required,
-        options: field.options?.map((option) => ({ label: option, value: option })) ?? null,
+        options: field.options?.map((option) => ({
+            label: getBuilderOptionLabel(option),
+            value: getBuilderOptionValue(option),
+        })) ?? null,
         validation: field.validation ?? null,
         help_text: field.helperText || null,
         show_if: field.showIf
@@ -693,10 +699,10 @@ function FieldInspector({
                                         return selectedFieldData.options.map((option, index) => (
                                             <div key={optionKeys[index]} className="flex gap-2">
                                                 <Input
-                                                    value={option}
+                                                    value={getBuilderOptionLabel(option)}
                                                     onChange={(event) => {
                                                         const nextOptions = [...selectedFieldData.options!]
-                                                        nextOptions[index] = event.target.value
+                                                        nextOptions[index] = updateBuilderOptionLabel(option, event.target.value)
                                                         onUpdateField(selectedFieldData.id, { options: nextOptions })
                                                     }}
                                                 />
@@ -705,7 +711,7 @@ function FieldInspector({
                                                     variant="ghost"
                                                     size="icon"
                                                     onClick={() => removeOption(selectedFieldData.id, index)}
-                                                    aria-label={`Remove option ${option || `Option ${index + 1}`}`}
+                                                    aria-label={`Remove option ${getBuilderOptionLabel(option) || `Option ${index + 1}`}`}
                                                 >
                                                     <XIcon className="size-4" />
                                                 </Button>
@@ -994,12 +1000,25 @@ function FieldInspector({
                                                         }
                                                     >
                                                         <SelectTrigger>
-                                                            <SelectValue placeholder="Value to match" />
+                                                            <SelectValue placeholder="Value to match">
+                                                                {(value: string | null) =>
+                                                                    sourceOptions.find((option) => getBuilderOptionValue(option) === value)
+                                                                        ? getBuilderOptionLabel(
+                                                                            sourceOptions.find(
+                                                                                (option) => getBuilderOptionValue(option) === value,
+                                                                            )!,
+                                                                        )
+                                                                        : value ?? "Value to match"
+                                                                }
+                                                            </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {sourceOptions.map((option) => (
-                                                                <SelectItem key={option} value={option}>
-                                                                    {option}
+                                                                <SelectItem
+                                                                    key={getBuilderOptionValue(option)}
+                                                                    value={getBuilderOptionValue(option)}
+                                                                >
+                                                                    {getBuilderOptionLabel(option)}
                                                                 </SelectItem>
                                                             ))}
                                                         </SelectContent>

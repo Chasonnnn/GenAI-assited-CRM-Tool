@@ -12,6 +12,7 @@ export const SURROGATE_FIELD_LABELS: Record<string, string> = {
     has_child: "Has Child",
     is_non_smoker: "Non-Smoker",
     has_surrogate_experience: "Has Surrogate Experience",
+    journey_timing_preference: "Journey Timing",
     num_deliveries: "Deliveries",
     num_csections: "C-Sections",
     source: "Source",

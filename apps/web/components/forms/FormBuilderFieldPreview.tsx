@@ -5,6 +5,7 @@ import { ChevronDownIcon, UploadIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import type { FieldType, FormFieldColumn, FormFieldValidation } from "@/lib/api/forms"
+import { getBuilderOptionLabel, getBuilderOptionValue, type BuilderFormField } from "@/lib/forms/form-builder-document"
 import { cn } from "@/lib/utils"
 
 type PreviewColumn = {
@@ -26,7 +27,7 @@ type FormBuilderFieldPreviewProps = {
     label: string
     type: FieldType
     surrogateFieldMapping?: string | undefined
-    options?: string[] | undefined
+    options?: BuilderFormField["options"] | undefined
     columns?: PreviewColumn[] | undefined
     rows?: PreviewRow[] | undefined
     className?: string
@@ -150,11 +151,11 @@ export function FormBuilderFieldPreview({
                 <div className="grid gap-2 sm:grid-cols-2">
                     {previewOptions.slice(0, 4).map((option) => (
                         <div
-                            key={option}
+                            key={getBuilderOptionValue(option)}
                             className="flex h-11 items-center gap-3 rounded-xl border border-border/70 bg-background/85 px-3 text-sm"
                         >
                             <span className="size-4 rounded-full border border-border bg-background" />
-                            <span className="text-foreground">{option}</span>
+                            <span className="text-foreground">{getBuilderOptionLabel(option)}</span>
                         </div>
                     ))}
                 </div>
