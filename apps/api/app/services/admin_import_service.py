@@ -46,6 +46,7 @@ from app.db.models import (
     UserPermissionOverride,
     WorkflowTemplate,
 )
+from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import (
     extract_email_domain,
     extract_phone_last4,
@@ -981,6 +982,9 @@ def import_surrogates_csv(db: Session, org_id: UUID, content: bytes) -> int:
             has_child=_parse_bool(row.get("has_child")),
             is_non_smoker=_parse_bool(row.get("is_non_smoker")),
             has_surrogate_experience=_parse_bool(row.get("has_surrogate_experience")),
+            journey_timing_preference=normalize_journey_timing_preference(
+                row.get("journey_timing_preference")
+            ),
             num_deliveries=_parse_int(row.get("num_deliveries")),
             num_csections=_parse_int(row.get("num_csections")),
             is_archived=_parse_bool(row.get("is_archived")) or False,

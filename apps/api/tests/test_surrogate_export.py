@@ -16,6 +16,7 @@ from app.core.security import create_export_token, create_session_token
 from app.db.enums import FormStatus, FormSubmissionStatus, Role
 from app.db.models import Form, FormSubmission, Membership, Organization, Surrogate, Task, User
 from app.main import app
+from app.routers.surrogates_shared import _surrogate_to_read
 from app.services import (
     form_submission_service,
     pdf_export_service,
@@ -498,3 +499,111 @@ def test_get_latest_submission_for_surrogate_returns_none_when_missing(db, test_
         surrogate_id=uuid.uuid4(),
     )
     assert result is None
+
+
+def test_surrogate_to_read_preserves_legacy_checklist_without_submission(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        suffix=uuid.uuid4().hex[:8],
+    )
+    surrogate.is_age_eligible = True
+    surrogate.is_citizen_or_pr = None
+    surrogate.has_child = False
+    surrogate.is_non_smoker = None
+    surrogate.has_surrogate_experience = True
+    surrogate.num_deliveries = 2
+    surrogate.num_csections = None
+    db.flush()
+
+    surrogate_read = _surrogate_to_read(surrogate, db)
+
+    assert [item.key for item in surrogate_read.eligibility_checklist] == [
+        "is_age_eligible",
+        "is_citizen_or_pr",
+        "has_child",
+        "is_non_smoker",
+        "has_surrogate_experience",
+        "num_deliveries",
+    ]
+    assert surrogate_read.eligibility_checklist[0].display_value == "Yes"
+    assert surrogate_read.eligibility_checklist[1].display_value == "-"
+    assert surrogate_read.eligibility_checklist[2].display_value == "No"
+    assert surrogate_read.eligibility_checklist[-1].display_value == "2"
+
+
+@pytest.mark.asyncio
+async def test_surrogate_export_view_includes_form_aware_checklist_and_hides_unasked_fields(
+    client, db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        default_stage,
+        suffix=uuid.uuid4().hex[:8],
+    )
+    form = _create_form(
+        db,
+        test_org.id,
+        test_user.id,
+        name="Journey Timing Form",
+        schema={
+            "pages": [
+                {
+                    "title": "Timing",
+                    "fields": [
+                        {
+                            "key": "journey_start",
+                            "label": "When would you like to start your surrogacy journey?",
+                            "type": "radio",
+                            "required": False,
+                            "options": [
+                                {"label": "0–3 months", "value": "0-3 months"},
+                                {"label": "3–6 months", "value": "3-6 months"},
+                                {"label": "Still deciding", "value": "Still deciding"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    submission = FormSubmission(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        form_id=form.id,
+        surrogate_id=surrogate.id,
+        status=FormSubmissionStatus.PENDING_REVIEW.value,
+        answers_json={"journey_start": "0-3 months"},
+        schema_snapshot=form.published_schema_json,
+        mapping_snapshot=[],
+        submitted_at=datetime.now(timezone.utc),
+    )
+    db.add(submission)
+    db.flush()
+
+    export_token = create_export_token(
+        org_id=test_org.id,
+        surrogate_id=surrogate.id,
+        purpose="case_details_export",
+    )
+    response = await client.get(
+        f"/surrogates/{surrogate.id}/export-view?export_token={export_token}"
+    )
+
+    assert response.status_code == 200
+    checklist = response.json()["surrogate"]["eligibility_checklist"]
+    assert checklist == [
+        {
+            "key": "journey_timing_preference",
+            "label": "Journey Timing",
+            "type": "text",
+            "value": "months_0_3",
+            "display_value": "0–3 months",
+        }
+    ]

@@ -321,6 +321,7 @@ NOTES ABOUT FIELDS:
 - height_ft is decimal feet (5.33 = 5'4")
 - weight_lb is weight in pounds
 - is_age_eligible, is_citizen_or_pr, has_child, is_non_smoker, has_surrogate_experience are booleans
+- journey_timing_preference is one of months_0_3, months_3_6, still_deciding
 - num_deliveries, num_csections are integers (counts)
 - For inverted questions like "Do you smoke?" → map to is_non_smoker with invert=true
 

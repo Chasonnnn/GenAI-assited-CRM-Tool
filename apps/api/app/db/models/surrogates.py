@@ -221,6 +221,7 @@ class Surrogate(Base):
     has_child: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_non_smoker: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     has_surrogate_experience: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    journey_timing_preference: Mapped[str | None] = mapped_column(String(50), nullable=True)
     num_deliveries: Mapped[int | None] = mapped_column(Integer, nullable=True)
     num_csections: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

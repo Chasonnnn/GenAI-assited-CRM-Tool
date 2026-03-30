@@ -49,6 +49,7 @@ from app.services.attachment_service import (
 )
 from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 from app.services import job_service
+from app.utils.journey_timing import normalize_journey_timing_preference
 
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -189,6 +190,7 @@ _SURROGATE_FIELD_LABEL_OVERRIDES: dict[str, str] = {
     "is_age_eligible": "Age Eligible",
     "is_citizen_or_pr": "US Citizen/PR",
     "is_non_smoker": "Non-Smoker",
+    "journey_timing_preference": "Journey Timing",
     "num_csections": "Number of C-Sections",
 }
 
@@ -1967,6 +1969,11 @@ def _validate_file_field_limits(
 
 def _coerce_surrogate_value(surrogate_field: str, value: Any) -> Any:
     field_type = SURROGATE_FIELD_TYPES.get(surrogate_field)
+    if surrogate_field == "journey_timing_preference":
+        normalized = normalize_journey_timing_preference(value)
+        if normalized is None:
+            raise ValueError(f"Invalid journey timing for {surrogate_field}")
+        return normalized
     if field_type == "str":
         return str(value)
     if field_type == "bool":

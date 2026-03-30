@@ -151,6 +151,10 @@ EXACT_COLUMN_MAPPING: dict[str, str] = {
     "non_smoker": "is_non_smoker",
     "has_surrogate_experience": "has_surrogate_experience",
     "surrogate_experience": "has_surrogate_experience",
+    "journey_timing_preference": "journey_timing_preference",
+    "journey_timing": "journey_timing_preference",
+    "journey_start": "journey_timing_preference",
+    "surrogacy_journey": "journey_timing_preference",
     # Delivery counts
     "num_deliveries": "num_deliveries",
     "deliveries": "num_deliveries",
@@ -227,6 +231,12 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
         "been.*surrogate",
         "previous surrogate",
         "surrogate.*experience",
+    ],
+    "journey_timing_preference": [
+        "start.*surrogacy journey",
+        "surrogacy journey.*start",
+        "when.*start.*journey",
+        "journey timing",
     ],
     "height_ft": ["height", "tall", "how tall"],
     "weight_lb": ["weight", "weigh", "how much.*weigh"],
@@ -348,6 +358,7 @@ CANONICAL_NAMES: dict[str, list[str]] = {
     "has_child": ["has children", "have children", "parenting experience"],
     "is_non_smoker": ["non smoker", "nonsmoker", "smoking status"],
     "has_surrogate_experience": ["surrogate experience", "prior surrogacy"],
+    "journey_timing_preference": ["journey timing", "surrogacy journey start"],
     "num_deliveries": ["number deliveries", "delivery count", "birth count"],
     "num_csections": ["number csections", "c sections", "c section count", "cesarean count"],
 }

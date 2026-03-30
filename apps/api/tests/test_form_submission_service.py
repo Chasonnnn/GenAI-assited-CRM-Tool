@@ -78,6 +78,53 @@ def _create_published_form(db, org_id, user_id):
     return form
 
 
+def _create_published_form_with_journey_timing(db, org_id, user_id):
+    schema = {
+        "pages": [
+            {
+                "title": "Timing",
+                "fields": [
+                    {
+                        "key": "journey_timing",
+                        "label": "When would you like to start your surrogacy journey?",
+                        "type": "radio",
+                        "required": False,
+                        "options": [
+                            {"label": "0–3 months", "value": "0-3 months"},
+                            {"label": "3–6 months", "value": "3-6 months"},
+                            {"label": "Still deciding", "value": "Still deciding"},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    form = form_service.create_form(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name="Journey Timing Form",
+        description="Journey timing mapping",
+        schema=schema,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form_service.publish_form(db, form, user_id)
+    form_service.set_field_mappings(
+        db,
+        form,
+        [
+            {
+                "field_key": "journey_timing",
+                "surrogate_field": "journey_timing_preference",
+            }
+        ],
+    )
+    return form
+
+
 def _create_published_form_with_validation(db, org_id, user_id):
     schema = {
         "pages": [
@@ -1023,6 +1070,40 @@ def test_submission_approval_uses_mapping_snapshot(db, test_org, test_user, defa
     db.refresh(surrogate)
     assert surrogate.full_name == "Jane Doe"
     assert surrogate.phone is None
+
+
+def test_submission_approval_normalizes_journey_timing_labels(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_journey_timing(db, test_org.id, test_user.id)
+
+    token_record = form_submission_service.create_submission_token(
+        db=db,
+        org_id=test_org.id,
+        form=form,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        expires_in_days=7,
+    )
+
+    submission = form_submission_service.create_submission(
+        db=db,
+        token=token_record,
+        form=form,
+        answers={"journey_timing": "0-3 months"},
+        files=[],
+    )
+
+    form_submission_service.approve_submission(
+        db=db,
+        submission=submission,
+        reviewer_id=test_user.id,
+        review_notes=None,
+    )
+
+    db.refresh(surrogate)
+    assert surrogate.journey_timing_preference == "months_0_3"
 
 
 def test_resolve_file_field_keys_defaults_first_field_for_single_upload():

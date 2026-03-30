@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, field_serializer
 
 from app.db.enums import SurrogateSource, OwnerType
+from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_phone, normalize_state, format_race_label
 
 
@@ -34,6 +35,7 @@ class SurrogateCreate(BaseModel):
     has_child: bool | None = None
     is_non_smoker: bool | None = None
     has_surrogate_experience: bool | None = None
+    journey_timing_preference: str | None = None
     num_deliveries: int | None = Field(None, ge=0, le=20)
     num_csections: int | None = Field(None, ge=0, le=10)
 
@@ -202,6 +204,16 @@ class SurrogateCreate(BaseModel):
             return None
         return normalize_state(v)
 
+    @field_validator("journey_timing_preference")
+    @classmethod
+    def validate_journey_timing_preference(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        normalized = normalize_journey_timing_preference(v)
+        if normalized is None:
+            raise ValueError("Invalid journey timing preference")
+        return normalized
+
 
 class SurrogateUpdate(BaseModel):
     """Request schema for updating a surrogate (partial)."""
@@ -219,6 +231,7 @@ class SurrogateUpdate(BaseModel):
     has_child: bool | None = None
     is_non_smoker: bool | None = None
     has_surrogate_experience: bool | None = None
+    journey_timing_preference: str | None = None
     num_deliveries: int | None = Field(None, ge=0, le=20)
     num_csections: int | None = Field(None, ge=0, le=10)
     is_priority: bool | None = None
@@ -385,6 +398,18 @@ class SurrogateUpdate(BaseModel):
             return None
         return normalize_state(v)
 
+    @field_validator("journey_timing_preference")
+    @classmethod
+    def validate_journey_timing_preference(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        normalized = normalize_journey_timing_preference(v)
+        if normalized is None:
+            raise ValueError("Invalid journey timing preference")
+        return normalized
+
 
 class BulkAssign(BaseModel):
     """Request schema for bulk surrogateassignment."""
@@ -400,6 +425,14 @@ class SurrogateLeadIntakeWarning(BaseModel):
     field_key: Literal["email", "phone", "state", "height_ft", "weight_lb"]
     issue: Literal["missing_value", "invalid_value"]
     raw_value: str
+
+
+class SurrogateEligibilityChecklistItem(BaseModel):
+    key: str
+    label: str
+    type: Literal["boolean", "text", "number"]
+    value: bool | str | int | None = None
+    display_value: str
 
 
 class SurrogateRead(BaseModel):
@@ -445,8 +478,10 @@ class SurrogateRead(BaseModel):
     has_child: bool | None
     is_non_smoker: bool | None
     has_surrogate_experience: bool | None
+    journey_timing_preference: str | None
     num_deliveries: int | None
     num_csections: int | None
+    eligibility_checklist: list[SurrogateEligibilityChecklistItem] = Field(default_factory=list)
 
     # =========================================================================
     # INSURANCE INFO

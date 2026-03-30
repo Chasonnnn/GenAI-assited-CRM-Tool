@@ -487,6 +487,7 @@ def create_surrogate(
             has_child=data.has_child,
             is_non_smoker=data.is_non_smoker,
             has_surrogate_experience=data.has_surrogate_experience,
+            journey_timing_preference=data.journey_timing_preference,
             num_deliveries=data.num_deliveries,
             num_csections=data.num_csections,
             # Insurance info
@@ -662,6 +663,7 @@ def update_surrogate(
         "has_child",
         "is_non_smoker",
         "has_surrogate_experience",
+        "journey_timing_preference",
         "num_deliveries",
         "num_csections",
         # Insurance fields

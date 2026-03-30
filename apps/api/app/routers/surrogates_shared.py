@@ -7,6 +7,7 @@ from sqlalchemy.orm.attributes import NO_VALUE
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
 from app.services import queue_service, surrogate_service, surrogate_stage_context, user_service
+from app.services.surrogate_checklist_service import build_eligibility_checklist
 
 
 def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
@@ -68,8 +69,10 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         has_child=surrogate.has_child,
         is_non_smoker=surrogate.is_non_smoker,
         has_surrogate_experience=surrogate.has_surrogate_experience,
+        journey_timing_preference=surrogate.journey_timing_preference,
         num_deliveries=surrogate.num_deliveries,
         num_csections=surrogate.num_csections,
+        eligibility_checklist=build_eligibility_checklist(db, surrogate),
         # Insurance info
         insurance_company=surrogate.insurance_company,
         insurance_plan_name=surrogate.insurance_plan_name,

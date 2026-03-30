@@ -22,6 +22,7 @@ from app.services.import_transformers import (
     transform_value,
 )
 from app.utils.datetime_parsing import parse_datetime_with_timezone
+from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_phone, normalize_state
 
 logger = logging.getLogger(__name__)
@@ -337,6 +338,11 @@ def convert_to_surrogate(
             has_surrogate_experience=_parse_bool(
                 fields.get("has_surrogate_experience")
                 or fields.get("have_you_been_a_surrogate_before?")
+            ),
+            journey_timing_preference=normalize_journey_timing_preference(
+                fields.get("journey_timing_preference")
+                or fields.get("journey_timing")
+                or fields.get("when_would_you_like_to_start_your_surrogacy_journey?")
             ),
             num_deliveries=_parse_int(
                 fields.get("num_deliveries") or fields.get("how_many_deliveries_have_you_had?")

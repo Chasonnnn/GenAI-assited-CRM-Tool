@@ -47,6 +47,7 @@ ALLOWED_CONDITION_FIELDS = {
     "is_non_smoker",
     "has_surrogate_experience",
     "is_age_eligible",
+    "journey_timing_preference",
     # Physical measurements
     "height_ft",
     "weight_lb",
