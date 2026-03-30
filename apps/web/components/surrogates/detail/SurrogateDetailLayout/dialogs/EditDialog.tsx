@@ -5,12 +5,29 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { useAuth } from "@/lib/auth-context"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
     useSurrogateDetailDialogs,
 } from "../context"
+
+const JOURNEY_TIMING_OPTIONS = [
+    { label: "0–3 months", value: "months_0_3" },
+    { label: "3–6 months", value: "months_3_6" },
+    { label: "Still deciding", value: "still_deciding" },
+] as const
+
+const FALLBACK_CHECKLIST_ITEMS = [
+    { key: "is_age_eligible", label: "Age Eligible", type: "boolean" },
+    { key: "is_citizen_or_pr", label: "US Citizen/PR", type: "boolean" },
+    { key: "has_child", label: "Has Child", type: "boolean" },
+    { key: "is_non_smoker", label: "Non-Smoker", type: "boolean" },
+    { key: "has_surrogate_experience", label: "Surrogate Experience", type: "boolean" },
+    { key: "num_deliveries", label: "Number of Deliveries", type: "number" },
+    { key: "num_csections", label: "Number of C-Sections", type: "number" },
+] as const
 
 export function EditDialog() {
     const { user } = useAuth()
@@ -22,6 +39,12 @@ export function EditDialog() {
     const isOpen = activeDialog.type === "edit_surrogate"
 
     if (!surrogate) return null
+
+    const editableChecklistItems =
+        surrogate.eligibility_checklist && surrogate.eligibility_checklist.length > 0
+            ? surrogate.eligibility_checklist
+            : FALLBACK_CHECKLIST_ITEMS
+    const visibleChecklistKeys = new Set(editableChecklistItems.map((item) => item.key))
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
@@ -58,15 +81,34 @@ export function EditDialog() {
                         const weightLb = getString("weight_lb")
                         data.weight_lb = weightLb ? parseFloat(weightLb) : null
                         const numDeliveries = getString("num_deliveries")
-                        data.num_deliveries = numDeliveries ? parseInt(numDeliveries, 10) : null
                         const numCsections = getString("num_csections")
-                        data.num_csections = numCsections ? parseInt(numCsections, 10) : null
+                        const journeyTimingPreference = getString("journey_timing_preference")
 
-                        data.is_age_eligible = formData.get("is_age_eligible") === "on"
-                        data.is_citizen_or_pr = formData.get("is_citizen_or_pr") === "on"
-                        data.has_child = formData.get("has_child") === "on"
-                        data.is_non_smoker = formData.get("is_non_smoker") === "on"
-                        data.has_surrogate_experience = formData.get("has_surrogate_experience") === "on"
+                        if (visibleChecklistKeys.has("num_deliveries")) {
+                            data.num_deliveries = numDeliveries ? parseInt(numDeliveries, 10) : null
+                        }
+                        if (visibleChecklistKeys.has("num_csections")) {
+                            data.num_csections = numCsections ? parseInt(numCsections, 10) : null
+                        }
+                        if (visibleChecklistKeys.has("journey_timing_preference")) {
+                            data.journey_timing_preference = journeyTimingPreference || null
+                        }
+
+                        if (visibleChecklistKeys.has("is_age_eligible")) {
+                            data.is_age_eligible = formData.get("is_age_eligible") === "on"
+                        }
+                        if (visibleChecklistKeys.has("is_citizen_or_pr")) {
+                            data.is_citizen_or_pr = formData.get("is_citizen_or_pr") === "on"
+                        }
+                        if (visibleChecklistKeys.has("has_child")) {
+                            data.has_child = formData.get("has_child") === "on"
+                        }
+                        if (visibleChecklistKeys.has("is_non_smoker")) {
+                            data.is_non_smoker = formData.get("is_non_smoker") === "on"
+                        }
+                        if (visibleChecklistKeys.has("has_surrogate_experience")) {
+                            data.has_surrogate_experience = formData.get("has_surrogate_experience") === "on"
+                        }
                         if (canManagePriority) {
                             data.is_priority = formData.get("is_priority") === "on"
                         }
@@ -115,42 +157,80 @@ export function EditDialog() {
                                 <Input id="weight_lb" name="weight_lb" type="number" defaultValue={surrogate.weight_lb ?? ""} />
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="num_deliveries">Number of Deliveries</Label>
-                                <Input id="num_deliveries" name="num_deliveries" type="number" min="0" max="20" defaultValue={surrogate.num_deliveries ?? ""} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="num_csections">Number of C-Sections</Label>
-                                <Input id="num_csections" name="num_csections" type="number" min="0" max="10" defaultValue={surrogate.num_csections ?? ""} />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                            {canManagePriority && (
-                                <div className="flex items-center gap-2">
-                                    <Checkbox id="is_priority" name="is_priority" defaultChecked={surrogate.is_priority} />
-                                    <Label htmlFor="is_priority">Priority Surrogate</Label>
-                                </div>
-                            )}
-                            <div className="flex items-center gap-2">
-                                <Checkbox id="is_age_eligible" name="is_age_eligible" defaultChecked={surrogate.is_age_eligible ?? false} />
-                                <Label htmlFor="is_age_eligible">Age Eligible</Label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Checkbox id="is_citizen_or_pr" name="is_citizen_or_pr" defaultChecked={surrogate.is_citizen_or_pr ?? false} />
-                                <Label htmlFor="is_citizen_or_pr">US Citizen/PR</Label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Checkbox id="has_child" name="has_child" defaultChecked={surrogate.has_child ?? false} />
-                                <Label htmlFor="has_child">Has Child</Label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Checkbox id="is_non_smoker" name="is_non_smoker" defaultChecked={surrogate.is_non_smoker ?? false} />
-                                <Label htmlFor="is_non_smoker">Non-Smoker</Label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Checkbox id="has_surrogate_experience" name="has_surrogate_experience" defaultChecked={surrogate.has_surrogate_experience ?? false} />
-                                <Label htmlFor="has_surrogate_experience">Surrogate Experience</Label>
+                        <div className="space-y-3 pt-2">
+                            <div className="text-sm font-medium text-foreground">Eligibility Checklist</div>
+                            <div className="grid grid-cols-2 gap-4">
+                                {canManagePriority && (
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox id="is_priority" name="is_priority" defaultChecked={surrogate.is_priority} />
+                                        <Label htmlFor="is_priority">Priority Surrogate</Label>
+                                    </div>
+                                )}
+                                {editableChecklistItems.map((item) => {
+                                    if (item.key === "journey_timing_preference") {
+                                        return (
+                                            <div key={item.key} className="space-y-2">
+                                                <Label htmlFor={item.key}>{item.label}</Label>
+                                                <NativeSelect
+                                                    id={item.key}
+                                                    name={item.key}
+                                                    defaultValue={surrogate.journey_timing_preference ?? ""}
+                                                    className="w-full"
+                                                >
+                                                    <NativeSelectOption value="">Not provided</NativeSelectOption>
+                                                    {JOURNEY_TIMING_OPTIONS.map((option) => (
+                                                        <NativeSelectOption key={option.value} value={option.value}>
+                                                            {option.label}
+                                                        </NativeSelectOption>
+                                                    ))}
+                                                </NativeSelect>
+                                            </div>
+                                        )
+                                    }
+
+                                    if (item.type === "number" && (item.key === "num_deliveries" || item.key === "num_csections")) {
+                                        const isDeliveries = item.key === "num_deliveries"
+                                        return (
+                                            <div key={item.key} className="space-y-2">
+                                                <Label htmlFor={item.key}>{item.label}</Label>
+                                                <Input
+                                                    id={item.key}
+                                                    name={item.key}
+                                                    type="number"
+                                                    min="0"
+                                                    max={isDeliveries ? "20" : "10"}
+                                                    defaultValue={
+                                                        isDeliveries
+                                                            ? surrogate.num_deliveries ?? ""
+                                                            : surrogate.num_csections ?? ""
+                                                    }
+                                                />
+                                            </div>
+                                        )
+                                    }
+
+                                    if (item.type === "boolean") {
+                                        const checked =
+                                            item.key === "is_age_eligible"
+                                                ? surrogate.is_age_eligible ?? false
+                                                : item.key === "is_citizen_or_pr"
+                                                    ? surrogate.is_citizen_or_pr ?? false
+                                                    : item.key === "has_child"
+                                                        ? surrogate.has_child ?? false
+                                                        : item.key === "is_non_smoker"
+                                                            ? surrogate.is_non_smoker ?? false
+                                                            : surrogate.has_surrogate_experience ?? false
+
+                                        return (
+                                            <div key={item.key} className="flex items-center gap-2">
+                                                <Checkbox id={item.key} name={item.key} defaultChecked={checked} />
+                                                <Label htmlFor={item.key}>{item.label}</Label>
+                                            </div>
+                                        )
+                                    }
+
+                                    return null
+                                })}
                             </div>
                         </div>
                     </div>

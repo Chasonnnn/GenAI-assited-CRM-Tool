@@ -113,8 +113,10 @@ const baseSurrogateData = {
     has_child: null,
     is_non_smoker: null,
     has_surrogate_experience: null,
+    journey_timing_preference: null,
     num_deliveries: null,
     num_csections: null,
+    eligibility_checklist: [],
     archived_at: null,
     // Insurance info
     insurance_company: null,
@@ -1067,5 +1069,108 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Actual Delivery Date:')).toBeInTheDocument()
         expect(screen.getByText('Gender:')).toBeInTheDocument()
         expect(screen.getByText('Weight:')).toBeInTheDocument()
+    })
+
+    it('renders the API-provided eligibility checklist instead of hard-coded rows', () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                has_surrogate_experience: true,
+                eligibility_checklist: [
+                    {
+                        key: 'is_age_eligible',
+                        label: 'Age Eligible (21-36)',
+                        type: 'boolean',
+                        value: true,
+                        display_value: 'Yes',
+                    },
+                    {
+                        key: 'journey_timing_preference',
+                        label: 'Journey Timing',
+                        type: 'text',
+                        value: 'months_0_3',
+                        display_value: '0–3 months',
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText(/Journey Timing/)).toBeInTheDocument()
+        expect(screen.getByText('0–3 months')).toBeInTheDocument()
+        expect(screen.queryByText('Prior Surrogate Experience')).not.toBeInTheDocument()
+    })
+
+    it('keeps visible checklist items editable from the surrogate detail edit dialog', async () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                is_age_eligible: true,
+                journey_timing_preference: 'months_0_3',
+                num_deliveries: 1,
+                eligibility_checklist: [
+                    {
+                        key: 'is_age_eligible',
+                        label: 'Age Eligible (21-36)',
+                        type: 'boolean',
+                        value: true,
+                        display_value: 'Yes',
+                    },
+                    {
+                        key: 'journey_timing_preference',
+                        label: 'Journey Timing',
+                        type: 'text',
+                        value: 'months_0_3',
+                        display_value: '0–3 months',
+                    },
+                    {
+                        key: 'num_deliveries',
+                        label: 'Number of Deliveries',
+                        type: 'number',
+                        value: 1,
+                        display_value: '1',
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+        fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
+
+        const journeyTimingSelect = await screen.findByLabelText('Journey Timing')
+        expect(journeyTimingSelect).toHaveValue('months_0_3')
+        expect(screen.getByLabelText('Number of Deliveries')).toHaveValue(1)
+        expect(screen.queryByLabelText('Surrogate Experience')).not.toBeInTheDocument()
+
+        fireEvent.change(journeyTimingSelect, { target: { value: 'still_deciding' } })
+        fireEvent.change(screen.getByLabelText('Number of Deliveries'), { target: { value: '2' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: expect.objectContaining({
+                    journey_timing_preference: 'still_deciding',
+                    num_deliveries: 2,
+                }),
+            })
+        })
     })
 })
