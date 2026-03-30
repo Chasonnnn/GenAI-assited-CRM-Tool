@@ -24,6 +24,18 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("<AutomationPageClient")
     })
 
+    it("uses stable IDs for platform workflow template rows", () => {
+        const source = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+
+        expect(source).toContain('from "@/components/automation/workflow-editor/shared"')
+        expect(source).toContain("type EditableCondition,")
+        expect(source).toContain("type EditableAction,")
+        expect(source).toContain("key={condition.clientId}")
+        expect(source).toContain("key={action.clientId}")
+        expect(source).not.toMatch(/conditions\.map\(\(condition, index\) => \(\s*<Card key=\{`condition-\$\{index\}`\}>/m)
+        expect(source).not.toMatch(/actions\.map\(\(action, index\) => \(\s*<Card key=\{`action-\$\{index\}`\}>/m)
+    })
+
     it("does not suppress exhaustive deps in MassEditStageModal and handles late stage load", () => {
         const source = readSource("components/surrogates/MassEditStageModal.tsx")
 

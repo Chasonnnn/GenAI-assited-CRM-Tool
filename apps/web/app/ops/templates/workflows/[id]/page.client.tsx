@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,9 +20,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useWorkflowOptions } from "@/lib/hooks/use-workflows"
 import {
     useCreatePlatformWorkflowTemplate,
@@ -44,11 +41,30 @@ import {
     Trash2Icon,
     XIcon,
     GripVerticalIcon,
-    ChevronDownIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-
-type SelectOption = { value: string; label: string }
+import {
+    areJsonObjectsEqual,
+    ConditionValueInput,
+    EMAIL_RECIPIENT_OPTIONS,
+    FORM_MATCH_STATUS_OPTIONS,
+    FORM_SOURCE_MODE_OPTIONS,
+    LIST_OPERATORS,
+    MULTISELECT_FIELDS,
+    OWNER_TYPE_OPTIONS,
+    SOURCE_OPTIONS,
+    VALUELESS_OPERATORS,
+    createClientRowId,
+    getEmailRecipientKind,
+    getEmailRecipientUserId,
+    normalizeEditableActionsForUi as normalizeActionsForUi,
+    normalizeEditableConditionsForSave as normalizeConditionsForSave,
+    normalizeEditableConditionsForUi as normalizeConditionsForUi,
+    toListArray,
+    type EditableAction,
+    type EditableCondition,
+    type SelectOption,
+} from "@/components/automation/workflow-editor/shared"
 
 const triggerLabels: Record<string, string> = {
     surrogate_created: "Surrogate Created",
@@ -103,6 +119,7 @@ const conditionFieldLabels: Record<string, string> = {
     bmi: "BMI",
     height_ft: "Height (ft)",
     weight_lb: "Weight (lb)",
+    journey_timing_preference: "Journey Timing",
     num_deliveries: "Deliveries",
     num_csections: "C-Sections",
     race: "Race",
@@ -114,65 +131,6 @@ const conditionFieldLabels: Record<string, string> = {
 function getConditionFieldLabel(value: string): string {
     return getSurrogateFieldLabel(value) ?? conditionFieldLabels[value] ?? "Unknown field"
 }
-
-const BOOLEAN_FIELDS = new Set([
-    "is_priority",
-    "has_child",
-    "is_citizen_or_pr",
-    "is_non_smoker",
-    "has_surrogate_experience",
-    "is_age_eligible",
-])
-
-const NUMBER_FIELDS = new Set([
-    "age",
-    "bmi",
-    "height_ft",
-    "weight_lb",
-    "num_deliveries",
-    "num_csections",
-])
-
-const DATE_FIELDS = new Set(["created_at", "date_of_birth"])
-
-const MULTISELECT_FIELDS = new Set([
-    "stage_id",
-    "status_label",
-    "owner_id",
-    "owner_type",
-    "state",
-    "source",
-    "source_mode",
-    "match_status",
-])
-
-const SOURCE_OPTIONS: SelectOption[] = [
-    { value: "manual", label: "Manual" },
-    { value: "meta", label: "Meta" },
-    { value: "website", label: "Website" },
-    { value: "referral", label: "Referral" },
-    { value: "import", label: "Import" },
-    { value: "agency", label: "Agency" },
-]
-
-const FORM_SOURCE_MODE_OPTIONS: SelectOption[] = [
-    { value: "dedicated", label: "Dedicated Link" },
-    { value: "shared", label: "Shared Link" },
-]
-
-const FORM_MATCH_STATUS_OPTIONS: SelectOption[] = [
-    { value: "linked", label: "Linked" },
-    { value: "ambiguous_review", label: "Ambiguous Review" },
-    { value: "lead_created", label: "Lead Created" },
-]
-
-const OWNER_TYPE_OPTIONS: SelectOption[] = [
-    { value: "user", label: "User" },
-    { value: "queue", label: "Queue" },
-]
-
-const LIST_OPERATORS = new Set(["in", "not_in"])
-const VALUELESS_OPERATORS = new Set(["is_empty", "is_not_empty"])
 
 const FALLBACK_TRIGGER_TYPES = [
     { value: "surrogate_created", label: "Surrogate Created", description: "When a new case is created" },
@@ -238,170 +196,6 @@ const ZAPIER_CONVERSION_SAMPLE = {
     actions: [{ action_type: "send_zapier_conversion_event" }] as ActionConfig[],
 }
 
-function toListArray(value: JsonValue): string[] {
-    if (Array.isArray(value)) {
-        return value.map((item) => String(item).trim()).filter(Boolean)
-    }
-    if (typeof value === "string") {
-        return value
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean)
-    }
-    if (value === null || value === undefined) {
-        return []
-    }
-    const asString = String(value).trim()
-    return asString ? [asString] : []
-}
-
-function MultiSelect({
-    options,
-    value,
-    onChange,
-    placeholder = "Select values",
-}: {
-    options: SelectOption[]
-    value: string[]
-    onChange: (next: string[]) => void
-    placeholder?: string
-}) {
-    const selectedValues = new Set(value)
-    const selectedLabels = options
-        .filter((option) => selectedValues.has(option.value))
-        .map((option) => option.label)
-    const label = selectedLabels.length > 0 ? `${selectedLabels.length} selected` : placeholder
-
-    return (
-        <Popover>
-            <PopoverTrigger
-                type="button"
-                className={buttonVariants({ variant: "outline", className: "flex-1 justify-between" })}
-            >
-                <span className="truncate">{label}</span>
-                <ChevronDownIcon className="size-4 text-muted-foreground" />
-            </PopoverTrigger>
-            <PopoverContent className="w-72">
-                <ScrollArea className="h-48">
-                    <div className="space-y-2">
-                        {options.map((option) => {
-                            const checked = selectedValues.has(option.value)
-                            return (
-                                <label key={option.value} className="flex items-center gap-2 text-sm">
-                                    <Checkbox
-                                        checked={checked}
-                                        onCheckedChange={(next) => {
-                                            const nextChecked = next === true
-                                            const updated = new Set(selectedValues)
-                                            if (nextChecked) {
-                                                updated.add(option.value)
-                                            } else {
-                                                updated.delete(option.value)
-                                            }
-                                            onChange(Array.from(updated))
-                                        }}
-                                    />
-                                    <span>{option.label}</span>
-                                </label>
-                            )
-                        })}
-                        {options.length === 0 && (
-                            <p className="text-xs text-muted-foreground">No options available.</p>
-                        )}
-                    </div>
-                </ScrollArea>
-            </PopoverContent>
-        </Popover>
-    )
-}
-
-function normalizeConditionsForUi(conditions: Condition[]): Condition[] {
-    return conditions.map((condition) => {
-        if (!LIST_OPERATORS.has(condition.operator)) {
-            return condition
-        }
-        if (MULTISELECT_FIELDS.has(condition.field)) {
-            if (Array.isArray(condition.value)) {
-                return condition
-            }
-            if (typeof condition.value === "string") {
-                const values = condition.value
-                    .split(",")
-                    .map((value) => value.trim())
-                    .filter(Boolean)
-                return { ...condition, value: values }
-            }
-            return { ...condition, value: [] }
-        }
-        if (Array.isArray(condition.value)) {
-            return { ...condition, value: condition.value.join(", ") }
-        }
-        return condition
-    })
-}
-
-function normalizeConditionsForSave(conditions: Condition[]): Condition[] {
-    return conditions.map((condition) => {
-        if (VALUELESS_OPERATORS.has(condition.operator)) {
-            return { ...condition, value: null }
-        }
-        if (LIST_OPERATORS.has(condition.operator)) {
-            const raw =
-                typeof condition.value === "string"
-                    ? condition.value
-                    : Array.isArray(condition.value)
-                        ? condition.value.join(", ")
-                        : ""
-            const values = raw
-                .split(",")
-                .map((value) => value.trim())
-                .filter(Boolean)
-            return { ...condition, value: values }
-        }
-        return condition
-    })
-}
-
-function normalizeActionsForUi(actions: ActionConfig[]): ActionConfig[] {
-    return actions.map((action) => {
-        const stageId = action["stage_id"]
-        if (action.action_type === "update_status" && typeof stageId === "string" && stageId) {
-            const normalized: ActionConfig = {
-                ...action,
-                action_type: "update_field",
-                field: "stage_id",
-                value: stageId,
-            }
-            delete normalized["stage_id"]
-            return normalized
-        }
-        return action
-    })
-}
-
-const EMAIL_RECIPIENT_OPTIONS: SelectOption[] = [
-    { value: "surrogate", label: "Surrogate" },
-    { value: "owner", label: "Case Owner" },
-    { value: "creator", label: "Creator" },
-    { value: "all_admins", label: "All Admins" },
-    { value: "user", label: "Specific User" },
-]
-
-function getEmailRecipientKind(action: ActionConfig): string {
-    const recipients = action.recipients
-    if (Array.isArray(recipients)) return "user"
-    if (typeof recipients === "string") return recipients
-    return "surrogate"
-}
-
-function getEmailRecipientUserId(action: ActionConfig): string {
-    const recipients = action.recipients
-    if (Array.isArray(recipients)) {
-        return typeof recipients[0] === "string" ? recipients[0] : ""
-    }
-    return ""
-}
-
 function normalizeTriggerConfigForUi(
     triggerType: string,
     triggerConfig: JsonObject,
@@ -432,7 +226,1750 @@ function normalizeTriggerConfigForUi(
     return next
 }
 
-export default function PlatformWorkflowTemplatePage() {
+type WorkflowTemplateEditorState = {
+    name: string
+    description: string
+    icon: string
+    category: string
+    triggerType: string
+    triggerConfig: JsonObject
+    conditions: EditableCondition[]
+    conditionLogic: "AND" | "OR"
+    actions: EditableAction[]
+    isPublished: boolean
+}
+
+type WorkflowTemplateEditorAction =
+    | { type: "hydrateDraft"; templateData: PlatformWorkflowTemplate; statusOptions: { id?: string; value: string; label: string }[] }
+    | { type: "loadZapierSample" }
+    | { type: "loadSharedIntakeSample" }
+    | { type: "setName"; value: string }
+    | { type: "setDescription"; value: string }
+    | { type: "setIcon"; value: string }
+    | { type: "setCategory"; value: string }
+    | { type: "setTriggerType"; value: string }
+    | { type: "setTriggerConfig"; value: JsonObject }
+    | { type: "setConditionLogic"; value: "AND" | "OR" }
+    | { type: "setIsPublished"; value: boolean }
+    | { type: "addCondition" }
+    | { type: "removeCondition"; index: number }
+    | { type: "updateCondition"; index: number; updates: Partial<Condition> }
+    | { type: "addAction" }
+    | { type: "removeAction"; index: number }
+    | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
+
+function createInitialWorkflowTemplateEditorState(): WorkflowTemplateEditorState {
+    return {
+        name: "",
+        description: "",
+        icon: "template",
+        category: "general",
+        triggerType: "",
+        triggerConfig: {},
+        conditions: [],
+        conditionLogic: "AND",
+        actions: [],
+        isPublished: false,
+    }
+}
+
+function mergeActionConfig(action: EditableAction, updates: Partial<ActionConfig>): EditableAction {
+    const next: EditableAction = { ...action }
+    for (const [key, value] of Object.entries(updates)) {
+        if (value !== undefined) {
+            next[key] = value as JsonValue
+        }
+    }
+    return next
+}
+
+function workflowTemplateEditorReducer(
+    state: WorkflowTemplateEditorState,
+    action: WorkflowTemplateEditorAction
+): WorkflowTemplateEditorState {
+    switch (action.type) {
+        case "hydrateDraft": {
+            const draft = action.templateData.draft
+            return {
+                ...state,
+                name: draft.name ?? "",
+                description: draft.description ?? "",
+                icon: draft.icon ?? "template",
+                category: draft.category ?? "general",
+                triggerType: draft.trigger_type ?? "",
+                triggerConfig: normalizeTriggerConfigForUi(
+                    draft.trigger_type ?? "",
+                    draft.trigger_config ?? {},
+                    action.statusOptions
+                ),
+                conditions: normalizeConditionsForUi(draft.conditions ?? []),
+                conditionLogic: (draft.condition_logic ?? "AND") as "AND" | "OR",
+                actions: normalizeActionsForUi(draft.actions ?? []),
+                isPublished: (action.templateData.published_version ?? 0) > 0,
+            }
+        }
+        case "loadZapierSample":
+            return {
+                ...state,
+                name: ZAPIER_CONVERSION_SAMPLE.name,
+                description: ZAPIER_CONVERSION_SAMPLE.description,
+                icon: ZAPIER_CONVERSION_SAMPLE.icon,
+                category: ZAPIER_CONVERSION_SAMPLE.category,
+                triggerType: ZAPIER_CONVERSION_SAMPLE.trigger_type,
+                triggerConfig: ZAPIER_CONVERSION_SAMPLE.trigger_config,
+                conditions: normalizeConditionsForUi(ZAPIER_CONVERSION_SAMPLE.conditions),
+                conditionLogic: ZAPIER_CONVERSION_SAMPLE.condition_logic,
+                actions: normalizeActionsForUi(ZAPIER_CONVERSION_SAMPLE.actions),
+            }
+        case "loadSharedIntakeSample":
+            return {
+                ...state,
+                name: "Shared Intake Routing: Match Then Lead",
+                description:
+                    "When a shared application is submitted, auto-match to an existing surrogate first; if no deterministic match exists, create an intake lead.",
+                icon: "activity",
+                category: "intake",
+                triggerType: "form_submitted",
+                triggerConfig: {},
+                conditions: normalizeConditionsForUi([
+                    { field: "source_mode", operator: "equals", value: "shared" },
+                ]),
+                conditionLogic: "AND",
+                actions: normalizeActionsForUi([
+                    { action_type: "auto_match_submission" },
+                    { action_type: "create_intake_lead", source: "shared_form_workflow" },
+                ]),
+            }
+        case "setName":
+            return { ...state, name: action.value }
+        case "setDescription":
+            return { ...state, description: action.value }
+        case "setIcon":
+            return { ...state, icon: action.value }
+        case "setCategory":
+            return { ...state, category: action.value }
+        case "setTriggerType":
+            return { ...state, triggerType: action.value }
+        case "setTriggerConfig":
+            return { ...state, triggerConfig: action.value }
+        case "setConditionLogic":
+            return { ...state, conditionLogic: action.value }
+        case "setIsPublished":
+            return { ...state, isPublished: action.value }
+        case "addCondition":
+            return {
+                ...state,
+                conditions: [
+                    ...state.conditions,
+                    { clientId: createClientRowId(), field: "", operator: "equals", value: "" },
+                ],
+            }
+        case "removeCondition":
+            return {
+                ...state,
+                conditions: state.conditions.filter((_, index) => index !== action.index),
+            }
+        case "updateCondition":
+            return {
+                ...state,
+                conditions: state.conditions.map((condition, index) => {
+                    if (index !== action.index) return condition
+                    const next: EditableCondition = { ...condition, ...action.updates }
+                    const fieldChanged =
+                        typeof action.updates.field === "string" && action.updates.field !== condition.field
+                    if (fieldChanged) {
+                        next.value = ""
+                    }
+                    if (VALUELESS_OPERATORS.has(next.operator)) {
+                        next.value = ""
+                        return next
+                    }
+                    if (LIST_OPERATORS.has(next.operator)) {
+                        if (MULTISELECT_FIELDS.has(next.field)) {
+                            next.value = toListArray(next.value as JsonValue)
+                        } else {
+                            if (Array.isArray(next.value)) {
+                                next.value = next.value.join(", ")
+                            }
+                            if (typeof next.value !== "string") {
+                                next.value = ""
+                            }
+                        }
+                        return next
+                    }
+                    if (Array.isArray(next.value)) {
+                        next.value = next.value[0] ?? ""
+                    }
+                    return next
+                }),
+            }
+        case "addAction":
+            return {
+                ...state,
+                actions: [...state.actions, { clientId: createClientRowId(), action_type: "" }],
+            }
+        case "removeAction":
+            return {
+                ...state,
+                actions: state.actions.filter((_, index) => index !== action.index),
+            }
+        case "updateAction":
+            return {
+                ...state,
+                actions: state.actions.map((currentAction, index) =>
+                    index === action.index ? mergeActionConfig(currentAction, action.updates) : currentAction
+                ),
+            }
+        default:
+            return state
+    }
+}
+
+type TemplateUserOption = {
+    id: string
+    display_name: string
+}
+
+type TemplateQueueOption = {
+    id: string
+    name: string
+}
+
+type UpdateConditionHandler = (index: number, updates: Partial<Condition>) => void
+type UpdateActionHandler = (index: number, updates: Partial<ActionConfig>) => void
+
+type WorkflowTemplateDeleteDialogProps = {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    onDelete: () => void
+    isDeleting: boolean
+    name: string
+}
+
+function WorkflowTemplateDeleteDialog({
+    open,
+    onOpenChange,
+    onDelete,
+    isDeleting,
+    name,
+}: WorkflowTemplateDeleteDialogProps) {
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete template?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This permanently deletes{" "}
+                        <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={onDelete}
+                        disabled={isDeleting}
+                        className="bg-destructive text-white hover:bg-destructive/90"
+                    >
+                        Delete
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
+}
+
+type WorkflowTemplateHeaderProps = {
+    name: string
+    setName: (value: string) => void
+    isPublished: boolean
+    isNew: boolean
+    isDeleting: boolean
+    isSaving: boolean
+    isPublishing: boolean
+    onBack: () => void
+    onDelete: () => void
+    onSave: () => void
+    onPublish: () => void
+}
+
+function WorkflowTemplateHeader({
+    name,
+    setName,
+    isPublished,
+    isNew,
+    isDeleting,
+    isSaving,
+    isPublishing,
+    onBack,
+    onDelete,
+    onSave,
+    onPublish,
+}: WorkflowTemplateHeaderProps) {
+    return (
+        <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
+            <div className="flex items-center gap-4">
+                <Button variant="ghost" size="icon" aria-label="Back to workflow templates" onClick={onBack}>
+                    <ArrowLeftIcon className="size-5" />
+                </Button>
+                <Input
+                    id="workflow-name"
+                    aria-label="Workflow template name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Workflow template name..."
+                    className="h-9 w-72 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
+                />
+                <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
+                    {isPublished ? "Published" : "Draft"}
+                </Badge>
+            </div>
+            <div className="flex items-center gap-3">
+                {!isNew && (
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={onDelete}
+                        disabled={isDeleting || isSaving || isPublishing}
+                    >
+                        {isDeleting ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : <Trash2Icon className="mr-2 size-4" />}
+                        Delete
+                    </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={onSave} disabled={isSaving || isPublishing}>
+                    {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                    Save Draft
+                </Button>
+                <Button size="sm" onClick={onPublish} disabled={isSaving || isPublishing}>
+                    {isPublishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                    Publish
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateDetailsSectionProps = {
+    description: string
+    setDescription: (value: string) => void
+    category: string
+    setCategory: (value: string) => void
+    icon: string
+    setIcon: (value: string) => void
+    onLoadSharedIntakeSample: () => void
+    onLoadZapierSample: () => void
+}
+
+function WorkflowTemplateDetailsSection({
+    description,
+    setDescription,
+    category,
+    setCategory,
+    icon,
+    setIcon,
+    onLoadSharedIntakeSample,
+    onLoadZapierSample,
+}: WorkflowTemplateDetailsSectionProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Template Details</CardTitle>
+                <CardDescription>Define name, category, and icon for the template.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                    <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={onLoadSharedIntakeSample}>
+                            Load Shared Intake Sample
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={onLoadZapierSample}>
+                            Load Zapier Conversion Sample
+                        </Button>
+                    </div>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                    <Label>Description</Label>
+                    <Textarea
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        placeholder="Describe what this workflow does"
+                        rows={3}
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label>Category (optional)</Label>
+                    <Input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="onboarding" />
+                </div>
+                <div className="space-y-2">
+                    <Label>Icon (optional)</Label>
+                    <Select value={icon} onValueChange={(value) => value && setIcon(value)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select icon" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {ICON_OPTIONS.map((iconKey) => (
+                                <SelectItem key={iconKey} value={iconKey}>
+                                    {ICON_LABELS[iconKey] ?? "Unknown icon"}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+type WorkflowTemplateStageTriggerFieldsProps = {
+    triggerConfig: JsonObject
+    setTriggerConfig: (value: JsonObject) => void
+    stageIdOptions: SelectOption[]
+}
+
+function WorkflowTemplateStageTriggerFields({
+    triggerConfig,
+    setTriggerConfig,
+    stageIdOptions,
+}: WorkflowTemplateStageTriggerFieldsProps) {
+    return (
+        <div className="grid gap-4 md:grid-cols-2">
+            <div>
+                <Label>To Stage (Optional)</Label>
+                <Select
+                    value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
+                    onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_stage_id: value })}
+                >
+                    <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder="Any stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="">Any stage</SelectItem>
+                        {stageIdOptions.map((stage) => (
+                            <SelectItem key={stage.value} value={stage.value}>
+                                {stage.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div>
+                <Label>From Stage (Optional)</Label>
+                <Select
+                    value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
+                    onValueChange={(value) => setTriggerConfig({ ...triggerConfig, from_stage_id: value })}
+                >
+                    <SelectTrigger className="mt-1.5">
+                        <SelectValue placeholder="Any stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="">Any stage</SelectItem>
+                        {stageIdOptions.map((stage) => (
+                            <SelectItem key={stage.value} value={stage.value}>
+                                {stage.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateScheduledTriggerFieldsProps = {
+    triggerConfig: JsonObject
+    setTriggerConfig: (value: JsonObject) => void
+}
+
+function WorkflowTemplateScheduledTriggerFields({
+    triggerConfig,
+    setTriggerConfig,
+}: WorkflowTemplateScheduledTriggerFieldsProps) {
+    return (
+        <div className="grid gap-4 md:grid-cols-2">
+            <div>
+                <Label>Cron Schedule *</Label>
+                <Input
+                    placeholder="0 9 * * 1"
+                    className="mt-1.5"
+                    value={typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""}
+                    onChange={(event) => setTriggerConfig({ ...triggerConfig, cron: event.target.value })}
+                />
+            </div>
+            <div>
+                <Label>Timezone</Label>
+                <Input
+                    placeholder="America/Los_Angeles"
+                    className="mt-1.5"
+                    value={typeof triggerConfig.timezone === "string" ? triggerConfig.timezone : "America/Los_Angeles"}
+                    onChange={(event) => setTriggerConfig({ ...triggerConfig, timezone: event.target.value })}
+                />
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateFormTriggerFieldProps = {
+    label: string
+    placeholder: string
+    emptyHint: string
+    allowAnyForm: boolean
+    formId: string
+    formOptions: SelectOption[]
+    onChange: (value: string) => void
+}
+
+function WorkflowTemplateFormTriggerField({
+    label,
+    placeholder,
+    emptyHint,
+    allowAnyForm,
+    formId,
+    formOptions,
+    onChange,
+}: WorkflowTemplateFormTriggerFieldProps) {
+    return (
+        <div>
+            <Label>{label}</Label>
+            <Select
+                value={formId}
+                onValueChange={(value) => {
+                    if (!value) return
+                    onChange(allowAnyForm && value === "__any_form__" ? "" : value)
+                }}
+            >
+                <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder={placeholder}>
+                        {(value: string | null) => {
+                            if (!value) return placeholder
+                            const form = formOptions.find((option) => option.value === value)
+                            return form?.label ?? "Unknown form"
+                        }}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {allowAnyForm && <SelectItem value="__any_form__">{placeholder}</SelectItem>}
+                    {formOptions.map((form) => (
+                        <SelectItem key={form.value} value={form.value}>
+                            {form.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {formOptions.length === 0 && <p className="mt-2 text-xs text-muted-foreground">{emptyHint}</p>}
+        </div>
+    )
+}
+
+type WorkflowTemplateSurrogateUpdatedTriggerFieldsProps = {
+    triggerConfig: JsonObject
+    setTriggerConfig: (value: JsonObject) => void
+    conditionFields: string[]
+}
+
+function WorkflowTemplateSurrogateUpdatedTriggerFields({
+    triggerConfig,
+    setTriggerConfig,
+    conditionFields,
+}: WorkflowTemplateSurrogateUpdatedTriggerFieldsProps) {
+    const selectedTriggerFields = Array.isArray(triggerConfig.fields)
+        ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
+        : []
+
+    return (
+        <div className="space-y-3">
+            <Label>Fields to Watch *</Label>
+            <Select
+                value=""
+                onValueChange={(value) => {
+                    if (!value || selectedTriggerFields.includes(value)) return
+                    setTriggerConfig({ ...triggerConfig, fields: [...selectedTriggerFields, value] })
+                }}
+            >
+                <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select field to add" />
+                </SelectTrigger>
+                <SelectContent>
+                    {conditionFields.map((field) => (
+                        <SelectItem key={field} value={field}>
+                            {getConditionFieldLabel(field)}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {selectedTriggerFields.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {selectedTriggerFields.map((field) => (
+                        <Badge key={field} variant="secondary" className="gap-1">
+                            {getConditionFieldLabel(field)}
+                            <button
+                                type="button"
+                                className="ml-1 text-xs"
+                                aria-label="Remove field"
+                                onClick={() =>
+                                    setTriggerConfig({
+                                        ...triggerConfig,
+                                        fields: selectedTriggerFields.filter((currentField) => currentField !== field),
+                                    })
+                                }
+                            >
+                                <XIcon className="size-3" />
+                            </button>
+                        </Badge>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+type WorkflowTemplateAssignedTriggerFieldsProps = {
+    triggerConfig: JsonObject
+    setTriggerConfig: (value: JsonObject) => void
+    userOptions: TemplateUserOption[]
+}
+
+function WorkflowTemplateAssignedTriggerFields({
+    triggerConfig,
+    setTriggerConfig,
+    userOptions,
+}: WorkflowTemplateAssignedTriggerFieldsProps) {
+    return (
+        <div>
+            <Label>Assigned To (Optional)</Label>
+            <Select
+                value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
+                onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || null })}
+            >
+                <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="Any user" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="">Any user</SelectItem>
+                    {userOptions.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                            {user.display_name}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+}
+
+type WorkflowTemplateTriggerConfigFieldsProps = {
+    triggerType: string
+    triggerConfig: JsonObject
+    setTriggerConfig: (value: JsonObject) => void
+    stageIdOptions: SelectOption[]
+    formOptions: SelectOption[]
+    conditionFields: string[]
+    userOptions: TemplateUserOption[]
+}
+
+function WorkflowTemplateTriggerConfigFields({
+    triggerType,
+    triggerConfig,
+    setTriggerConfig,
+    stageIdOptions,
+    formOptions,
+    conditionFields,
+    userOptions,
+}: WorkflowTemplateTriggerConfigFieldsProps) {
+    if (triggerType === "status_changed") {
+        return (
+            <WorkflowTemplateStageTriggerFields
+                triggerConfig={triggerConfig}
+                setTriggerConfig={setTriggerConfig}
+                stageIdOptions={stageIdOptions}
+            />
+        )
+    }
+
+    if (triggerType === "scheduled") {
+        return <WorkflowTemplateScheduledTriggerFields triggerConfig={triggerConfig} setTriggerConfig={setTriggerConfig} />
+    }
+
+    if (triggerType === "inactivity") {
+        return (
+            <div>
+                <Label>Days Inactive *</Label>
+                <Input
+                    type="number"
+                    min={1}
+                    max={90}
+                    className="mt-1.5"
+                    value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
+                    onChange={(event) => setTriggerConfig({ ...triggerConfig, days: Number(event.target.value) })}
+                />
+            </div>
+        )
+    }
+
+    if (triggerType === "form_started") {
+        return (
+            <WorkflowTemplateFormTriggerField
+                label="Form *"
+                placeholder="Select form"
+                emptyHint="Publish a form to use this trigger."
+                allowAnyForm={false}
+                formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                formOptions={formOptions}
+                onChange={(value) => value && setTriggerConfig({ ...triggerConfig, form_id: value })}
+            />
+        )
+    }
+
+    if (triggerType === "form_submitted") {
+        return (
+            <WorkflowTemplateFormTriggerField
+                label="Form (optional)"
+                placeholder="Any published form"
+                emptyHint="Publish a form to use this trigger."
+                allowAnyForm
+                formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                formOptions={formOptions}
+                onChange={(value) => setTriggerConfig({ ...triggerConfig, form_id: value })}
+            />
+        )
+    }
+
+    if (triggerType === "intake_lead_created") {
+        return (
+            <WorkflowTemplateFormTriggerField
+                label="Form (optional)"
+                placeholder="Any published form"
+                emptyHint="Leave blank to apply to all forms in target orgs."
+                allowAnyForm
+                formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                formOptions={formOptions}
+                onChange={(value) => setTriggerConfig({ ...triggerConfig, form_id: value })}
+            />
+        )
+    }
+
+    if (triggerType === "task_due") {
+        return (
+            <div>
+                <Label>Hours Before Due *</Label>
+                <Input
+                    type="number"
+                    min={1}
+                    max={168}
+                    className="mt-1.5"
+                    value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
+                    onChange={(event) => setTriggerConfig({ ...triggerConfig, hours_before: Number(event.target.value) })}
+                />
+            </div>
+        )
+    }
+
+    if (triggerType === "surrogate_updated") {
+        return (
+            <WorkflowTemplateSurrogateUpdatedTriggerFields
+                triggerConfig={triggerConfig}
+                setTriggerConfig={setTriggerConfig}
+                conditionFields={conditionFields}
+            />
+        )
+    }
+
+    if (triggerType === "surrogate_assigned") {
+        return (
+            <WorkflowTemplateAssignedTriggerFields
+                triggerConfig={triggerConfig}
+                setTriggerConfig={setTriggerConfig}
+                userOptions={userOptions}
+            />
+        )
+    }
+
+    return null
+}
+
+type WorkflowTemplateTriggerSectionProps = {
+    triggerType: string
+    setTriggerType: (value: string) => void
+    triggerTypeOptions: SelectOption[]
+    triggerConfig: JsonObject
+    setTriggerConfig: (value: JsonObject) => void
+    stageIdOptions: SelectOption[]
+    formOptions: SelectOption[]
+    conditionFields: string[]
+    userOptions: TemplateUserOption[]
+}
+
+function WorkflowTemplateTriggerSection({
+    triggerType,
+    setTriggerType,
+    triggerTypeOptions,
+    triggerConfig,
+    setTriggerConfig,
+    stageIdOptions,
+    formOptions,
+    conditionFields,
+    userOptions,
+}: WorkflowTemplateTriggerSectionProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Trigger</CardTitle>
+                <CardDescription>Pick a trigger type and configure it.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div>
+                    <Label>Trigger Type *</Label>
+                    <Select value={triggerType} onValueChange={(value) => value && setTriggerType(value)}>
+                        <SelectTrigger className="mt-1.5 w-full">
+                            <SelectValue placeholder="Select trigger">
+                                {(value: string | null) => {
+                                    if (!value) return "Select trigger"
+                                    const trigger = triggerTypeOptions.find((option) => option.value === value)
+                                    return trigger?.label ?? triggerLabels[value] ?? "Unknown trigger"
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="min-w-[320px]">
+                            {triggerTypeOptions.map((trigger) => (
+                                <SelectItem key={trigger.value} value={trigger.value}>
+                                    {trigger.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <WorkflowTemplateTriggerConfigFields
+                    triggerType={triggerType}
+                    triggerConfig={triggerConfig}
+                    setTriggerConfig={setTriggerConfig}
+                    stageIdOptions={stageIdOptions}
+                    formOptions={formOptions}
+                    conditionFields={conditionFields}
+                    userOptions={userOptions}
+                />
+            </CardContent>
+        </Card>
+    )
+}
+
+type WorkflowTemplateConditionRowProps = {
+    condition: EditableCondition
+    index: number
+    conditionOperators: SelectOption[]
+    conditionFields: string[]
+    getConditionOptions: (field: string) => SelectOption[] | null
+    updateCondition: UpdateConditionHandler
+    removeCondition: (index: number) => void
+}
+
+function WorkflowTemplateConditionRow({
+    condition,
+    index,
+    conditionOperators,
+    conditionFields,
+    getConditionOptions,
+    updateCondition,
+    removeCondition,
+}: WorkflowTemplateConditionRowProps) {
+    return (
+        <Card>
+            <CardContent className="space-y-3 p-4">
+                <div className="flex items-center gap-3">
+                    <Select value={condition.field} onValueChange={(value) => value && updateCondition(index, { field: value })}>
+                        <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Field">
+                                {(value: string | null) => (value ? getConditionFieldLabel(value) : "Field")}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {conditionFields.map((field) => (
+                                <SelectItem key={field} value={field}>
+                                    {getConditionFieldLabel(field)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={condition.operator}
+                        onValueChange={(value) => value && updateCondition(index, { operator: value })}
+                    >
+                        <SelectTrigger className="w-36">
+                            <SelectValue placeholder="Operator">
+                                {(value: string | null) => {
+                                    if (!value) return "Operator"
+                                    const operator = conditionOperators.find((option) => option.value === value)
+                                    return operator?.label ?? "Unknown operator"
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {conditionOperators.map((operator) => (
+                                <SelectItem key={operator.value} value={operator.value}>
+                                    {operator.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <ConditionValueInput
+                        condition={condition}
+                        options={getConditionOptions(condition.field)}
+                        onChange={(value) => updateCondition(index, { value })}
+                    />
+                    <Button size="icon" variant="ghost" aria-label="Remove condition" onClick={() => removeCondition(index)}>
+                        <XIcon className="size-4" />
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+type WorkflowTemplateConditionsSectionProps = {
+    conditions: EditableCondition[]
+    conditionOperators: SelectOption[]
+    conditionFields: string[]
+    conditionLogic: "AND" | "OR"
+    setConditionLogic: (value: "AND" | "OR") => void
+    getConditionOptions: (field: string) => SelectOption[] | null
+    addCondition: () => void
+    updateCondition: UpdateConditionHandler
+    removeCondition: (index: number) => void
+}
+
+function WorkflowTemplateConditionsSection({
+    conditions,
+    conditionOperators,
+    conditionFields,
+    conditionLogic,
+    setConditionLogic,
+    getConditionOptions,
+    addCondition,
+    updateCondition,
+    removeCondition,
+}: WorkflowTemplateConditionsSectionProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Conditions</CardTitle>
+                <CardDescription>Optional filters that must be true for the workflow to run.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Label>Conditions</Label>
+                    <Button size="sm" variant="outline" onClick={addCondition}>
+                        <PlusIcon className="mr-1 size-3" />
+                        Add Condition
+                    </Button>
+                </div>
+
+                {conditions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No conditions - workflow will run for all matching triggers.</p>
+                ) : (
+                    <>
+                        {conditions.map((condition, index) => (
+                            <WorkflowTemplateConditionRow
+                                key={condition.clientId}
+                                condition={condition}
+                                index={index}
+                                conditionOperators={conditionOperators}
+                                conditionFields={conditionFields}
+                                getConditionOptions={getConditionOptions}
+                                updateCondition={updateCondition}
+                                removeCondition={removeCondition}
+                            />
+                        ))}
+                        {conditions.length > 1 && (
+                            <div className="flex justify-center">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setConditionLogic(conditionLogic === "AND" ? "OR" : "AND")}
+                                >
+                                    {conditionLogic}
+                                </Button>
+                            </div>
+                        )}
+                    </>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+type WorkflowTemplateSendEmailFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+    userOptions: TemplateUserOption[]
+}
+
+function WorkflowTemplateSendEmailFields({
+    action,
+    index,
+    updateAction,
+    userOptions,
+}: WorkflowTemplateSendEmailFieldsProps) {
+    return (
+        <div className="space-y-3">
+            <div className="space-y-2">
+                <Label>Email Template ID (optional)</Label>
+                <Input
+                    placeholder="Leave blank to force selection in each org"
+                    value={typeof action.template_id === "string" ? action.template_id : ""}
+                    onChange={(event) => updateAction(index, { template_id: event.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">Use only if every target org has this template ID.</p>
+            </div>
+            <div className="space-y-2">
+                <Label>Recipient</Label>
+                <Select
+                    value={getEmailRecipientKind(action)}
+                    onValueChange={(value) => {
+                        if (value === "user") {
+                            const currentUser = getEmailRecipientUserId(action)
+                            updateAction(index, { recipients: currentUser ? [currentUser] : [] })
+                            return
+                        }
+                        updateAction(index, { recipients: value })
+                    }}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select recipient" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {EMAIL_RECIPIENT_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            {getEmailRecipientKind(action) === "user" && (
+                <Select
+                    value={getEmailRecipientUserId(action)}
+                    onValueChange={(value) => updateAction(index, { recipients: value ? [value] : [] })}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select user">
+                            {(value: string | null) => {
+                                if (!value) return "Select user"
+                                const user = userOptions.find((option) => option.id === value)
+                                return user?.display_name ?? "Unknown user"
+                            }}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {userOptions.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                                {user.display_name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )}
+        </div>
+    )
+}
+
+type WorkflowTemplateCreateTaskFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+    userOptions: TemplateUserOption[]
+}
+
+function WorkflowTemplateCreateTaskFields({
+    action,
+    index,
+    updateAction,
+    userOptions,
+}: WorkflowTemplateCreateTaskFieldsProps) {
+    return (
+        <div className="space-y-3">
+            <div className="space-y-2">
+                <Label>Task title *</Label>
+                <Input
+                    placeholder="e.g. Call surrogate to schedule intake"
+                    value={typeof action.title === "string" ? action.title : ""}
+                    onChange={(event) => updateAction(index, { title: event.target.value })}
+                />
+            </div>
+            <div className="space-y-2">
+                <Label>Description (optional)</Label>
+                <Textarea
+                    placeholder="Add context or steps for the assignee"
+                    value={typeof action.description === "string" ? action.description : ""}
+                    onChange={(event) => updateAction(index, { description: event.target.value })}
+                    rows={2}
+                />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                    <Label>Due in (days)</Label>
+                    <Input
+                        type="number"
+                        min={0}
+                        max={365}
+                        placeholder="1"
+                        value={typeof action.due_days === "number" ? action.due_days : 1}
+                        onChange={(event) => updateAction(index, { due_days: Number(event.target.value) })}
+                    />
+                    <p className="text-xs text-muted-foreground">0 = due today.</p>
+                </div>
+                <div className="space-y-2">
+                    <Label>Assignee</Label>
+                    <Select
+                        value={typeof action.assignee === "string" ? action.assignee : "owner"}
+                        onValueChange={(value) => value && updateAction(index, { assignee: value })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Assignee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="owner">Case Owner</SelectItem>
+                            <SelectItem value="creator">Creator</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            {userOptions.map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                    {user.display_name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateSendNotificationFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+    userOptions: TemplateUserOption[]
+}
+
+function WorkflowTemplateSendNotificationFields({
+    action,
+    index,
+    updateAction,
+    userOptions,
+}: WorkflowTemplateSendNotificationFieldsProps) {
+    return (
+        <div className="space-y-3">
+            <div className="space-y-2">
+                <Label>Notification title *</Label>
+                <Input
+                    placeholder="e.g. Follow up required"
+                    value={typeof action.title === "string" ? action.title : ""}
+                    onChange={(event) => updateAction(index, { title: event.target.value })}
+                />
+            </div>
+            <div className="space-y-2">
+                <Label>Message (optional)</Label>
+                <Textarea
+                    placeholder="Add extra details for the recipient"
+                    value={typeof action.body === "string" ? action.body : ""}
+                    onChange={(event) => updateAction(index, { body: event.target.value })}
+                    rows={2}
+                />
+            </div>
+            <div className="space-y-2">
+                <Label>Recipients *</Label>
+                <Select
+                    value={
+                        Array.isArray(action.recipients)
+                            ? action.recipients[0] ?? "owner"
+                            : typeof action.recipients === "string"
+                                ? action.recipients
+                                : "owner"
+                    }
+                    onValueChange={(value) => {
+                        if (!value) return
+                        if (value === "owner" || value === "creator" || value === "all_admins") {
+                            updateAction(index, { recipients: value })
+                            return
+                        }
+                        updateAction(index, { recipients: [value] })
+                    }}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select recipients" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="owner">Owner</SelectItem>
+                        <SelectItem value="creator">Creator</SelectItem>
+                        <SelectItem value="all_admins">All Admins</SelectItem>
+                        {userOptions.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                                {user.display_name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Choose a role or a specific user in each org.</p>
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateAssignSurrogateFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+    userOptions: TemplateUserOption[]
+    queueOptions: TemplateQueueOption[]
+}
+
+function WorkflowTemplateAssignSurrogateFields({
+    action,
+    index,
+    updateAction,
+    userOptions,
+    queueOptions,
+}: WorkflowTemplateAssignSurrogateFieldsProps) {
+    return (
+        <div className="space-y-3">
+            <div className="space-y-2">
+                <Label>Owner type *</Label>
+                <Select
+                    value={typeof action.owner_type === "string" ? action.owner_type : "user"}
+                    onValueChange={(value) => updateAction(index, { owner_type: value, owner_id: "" })}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Owner type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {OWNER_TYPE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2">
+                <Label>Owner *</Label>
+                <Select
+                    value={typeof action.owner_id === "string" ? action.owner_id : ""}
+                    onValueChange={(value) => value && updateAction(index, { owner_id: value })}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select owner" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {(action.owner_type === "queue" ? queueOptions : userOptions).map((owner) => (
+                            <SelectItem key={owner.id} value={owner.id}>
+                                {"name" in owner ? owner.name : owner.display_name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                    Assigning a specific user should target selected orgs only.
+                </p>
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateUpdateFieldFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+    updateFields: string[]
+    stageIdOptions: SelectOption[]
+    userOptions: TemplateUserOption[]
+    queueOptions: TemplateQueueOption[]
+}
+
+function WorkflowTemplateUpdateFieldFields({
+    action,
+    index,
+    updateAction,
+    updateFields,
+    stageIdOptions,
+    userOptions,
+    queueOptions,
+}: WorkflowTemplateUpdateFieldFieldsProps) {
+    return (
+        <div className="space-y-3">
+            <div className="space-y-2">
+                <Label>Field *</Label>
+                <Select
+                    value={typeof action.field === "string" ? action.field : ""}
+                    onValueChange={(value) => value && updateAction(index, { field: value, value: "" })}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {updateFields.map((field) => (
+                            <SelectItem key={field} value={field}>
+                                {getConditionFieldLabel(field)}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            {action.field === "stage_id" ? (
+                <div className="space-y-2">
+                    <Label>Value *</Label>
+                    <Select
+                        value={typeof action.value === "string" ? action.value : ""}
+                        onValueChange={(value) => value && updateAction(index, { value })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select stage" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {stageIdOptions.map((stage) => (
+                                <SelectItem key={stage.value} value={stage.value}>
+                                    {stage.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            ) : action.field === "is_priority" ? (
+                <div className="space-y-2">
+                    <Label>Value *</Label>
+                    <Select
+                        value={typeof action.value === "boolean" ? String(action.value) : ""}
+                        onValueChange={(value) => updateAction(index, { value: value === "true" })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="true">Priority</SelectItem>
+                            <SelectItem value="false">Normal</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            ) : action.field === "owner_type" ? (
+                <div className="space-y-2">
+                    <Label>Value *</Label>
+                    <Select
+                        value={typeof action.value === "string" ? action.value : ""}
+                        onValueChange={(value) => value && updateAction(index, { value })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select owner type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {OWNER_TYPE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            ) : action.field === "owner_id" ? (
+                <div className="space-y-2">
+                    <Label>Value *</Label>
+                    <Select
+                        value={typeof action.value === "string" ? action.value : ""}
+                        onValueChange={(value) => value && updateAction(index, { value })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select owner" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {userOptions.map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                    {user.display_name}
+                                </SelectItem>
+                            ))}
+                            {queueOptions.map((queue) => (
+                                <SelectItem key={queue.id} value={queue.id}>
+                                    {queue.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Owner IDs are org-specific.</p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    <Label>Value *</Label>
+                    <Input
+                        placeholder="Value"
+                        value={typeof action.value === "string" ? action.value : ""}
+                        onChange={(event) => updateAction(index, { value: event.target.value })}
+                    />
+                </div>
+            )}
+        </div>
+    )
+}
+
+type WorkflowTemplatePromoteLeadFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+}
+
+function WorkflowTemplatePromoteLeadFields({
+    action,
+    index,
+    updateAction,
+}: WorkflowTemplatePromoteLeadFieldsProps) {
+    return (
+        <div className="space-y-3">
+            <Input
+                placeholder="Source (optional)"
+                value={typeof action.source === "string" ? action.source : ""}
+                onChange={(event) => updateAction(index, { source: event.target.value })}
+            />
+            <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="text-sm">Mark as priority</div>
+                <Switch
+                    checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
+                    onCheckedChange={(checked) => updateAction(index, { is_priority: checked })}
+                />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="text-sm">Assign to workflow owner if available</div>
+                <Switch
+                    checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
+                    onCheckedChange={(checked) => updateAction(index, { assign_to_user: checked })}
+                />
+            </div>
+        </div>
+    )
+}
+
+type WorkflowTemplateActionFieldsProps = {
+    action: EditableAction
+    index: number
+    updateAction: UpdateActionHandler
+    userOptions: TemplateUserOption[]
+    queueOptions: TemplateQueueOption[]
+    updateFields: string[]
+    stageIdOptions: SelectOption[]
+}
+
+function WorkflowTemplateActionFields({
+    action,
+    index,
+    updateAction,
+    userOptions,
+    queueOptions,
+    updateFields,
+    stageIdOptions,
+}: WorkflowTemplateActionFieldsProps) {
+    if (action.action_type === "send_email") {
+        return (
+            <WorkflowTemplateSendEmailFields
+                action={action}
+                index={index}
+                updateAction={updateAction}
+                userOptions={userOptions}
+            />
+        )
+    }
+
+    if (action.action_type === "create_task") {
+        return (
+            <WorkflowTemplateCreateTaskFields
+                action={action}
+                index={index}
+                updateAction={updateAction}
+                userOptions={userOptions}
+            />
+        )
+    }
+
+    if (action.action_type === "send_notification") {
+        return (
+            <WorkflowTemplateSendNotificationFields
+                action={action}
+                index={index}
+                updateAction={updateAction}
+                userOptions={userOptions}
+            />
+        )
+    }
+
+    if (action.action_type === "assign_surrogate") {
+        return (
+            <WorkflowTemplateAssignSurrogateFields
+                action={action}
+                index={index}
+                updateAction={updateAction}
+                userOptions={userOptions}
+                queueOptions={queueOptions}
+            />
+        )
+    }
+
+    if (action.action_type === "update_field") {
+        return (
+            <WorkflowTemplateUpdateFieldFields
+                action={action}
+                index={index}
+                updateAction={updateAction}
+                updateFields={updateFields}
+                stageIdOptions={stageIdOptions}
+                userOptions={userOptions}
+                queueOptions={queueOptions}
+            />
+        )
+    }
+
+    if (action.action_type === "add_note") {
+        return (
+            <div className="space-y-2">
+                <Label>Note content *</Label>
+                <Textarea
+                    placeholder="What should be logged in the case notes?"
+                    value={typeof action.content === "string" ? action.content : ""}
+                    onChange={(event) => updateAction(index, { content: event.target.value })}
+                    rows={2}
+                />
+            </div>
+        )
+    }
+
+    if (action.action_type === "auto_match_submission") {
+        return (
+            <p className="rounded-md border p-3 text-sm text-muted-foreground">
+                Runs deterministic matching using name + DOB + phone/email and updates the submission to linked or ambiguous review.
+            </p>
+        )
+    }
+
+    if (action.action_type === "create_intake_lead") {
+        return (
+            <div className="space-y-2">
+                <Label>Source (optional)</Label>
+                <Input
+                    placeholder="shared_form_workflow"
+                    value={typeof action.source === "string" ? action.source : ""}
+                    onChange={(event) => updateAction(index, { source: event.target.value })}
+                />
+            </div>
+        )
+    }
+
+    if (action.action_type === "send_zapier_conversion_event") {
+        return (
+            <p className="rounded-md border p-3 text-sm text-muted-foreground">
+                Queues a Zapier outbound stage update when the current stage maps to Qualified, Converted, Lost, or Not Qualified. Skips automatically if outbound integration is disabled.
+            </p>
+        )
+    }
+
+    if (action.action_type === "promote_intake_lead") {
+        return <WorkflowTemplatePromoteLeadFields action={action} index={index} updateAction={updateAction} />
+    }
+
+    return null
+}
+
+type WorkflowTemplateActionCardProps = {
+    action: EditableAction
+    index: number
+    filteredActionTypes: SelectOption[]
+    updateAction: UpdateActionHandler
+    removeAction: (index: number) => void
+    userOptions: TemplateUserOption[]
+    queueOptions: TemplateQueueOption[]
+    updateFields: string[]
+    stageIdOptions: SelectOption[]
+}
+
+function WorkflowTemplateActionCard({
+    action,
+    index,
+    filteredActionTypes,
+    updateAction,
+    removeAction,
+    userOptions,
+    queueOptions,
+    updateFields,
+    stageIdOptions,
+}: WorkflowTemplateActionCardProps) {
+    return (
+        <Card>
+            <CardContent className="space-y-3 p-4">
+                <div className="flex items-center gap-3">
+                    <GripVerticalIcon className="size-4 text-muted-foreground" />
+                    <Select
+                        value={action.action_type}
+                        onValueChange={(value) => value && updateAction(index, { action_type: value })}
+                    >
+                        <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Action type">
+                                {(value: string | null) => {
+                                    if (!value) return "Action type"
+                                    const actionType = filteredActionTypes.find((option) => option.value === value)
+                                    return actionType?.label ?? "Unknown action type"
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {filteredActionTypes.map((actionType) => (
+                                <SelectItem key={actionType.value} value={actionType.value}>
+                                    {actionType.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button size="icon" variant="ghost" aria-label="Remove action" onClick={() => removeAction(index)}>
+                        <XIcon className="size-4" />
+                    </Button>
+                </div>
+
+                <WorkflowTemplateActionFields
+                    action={action}
+                    index={index}
+                    updateAction={updateAction}
+                    userOptions={userOptions}
+                    queueOptions={queueOptions}
+                    updateFields={updateFields}
+                    stageIdOptions={stageIdOptions}
+                />
+
+                {action.action_type && action.action_type !== "promote_intake_lead" && (
+                    <div className="mt-2 flex items-center justify-between border-t pt-2">
+                        <div className="flex flex-col">
+                            <Label className="text-sm font-medium">Requires Approval</Label>
+                            <span className="text-xs text-muted-foreground">
+                                Surrogate owner must approve before this action runs
+                            </span>
+                        </div>
+                        <Switch
+                            checked={!!action.requires_approval}
+                            onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
+                        />
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+type WorkflowTemplateActionsSectionProps = {
+    actions: EditableAction[]
+    filteredActionTypes: SelectOption[]
+    addAction: () => void
+    updateAction: UpdateActionHandler
+    removeAction: (index: number) => void
+    userOptions: TemplateUserOption[]
+    queueOptions: TemplateQueueOption[]
+    updateFields: string[]
+    stageIdOptions: SelectOption[]
+}
+
+function WorkflowTemplateActionsSection({
+    actions,
+    filteredActionTypes,
+    addAction,
+    updateAction,
+    removeAction,
+    userOptions,
+    queueOptions,
+    updateFields,
+    stageIdOptions,
+}: WorkflowTemplateActionsSectionProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Actions</CardTitle>
+                <CardDescription>Define what happens when the trigger and conditions are met.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Label>Actions *</Label>
+                    <Button size="sm" variant="outline" onClick={addAction}>
+                        <PlusIcon className="mr-1 size-3" />
+                        Add Action
+                    </Button>
+                </div>
+
+                {actions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Add at least one action.</p>
+                ) : (
+                    actions.map((action, index) => (
+                        <WorkflowTemplateActionCard
+                            key={action.clientId}
+                            action={action}
+                            index={index}
+                            filteredActionTypes={filteredActionTypes}
+                            updateAction={updateAction}
+                            removeAction={removeAction}
+                            userOptions={userOptions}
+                            queueOptions={queueOptions}
+                            updateFields={updateFields}
+                            stageIdOptions={stageIdOptions}
+                        />
+                    ))
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+type WorkflowTemplateSidebarProps = {
+    workflowValidationError: string | null
+    triggerType: string
+    conditionsCount: number
+    actionsCount: number
+}
+
+function WorkflowTemplateSidebar({
+    workflowValidationError,
+    triggerType,
+    conditionsCount,
+    actionsCount,
+}: WorkflowTemplateSidebarProps) {
+    return (
+        <div className="space-y-4">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Workflow Summary</CardTitle>
+                    <CardDescription>Snapshot of current configuration.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                    {workflowValidationError && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            {workflowValidationError}
+                        </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Trigger</span>
+                        <Badge variant="secondary">{triggerLabels[triggerType] || triggerType || "—"}</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Conditions</span>
+                        <span>{conditionsCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Actions</span>
+                        <span>{actionsCount}</span>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Hints</CardTitle>
+                    <CardDescription>Template best practices.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    <p>Use org-safe defaults (owner/creator/admin) when targeting all orgs.</p>
+                    <p>Leave email template IDs blank to force selection when used.</p>
+                    <p>Assign actions with org-specific users should be published to selected orgs only.</p>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+function useWorkflowTemplatePageState() {
     const router = useRouter()
     const params = useParams()
     const id = params?.id as string
@@ -446,20 +1983,37 @@ export default function PlatformWorkflowTemplatePage() {
     const deleteTemplate = useDeletePlatformWorkflowTemplate()
     const { data: options } = useWorkflowOptions("org")
 
-    const [name, setName] = useState("")
-    const [description, setDescription] = useState("")
-    const [icon, setIcon] = useState("template")
-    const [category, setCategory] = useState("general")
-    const [triggerType, setTriggerType] = useState("")
-    const [triggerConfig, setTriggerConfig] = useState<JsonObject>({})
-    const [conditions, setConditions] = useState<Condition[]>([])
-    const [conditionLogic, setConditionLogic] = useState<"AND" | "OR">("AND")
-    const [actions, setActions] = useState<ActionConfig[]>([])
-    const [isPublished, setIsPublished] = useState(false)
+    const [editorState, dispatchEditor] = useReducer(
+        workflowTemplateEditorReducer,
+        undefined,
+        createInitialWorkflowTemplateEditorState
+    )
     const [showPublishDialog, setShowPublishDialog] = useState(false)
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
+
+    const {
+        name,
+        description,
+        icon,
+        category,
+        triggerType,
+        triggerConfig,
+        conditions,
+        conditionLogic,
+        actions,
+        isPublished,
+    } = editorState
+    const setName = (value: string) => dispatchEditor({ type: "setName", value })
+    const setDescription = (value: string) => dispatchEditor({ type: "setDescription", value })
+    const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
+    const setCategory = (value: string) => dispatchEditor({ type: "setCategory", value })
+    const setTriggerType = (value: string) => dispatchEditor({ type: "setTriggerType", value })
+    const setTriggerConfig = (value: JsonObject) => dispatchEditor({ type: "setTriggerConfig", value })
+    const setConditionLogic = (value: "AND" | "OR") =>
+        dispatchEditor({ type: "setConditionLogic", value })
+    const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
     const statusOptions = useMemo(() => options?.statuses ?? [], [options?.statuses])
     const actionTypeOptions = options?.action_types ?? FALLBACK_ACTION_TYPES
@@ -509,159 +2063,78 @@ export default function PlatformWorkflowTemplatePage() {
         []
     )
 
-    const selectedTriggerFields = Array.isArray(triggerConfig.fields)
-        ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
-        : []
-
     const applyZapierConversionSample = () => {
-        setName(ZAPIER_CONVERSION_SAMPLE.name)
-        setDescription(ZAPIER_CONVERSION_SAMPLE.description)
-        setIcon(ZAPIER_CONVERSION_SAMPLE.icon)
-        setCategory(ZAPIER_CONVERSION_SAMPLE.category)
-        setTriggerType(ZAPIER_CONVERSION_SAMPLE.trigger_type)
-        setTriggerConfig(ZAPIER_CONVERSION_SAMPLE.trigger_config)
-        setConditions(ZAPIER_CONVERSION_SAMPLE.conditions)
-        setConditionLogic(ZAPIER_CONVERSION_SAMPLE.condition_logic)
-        setActions(ZAPIER_CONVERSION_SAMPLE.actions)
+        dispatchEditor({ type: "loadZapierSample" })
         toast.success("Loaded Zapier conversion sample workflow")
     }
 
     useEffect(() => {
         if (!templateData || isNew) return
-        const draft = templateData.draft
-        setName(draft.name ?? "")
-        setDescription(draft.description ?? "")
-        setIcon(draft.icon ?? "template")
-        setCategory(draft.category ?? "general")
-        setTriggerType(draft.trigger_type ?? "")
-        setTriggerConfig(
-            normalizeTriggerConfigForUi(draft.trigger_type ?? "", draft.trigger_config ?? {}, statusOptions)
-        )
-        setConditions(normalizeConditionsForUi(draft.conditions ?? []))
-        setConditionLogic((draft.condition_logic ?? "AND") as "AND" | "OR")
-        setActions(normalizeActionsForUi(draft.actions ?? []))
-        setIsPublished((templateData.published_version ?? 0) > 0)
+        dispatchEditor({ type: "hydrateDraft", templateData, statusOptions })
     }, [templateData, isNew, statusOptions])
 
     useEffect(() => {
         if (!triggerType) return
-        setTriggerConfig((prev) => {
-            const next = { ...prev }
-            if (triggerType === "status_changed") {
-                if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
-                if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
-            }
-            if (triggerType === "scheduled") {
-                if (typeof next.cron !== "string") next.cron = ""
-                if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
-            }
-            if (triggerType === "inactivity") {
-                if (typeof next.days !== "number") next.days = 7
-            }
-            if (triggerType === "task_due") {
-                if (typeof next.hours_before !== "number") next.hours_before = 24
-            }
-            if (triggerType === "surrogate_updated") {
-                if (!Array.isArray(next.fields)) next.fields = []
-            }
-            if (triggerType === "surrogate_assigned") {
-                if (typeof next.to_user_id !== "string") delete next.to_user_id
-            }
-            if (triggerType === "form_started") {
-                if (typeof next.form_id !== "string") next.form_id = ""
-            }
-            if (triggerType === "form_submitted") {
-                if (typeof next.form_id !== "string") next.form_id = ""
-            }
-            if (triggerType === "intake_lead_created") {
-                if (typeof next.form_id !== "string") next.form_id = ""
-            }
-            return next
-        })
-    }, [triggerType])
+        const next = { ...triggerConfig }
+        if (triggerType === "status_changed") {
+            if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+            if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
+        }
+        if (triggerType === "scheduled") {
+            if (typeof next.cron !== "string") next.cron = ""
+            if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+        }
+        if (triggerType === "inactivity") {
+            if (typeof next.days !== "number") next.days = 7
+        }
+        if (triggerType === "task_due") {
+            if (typeof next.hours_before !== "number") next.hours_before = 24
+        }
+        if (triggerType === "surrogate_updated") {
+            if (!Array.isArray(next.fields)) next.fields = []
+        }
+        if (triggerType === "surrogate_assigned") {
+            if (typeof next.to_user_id !== "string") delete next.to_user_id
+        }
+        if (triggerType === "form_started") {
+            if (typeof next.form_id !== "string") next.form_id = ""
+        }
+        if (triggerType === "form_submitted") {
+            if (typeof next.form_id !== "string") next.form_id = ""
+        }
+        if (triggerType === "intake_lead_created") {
+            if (typeof next.form_id !== "string") next.form_id = ""
+        }
+        if (areJsonObjectsEqual(next, triggerConfig)) return
+        setTriggerConfig(next)
+    }, [triggerConfig, triggerType])
 
     const addCondition = () => {
-        setConditions([...conditions, { field: "", operator: "equals", value: "" }])
+        dispatchEditor({ type: "addCondition" })
     }
 
     const removeCondition = (index: number) => {
-        setConditions(conditions.filter((_, i) => i !== index))
+        dispatchEditor({ type: "removeCondition", index })
     }
 
     const updateCondition = (index: number, updates: Partial<Condition>) => {
-        setConditions(
-            conditions.map((condition, i) => {
-                if (i !== index) return condition
-                const next = { ...condition, ...updates }
-                const fieldChanged = typeof updates.field === "string" && updates.field !== condition.field
-                if (fieldChanged) {
-                    next.value = ""
-                }
-                if (VALUELESS_OPERATORS.has(next.operator)) {
-                    next.value = ""
-                    return next
-                }
-                if (LIST_OPERATORS.has(next.operator)) {
-                    if (MULTISELECT_FIELDS.has(next.field)) {
-                        next.value = toListArray(next.value as JsonValue)
-                    } else {
-                        if (Array.isArray(next.value)) {
-                            next.value = next.value.join(", ")
-                        }
-                        if (typeof next.value !== "string") {
-                            next.value = ""
-                        }
-                    }
-                    return next
-                }
-                if (Array.isArray(next.value)) {
-                    next.value = next.value[0] ?? ""
-                }
-                if (BOOLEAN_FIELDS.has(next.field) && typeof next.value !== "boolean") {
-                    next.value = false
-                }
-                return next
-            })
-        )
+        dispatchEditor({ type: "updateCondition", index, updates })
     }
 
     const addAction = () => {
-        setActions([...actions, { action_type: "" }])
+        dispatchEditor({ type: "addAction" })
     }
 
     const removeAction = (index: number) => {
-        setActions(actions.filter((_, i) => i !== index))
-    }
-
-    const mergeActionConfig = (action: ActionConfig, updates: Partial<ActionConfig>): ActionConfig => {
-        const next: ActionConfig = { ...action }
-        for (const [key, value] of Object.entries(updates)) {
-            if (value !== undefined) {
-                next[key] = value as JsonValue
-            }
-        }
-        return next
+        dispatchEditor({ type: "removeAction", index })
     }
 
     const updateAction = (index: number, updates: Partial<ActionConfig>) => {
-        setActions(actions.map((action, i) => (i === index ? mergeActionConfig(action, updates) : action)))
+        dispatchEditor({ type: "updateAction", index, updates })
     }
 
     const applySharedIntakeSample = () => {
-        setName("Shared Intake Routing: Match Then Lead")
-        setDescription(
-            "When a shared application is submitted, auto-match to an existing surrogate first; if no deterministic match exists, create an intake lead."
-        )
-        setIcon("activity")
-        setCategory("intake")
-        setTriggerType("form_submitted")
-        setTriggerConfig({})
-        setConditions([{ field: "source_mode", operator: "equals", value: "shared" }])
-        setConditionLogic("AND")
-        setActions([
-            { action_type: "auto_match_submission" },
-            { action_type: "create_intake_lead", source: "shared_form_workflow" },
-        ])
+        dispatchEditor({ type: "loadSharedIntakeSample" })
         toast.success("Loaded sample workflow template")
     }
 
@@ -675,113 +2148,6 @@ export default function PlatformWorkflowTemplatePage() {
         if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
         if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
         return null
-    }
-
-    const renderConditionValueInput = (condition: Condition, index: number) => {
-        const operator = condition.operator
-        const field = condition.field
-        const isListOperator = LIST_OPERATORS.has(operator)
-        const isValueless = VALUELESS_OPERATORS.has(operator)
-        const optionsForField = getConditionOptions(field)
-
-        if (isValueless) {
-            return (
-                <Input
-                    className="flex-1"
-                    value=""
-                    disabled
-                    placeholder="No value needed"
-                />
-            )
-        }
-
-        if (!isListOperator && BOOLEAN_FIELDS.has(field)) {
-            const checked = Boolean(condition.value)
-            return (
-                <div className="flex flex-1 items-center gap-2 rounded-md border px-3 py-2">
-                    <Switch checked={checked} onCheckedChange={(next) => updateCondition(index, { value: next })} />
-                    <span className="text-sm">{checked ? "Yes" : "No"}</span>
-                </div>
-            )
-        }
-
-        if (!isListOperator && NUMBER_FIELDS.has(field)) {
-            return (
-                <Input
-                    type="number"
-                    className="flex-1"
-                    value={typeof condition.value === "number" ? condition.value : ""}
-                    onChange={(event) => updateCondition(index, { value: Number(event.target.value) })}
-                />
-            )
-        }
-
-        if (!isListOperator && DATE_FIELDS.has(field)) {
-            return (
-                <Input
-                    type="date"
-                    className="flex-1"
-                    value={typeof condition.value === "string" ? condition.value : ""}
-                    onChange={(event) => updateCondition(index, { value: event.target.value })}
-                />
-            )
-        }
-
-        if (isListOperator && optionsForField && MULTISELECT_FIELDS.has(field)) {
-            const selectedValues = Array.isArray(condition.value)
-                ? condition.value.map((item) => String(item))
-                : toListArray(condition.value as JsonValue)
-            return (
-                <MultiSelect
-                    options={optionsForField}
-                    value={selectedValues}
-                    onChange={(next) => updateCondition(index, { value: next })}
-                    placeholder="Select values"
-                />
-            )
-        }
-
-        if (optionsForField && !isListOperator) {
-            return (
-                <Select
-                    value={typeof condition.value === "string" ? condition.value : ""}
-                    onValueChange={(value) => updateCondition(index, { value })}
-                >
-                    <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select value">
-                            {(value: string | null) => {
-                                if (!value) return "Select value"
-                                const option = optionsForField.find((opt) => opt.value === value)
-                                return option?.label ?? "Unknown option"
-                            }}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {optionsForField.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            )
-        }
-
-        const inputValue =
-            typeof condition.value === "string"
-                ? condition.value
-                : Array.isArray(condition.value)
-                    ? condition.value.join(", ")
-                    : ""
-
-        return (
-            <Input
-                placeholder={isListOperator ? "Comma-separated values" : "Value"}
-                className="flex-1"
-                value={inputValue}
-                onChange={(event) => updateCondition(index, { value: event.target.value })}
-            />
-        )
     }
 
     const getTriggerValidationError = (): string | null => {
@@ -1016,6 +2382,118 @@ export default function PlatformWorkflowTemplatePage() {
         }
     }
 
+    return {
+        isNew,
+        isLoading,
+        templateData,
+        name,
+        setName,
+        description,
+        setDescription,
+        category,
+        setCategory,
+        icon,
+        setIcon,
+        triggerType,
+        setTriggerType,
+        triggerTypeOptions,
+        triggerConfig,
+        setTriggerConfig,
+        stageIdOptions,
+        formOptions,
+        conditionFields,
+        conditions,
+        conditionOperators,
+        conditionLogic,
+        setConditionLogic,
+        actions,
+        filteredActionTypes,
+        updateFields,
+        userOptions,
+        queueOptions,
+        isPublished,
+        isSaving,
+        isPublishing,
+        isDeleting: deleteTemplate.isPending,
+        showPublishDialog,
+        setShowPublishDialog,
+        showDeleteDialog,
+        setShowDeleteDialog,
+        workflowValidationError,
+        getConditionOptions,
+        addCondition,
+        updateCondition,
+        removeCondition,
+        addAction,
+        updateAction,
+        removeAction,
+        applySharedIntakeSample,
+        applyZapierConversionSample,
+        handleSave,
+        handlePublish,
+        confirmPublish,
+        handleDelete,
+        handleBack: () => router.push("/ops/templates?tab=workflows"),
+        openDeleteDialog: () => setShowDeleteDialog(true),
+    }
+}
+
+export default function PlatformWorkflowTemplatePage() {
+    const {
+        isNew,
+        isLoading,
+        templateData,
+        name,
+        setName,
+        description,
+        setDescription,
+        category,
+        setCategory,
+        icon,
+        setIcon,
+        triggerType,
+        setTriggerType,
+        triggerTypeOptions,
+        triggerConfig,
+        setTriggerConfig,
+        stageIdOptions,
+        formOptions,
+        conditionFields,
+        conditions,
+        conditionOperators,
+        conditionLogic,
+        setConditionLogic,
+        actions,
+        filteredActionTypes,
+        updateFields,
+        userOptions,
+        queueOptions,
+        isPublished,
+        isSaving,
+        isPublishing,
+        isDeleting,
+        showPublishDialog,
+        setShowPublishDialog,
+        showDeleteDialog,
+        setShowDeleteDialog,
+        workflowValidationError,
+        getConditionOptions,
+        addCondition,
+        updateCondition,
+        removeCondition,
+        addAction,
+        updateAction,
+        removeAction,
+        applySharedIntakeSample,
+        applyZapierConversionSample,
+        handleSave,
+        handlePublish,
+        confirmPublish,
+        handleDelete,
+        handleBack,
+        openDeleteDialog,
+    } = useWorkflowTemplatePageState()
+
     if (!isNew && isLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
@@ -1031,1060 +2509,84 @@ export default function PlatformWorkflowTemplatePage() {
 
     return (
         <div className="min-h-screen bg-stone-100 dark:bg-stone-950">
-            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete template?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This permanently deletes{" "}
-                            <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={deleteTemplate.isPending}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleDelete}
-                            disabled={deleteTemplate.isPending}
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                        >
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <WorkflowTemplateDeleteDialog
+                open={showDeleteDialog}
+                onOpenChange={setShowDeleteDialog}
+                onDelete={handleDelete}
+                isDeleting={isDeleting}
+                name={name}
+            />
 
-            <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Back to workflow templates"
-                        onClick={() => router.push("/ops/templates?tab=workflows")}
-                    >
-                        <ArrowLeftIcon className="size-5" />
-                    </Button>
-                    <Input
-                        id="workflow-name"
-                        aria-label="Workflow template name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        placeholder="Workflow template name..."
-                        className="h-9 w-72 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
-                    />
-                    <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
-                        {isPublished ? "Published" : "Draft"}
-                    </Badge>
-                </div>
-                <div className="flex items-center gap-3">
-                    {!isNew && (
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setShowDeleteDialog(true)}
-                            disabled={deleteTemplate.isPending || isSaving || isPublishing}
-                        >
-                            {deleteTemplate.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            ) : (
-                                <Trash2Icon className="mr-2 size-4" />
-                            )}
-                            Delete
-                        </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving || isPublishing}>
-                        {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                        Save Draft
-                    </Button>
-                    <Button size="sm" onClick={handlePublish} disabled={isSaving || isPublishing}>
-                        {isPublishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                        Publish
-                    </Button>
-                </div>
-            </div>
+            <WorkflowTemplateHeader
+                name={name}
+                setName={setName}
+                isPublished={isPublished}
+                isNew={isNew}
+                isDeleting={isDeleting}
+                isSaving={isSaving}
+                isPublishing={isPublishing}
+                onBack={handleBack}
+                onDelete={openDeleteDialog}
+                onSave={handleSave}
+                onPublish={handlePublish}
+            />
 
             <div className="grid gap-6 p-6 lg:grid-cols-[1fr_320px]">
                 <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Template Details</CardTitle>
-                            <CardDescription>Define name, category, and icon for the template.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-4 md:grid-cols-2">
-                            <div className="md:col-span-2">
-                                <div className="flex flex-wrap gap-2">
-                                    <Button type="button" variant="outline" size="sm" onClick={applySharedIntakeSample}>
-                                        Load Shared Intake Sample
-                                    </Button>
-                                    <Button type="button" variant="outline" size="sm" onClick={applyZapierConversionSample}>
-                                        Load Zapier Conversion Sample
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className="space-y-2 md:col-span-2">
-                                <Label>Description</Label>
-                                <Textarea
-                                    value={description}
-                                    onChange={(event) => setDescription(event.target.value)}
-                                    placeholder="Describe what this workflow does"
-                                    rows={3}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Category (optional)</Label>
-                                <Input
-                                    value={category}
-                                    onChange={(event) => setCategory(event.target.value)}
-                                    placeholder="onboarding"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Icon (optional)</Label>
-                                <Select value={icon} onValueChange={(value) => value && setIcon(value)}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select icon" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {ICON_OPTIONS.map((iconKey) => (
-                                            <SelectItem key={iconKey} value={iconKey}>
-                                                {ICON_LABELS[iconKey] ?? "Unknown icon"}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <WorkflowTemplateDetailsSection
+                        description={description}
+                        setDescription={setDescription}
+                        category={category}
+                        setCategory={setCategory}
+                        icon={icon}
+                        setIcon={setIcon}
+                        onLoadSharedIntakeSample={applySharedIntakeSample}
+                        onLoadZapierSample={applyZapierConversionSample}
+                    />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Trigger</CardTitle>
-                            <CardDescription>Pick a trigger type and configure it.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div>
-                                <Label>Trigger Type *</Label>
-                                <Select value={triggerType} onValueChange={(value) => value && setTriggerType(value)}>
-                                    <SelectTrigger className="mt-1.5 w-full">
-                                        <SelectValue placeholder="Select trigger">
-                                            {(value: string | null) => {
-                                                if (!value) return "Select trigger"
-                                                const trigger = triggerTypeOptions.find((t) => t.value === value)
-                                                return trigger?.label ?? triggerLabels[value] ?? "Unknown trigger"
-                                            }}
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent className="min-w-[320px]">
-                                        {triggerTypeOptions.map((trigger) => (
-                                            <SelectItem key={trigger.value} value={trigger.value}>
-                                                {trigger.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                    <WorkflowTemplateTriggerSection
+                        triggerType={triggerType}
+                        setTriggerType={setTriggerType}
+                        triggerTypeOptions={triggerTypeOptions}
+                        triggerConfig={triggerConfig}
+                        setTriggerConfig={setTriggerConfig}
+                        stageIdOptions={stageIdOptions}
+                        formOptions={formOptions}
+                        conditionFields={conditionFields}
+                        userOptions={userOptions}
+                    />
 
-                            {triggerType === "status_changed" && (
-                                <div className="grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <Label>To Stage (Optional)</Label>
-                                        <Select
-                                            value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
-                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_stage_id: value })}
-                                        >
-                                            <SelectTrigger className="mt-1.5">
-                                                <SelectValue placeholder="Any stage" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="">Any stage</SelectItem>
-                                                {stageIdOptions.map((stage) => (
-                                                    <SelectItem key={stage.value} value={stage.value}>
-                                                        {stage.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>From Stage (Optional)</Label>
-                                        <Select
-                                            value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
-                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, from_stage_id: value })}
-                                        >
-                                            <SelectTrigger className="mt-1.5">
-                                                <SelectValue placeholder="Any stage" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="">Any stage</SelectItem>
-                                                {stageIdOptions.map((stage) => (
-                                                    <SelectItem key={stage.value} value={stage.value}>
-                                                        {stage.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                            )}
+                    <WorkflowTemplateConditionsSection
+                        conditions={conditions}
+                        conditionOperators={conditionOperators}
+                        conditionFields={conditionFields}
+                        conditionLogic={conditionLogic}
+                        setConditionLogic={setConditionLogic}
+                        getConditionOptions={getConditionOptions}
+                        addCondition={addCondition}
+                        updateCondition={updateCondition}
+                        removeCondition={removeCondition}
+                    />
 
-                            {triggerType === "scheduled" && (
-                                <div className="grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <Label>Cron Schedule *</Label>
-                                        <Input
-                                            placeholder="0 9 * * 1"
-                                            className="mt-1.5"
-                                            value={typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""}
-                                            onChange={(event) => setTriggerConfig({ ...triggerConfig, cron: event.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Timezone</Label>
-                                        <Input
-                                            placeholder="America/Los_Angeles"
-                                            className="mt-1.5"
-                                            value={typeof triggerConfig.timezone === "string" ? triggerConfig.timezone : "America/Los_Angeles"}
-                                            onChange={(event) => setTriggerConfig({ ...triggerConfig, timezone: event.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            {triggerType === "inactivity" && (
-                                <div>
-                                    <Label>Days Inactive *</Label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        max={90}
-                                        className="mt-1.5"
-                                        value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
-                                        onChange={(event) => setTriggerConfig({ ...triggerConfig, days: Number(event.target.value) })}
-                                    />
-                                </div>
-                            )}
-
-                            {triggerType === "form_started" && (
-                                <div>
-                                    <Label>Form *</Label>
-                                    <Select
-                                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
-                                        onValueChange={(value) => value && setTriggerConfig({ ...triggerConfig, form_id: value })}
-                                    >
-                                        <SelectTrigger className="mt-1.5">
-                                            <SelectValue placeholder="Select form">
-                                                {(value: string | null) => {
-                                                    if (!value) return "Select form"
-                                                    const form = formOptions.find((option) => option.value === value)
-                                                    return form?.label ?? "Unknown form"
-                                                }}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {formOptions.map((form) => (
-                                                <SelectItem key={form.value} value={form.value}>
-                                                    {form.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {formOptions.length === 0 && (
-                                        <p className="mt-2 text-xs text-muted-foreground">
-                                            Publish a form to use this trigger.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {triggerType === "form_submitted" && (
-                                <div>
-                                    <Label>Form (optional)</Label>
-                                    <Select
-                                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
-                                        onValueChange={(value) =>
-                                            setTriggerConfig({
-                                                ...triggerConfig,
-                                                form_id: value === "__any_form__" ? "" : value,
-                                            })
-                                        }
-                                    >
-                                        <SelectTrigger className="mt-1.5">
-                                            <SelectValue placeholder="Any published form">
-                                                {(value: string | null) => {
-                                                    if (!value) return "Any published form"
-                                                    const form = formOptions.find((option) => option.value === value)
-                                                    return form?.label ?? "Unknown form"
-                                                }}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="__any_form__">Any published form</SelectItem>
-                                            {formOptions.map((form) => (
-                                                <SelectItem key={form.value} value={form.value}>
-                                                    {form.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {formOptions.length === 0 && (
-                                        <p className="mt-2 text-xs text-muted-foreground">
-                                            Publish a form to use this trigger.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {triggerType === "intake_lead_created" && (
-                                <div>
-                                    <Label>Form (optional)</Label>
-                                    <Select
-                                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
-                                        onValueChange={(value) =>
-                                            setTriggerConfig({
-                                                ...triggerConfig,
-                                                form_id: value === "__any_form__" ? "" : value,
-                                            })
-                                        }
-                                    >
-                                        <SelectTrigger className="mt-1.5">
-                                            <SelectValue placeholder="Any published form">
-                                                {(value: string | null) => {
-                                                    if (!value) return "Any published form"
-                                                    const form = formOptions.find((option) => option.value === value)
-                                                    return form?.label ?? "Unknown form"
-                                                }}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="__any_form__">Any published form</SelectItem>
-                                            {formOptions.map((form) => (
-                                                <SelectItem key={form.value} value={form.value}>
-                                                    {form.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {formOptions.length === 0 && (
-                                        <p className="mt-2 text-xs text-muted-foreground">
-                                            Leave blank to apply to all forms in target orgs.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {triggerType === "task_due" && (
-                                <div>
-                                    <Label>Hours Before Due *</Label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        max={168}
-                                        className="mt-1.5"
-                                        value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
-                                        onChange={(event) => setTriggerConfig({ ...triggerConfig, hours_before: Number(event.target.value) })}
-                                    />
-                                </div>
-                            )}
-
-                            {triggerType === "surrogate_updated" && (
-                                <div className="space-y-3">
-                                    <Label>Fields to Watch *</Label>
-                                    <Select
-                                        value=""
-                                        onValueChange={(value) => {
-                                            if (!value || selectedTriggerFields.includes(value)) return
-                                            setTriggerConfig({ ...triggerConfig, fields: [...selectedTriggerFields, value] })
-                                        }}
-                                    >
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Select field to add" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {conditionFields.map((field) => (
-                                                <SelectItem key={field} value={field}>
-                                                    {getConditionFieldLabel(field)}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {selectedTriggerFields.length > 0 && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedTriggerFields.map((field) => (
-                                                <Badge key={field} variant="secondary" className="gap-1">
-                                                    {getConditionFieldLabel(field)}
-                                                    <button
-                                                        type="button"
-                                                        className="ml-1 text-xs"
-                                                        aria-label="Remove field"
-                                                        onClick={() =>
-                                                            setTriggerConfig({
-                                                                ...triggerConfig,
-                                                                fields: selectedTriggerFields.filter((f) => f !== field),
-                                                            })
-                                                        }
-                                                    >
-                                                        <XIcon className="size-3" />
-                                                    </button>
-                                                </Badge>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {triggerType === "surrogate_assigned" && (
-                                <div>
-                                    <Label>Assigned To (Optional)</Label>
-                                    <Select
-                                        value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
-                                        onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || null })}
-                                    >
-                                        <SelectTrigger className="mt-1.5">
-                                            <SelectValue placeholder="Any user" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="">Any user</SelectItem>
-                                            {userOptions.map((user) => (
-                                                <SelectItem key={user.id} value={user.id}>
-                                                    {user.display_name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Conditions</CardTitle>
-                            <CardDescription>Optional filters that must be true for the workflow to run.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <Label>Conditions</Label>
-                                <Button size="sm" variant="outline" onClick={addCondition}>
-                                    <PlusIcon className="mr-1 size-3" />
-                                    Add Condition
-                                </Button>
-                            </div>
-
-                            {conditions.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    No conditions - workflow will run for all matching triggers.
-                                </p>
-                            ) : (
-                                <>
-                                    {conditions.map((condition, index) => (
-                                        <Card key={`condition-${index}`}>
-                                            <CardContent className="space-y-3 p-4">
-                                                <div className="flex items-center gap-3">
-                                                    <Select
-                                                        value={condition.field}
-                                                        onValueChange={(value) => value && updateCondition(index, { field: value })}
-                                                    >
-                                                        <SelectTrigger className="flex-1">
-                                                            <SelectValue placeholder="Field">
-                                                                {(value: string | null) => {
-                                                                    if (!value) return "Field"
-                                                                    return getConditionFieldLabel(value)
-                                                                }}
-                                                            </SelectValue>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {conditionFields.map((field) => (
-                                                                <SelectItem key={field} value={field}>
-                                                                    {getConditionFieldLabel(field)}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Select
-                                                        value={condition.operator}
-                                                        onValueChange={(value) => value && updateCondition(index, { operator: value })}
-                                                    >
-                                                        <SelectTrigger className="w-36">
-                                                            <SelectValue placeholder="Operator">
-                                                                {(value: string | null) => {
-                                                                    if (!value) return "Operator"
-                                                                    const operator = conditionOperators.find((o) => o.value === value)
-                                                                    return operator?.label ?? "Unknown operator"
-                                                                }}
-                                                            </SelectValue>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {conditionOperators.map((operator) => (
-                                                                <SelectItem key={operator.value} value={operator.value}>
-                                                                    {operator.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    {renderConditionValueInput(condition, index)}
-                                                    <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        aria-label="Remove condition"
-                                                        onClick={() => removeCondition(index)}
-                                                    >
-                                                        <XIcon className="size-4" />
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
-                                    {conditions.length > 1 && (
-                                        <div className="flex justify-center">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setConditionLogic(conditionLogic === "AND" ? "OR" : "AND")}
-                                            >
-                                                {conditionLogic}
-                                            </Button>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Actions</CardTitle>
-                            <CardDescription>Define what happens when the trigger and conditions are met.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <Label>Actions *</Label>
-                                <Button size="sm" variant="outline" onClick={addAction}>
-                                    <PlusIcon className="mr-1 size-3" />
-                                    Add Action
-                                </Button>
-                            </div>
-
-                            {actions.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">Add at least one action.</p>
-                            ) : (
-                                actions.map((action, index) => (
-                                    <Card key={`action-${index}`}>
-                                        <CardContent className="space-y-3 p-4">
-                                            <div className="flex items-center gap-3">
-                                                <GripVerticalIcon className="size-4 text-muted-foreground" />
-                                                <Select
-                                                    value={action.action_type}
-                                                    onValueChange={(value) => value && updateAction(index, { action_type: value })}
-                                                >
-                                                    <SelectTrigger className="flex-1">
-                                                        <SelectValue placeholder="Action type">
-                                                            {(value: string | null) => {
-                                                                if (!value) return "Action type"
-                                                                const actionType = actionTypeOptions.find((a) => a.value === value)
-                                                                return actionType?.label ?? "Unknown action type"
-                                                            }}
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                    {filteredActionTypes.map((actionType) => (
-                                                        <SelectItem key={actionType.value} value={actionType.value}>
-                                                            {actionType.label}
-                                                        </SelectItem>
-                                                    ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <Button
-                                                    size="icon"
-                                                    variant="ghost"
-                                                    aria-label="Remove action"
-                                                    onClick={() => removeAction(index)}
-                                                >
-                                                    <XIcon className="size-4" />
-                                                </Button>
-                                            </div>
-
-                                            {action.action_type === "send_email" && (
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Email Template ID (optional)</Label>
-                                                        <Input
-                                                            placeholder="Leave blank to force selection in each org"
-                                                            value={typeof action.template_id === "string" ? action.template_id : ""}
-                                                            onChange={(event) => updateAction(index, { template_id: event.target.value })}
-                                                        />
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Use only if every target org has this template ID.
-                                                        </p>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Recipient</Label>
-                                                        <Select
-                                                            value={getEmailRecipientKind(action)}
-                                                            onValueChange={(value) => {
-                                                                if (value === "user") {
-                                                                    const currentUser = getEmailRecipientUserId(action)
-                                                                    updateAction(index, {
-                                                                        recipients: currentUser ? [currentUser] : [],
-                                                                    })
-                                                                    return
-                                                                }
-                                                                updateAction(index, { recipients: value })
-                                                            }}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select recipient" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {EMAIL_RECIPIENT_OPTIONS.map((option) => (
-                                                                    <SelectItem key={option.value} value={option.value}>
-                                                                        {option.label}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    {getEmailRecipientKind(action) === "user" && (
-                                                        <Select
-                                                            value={getEmailRecipientUserId(action)}
-                                                            onValueChange={(value) =>
-                                                                updateAction(index, { recipients: value ? [value] : [] })
-                                                            }
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select user">
-                                                                    {(value: string | null) => {
-                                                                        if (!value) return "Select user"
-                                                                        const user = userOptions.find((option) => option.id === value)
-                                                                        return user?.display_name ?? "Unknown user"
-                                                                    }}
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {userOptions.map((user) => (
-                                                                    <SelectItem key={user.id} value={user.id}>
-                                                                        {user.display_name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {action.action_type === "create_task" && (
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Task title *</Label>
-                                                        <Input
-                                                            placeholder="e.g. Call surrogate to schedule intake"
-                                                            value={typeof action.title === "string" ? action.title : ""}
-                                                            onChange={(event) => updateAction(index, { title: event.target.value })}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Description (optional)</Label>
-                                                        <Textarea
-                                                            placeholder="Add context or steps for the assignee"
-                                                            value={typeof action.description === "string" ? action.description : ""}
-                                                            onChange={(event) => updateAction(index, { description: event.target.value })}
-                                                            rows={2}
-                                                        />
-                                                    </div>
-                                                    <div className="grid gap-3 md:grid-cols-2">
-                                                        <div className="space-y-2">
-                                                            <Label>Due in (days)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min={0}
-                                                                max={365}
-                                                                placeholder="1"
-                                                                value={typeof action.due_days === "number" ? action.due_days : 1}
-                                                                onChange={(event) =>
-                                                                    updateAction(index, { due_days: Number(event.target.value) })
-                                                                }
-                                                            />
-                                                            <p className="text-xs text-muted-foreground">
-                                                                0 = due today.
-                                                            </p>
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            <Label>Assignee</Label>
-                                                            <Select
-                                                                value={typeof action.assignee === "string" ? action.assignee : "owner"}
-                                                                onValueChange={(value) => value && updateAction(index, { assignee: value })}
-                                                            >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Assignee" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="owner">Case Owner</SelectItem>
-                                                                    <SelectItem value="creator">Creator</SelectItem>
-                                                                    <SelectItem value="admin">Admin</SelectItem>
-                                                                    {userOptions.map((user) => (
-                                                                        <SelectItem key={user.id} value={user.id}>
-                                                                            {user.display_name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {action.action_type === "send_notification" && (
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Notification title *</Label>
-                                                        <Input
-                                                            placeholder="e.g. Follow up required"
-                                                            value={typeof action.title === "string" ? action.title : ""}
-                                                            onChange={(event) => updateAction(index, { title: event.target.value })}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Message (optional)</Label>
-                                                        <Textarea
-                                                            placeholder="Add extra details for the recipient"
-                                                            value={typeof action.body === "string" ? action.body : ""}
-                                                            onChange={(event) => updateAction(index, { body: event.target.value })}
-                                                            rows={2}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Recipients *</Label>
-                                                        <Select
-                                                            value={
-                                                                Array.isArray(action.recipients)
-                                                                    ? action.recipients[0] ?? "owner"
-                                                                    : typeof action.recipients === "string"
-                                                                        ? action.recipients
-                                                                        : "owner"
-                                                            }
-                                                            onValueChange={(value) => {
-                                                                if (!value) return
-                                                                if (value === "owner" || value === "creator" || value === "all_admins") {
-                                                                    updateAction(index, { recipients: value })
-                                                                    return
-                                                                }
-                                                                updateAction(index, { recipients: [value] })
-                                                            }}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select recipients" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="owner">Owner</SelectItem>
-                                                                <SelectItem value="creator">Creator</SelectItem>
-                                                                <SelectItem value="all_admins">All Admins</SelectItem>
-                                                                {userOptions.map((user) => (
-                                                                    <SelectItem key={user.id} value={user.id}>
-                                                                        {user.display_name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Choose a role or a specific user in each org.
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {action.action_type === "assign_surrogate" && (
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Owner type *</Label>
-                                                        <Select
-                                                            value={typeof action.owner_type === "string" ? action.owner_type : "user"}
-                                                            onValueChange={(value) =>
-                                                                updateAction(index, { owner_type: value, owner_id: "" })
-                                                            }
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Owner type" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {OWNER_TYPE_OPTIONS.map((option) => (
-                                                                    <SelectItem key={option.value} value={option.value}>
-                                                                        {option.label}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Owner *</Label>
-                                                        <Select
-                                                            value={typeof action.owner_id === "string" ? action.owner_id : ""}
-                                                            onValueChange={(value) => value && updateAction(index, { owner_id: value })}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select owner" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {(action.owner_type === "queue" ? queueOptions : userOptions).map((owner) => (
-                                                                    <SelectItem key={owner.id} value={owner.id}>
-                                                                        {"name" in owner ? owner.name : owner.display_name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Assigning a specific user should target selected orgs only.
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {action.action_type === "update_field" && (
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Field *</Label>
-                                                        <Select
-                                                            value={typeof action.field === "string" ? action.field : ""}
-                                                            onValueChange={(value) =>
-                                                                value && updateAction(index, { field: value, value: "" })
-                                                            }
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select field" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {updateFields.map((field) => (
-                                                                    <SelectItem key={field} value={field}>
-                                                                        {getConditionFieldLabel(field)}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    {action.field === "stage_id" ? (
-                                                        <div className="space-y-2">
-                                                            <Label>Value *</Label>
-                                                            <Select
-                                                                value={typeof action.value === "string" ? action.value : ""}
-                                                                onValueChange={(value) => value && updateAction(index, { value })}
-                                                            >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Select stage" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {stageIdOptions.map((stage) => (
-                                                                        <SelectItem key={stage.value} value={stage.value}>
-                                                                            {stage.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    ) : action.field === "is_priority" ? (
-                                                        <div className="space-y-2">
-                                                            <Label>Value *</Label>
-                                                            <Select
-                                                                value={typeof action.value === "boolean" ? String(action.value) : ""}
-                                                                onValueChange={(value) =>
-                                                                    updateAction(index, { value: value === "true" })
-                                                                }
-                                                            >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Select priority" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="true">Priority</SelectItem>
-                                                                    <SelectItem value="false">Normal</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    ) : action.field === "owner_type" ? (
-                                                        <div className="space-y-2">
-                                                            <Label>Value *</Label>
-                                                            <Select
-                                                                value={typeof action.value === "string" ? action.value : ""}
-                                                                onValueChange={(value) => value && updateAction(index, { value })}
-                                                            >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Select owner type" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {OWNER_TYPE_OPTIONS.map((option) => (
-                                                                        <SelectItem key={option.value} value={option.value}>
-                                                                            {option.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
-                                                    ) : action.field === "owner_id" ? (
-                                                        <div className="space-y-2">
-                                                            <Label>Value *</Label>
-                                                            <Select
-                                                                value={typeof action.value === "string" ? action.value : ""}
-                                                                onValueChange={(value) => value && updateAction(index, { value })}
-                                                            >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Select owner" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {userOptions.map((user) => (
-                                                                        <SelectItem key={user.id} value={user.id}>
-                                                                            {user.display_name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                    {queueOptions.map((queue) => (
-                                                                        <SelectItem key={queue.id} value={queue.id}>
-                                                                            {queue.name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Owner IDs are org-specific.
-                                                            </p>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-2">
-                                                            <Label>Value *</Label>
-                                                            <Input
-                                                                placeholder="Value"
-                                                                value={typeof action.value === "string" ? action.value : ""}
-                                                                onChange={(event) => updateAction(index, { value: event.target.value })}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {action.action_type === "add_note" && (
-                                                <div className="space-y-2">
-                                                    <Label>Note content *</Label>
-                                                    <Textarea
-                                                        placeholder="What should be logged in the case notes?"
-                                                        value={typeof action.content === "string" ? action.content : ""}
-                                                        onChange={(event) => updateAction(index, { content: event.target.value })}
-                                                        rows={2}
-                                                    />
-                                                </div>
-                                            )}
-                                            {action.action_type === "auto_match_submission" && (
-                                                <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                                                    Runs deterministic matching using name + DOB + phone/email and updates the
-                                                    submission to linked or ambiguous review.
-                                                </p>
-                                            )}
-
-                                            {action.action_type === "create_intake_lead" && (
-                                                <div className="space-y-2">
-                                                    <Label>Source (optional)</Label>
-                                                    <Input
-                                                        placeholder="shared_form_workflow"
-                                                        value={typeof action.source === "string" ? action.source : ""}
-                                                        onChange={(event) => updateAction(index, { source: event.target.value })}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {action.action_type === "send_zapier_conversion_event" && (
-                                                <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                                                    Queues a Zapier outbound stage update when the current stage maps to
-                                                    Qualified, Converted, Lost, or Not Qualified. Skips automatically if outbound
-                                                    integration is disabled.
-                                                </p>
-                                            )}
-
-                                            {action.action_type === "promote_intake_lead" && (
-                                                <div className="space-y-3">
-                                                    <Input
-                                                        placeholder="Source (optional)"
-                                                        value={typeof action.source === "string" ? action.source : ""}
-                                                        onChange={(event) => updateAction(index, { source: event.target.value })}
-                                                    />
-                                                    <div className="flex items-center justify-between rounded-md border p-3">
-                                                        <div className="text-sm">Mark as priority</div>
-                                                        <Switch
-                                                            checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
-                                                            onCheckedChange={(checked) =>
-                                                                updateAction(index, { is_priority: checked })
-                                                            }
-                                                        />
-                                                    </div>
-                                                    <div className="flex items-center justify-between rounded-md border p-3">
-                                                        <div className="text-sm">Assign to workflow owner if available</div>
-                                                        <Switch
-                                                            checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
-                                                            onCheckedChange={(checked) =>
-                                                                updateAction(index, { assign_to_user: checked })
-                                                            }
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {action.action_type &&
-                                                !["promote_intake_lead"].includes(
-                                                    action.action_type
-                                                ) && (
-                                                <div className="flex items-center justify-between pt-2 border-t mt-2">
-                                                    <div className="flex flex-col">
-                                                        <Label className="text-sm font-medium">
-                                                            Requires Approval
-                                                        </Label>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Surrogate owner must approve before this action runs
-                                                        </span>
-                                                    </div>
-                                                    <Switch
-                                                        checked={!!action.requires_approval}
-                                                        onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
-                                                    />
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-                                ))
-                            )}
-                        </CardContent>
-                    </Card>
+                    <WorkflowTemplateActionsSection
+                        actions={actions}
+                        filteredActionTypes={filteredActionTypes}
+                        addAction={addAction}
+                        updateAction={updateAction}
+                        removeAction={removeAction}
+                        userOptions={userOptions}
+                        queueOptions={queueOptions}
+                        updateFields={updateFields}
+                        stageIdOptions={stageIdOptions}
+                    />
                 </div>
 
-                <div className="space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Workflow Summary</CardTitle>
-                            <CardDescription>Snapshot of current configuration.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3 text-sm">
-                            {workflowValidationError && (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                                    {workflowValidationError}
-                                </div>
-                            )}
-                            <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Trigger</span>
-                                <Badge variant="secondary">{triggerLabels[triggerType] || triggerType || "—"}</Badge>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Conditions</span>
-                                <span>{conditions.length}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Actions</span>
-                                <span>{actions.length}</span>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Hints</CardTitle>
-                            <CardDescription>Template best practices.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="text-sm text-muted-foreground space-y-2">
-                            <p>Use org-safe defaults (owner/creator/admin) when targeting all orgs.</p>
-                            <p>Leave email template IDs blank to force selection when used.</p>
-                            <p>Assign actions with org-specific users should be published to selected orgs only.</p>
-                        </CardContent>
-                    </Card>
-                </div>
+                <WorkflowTemplateSidebar
+                    workflowValidationError={workflowValidationError}
+                    triggerType={triggerType}
+                    conditionsCount={conditions.length}
+                    actionsCount={actions.length}
+                />
             </div>
 
             <PublishDialog
