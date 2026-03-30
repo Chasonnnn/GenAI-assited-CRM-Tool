@@ -14,12 +14,6 @@ function display(value: string | number | null | undefined, fallback: string = "
     return String(value)
 }
 
-function yesNo(value: boolean | null | undefined): string {
-    if (value === true) return "Yes"
-    if (value === false) return "No"
-    return "-"
-}
-
 function formatDateOrDash(value: string | null | undefined): string {
     if (!value) return "-"
     return formatDate(value)
@@ -297,22 +291,13 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                         </Section>
 
                         <Section title="Eligibility Checklist">
-                            <Row label="Age Eligible (21-36)" value={yesNo(surrogate.is_age_eligible)} />
-                            <Row label="US Citizen or PR" value={yesNo(surrogate.is_citizen_or_pr)} />
-                            <Row label="Has Child" value={yesNo(surrogate.has_child)} />
-                            <Row label="Non-Smoker" value={yesNo(surrogate.is_non_smoker)} />
-                            <Row
-                                label="Prior Surrogate Experience"
-                                value={yesNo(surrogate.has_surrogate_experience)}
-                            />
-                            <Row
-                                label="Deliveries"
-                                value={surrogate.num_deliveries !== null ? String(surrogate.num_deliveries) : "-"}
-                            />
-                            <Row
-                                label="C-sections"
-                                value={surrogate.num_csections !== null ? String(surrogate.num_csections) : "-"}
-                            />
+                            {(surrogate.eligibility_checklist ?? []).map((item) => (
+                                <Row
+                                    key={item.key}
+                                    label={item.label}
+                                    value={item.display_value}
+                                />
+                            ))}
                         </Section>
                     </div>
                 </div>

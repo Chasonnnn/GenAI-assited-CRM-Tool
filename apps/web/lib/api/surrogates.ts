@@ -111,6 +111,7 @@ export interface SurrogateCreatePayload {
     has_child?: boolean;
     is_non_smoker?: boolean;
     has_surrogate_experience?: boolean;
+    journey_timing_preference?: string;
     num_deliveries?: number;
     num_csections?: number;
     source?: SurrogateSource;
@@ -135,6 +136,7 @@ export interface SurrogateUpdatePayload {
     has_child?: boolean | null;
     is_non_smoker?: boolean | null;
     has_surrogate_experience?: boolean | null;
+    journey_timing_preference?: string | null;
     num_deliveries?: number | null;
     num_csections?: number | null;
     is_priority?: boolean;

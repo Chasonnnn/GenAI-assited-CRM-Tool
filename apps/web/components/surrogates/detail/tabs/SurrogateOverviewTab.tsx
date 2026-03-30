@@ -363,51 +363,26 @@ export function SurrogateOverviewTab() {
                     />
 
                     <SurrogateOverviewCard title="Eligibility Checklist" icon={ClipboardCheckIcon}>
-                        {[
-                            { label: "Age Eligible (21-36)", value: surrogateData.is_age_eligible },
-                            { label: "US Citizen or PR", value: surrogateData.is_citizen_or_pr },
-                            { label: "Has Child", value: surrogateData.has_child },
-                            { label: "Non-Smoker", value: surrogateData.is_non_smoker },
-                            {
-                                label: "Prior Surrogate Experience",
-                                value: surrogateData.has_surrogate_experience,
-                            },
-                        ].map(({ label, value }) => (
-                            <div key={label} className="flex items-center gap-2">
-                                {value === true && <CheckIcon className="h-4 w-4 text-green-500" />}
-                                {value === false && <XIcon className="h-4 w-4 text-red-500" />}
-                                {value === null && (
-                                    <span className="h-4 w-4 text-center text-muted-foreground">
-                                        -
+                        {(surrogateData.eligibility_checklist ?? []).map((item) =>
+                            item.type === "boolean" ? (
+                                <div key={item.key} className="flex items-center gap-2">
+                                    {item.value === true && <CheckIcon className="h-4 w-4 text-green-500" />}
+                                    {item.value === false && <XIcon className="h-4 w-4 text-red-500" />}
+                                    {item.value === null && (
+                                        <span className="h-4 w-4 text-center text-muted-foreground">
+                                            -
+                                        </span>
+                                    )}
+                                    <span className="text-sm">{item.label}</span>
+                                </div>
+                            ) : (
+                                <div key={item.key} className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground">
+                                        {item.label}:
                                     </span>
-                                )}
-                                <span className="text-sm">{label}</span>
-                            </div>
-                        ))}
-                        {(surrogateData.num_deliveries !== null ||
-                            surrogateData.num_csections !== null) && (
-                            <div className="border-t pt-3 space-y-2">
-                                {surrogateData.num_deliveries !== null && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground">
-                                            Deliveries:
-                                        </span>
-                                        <span className="text-sm">
-                                            {surrogateData.num_deliveries}
-                                        </span>
-                                    </div>
-                                )}
-                                {surrogateData.num_csections !== null && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground">
-                                            C-Sections:
-                                        </span>
-                                        <span className="text-sm">
-                                            {surrogateData.num_csections}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
+                                    <span className="text-sm">{item.display_value}</span>
+                                </div>
+                            ),
                         )}
                     </SurrogateOverviewCard>
                 </div>

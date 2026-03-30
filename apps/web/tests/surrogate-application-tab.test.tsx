@@ -257,4 +257,62 @@ describe("SurrogateApplicationTab", () => {
             screen.getByRole("button", { name: "Delete medical-records.pdf" }),
         ).toBeInTheDocument()
     })
+
+    it("renders option labels instead of stored slugs for journey timing answers", () => {
+        mockUseSurrogateFormSubmission.mockReturnValue({
+            isLoading: false,
+            error: null,
+            data: {
+                id: "submission-3",
+                form_id: "form-1",
+                surrogate_id: "surrogate-1",
+                status: "pending_review",
+                submitted_at: new Date().toISOString(),
+                reviewed_at: null,
+                reviewed_by_user_id: null,
+                review_notes: null,
+                source_mode: "dedicated",
+                intake_link_id: null,
+                intake_lead_id: null,
+                match_status: "linked",
+                match_reason: "dedicated_token",
+                matched_at: new Date().toISOString(),
+                answers: {
+                    journey_timing_preference: "months_0_3",
+                },
+                schema_snapshot: {
+                    pages: [
+                        {
+                            title: "Timing",
+                            fields: [
+                                {
+                                    key: "journey_timing_preference",
+                                    label: "When would you like to start your surrogacy journey?",
+                                    type: "radio",
+                                    required: false,
+                                    options: [
+                                        { label: "0–3 months", value: "months_0_3" },
+                                        { label: "3–6 months", value: "months_3_6" },
+                                        { label: "Still deciding", value: "still_deciding" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                files: [],
+            },
+        })
+
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId="form-1"
+                publishedForms={[]}
+            />,
+        )
+
+        expect(screen.getByText("0–3 months")).toBeInTheDocument()
+        expect(screen.queryByText("months_0_3")).not.toBeInTheDocument()
+    })
 })

@@ -28,6 +28,14 @@ export interface SurrogateListItem {
     updated_at: string;
 }
 
+export interface SurrogateEligibilityChecklistItem {
+    key: string;
+    label: string;
+    type: "boolean" | "text" | "number";
+    value?: boolean | string | number | null;
+    display_value: string;
+}
+
 export interface SurrogateLeadIntakeWarning {
     field_key: "email" | "phone" | "state" | "height_ft" | "weight_lb";
     issue: "missing_value" | "invalid_value";
@@ -67,8 +75,10 @@ export interface SurrogateRead {
     has_child: boolean | null;
     is_non_smoker: boolean | null;
     has_surrogate_experience: boolean | null;
+    journey_timing_preference: string | null;
     num_deliveries: number | null;
     num_csections: number | null;
+    eligibility_checklist?: SurrogateEligibilityChecklistItem[];
     insurance_company?: string | null;
     insurance_plan_name?: string | null;
     insurance_phone?: string | null;

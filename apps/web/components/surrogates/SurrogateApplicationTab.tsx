@@ -58,6 +58,7 @@ import {
     type FormSchema,
     type FormSummary,
 } from "@/lib/api/forms"
+import { getFormOptionLabel, getFormOptionLabels } from "@/lib/forms/option-labels"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
 import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
@@ -149,10 +150,16 @@ function resolveFixedTableRows(
     }))
 }
 
-function formatTableCellValue(value: unknown): string {
+function formatTableCellValue(
+    value: unknown,
+    options?: TableColumn["options"],
+): string {
     if (value === null || value === undefined || value === "") return "—"
     if (typeof value === "boolean") return value ? "Yes" : "No"
-    return String(value)
+    if (Array.isArray(value)) {
+        return value.length ? getFormOptionLabels(options, value).join(", ") : "—"
+    }
+    return getFormOptionLabel(options, value) ?? String(value)
 }
 
 export function SurrogateApplicationTab({
@@ -1096,7 +1103,7 @@ export function SurrogateApplicationTab({
                                     ) : null}
                                     {columns.map((column) => (
                                         <td key={column.key} className="py-1 pr-2 align-top">
-                                            {formatTableCellValue(row[column.key])}
+                                            {formatTableCellValue(row[column.key], column.options)}
                                         </td>
                                     ))}
                                 </tr>
@@ -1118,9 +1125,21 @@ export function SurrogateApplicationTab({
                 <Badge variant="secondary">No</Badge>
             )
         }
+        if (
+            typeof value === "string" &&
+            (field.type === "select" || field.type === "radio")
+        ) {
+            return (
+                <span className="text-sm text-right">
+                    {getFormOptionLabel(field.options, value) ?? value}
+                </span>
+            )
+        }
         if (Array.isArray(value)) {
             return value.length ? (
-                <span className="text-sm text-right">{value.join(", ")}</span>
+                <span className="text-sm text-right">
+                    {getFormOptionLabels(field.options, value).join(", ")}
+                </span>
             ) : (
                 <span className="text-sm text-muted-foreground">—</span>
             )

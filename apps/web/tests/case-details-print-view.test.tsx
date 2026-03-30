@@ -82,4 +82,55 @@ describe("CaseDetailsPrintView", () => {
         expect(screen.getByText("Austin Fertility Center")).toBeInTheDocument()
         expect(screen.queryByText("Pregnancy Tracker")).not.toBeInTheDocument()
     })
+
+    it("renders the API-provided eligibility checklist rows", () => {
+        render(
+            <CaseDetailsPrintView
+                data={
+                    {
+                        surrogate: {
+                            id: "sur-1",
+                            surrogate_number: "S10001",
+                            full_name: "Taylor Example",
+                            email: "taylor@example.com",
+                            phone: null,
+                            state: null,
+                            created_at: "2026-03-15T12:00:00Z",
+                            date_of_birth: null,
+                            race: null,
+                            height_ft: null,
+                            weight_lb: null,
+                            bmi: null,
+                            source: "manual",
+                            has_surrogate_experience: true,
+                            journey_timing_preference: null,
+                            eligibility_checklist: [
+                                {
+                                    key: "is_age_eligible",
+                                    label: "Age Eligible (21-36)",
+                                    type: "boolean",
+                                    value: true,
+                                    display_value: "Yes",
+                                },
+                                {
+                                    key: "journey_timing_preference",
+                                    label: "Journey Timing",
+                                    type: "text",
+                                    value: "months_0_3",
+                                    display_value: "0–3 months",
+                                },
+                            ],
+                        },
+                        activities: [],
+                        tasks: [],
+                        show_pregnancy: false,
+                    } as never
+                }
+            />,
+        )
+
+        expect(screen.getByText("Journey Timing")).toBeInTheDocument()
+        expect(screen.getByText("0–3 months")).toBeInTheDocument()
+        expect(screen.queryByText("Prior Surrogate Experience")).not.toBeInTheDocument()
+    })
 })

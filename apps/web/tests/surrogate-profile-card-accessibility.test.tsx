@@ -73,4 +73,27 @@ describe("ProfileCard FieldRow accessibility", () => {
 
         expect(screen.getByRole("button", { name: "Cancel editing Email" })).toBeInTheDocument()
     })
+
+    it("renders option labels instead of stored slugs for select fields", () => {
+        render(
+            <FieldRow
+                fieldKey="journey_timing_preference"
+                field={{
+                    key: "journey_timing_preference",
+                    label: "Journey Timing",
+                    type: "select",
+                    options: [
+                        { label: "0–3 months", value: "months_0_3" },
+                        { label: "3–6 months", value: "months_3_6" },
+                        { label: "Still deciding", value: "still_deciding" },
+                    ],
+                }}
+                mergedValue="months_0_3"
+                baseValue="months_0_3"
+            />,
+        )
+
+        expect(screen.getByText("0–3 months")).toBeInTheDocument()
+        expect(screen.queryByText("months_0_3")).not.toBeInTheDocument()
+    })
 })
