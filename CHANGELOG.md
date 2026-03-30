@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.4...surrogacy-crm-platform-v0.91.5) (2026-03-30)
+
+
+### Features
+
+* add dynamic surrogate checklist backend ([2231614](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2231614672882fb16f8fbb5efb2fb19f9c8399ac))
+* render dynamic surrogate checklist data ([b49542a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b49542a60b1b108aec1be7a5484af42b8018f117))
+
+
+### Bug Fixes
+
+* normalize integrations dropdown labels ([028e854](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/028e854d3e65f9169288b6d58f5b1ca57695ba8e))
+* preserve canonical journey timing builder options ([a07674b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a07674ba31a2caecaa27a922c525ea4dbfc78a29))
+* remove redundant meta crm tracked event input ([22e47ce](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/22e47ce235896ee807496b690e80fe280a5da430))
+* restore checklist editing in surrogate detail ([fa6ed55](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fa6ed5506a6caa0d69d139827388a5b05304c516))
+* stabilize and widen integrations settings ([8236a4e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8236a4eb86b28056e38edc93b433b6c024879397))
+* upgrade cryptography security patch ([e66a4cd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e66a4cdc2c0ff3cc908e66cb56ee0b8df3e59099))
+
 ## [0.91.4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.3...surrogacy-crm-platform-v0.91.4) (2026-03-27)
 
 
