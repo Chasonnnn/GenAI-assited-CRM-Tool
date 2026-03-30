@@ -133,7 +133,9 @@ def test_get_or_create_default_pipeline_prunes_legacy_feature_config_refs(db, te
 
     for milestone in hydrated.feature_config["journey"]["milestones"]:
         assert set(milestone["mapped_stage_keys"]).issubset(active_stage_keys)
-    assert set(hydrated.feature_config["analytics"]["funnel_stage_keys"]).issubset(active_stage_keys)
+    assert set(hydrated.feature_config["analytics"]["funnel_stage_keys"]).issubset(
+        active_stage_keys
+    )
     assert set(hydrated.feature_config["analytics"]["performance_stage_keys"]).issubset(
         active_stage_keys
     )
@@ -802,7 +804,9 @@ async def test_apply_pipeline_draft_adds_custom_stage_and_remaps_deleted_stage_d
     assert default_response.status_code == 200, default_response.text
     pipeline = default_response.json()
 
-    contacted_stage = next(stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted")
+    contacted_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted"
+    )
     contacted_stage_db = pipeline_service.get_stage_by_id(db, UUID(contacted_stage["id"]))
     assert contacted_stage_db is not None
     surrogate = _create_surrogate_for_stage(
@@ -958,8 +962,7 @@ async def test_apply_pipeline_draft_adds_custom_stage_and_remaps_deleted_stage_d
     payload = response.json()
     assert any(stage["stage_key"] == "matching_review" for stage in payload["stages"])
     assert all(
-        stage["stage_key"] != "contacted" or not stage["is_active"]
-        for stage in payload["stages"]
+        stage["stage_key"] != "contacted" or not stage["is_active"] for stage in payload["stages"]
     )
 
     db.refresh(surrogate)

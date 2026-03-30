@@ -74,7 +74,10 @@ def validate_protected_stage_layout(
         return []
 
     errors: list[str] = []
-    if active_stage_keys[0] not in protected_stage_keys or active_stage_keys[-1] not in protected_stage_keys:
+    if (
+        active_stage_keys[0] not in protected_stage_keys
+        or active_stage_keys[-1] not in protected_stage_keys
+    ):
         errors.append("Custom stages must stay between protected system stages.")
 
     draft_protected_stage_keys = [
@@ -235,7 +238,9 @@ def normalize_stage_drafts(
         if declared_order != index:
             auto_fixes.append("Stage order normalized to match the draft order.")
 
-        stage_label = str(raw_stage.get("label") or "").strip() or raw_slug or stage_key or f"Stage {index}"
+        stage_label = (
+            str(raw_stage.get("label") or "").strip() or raw_slug or stage_key or f"Stage {index}"
+        )
         normalized_semantics = pipeline_semantics_service.get_stage_semantics(
             {
                 "entity_type": entity_type,

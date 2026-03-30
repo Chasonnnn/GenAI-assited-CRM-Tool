@@ -150,14 +150,18 @@ def _without_journey_mapping(settings: dict | None) -> dict | None:
 def _update_template_records(add_field: bool) -> None:
     conn = op.get_bind()
     template_table = _template_table()
-    row = conn.execute(
-        sa.select(
-            template_table.c.schema_json,
-            template_table.c.settings_json,
-            template_table.c.published_schema_json,
-            template_table.c.published_settings_json,
-        ).where(template_table.c.name == TEMPLATE_NAME)
-    ).mappings().first()
+    row = (
+        conn.execute(
+            sa.select(
+                template_table.c.schema_json,
+                template_table.c.settings_json,
+                template_table.c.published_schema_json,
+                template_table.c.published_settings_json,
+            ).where(template_table.c.name == TEMPLATE_NAME)
+        )
+        .mappings()
+        .first()
+    )
     if row is None:
         return
 

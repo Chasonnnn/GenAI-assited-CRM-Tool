@@ -141,7 +141,10 @@ def _protected_stage_update_errors(
         attempted_fields.append("color")
     if order is not None and order != stage.order:
         attempted_fields.append("order")
-    if stage_type is not None and pipeline_change_service.normalize_stage_category(stage_type) != stage.stage_type:
+    if (
+        stage_type is not None
+        and pipeline_change_service.normalize_stage_category(stage_type) != stage.stage_type
+    ):
         attempted_fields.append("category")
     if semantics is not None:
         next_semantics = pipeline_semantics_service.get_stage_semantics(
@@ -208,8 +211,14 @@ def _protected_stage_draft_errors(
             slug=str(draft_stage.get("slug") or existing_stage.slug),
             label=str(draft_stage.get("label") or existing_stage.label),
             color=str(draft_stage.get("color") or existing_stage.color),
-            stage_type=str(draft_stage.get("category") or draft_stage.get("stage_type") or existing_stage.stage_type),
-            semantics=draft_stage.get("semantics") if isinstance(draft_stage.get("semantics"), dict) else None,
+            stage_type=str(
+                draft_stage.get("category")
+                or draft_stage.get("stage_type")
+                or existing_stage.stage_type
+            ),
+            semantics=draft_stage.get("semantics")
+            if isinstance(draft_stage.get("semantics"), dict)
+            else None,
         )
         if attempted_fields:
             errors.append(
@@ -273,7 +282,9 @@ def _merge_missing_stage_defs(
                 for index, stage in enumerate(ordered_items)
                 if default_positions.get(
                     _normalize_stage_key(
-                        stage.stage_key if isinstance(stage, PipelineStage) else stage.get("stage_key") or stage.get("slug")
+                        stage.stage_key
+                        if isinstance(stage, PipelineStage)
+                        else stage.get("stage_key") or stage.get("slug")
                     ),
                     float("inf"),
                 )
@@ -1460,7 +1471,9 @@ def delete_stage(
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
     pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
     if get_stage_protection(stage.stage_key, pipeline_entity_type):
-        raise ValueError(f"Stage '{stage.label}' is a protected system stage and cannot be deleted.")
+        raise ValueError(
+            f"Stage '{stage.label}' is a protected system stage and cannot be deleted."
+        )
 
     # Validate migrate_to stage
     target = get_stage_by_id(db, migrate_to_stage_id)
@@ -1654,7 +1667,9 @@ def build_pipeline_draft_preview(
         remap_by_key,
     )
     before_stages = [
-        _serialize_stage(stage, pipeline.entity_type) for stage in pipeline.stages if stage.is_active
+        _serialize_stage(stage, pipeline.entity_type)
+        for stage in pipeline.stages
+        if stage.is_active
     ]
     dependency_graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, pipeline)
     preview = pipeline_change_service.build_pipeline_change_preview(
