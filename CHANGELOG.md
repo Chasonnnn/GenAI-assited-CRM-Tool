@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.5...surrogacy-crm-platform-v0.91.6) (2026-03-30)
+
+
+### Bug Fixes
+
+* expose journey timing in meta form mappings ([8981bb1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8981bb1564f6b313ec26dfdec58680c9cdc268aa))
+
+
+### Maintenance
+
+* format pipeline backend files ([bf117da](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bf117da05958fe2475bab7593013e09196ccebb1))
+
 ## [0.91.5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.4...surrogacy-crm-platform-v0.91.5) (2026-03-30)
 
 
