@@ -58,6 +58,45 @@ async def test_meta_form_mapping_preview_generates_sample_rows(
 
 
 @pytest.mark.asyncio
+async def test_meta_form_mapping_preview_exposes_journey_timing_as_available_field(
+    authed_client: AsyncClient, db, test_org
+):
+    from app.db.models import MetaForm, MetaFormVersion
+
+    form = MetaForm(
+        organization_id=test_org.id,
+        page_id="page_journey",
+        form_external_id="form_ext_journey",
+        form_name="Journey Form",
+    )
+    db.add(form)
+    db.flush()
+
+    version = MetaFormVersion(
+        form_id=form.id,
+        version_number=1,
+        field_schema=[
+            {
+                "key": "when_would_you_like_to_start_your_surrogacy_journey",
+                "type": "TEXT",
+                "label": "When would you like to start your surrogacy journey?",
+            }
+        ],
+        schema_hash="hash_journey",
+    )
+    db.add(version)
+    db.flush()
+    form.current_version_id = version.id
+    db.commit()
+
+    response = await authed_client.get(f"/integrations/meta/forms/{form.id}/mapping")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "journey_timing_preference" in data["available_fields"]
+
+
+@pytest.mark.asyncio
 async def test_meta_form_mapping_save_enqueues_reprocess_job(
     authed_client: AsyncClient, db, test_org, test_user
 ):

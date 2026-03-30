@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import MetaFormMappingPage from "../app/(app)/settings/integrations/meta/forms/[id]/page"
 
 const mockPush = vi.fn()
@@ -81,7 +81,7 @@ describe("MetaFormMappingPage", () => {
                 ],
                 sample_rows: [{ full_name: "Failed Lead", email: "failed@example.com" }],
                 has_live_leads: true,
-                available_fields: ["full_name", "email", "phone", "state"],
+                available_fields: ["full_name", "email", "phone", "state", "journey_timing_preference"],
                 ai_available: false,
                 mapping_rules: [
                     {
@@ -193,6 +193,30 @@ describe("MetaFormMappingPage", () => {
         expect(mutateAsync).toHaveBeenCalledTimes(1)
         expect(
             await screen.findByText(/queued 1 eligible lead\(s\) for reconversion/i)
+        ).toBeInTheDocument()
+    })
+
+    it("shows journey timing as a selectable mapping option", async () => {
+        render(<MetaFormMappingPage />)
+
+        expect(screen.getByRole("combobox", { name: /action for full_name/i })).toHaveTextContent("Map")
+        expect(screen.getByRole("combobox", { name: /action for full_name/i })).not.toHaveTextContent("map")
+
+        const mapToSelect = screen.getByRole("combobox", {
+            name: /map full_name to field/i,
+        })
+
+        fireEvent.mouseDown(mapToSelect)
+
+        const journeyOption = await screen.findByRole("option", { name: "Journey Timing" })
+        expect(journeyOption).toBeInTheDocument()
+
+        fireEvent.mouseMove(journeyOption)
+        fireEvent.click(journeyOption)
+
+        expect(
+            within(screen.getByRole("combobox", { name: /map full_name to field/i }))
+                .getByText("Journey Timing")
         ).toBeInTheDocument()
     })
 })

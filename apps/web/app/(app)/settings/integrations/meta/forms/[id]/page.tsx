@@ -58,6 +58,30 @@ const ACTION_OPTIONS = [
     { value: "custom", label: "Custom" },
 ]
 
+const UNKNOWN_COLUMN_BEHAVIOR_OPTIONS = [
+    { value: "ignore", label: "Ignore" },
+    { value: "metadata", label: "Store metadata" },
+    { value: "warn", label: "Warn only" },
+] satisfies Array<{ value: UnknownColumnBehavior; label: string }>
+
+const ACTION_LABELS = new Map(ACTION_OPTIONS.map((option) => [option.value, option.label]))
+const TRANSFORM_LABELS = new Map(TRANSFORM_OPTIONS.map((option) => [option.value, option.label]))
+const UNKNOWN_COLUMN_BEHAVIOR_LABELS = new Map(
+    UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => [option.value, option.label])
+)
+
+function getActionLabel(value: string | null) {
+    return value ? ACTION_LABELS.get(value) ?? value : "Action"
+}
+
+function getTransformationLabel(value: string | null) {
+    return value ? TRANSFORM_LABELS.get(value) ?? value : "None"
+}
+
+function getUnknownColumnBehaviorLabel(value: UnknownColumnBehavior | null) {
+    return value ? UNKNOWN_COLUMN_BEHAVIOR_LABELS.get(value) ?? value : "Store metadata"
+}
+
 export default function MetaFormMappingPage() {
     const params = useParams()
     const router = useRouter()
@@ -290,12 +314,20 @@ export default function MetaFormMappingPage() {
                                             className="h-8 w-[140px]"
                                             aria-label="Unknown columns behavior"
                                         >
-                                            <SelectValue />
+                                            <SelectValue>
+                                                {(value: string | null) =>
+                                                    getUnknownColumnBehaviorLabel(
+                                                        value as UnknownColumnBehavior | null
+                                                    )
+                                                }
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="ignore">Ignore</SelectItem>
-                                            <SelectItem value="metadata">Store metadata</SelectItem>
-                                            <SelectItem value="warn">Warn only</SelectItem>
+                                            {UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -369,7 +401,9 @@ export default function MetaFormMappingPage() {
                                                         className="w-[130px]"
                                                         aria-label={`Action for ${mapping.csv_column}`}
                                                     >
-                                                        <SelectValue placeholder="Action" />
+                                                        <SelectValue placeholder="Action">
+                                                            {(value: string | null) => getActionLabel(value)}
+                                                        </SelectValue>
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {ACTION_OPTIONS.map((option) => (
@@ -395,7 +429,11 @@ export default function MetaFormMappingPage() {
                                                             className="w-[180px]"
                                                             aria-label={`Map ${mapping.csv_column} to field`}
                                                         >
-                                                            <SelectValue placeholder="Select field" />
+                                                            <SelectValue placeholder="Select field">
+                                                                {(value: string | null) =>
+                                                                    getSurrogateFieldLabel(value) ?? "Select field"
+                                                                }
+                                                            </SelectValue>
                                                         </SelectTrigger>
                                                             <SelectContent>
                                                                 {data.available_fields.map((field) => (
@@ -437,7 +475,11 @@ export default function MetaFormMappingPage() {
                                                         className="w-[170px]"
                                                         aria-label={`Transform ${mapping.csv_column}`}
                                                     >
-                                                        <SelectValue placeholder="None" />
+                                                        <SelectValue placeholder="None">
+                                                            {(value: string | null) =>
+                                                                getTransformationLabel(value)
+                                                            }
+                                                        </SelectValue>
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {TRANSFORM_OPTIONS.map((option) => (

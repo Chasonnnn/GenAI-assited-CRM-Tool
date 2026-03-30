@@ -1129,6 +1129,7 @@ AVAILABLE_SURROGATE_FIELDS = [
     "has_child",
     "is_non_smoker",
     "has_surrogate_experience",
+    "journey_timing_preference",
     "num_deliveries",
     "num_csections",
     # Source
