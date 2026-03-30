@@ -227,8 +227,10 @@ const SUGGESTION_PROFILE_OPTIONS = [
     "anatomy_scan_followup",
 ]
 
+// ⚡ Bolt: Using structuredClone over JSON.parse(JSON.stringify) prevents blocking the
+// main thread on large pipeline drafts and correctly handles Dates/Maps natively.
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
