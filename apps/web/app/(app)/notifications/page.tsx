@@ -314,7 +314,7 @@ export default function NotificationsPage() {
                                                 type="button"
                                                 key={notification.id}
                                                 onClick={() => handleNotificationClick(notification)}
-                                                className={`block w-full rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer ${!notification.read_at ? "border-l-4 border-l-blue-500 bg-blue-500/5" : "border-border"
+                                                className={`block w-full rounded-lg border p-4 text-left transition-colors hover:bg-accent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${!notification.read_at ? "border-l-4 border-l-blue-500 bg-blue-500/5" : "border-border"
                                                     }`}
                                             >
                                                 <div className="flex items-start gap-3">
