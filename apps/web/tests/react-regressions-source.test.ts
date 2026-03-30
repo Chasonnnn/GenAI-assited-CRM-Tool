@@ -8,12 +8,20 @@ function readSource(pathFromWebRoot: string): string {
 
 describe("React regression guards (source)", () => {
     it("uses stable IDs for editable automation rows", () => {
-        const source = readSource("app/(app)/automation/page.tsx")
+        const source = readSource("app/(app)/automation/page.client.tsx")
 
         expect(source).toContain("key={condition.clientId}")
         expect(source).toContain("key={action.clientId}")
         expect(source).not.toMatch(/conditions\.map\(\(condition, index\) => \(\s*<Card key=\{index\}>/m)
         expect(source).not.toMatch(/actions\.map\(\(action, index\) => \(\s*<Card key=\{index\}>/m)
+    })
+
+    it("keeps automation route search param parsing in the server wrapper", () => {
+        const source = readSource("app/(app)/automation/page.tsx")
+
+        expect(source).toContain('import AutomationPageClient from "./page.client"')
+        expect(source).not.toContain("useSearchParams")
+        expect(source).toContain("<AutomationPageClient")
     })
 
     it("does not suppress exhaustive deps in MassEditStageModal and handles late stage load", () => {

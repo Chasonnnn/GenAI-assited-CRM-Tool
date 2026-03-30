@@ -1,7 +1,7 @@
 import type { PropsWithChildren, ButtonHTMLAttributes, ReactNode } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import AutomationPage from '../app/(app)/automation/page'
+import AutomationPage from '../app/(app)/automation/page.client'
 
 const mockUseAuth = vi.fn()
 vi.mock('@/lib/auth-context', () => ({
@@ -142,6 +142,16 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
     useToggleWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
+function renderAutomationPage() {
+    return render(
+        <AutomationPage
+            initialTab="workflows"
+            initialWorkflowScopeTab="personal"
+            initialCreateOpen={false}
+        />
+    )
+}
+
 describe('AutomationPage', () => {
     beforeEach(() => {
         mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
@@ -176,12 +186,12 @@ describe('AutomationPage', () => {
     })
 
     it('renders', () => {
-        render(<AutomationPage />)
+        renderAutomationPage()
         expect(screen.getAllByText('Workflows').length).toBeGreaterThan(0)
     })
 
     it('renders workflow tabs', () => {
-        render(<AutomationPage />)
+        renderAutomationPage()
         expect(screen.getByText('My Workflows')).toBeInTheDocument()
         expect(screen.getByText('Org Workflows')).toBeInTheDocument()
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
@@ -192,7 +202,7 @@ describe('AutomationPage', () => {
             opts?.onError?.(new Error('Action 1: title is required; Action 1: assignee is required'))
         })
 
-        render(<AutomationPage />)
+        renderAutomationPage()
 
         const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
         fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
@@ -241,7 +251,7 @@ describe('AutomationPage', () => {
             isLoading: false,
         })
 
-        render(<AutomationPage />)
+        renderAutomationPage()
 
         fireEvent.click(screen.getByRole('button', { name: /test workflow/i }))
 
