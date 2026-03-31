@@ -301,13 +301,14 @@ export default function CSVImportPage() {
                                                                         {...props}
                                                                         variant="ghost"
                                                                         size="icon"
+                                                                        aria-label={`Actions for import ${imp.id}`}
                                                                         disabled={
                                                                             cancelMutation.isPending ||
                                                                             retryMutation.isPending ||
                                                                             runInlineMutation.isPending
                                                                         }
                                                                     >
-                                                                        <MoreHorizontalIcon className="size-4" />
+                                                                        <MoreHorizontalIcon className="size-4" aria-hidden="true" />
                                                                     </Button>
                                                                 )}
                                                             />
