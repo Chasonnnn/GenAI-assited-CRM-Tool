@@ -228,7 +228,9 @@ const SUGGESTION_PROFILE_OPTIONS = [
 ]
 
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    // ⚡ Bolt: Use native structuredClone for deep cloning instead of JSON.parse(JSON.stringify).
+    // It avoids allocating intermediate serialized string memory and provides better fidelity.
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
