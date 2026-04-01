@@ -630,6 +630,294 @@ describe("PipelinesSettingsPage", () => {
         ).toBe(true)
     })
 
+    it("auto-remaps removed custom stages when resetting to default", async () => {
+        const resettablePipelineFixture = {
+            ...pipelineFixture,
+            current_version: 8,
+            stages: [
+                pipelineFixture.stages[0],
+                {
+                    id: "custom-1",
+                    stage_key: "application_packet_received",
+                    slug: "application_packet_received",
+                    label: "Application Packet Received",
+                    color: "#8b5cf6",
+                    order: 2,
+                    stage_type: "intake" as const,
+                    is_active: true,
+                    is_locked: false,
+                    system_role: null,
+                    lock_reason: null,
+                    locked_fields: [],
+                    semantics: {
+                        capabilities: {
+                            counts_as_contacted: true,
+                            eligible_for_matching: false,
+                            locks_match_state: false,
+                            shows_pregnancy_tracking: false,
+                            requires_delivery_details: false,
+                            tracks_interview_outcome: false,
+                        },
+                        pause_behavior: "none" as const,
+                        terminal_outcome: "none" as const,
+                        integration_bucket: "qualified" as const,
+                        analytics_bucket: "application_submitted",
+                        suggestion_profile_key: "application_submitted_followup",
+                        requires_reason_on_enter: false,
+                    },
+                },
+                {
+                    id: "custom-2",
+                    stage_key: "panel_review",
+                    slug: "panel_review",
+                    label: "Clinical Review",
+                    color: "#2563eb",
+                    order: 3,
+                    stage_type: "intake" as const,
+                    is_active: true,
+                    is_locked: false,
+                    system_role: null,
+                    lock_reason: null,
+                    locked_fields: [],
+                    semantics: {
+                        capabilities: {
+                            counts_as_contacted: true,
+                            eligible_for_matching: false,
+                            locks_match_state: false,
+                            shows_pregnancy_tracking: false,
+                            requires_delivery_details: false,
+                            tracks_interview_outcome: true,
+                        },
+                        pause_behavior: "none" as const,
+                        terminal_outcome: "none" as const,
+                        integration_bucket: "qualified" as const,
+                        analytics_bucket: "under_review",
+                        suggestion_profile_key: "under_review_followup",
+                        requires_reason_on_enter: false,
+                    },
+                },
+                {
+                    id: "custom-3",
+                    stage_key: "transfer_readiness",
+                    slug: "transfer_readiness",
+                    label: "Transfer Readiness",
+                    color: "#0f766e",
+                    order: 4,
+                    stage_type: "post_approval" as const,
+                    is_active: true,
+                    is_locked: false,
+                    system_role: null,
+                    lock_reason: null,
+                    locked_fields: [],
+                    semantics: {
+                        capabilities: {
+                            counts_as_contacted: false,
+                            eligible_for_matching: false,
+                            locks_match_state: false,
+                            shows_pregnancy_tracking: false,
+                            requires_delivery_details: false,
+                            tracks_interview_outcome: false,
+                        },
+                        pause_behavior: "none" as const,
+                        terminal_outcome: "none" as const,
+                        integration_bucket: "converted" as const,
+                        analytics_bucket: "transfer_readiness",
+                        suggestion_profile_key: "transfer_cycle_followup",
+                        requires_reason_on_enter: false,
+                    },
+                },
+                pipelineFixture.stages[3],
+            ],
+            feature_config: {
+                ...pipelineFixture.feature_config,
+                journey: {
+                    phases: [],
+                    milestones: [
+                        {
+                            slug: "application_intake",
+                            label: "Application & Intake",
+                            description: "Initial application received.",
+                            mapped_stage_keys: ["new_unread", "application_packet_received"],
+                            is_soft: false,
+                        },
+                    ],
+                },
+                analytics: {
+                    funnel_stage_keys: ["new_unread", "application_packet_received", "panel_review"],
+                    performance_stage_keys: ["application_packet_received", "panel_review", "transfer_readiness"],
+                    qualification_stage_key: "application_packet_received",
+                    conversion_stage_key: "transfer_readiness",
+                },
+            },
+        }
+        const resettableDependencyGraph = {
+            pipeline_id: "p1",
+            entity_type: "surrogate" as const,
+            version: 8,
+            stages: resettablePipelineFixture.stages.map((stage) => ({
+                stage_id: stage.id,
+                stage_key: stage.stage_key,
+                slug: stage.slug,
+                label: stage.label,
+                category: stage.stage_type,
+                stage_type: stage.stage_type,
+                is_active: stage.is_active,
+                surrogate_count:
+                    stage.stage_key === "application_packet_received"
+                    || stage.stage_key === "panel_review"
+                        ? 4
+                        : 0,
+                journey_milestone_slugs: [],
+                analytics_funnel: false,
+                intelligent_suggestion_rules: [],
+                integration_refs:
+                    stage.stage_key === "application_packet_received"
+                    || stage.stage_key === "transfer_readiness"
+                        ? ["zapier"]
+                        : [],
+                campaign_refs: [],
+                workflow_refs:
+                    stage.stage_key === "application_packet_received"
+                        ? [{ id: "wf-1", name: "Application Follow-up", scope: "surrogate", is_enabled: true, reference_paths: [] }]
+                        : [],
+                role_visibility_roles: [],
+                role_mutation_roles: [],
+            })),
+        }
+        const recommendedResetDraft = {
+            name: resettablePipelineFixture.name,
+            stages: [
+                {
+                    ...pipelineFixture.stages[0],
+                    id: null,
+                },
+                {
+                    id: null,
+                    stage_key: "application_submitted",
+                    slug: "application_submitted",
+                    label: "Application Submitted",
+                    color: "#8b5cf6",
+                    order: 2,
+                    stage_type: "intake" as const,
+                    is_active: true,
+                    semantics: resettablePipelineFixture.stages[1].semantics,
+                },
+                {
+                    id: null,
+                    stage_key: "under_review",
+                    slug: "under_review",
+                    label: "Under Review",
+                    color: "#2563eb",
+                    order: 3,
+                    stage_type: "intake" as const,
+                    is_active: true,
+                    semantics: resettablePipelineFixture.stages[2].semantics,
+                },
+                {
+                    id: null,
+                    stage_key: "transfer_cycle",
+                    slug: "transfer_cycle",
+                    label: "Transfer Cycle Initiated",
+                    color: "#0f766e",
+                    order: 4,
+                    stage_type: "post_approval" as const,
+                    is_active: true,
+                    semantics: {
+                        ...resettablePipelineFixture.stages[3].semantics,
+                        capabilities: {
+                            ...resettablePipelineFixture.stages[3].semantics.capabilities,
+                            locks_match_state: true,
+                        },
+                        analytics_bucket: "transfer_cycle",
+                    },
+                },
+                {
+                    ...pipelineFixture.stages[3],
+                    id: null,
+                },
+            ],
+            feature_config: {
+                ...resettablePipelineFixture.feature_config,
+                journey: {
+                    phases: [],
+                    milestones: [
+                        {
+                            slug: "application_intake",
+                            label: "Application & Intake",
+                            description: "Initial application received.",
+                            mapped_stage_keys: ["new_unread", "application_submitted"],
+                            is_soft: false,
+                        },
+                    ],
+                },
+                analytics: {
+                    funnel_stage_keys: ["new_unread", "application_submitted", "under_review"],
+                    performance_stage_keys: ["application_submitted", "under_review", "transfer_cycle"],
+                    qualification_stage_key: "application_submitted",
+                    conversion_stage_key: "transfer_cycle",
+                },
+            },
+        }
+
+        mockUsePipelines.mockReturnValue({
+            data: [resettablePipelineFixture],
+            isLoading: false,
+        })
+        mockUsePipeline.mockReturnValue({
+            data: resettablePipelineFixture,
+            isLoading: false,
+        })
+        mockUsePipelineDependencyGraph.mockReturnValue({
+            data: resettableDependencyGraph,
+            isLoading: false,
+        })
+        mockUseRecommendedPipelineDraft.mockResolvedValue(recommendedResetDraft)
+
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /reset to default/i }))
+
+        await waitFor(() => {
+            expect(mockUseRecommendedPipelineDraft).toHaveBeenCalledWith({
+                id: "p1",
+                entityType: "surrogate",
+            })
+        })
+        await waitFor(() => {
+            expect(screen.getByDisplayValue("Application Submitted")).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+
+        await waitFor(() => {
+            expect(mockApplyPipelineDraft).toHaveBeenCalled()
+        })
+
+        const call = mockApplyPipelineDraft.mock.calls[0][0]
+        expect(call.data.remaps).toEqual([
+            {
+                removed_stage_key: "application_packet_received",
+                target_stage_key: "application_submitted",
+            },
+            {
+                removed_stage_key: "panel_review",
+                target_stage_key: "under_review",
+            },
+            {
+                removed_stage_key: "transfer_readiness",
+                target_stage_key: "transfer_cycle",
+            },
+        ])
+
+        const duplicateKeyWarnings = consoleError.mock.calls.filter((args) =>
+            args.some((arg) => String(arg).includes("Encountered two children with the same key")),
+        )
+        expect(duplicateKeyWarnings).toHaveLength(0)
+        consoleError.mockRestore()
+    })
+
     it("marks changes immediately and delays preview payloads until edits settle", () => {
         vi.useFakeTimers()
 
