@@ -82,6 +82,8 @@ def _resolve_stage_ref(
     db: Session,
     org_id: UUID,
     value: object | None,
+    *,
+    entity_type: str | None = None,
 ) -> tuple[str, str] | None:
     if value in (None, ""):
         return None
@@ -97,18 +99,36 @@ def _resolve_stage_ref(
     if stage_uuid is not None:
         stage = pipeline_service.get_stage_by_id(db, stage_uuid)
     else:
-        default_pipeline_id = (
-            db.query(Pipeline.id)
-            .filter(
-                Pipeline.organization_id == org_id,
-                Pipeline.is_default.is_(True),
+        default_pipeline_ids = [
+            pipeline_id
+            for (pipeline_id,) in (
+                db.query(Pipeline.id)
+                .filter(
+                    Pipeline.organization_id == org_id,
+                    Pipeline.is_default.is_(True),
+                    Pipeline.entity_type == entity_type if entity_type else True,
+                )
+                .all()
             )
-            .scalar()
-        )
-        if default_pipeline_id is None:
-            pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
-            default_pipeline_id = pipeline.id
-        stage = pipeline_service.resolve_stage(db, default_pipeline_id, str(value))
+        ]
+        if not default_pipeline_ids and entity_type:
+            pipeline = pipeline_service.get_or_create_default_pipeline(
+                db,
+                org_id,
+                entity_type=entity_type,
+            )
+            default_pipeline_ids = [pipeline.id]
+
+        if len(default_pipeline_ids) == 1:
+            stage = pipeline_service.resolve_stage(db, default_pipeline_ids[0], str(value))
+        elif len(default_pipeline_ids) > 1:
+            matches = [
+                resolved
+                for pipeline_id in default_pipeline_ids
+                if (resolved := pipeline_service.resolve_stage(db, pipeline_id, str(value))) is not None
+            ]
+            if len(matches) == 1:
+                stage = matches[0]
 
     if not stage or stage.pipeline.organization_id != org_id:
         return None
@@ -120,18 +140,21 @@ def _canonicalize_trigger_config(
     org_id: UUID,
     trigger_type: WorkflowTriggerType,
     trigger_config: dict[str, object],
+    *,
+    entity_type: str | None = None,
 ) -> dict[str, object]:
     config = deepcopy(trigger_config or {})
     if trigger_type != WorkflowTriggerType.STATUS_CHANGED:
         return config
 
+    effective_entity_type = entity_type or TRIGGER_ENTITY_TYPES.get(str(trigger_type))
     for prefix in ("from", "to"):
         ref = (
             config.get(f"{prefix}_stage_key")
             or config.get(f"{prefix}_stage_id")
             or config.get(f"{prefix}_status")
         )
-        resolved = _resolve_stage_ref(db, org_id, ref)
+        resolved = _resolve_stage_ref(db, org_id, ref, entity_type=effective_entity_type)
         config.pop(f"{prefix}_status", None)
         if resolved:
             config[f"{prefix}_stage_id"] = resolved[0]
@@ -146,6 +169,8 @@ def _canonicalize_conditions(
     db: Session,
     org_id: UUID,
     conditions: list[Condition] | list[dict] | None,
+    *,
+    entity_type: str | None = None,
 ) -> list[dict]:
     normalized: list[dict] = []
     for raw_condition in conditions or []:
@@ -163,7 +188,7 @@ def _canonicalize_conditions(
             resolved_ids: list[str] = []
             resolved_keys: list[str] = []
             for item in value:
-                resolved = _resolve_stage_ref(db, org_id, item)
+                resolved = _resolve_stage_ref(db, org_id, item, entity_type=entity_type)
                 if not resolved:
                     continue
                 stage_id, stage_key = resolved
@@ -174,7 +199,7 @@ def _canonicalize_conditions(
             condition["value"] = resolved_ids
             condition["stage_keys"] = resolved_keys
         else:
-            resolved = _resolve_stage_ref(db, org_id, value)
+            resolved = _resolve_stage_ref(db, org_id, value, entity_type=entity_type)
             if resolved:
                 condition["value"] = resolved[0]
                 condition["stage_key"] = resolved[1]
@@ -186,6 +211,8 @@ def _canonicalize_actions(
     db: Session,
     org_id: UUID,
     actions: list[dict[str, object]] | None,
+    *,
+    entity_type: str | None = None,
 ) -> list[dict]:
     normalized: list[dict] = []
     for raw_action in actions or []:
@@ -204,6 +231,7 @@ def _canonicalize_actions(
                 db,
                 org_id,
                 action.get("value_stage_key") or action.get("value"),
+                entity_type=entity_type,
             )
             if resolved:
                 action["value"] = resolved[0]
@@ -217,10 +245,13 @@ def remap_workflow_stage_references(
     org_id: UUID,
     workflow: AutomationWorkflow,
     remap_by_key: dict[str, str | None],
+    *,
+    entity_type: str | None = None,
 ) -> None:
     if not remap_by_key:
         return
 
+    effective_entity_type = entity_type or TRIGGER_ENTITY_TYPES.get(workflow.trigger_type)
     trigger_config = deepcopy(workflow.trigger_config or {})
     if workflow.trigger_type == WorkflowTriggerType.STATUS_CHANGED.value:
         for prefix in ("from", "to"):
@@ -245,6 +276,7 @@ def remap_workflow_stage_references(
             org_id,
             WorkflowTriggerType.STATUS_CHANGED,
             trigger_config,
+            entity_type=effective_entity_type,
         )
 
     remapped_conditions: list[dict] = []
@@ -270,7 +302,12 @@ def remap_workflow_stage_references(
                 condition["stage_keys"] = remapped_stage_keys
                 condition["value"] = remapped_stage_keys
             elif stage_key is None:
-                resolved = _resolve_stage_ref(db, org_id, value)
+                resolved = _resolve_stage_ref(
+                    db,
+                    org_id,
+                    value,
+                    entity_type=effective_entity_type,
+                )
                 current_key = resolved[1] if resolved else None
                 if current_key in remap_by_key:
                     replacement = remap_by_key[current_key]
@@ -280,7 +317,12 @@ def remap_workflow_stage_references(
                     else:
                         continue
         remapped_conditions.append(condition)
-    workflow.conditions = _canonicalize_conditions(db, org_id, remapped_conditions)
+    workflow.conditions = _canonicalize_conditions(
+        db,
+        org_id,
+        remapped_conditions,
+        entity_type=effective_entity_type,
+    )
 
     remapped_actions: list[dict] = []
     for raw_action in workflow.actions or []:
@@ -295,7 +337,12 @@ def remap_workflow_stage_references(
                     continue
         elif action.get("action_type") == "update_status":
             stage_ref = action.get("stage_id")
-            resolved = _resolve_stage_ref(db, org_id, stage_ref)
+            resolved = _resolve_stage_ref(
+                db,
+                org_id,
+                stage_ref,
+                entity_type=effective_entity_type,
+            )
             if resolved and resolved[1] in remap_by_key:
                 replacement = remap_by_key[resolved[1]]
                 if replacement:
@@ -303,7 +350,12 @@ def remap_workflow_stage_references(
                 else:
                     continue
         remapped_actions.append(action)
-    workflow.actions = _canonicalize_actions(db, org_id, remapped_actions)
+    workflow.actions = _canonicalize_actions(
+        db,
+        org_id,
+        remapped_actions,
+        entity_type=effective_entity_type,
+    )
 
 
 # =============================================================================
@@ -318,10 +370,15 @@ def create_workflow(
     data: WorkflowCreate,
 ) -> AutomationWorkflow:
     """Create a new workflow with validation."""
+    entity_type = TRIGGER_ENTITY_TYPES.get(data.trigger_type.value)
     trigger_config = _canonicalize_trigger_config(
-        db, org_id, data.trigger_type, data.trigger_config
+        db,
+        org_id,
+        data.trigger_type,
+        data.trigger_config,
+        entity_type=entity_type,
     )
-    conditions = _canonicalize_conditions(db, org_id, data.conditions)
+    conditions = _canonicalize_conditions(db, org_id, data.conditions, entity_type=entity_type)
 
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, trigger_config)
@@ -330,6 +387,7 @@ def create_workflow(
         db,
         org_id,
         _normalize_actions_for_trigger(data.trigger_type, data.actions),
+        entity_type=entity_type,
     )
 
     # Validate actions
@@ -388,9 +446,14 @@ def update_workflow(
 ) -> AutomationWorkflow:
     """Update an existing workflow with validation."""
     trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
+    entity_type = TRIGGER_ENTITY_TYPES.get(trigger_type.value)
     trigger_config = (
         _canonicalize_trigger_config(
-            db, workflow.organization_id, trigger_type, data.trigger_config
+            db,
+            workflow.organization_id,
+            trigger_type,
+            data.trigger_config,
+            entity_type=entity_type,
         )
         if data.trigger_config is not None
         else _canonicalize_trigger_config(
@@ -398,12 +461,23 @@ def update_workflow(
             workflow.organization_id,
             trigger_type,
             workflow.trigger_config,
+            entity_type=entity_type,
         )
     )
     normalized_conditions = (
-        _canonicalize_conditions(db, workflow.organization_id, data.conditions)
+        _canonicalize_conditions(
+            db,
+            workflow.organization_id,
+            data.conditions,
+            entity_type=entity_type,
+        )
         if data.conditions is not None
-        else _canonicalize_conditions(db, workflow.organization_id, workflow.conditions)
+        else _canonicalize_conditions(
+            db,
+            workflow.organization_id,
+            workflow.conditions,
+            entity_type=entity_type,
+        )
     )
 
     if data.trigger_type is not None or data.trigger_config is not None:
@@ -416,6 +490,7 @@ def update_workflow(
             db,
             workflow.organization_id,
             _normalize_actions_for_trigger(effective_trigger_type, data.actions),
+            entity_type=entity_type,
         )
         for action in normalized_actions:
             _validate_action_config(

@@ -1798,6 +1798,7 @@ def _apply_external_stage_remaps(
             pipeline.organization_id,
             workflow,
             remap_by_key,
+            entity_type=pipeline.entity_type,
         )
 
 
@@ -1843,6 +1844,7 @@ def apply_pipeline_draft(
     existing_by_id = {str(stage.id): stage for stage in existing_stages}
     existing_by_key = {stage.stage_key: stage for stage in existing_stages if stage.stage_key}
     kept_stage_keys: set[str] = set()
+    renamed_surrogate_stage_labels: dict[UUID, str] = {}
 
     for draft_stage in draft_stages:
         stage_id = str(draft_stage.get("id") or "").strip() or None
@@ -1870,6 +1872,7 @@ def apply_pipeline_draft(
             existing_by_id[str(stage.id)] = stage
             existing_by_key[stage_key] = stage
         else:
+            previous_label = stage.label
             stage.slug = str(draft_stage["slug"])
             stage.label = str(draft_stage["label"])
             stage.color = str(draft_stage["color"])
@@ -1880,8 +1883,25 @@ def apply_pipeline_draft(
             stage.is_active = bool(draft_stage.get("is_active", True))
             stage.deleted_at = None if stage.is_active else datetime.now(timezone.utc)
             stage.updated_at = datetime.now(timezone.utc)
+            if (
+                pipeline.entity_type == SURROGATE_PIPELINE_ENTITY
+                and stage.is_active
+                and previous_label != stage.label
+            ):
+                renamed_surrogate_stage_labels[stage.id] = stage.label
 
         kept_stage_keys.add(stage_key)
+
+    if renamed_surrogate_stage_labels:
+        for stage_id, label in renamed_surrogate_stage_labels.items():
+            (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.organization_id == pipeline.organization_id,
+                    Surrogate.stage_id == stage_id,
+                )
+                .update({Surrogate.status_label: label})
+            )
 
     removed_stages = [
         stage

@@ -987,6 +987,213 @@ async def test_apply_pipeline_draft_adds_custom_stage_and_remaps_deleted_stage_d
 
 
 @pytest.mark.asyncio
+async def test_apply_pipeline_draft_remaps_workflow_trigger_when_multiple_default_pipelines_exist(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+):
+    pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type="intended_parent",
+    )
+
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    contacted_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted"
+    )
+    contacted_stage_db = pipeline_service.get_stage_by_id(db, UUID(contacted_stage["id"]))
+    assert contacted_stage_db is not None
+    _create_surrogate_for_stage(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=contacted_stage_db,
+    )
+    workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name=f"Pipeline trigger remap {uuid.uuid4().hex[:8]}",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            trigger_config={"to_stage_key": "contacted"},
+            conditions=[],
+            actions=[
+                {
+                    "action_type": "send_notification",
+                    "title": "Stage changed",
+                    "body": "Pipeline remap audit workflow",
+                    "recipients": "owner",
+                }
+            ],
+        ),
+    )
+    db.commit()
+
+    feature_config = deepcopy(pipeline["feature_config"])
+    for milestone in feature_config["journey"]["milestones"]:
+        if "contacted" in milestone["mapped_stage_keys"]:
+            milestone["mapped_stage_keys"] = [
+                "matching_review" if key == "contacted" else key
+                for key in milestone["mapped_stage_keys"]
+            ]
+    feature_config["analytics"]["funnel_stage_keys"] = [
+        "matching_review" if key == "contacted" else key
+        for key in feature_config["analytics"]["funnel_stage_keys"]
+    ]
+    feature_config["analytics"]["performance_stage_keys"] = [
+        "matching_review" if key == "contacted" else key
+        for key in feature_config["analytics"]["performance_stage_keys"]
+    ]
+    if feature_config["analytics"]["qualification_stage_key"] == "contacted":
+        feature_config["analytics"]["qualification_stage_key"] = "matching_review"
+    if feature_config["analytics"]["conversion_stage_key"] == "contacted":
+        feature_config["analytics"]["conversion_stage_key"] = "matching_review"
+
+    draft_stages = []
+    for stage in pipeline["stages"]:
+        if stage["stage_key"] == "contacted":
+            continue
+        draft_stages.append(
+            {
+                "id": stage["id"],
+                "stage_key": stage["stage_key"],
+                "slug": stage["slug"],
+                "label": stage["label"],
+                "color": stage["color"],
+                "order": stage["order"],
+                "category": stage["stage_type"],
+                "is_active": stage["is_active"],
+                "semantics": stage["semantics"],
+            }
+        )
+        if stage["stage_key"] == "approved":
+            draft_stages.append(
+                {
+                    "stage_key": "matching_review",
+                    "slug": "matching_review",
+                    "label": "Matching Review",
+                    "color": "#8b5cf6",
+                    "order": stage["order"] + 1,
+                    "category": "post_approval",
+                    "is_active": True,
+                    "semantics": {
+                        "capabilities": {
+                            "counts_as_contacted": True,
+                            "eligible_for_matching": False,
+                            "locks_match_state": False,
+                            "shows_pregnancy_tracking": False,
+                            "requires_delivery_details": False,
+                            "tracks_interview_outcome": False,
+                        },
+                        "pause_behavior": "none",
+                        "terminal_outcome": "none",
+                        "integration_bucket": "qualified",
+                        "analytics_bucket": "matching_review",
+                        "suggestion_profile_key": "contacted_followup",
+                        "requires_reason_on_enter": False,
+                    },
+                }
+            )
+
+    response = await authed_client.put(
+        f"/settings/pipelines/{pipeline['id']}/apply-draft",
+        json={
+            "name": pipeline["name"],
+            "stages": draft_stages,
+            "feature_config": feature_config,
+            "expected_version": pipeline["current_version"],
+            "comment": "Workflow trigger remap audit",
+            "remaps": [
+                {
+                    "removed_stage_key": "contacted",
+                    "target_stage_key": "matching_review",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    db.refresh(workflow)
+    matching_review_stage = pipeline_service.get_stage_by_key(
+        db, UUID(pipeline["id"]), "matching_review"
+    )
+    assert matching_review_stage is not None
+    assert workflow.trigger_config["to_stage_key"] == "matching_review"
+    assert str(workflow.trigger_config["to_stage_id"]) == str(matching_review_stage.id)
+
+
+@pytest.mark.asyncio
+async def test_apply_pipeline_draft_syncs_surrogate_status_labels_for_renamed_stage(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    contacted_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted"
+    )
+    contacted_stage_db = pipeline_service.get_stage_by_id(db, UUID(contacted_stage["id"]))
+    assert contacted_stage_db is not None
+    surrogate = _create_surrogate_for_stage(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=contacted_stage_db,
+    )
+    db.commit()
+
+    draft_stages = []
+    for stage in pipeline["stages"]:
+        stage_payload = {
+            "id": stage["id"],
+            "stage_key": stage["stage_key"],
+            "slug": stage["slug"],
+            "label": stage["label"],
+            "color": stage["color"],
+            "order": stage["order"],
+            "category": stage["stage_type"],
+            "is_active": stage["is_active"],
+            "semantics": stage["semantics"],
+        }
+        if stage["stage_key"] == "contacted":
+            stage_payload["label"] = "Outreach Complete"
+        draft_stages.append(stage_payload)
+
+    response = await authed_client.put(
+        f"/settings/pipelines/{pipeline['id']}/apply-draft",
+        json={
+            "name": pipeline["name"],
+            "stages": draft_stages,
+            "feature_config": pipeline["feature_config"],
+            "expected_version": pipeline["current_version"],
+            "comment": "Rename contacted stage for label sync audit",
+            "remaps": [],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    db.refresh(surrogate)
+    assert surrogate.status_label == "Outreach Complete"
+
+    detail_response = await authed_client.get(f"/surrogates/{surrogate.id}")
+    assert detail_response.status_code == 200, detail_response.text
+    assert detail_response.json()["status_label"] == "Outreach Complete"
+
+
+@pytest.mark.asyncio
 async def test_apply_pipeline_draft_remaps_paused_from_stage_and_pending_status_change_request(
     authed_client: AsyncClient,
     db,
