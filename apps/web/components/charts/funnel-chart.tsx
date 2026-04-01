@@ -9,6 +9,7 @@ interface FunnelStage {
     label: string
     count: number
     percentage: number
+    fill?: string
 }
 
 interface FunnelChartProps {
@@ -18,14 +19,7 @@ interface FunnelChartProps {
     title?: string
 }
 
-// Gradient colors for funnel stages
-const stageColors = [
-    "from-blue-500 to-blue-600",
-    "from-indigo-500 to-indigo-600",
-    "from-purple-500 to-purple-600",
-    "from-violet-500 to-violet-600",
-    "from-green-500 to-green-600",
-]
+const funnelFallbackColor = "#3b82f6"
 
 export function FunnelChart({
     data,
@@ -92,7 +86,7 @@ export function FunnelChart({
                 <div className="space-y-3">
                     {data.map((stage, index) => {
                         const widthPercent = maxCount > 0 ? (stage.count / maxCount) * 100 : 0
-                        const colorClass = stageColors[index % stageColors.length]
+                        const stageColor = stage.fill || funnelFallbackColor
 
                         return (
                             <div key={stage.stage} className="relative">
@@ -107,9 +101,10 @@ export function FunnelChart({
                                 {/* Funnel bar */}
                                 <div className="relative h-10 w-full rounded-md bg-muted/30">
                                     <div
-                                        className={`absolute left-0 top-0 h-full rounded-md bg-gradient-to-r ${colorClass} transition-all duration-500`}
+                                        className="absolute left-0 top-0 h-full rounded-md transition-all duration-500"
                                         style={{
                                             width: `${Math.max(widthPercent, 5)}%`,
+                                            backgroundColor: stageColor,
                                         }}
                                     />
 

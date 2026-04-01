@@ -20,6 +20,27 @@ vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { ai_enabled: true } }),
 }))
 
+vi.mock('@/lib/hooks/use-pipelines', () => ({
+    useDefaultPipeline: () => ({
+        data: {
+            id: 'pipeline-1',
+            stages: [
+                {
+                    id: 'stage-1',
+                    stage_key: 'new_unread',
+                    slug: 'new_unread',
+                    label: 'New Unread',
+                    color: '#3B82F6',
+                    order: 1,
+                    stage_type: 'intake',
+                    is_active: true,
+                },
+            ],
+        },
+        isLoading: false,
+    }),
+}))
+
 vi.mock('recharts', () => ({
     Bar: ({ children }: PropsWithChildren) => <div>{children}</div>,
     BarChart: ({ children }: PropsWithChildren) => <div>{children}</div>,

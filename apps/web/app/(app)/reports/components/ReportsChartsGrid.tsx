@@ -12,6 +12,7 @@ import {
     Bar,
     BarChart,
     CartesianGrid,
+    Cell,
     Line,
     LineChart,
     Pie,
@@ -43,7 +44,7 @@ const surrogatesByAssigneeConfig = {
 type StatusChartDatum = {
     status: string
     count: number
-    fill?: string
+    fill: string
 }
 
 type TrendChartDatum = {
@@ -127,7 +128,11 @@ export function ReportsChartsGrid({
                                 <XAxis dataKey="status" tickLine={false} axisLine={false} fontSize={12} />
                                 <YAxis tickLine={false} axisLine={false} />
                                 <ChartTooltip content={<ChartTooltipContent />} />
-                                <Bar dataKey="count" radius={[8, 8, 0, 0]} />
+                                <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                                    {statusChartData.map((item) => (
+                                        <Cell key={`${item.status}-${item.fill}`} fill={item.fill} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ChartContainer>
                     ) : (
@@ -240,7 +245,12 @@ export function ReportsChartsGrid({
                                     fontSize={12}
                                 />
                                 <ChartTooltip content={<ChartTooltipContent />} />
-                                <Bar dataKey="count" radius={[0, 8, 8, 0]} />
+                                <Bar dataKey="count" radius={[0, 8, 8, 0]}>
+                                    {assigneeChartData.map((item) => {
+                                        const fill = item.fill || "#3b82f6"
+                                        return <Cell key={`${item.member}-${fill}`} fill={fill} />
+                                    })}
+                                </Bar>
                             </BarChart>
                         </ChartContainer>
                     ) : (

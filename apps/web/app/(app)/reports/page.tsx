@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAIUsageSummary } from "@/lib/hooks/use-ai"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+import { buildFunnelChartData, buildStatusChartData } from "@/lib/reports-stage-colors"
 import { toast } from "sonner"
 import { formatLocalDate } from "@/lib/utils/date"
 import { getCsrfHeaders } from "@/lib/csrf"
@@ -61,8 +63,6 @@ const chartColors = [
     "#06b6d4",
     "#ef4444",
 ]
-const chartFallbackColor = "#3b82f6"
-
 // AI Usage Stats sub-component
 function AIUsageStats() {
     const { data: usage, isLoading, isError } = useAIUsageSummary(30)
@@ -167,6 +167,7 @@ export default function ReportsPage() {
     const { data: trend, isLoading: trendLoading, isError: trendError } = useSurrogatesTrend(dateParams)
     const { data: metaPerf, isLoading: metaLoading, isError: metaError } = useMetaPerformance(dateParams)
     const { data: spendTotals, isLoading: spendLoading, isError: spendError } = useSpendTotals(dateParams)
+    const { data: defaultPipeline } = useDefaultPipeline('surrogate')
 
     // New hooks for funnel and map
     const { data: campaigns, isLoading: campaignsLoading, isError: campaignsError } = useCampaigns()
@@ -186,11 +187,7 @@ export default function ReportsPage() {
     })
 
     // Transform data for charts
-    const statusChartData = (byStatus || []).map((item, i) => ({
-        status: item.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-        count: item.count,
-        fill: chartColors[i % chartColors.length] ?? chartFallbackColor,
-    }))
+    const statusChartData = buildStatusChartData(byStatus, defaultPipeline?.stages)
 
     const assigneeChartData = (byAssignee || [])
         .filter(item => item.user_email)
@@ -198,8 +195,10 @@ export default function ReportsPage() {
         .map((item, i) => ({
             member: item.user_email?.split('@')[0] || 'Unassigned',
             count: item.count,
-            fill: chartColors[i % chartColors.length] ?? chartFallbackColor,
+            fill: chartColors[i % chartColors.length] ?? "#3b82f6",
         }))
+
+    const funnelChartData = buildFunnelChartData(funnel || undefined, defaultPipeline?.stages)
 
     const trendChartData = (trend || []).map(item => ({
         date: item.date,
@@ -598,7 +597,7 @@ export default function ReportsPage() {
                 {/* Funnel & Map Charts */}
                 <div className="mt-6 grid gap-6 lg:grid-cols-2">
                     <FunnelChart
-                        data={funnel}
+                        data={funnelChartData}
                         isLoading={funnelLoading}
                         isError={funnelError}
                         title="Conversion Funnel"
