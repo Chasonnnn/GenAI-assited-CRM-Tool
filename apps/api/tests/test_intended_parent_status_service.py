@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.db.enums import IntendedParentStatus
+from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParentStatusHistory, StatusChangeRequest
 from app.services import intended_parent_status_service, ip_service, pipeline_service
 
@@ -46,6 +46,7 @@ def test_ip_status_backdate_requires_reason(db, test_org, test_user):
             ip=ip,
             new_stage=ready_stage,
             user_id=test_user.id,
+            user_role=Role.DEVELOPER,
             effective_at=effective_at,
         )
 
@@ -60,6 +61,7 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
         ip=ip,
         new_stage=ready_stage,
         user_id=test_user.id,
+        user_role=Role.CASE_MANAGER,
     )
     assert applied["status"] == "applied"
 
@@ -78,6 +80,7 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
         ip=ip,
         new_stage=new_stage,
         user_id=test_user.id,
+        user_role=Role.CASE_MANAGER,
         reason="Requested correction",
     )
     assert regression["status"] == "pending_approval"
@@ -98,6 +101,73 @@ def test_ip_status_regression_creates_pending_request(db, test_org, test_user):
     assert request.target_stage_id == new_stage.id
 
 
+@pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
+def test_ip_status_regression_self_approves_for_admin_or_developer(
+    db, test_org, test_user, role
+):
+    ip = _create_ip(db, test_org.id, test_user.id)
+    ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
+    new_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.NEW.value)
+
+    applied = intended_parent_status_service.change_status(
+        db=db,
+        ip=ip,
+        new_stage=ready_stage,
+        user_id=test_user.id,
+        user_role=role,
+    )
+    assert applied["status"] == "applied"
+
+    history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(IntendedParentStatusHistory.intended_parent_id == ip.id)
+        .order_by(IntendedParentStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert history is not None
+    history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db.commit()
+
+    regression = intended_parent_status_service.change_status(
+        db=db,
+        ip=ip,
+        new_stage=new_stage,
+        user_id=test_user.id,
+        user_role=role,
+        reason="Requested correction",
+    )
+    assert regression["status"] == "applied"
+
+    db.refresh(ip)
+    assert ip.status == IntendedParentStatus.NEW.value
+
+    request_count = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.entity_type == "intended_parent",
+            StatusChangeRequest.entity_id == ip.id,
+            StatusChangeRequest.status == "pending",
+        )
+        .count()
+    )
+    assert request_count == 0
+
+    regression_history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(
+            IntendedParentStatusHistory.intended_parent_id == ip.id,
+            IntendedParentStatusHistory.new_stage_id == new_stage.id,
+        )
+        .order_by(IntendedParentStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert regression_history is not None
+    assert regression_history.request_id is None
+    assert regression_history.changed_by_user_id == test_user.id
+    assert regression_history.approved_by_user_id == test_user.id
+    assert regression_history.approved_at is not None
+
+
 def test_ip_status_undo_within_grace_period_applies(db, test_org, test_user):
     ip = _create_ip(db, test_org.id, test_user.id)
     ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
@@ -108,6 +178,7 @@ def test_ip_status_undo_within_grace_period_applies(db, test_org, test_user):
         ip=ip,
         new_stage=ready_stage,
         user_id=test_user.id,
+        user_role=Role.DEVELOPER,
     )
     assert applied["status"] == "applied"
 
@@ -116,6 +187,7 @@ def test_ip_status_undo_within_grace_period_applies(db, test_org, test_user):
         ip=ip,
         new_stage=new_stage,
         user_id=test_user.id,
+        user_role=Role.DEVELOPER,
         reason="Undoing mistake",
     )
     assert undo["status"] == "applied"

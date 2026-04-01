@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import IntendedParentStatus
+from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParent, IntendedParentStatusHistory
 from app.schemas.auth import UserSession
 from app.utils.normalization import (
@@ -660,6 +660,7 @@ def change_status(
     ip: IntendedParent,
     new_stage,
     user_id: UUID,
+    user_role: Role | str | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
 ) -> StatusChangeResult:
@@ -677,6 +678,7 @@ def change_status(
         ip=ip,
         new_stage=new_stage,
         user_id=user_id,
+        user_role=user_role,
         reason=reason,
         effective_at=effective_at,
     )

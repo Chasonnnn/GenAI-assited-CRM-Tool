@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db.enums import Role
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.models import (
     IntendedParent,
@@ -123,6 +124,7 @@ def change_status(
     ip: IntendedParent,
     new_stage: PipelineStage,
     user_id: UUID,
+    user_role: Role | str | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
 ) -> StatusChangeResult:
@@ -143,6 +145,10 @@ def change_status(
 
     if ip.created_at and normalized_effective_at < ip.created_at:
         raise ValueError("Cannot set date before intended parent was created")
+
+    role_str = user_role.value if hasattr(user_role, "value") else user_role
+    if not role_str:
+        raise ValueError("User role is required to change status")
 
     if is_regression:
         last_history = (
@@ -178,6 +184,21 @@ def change_status(
         raise ValueError("Reason required for backdated or regressed status changes")
 
     if is_regression:
+        if role_str in {Role.ADMIN.value, Role.DEVELOPER.value}:
+            return apply_status_change(
+                db=db,
+                ip=ip,
+                old_stage=current_stage,
+                new_stage=new_stage,
+                user_id=user_id,
+                reason=reason,
+                effective_at=normalized_effective_at,
+                recorded_at=now,
+                is_undo=False,
+                approved_by_user_id=user_id,
+                approved_at=now,
+            )
+
         request = StatusChangeRequest(
             organization_id=ip.organization_id,
             entity_type="intended_parent",

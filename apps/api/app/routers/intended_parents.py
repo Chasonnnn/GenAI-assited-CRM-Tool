@@ -373,6 +373,7 @@ def update_status(
             ip=ip,
             new_stage=target_stage,
             user_id=session.user_id,
+            user_role=session.role,
             reason=data.reason,
             effective_at=data.effective_at,
         )
