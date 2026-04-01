@@ -31,10 +31,7 @@ def _normalize_origin(origin: str) -> str:
 
 def _allowed_origins() -> set[str]:
     """Get static list of allowed origins (for backwards compatibility)."""
-    allowed = {_normalize_origin(origin) for origin in settings.cors_origins_list}
-    if settings.FRONTEND_URL:
-        allowed.add(_normalize_origin(settings.FRONTEND_URL))
-    return {origin for origin in allowed if origin}
+    return {_normalize_origin(origin) for origin in settings.cors_allowed_origins if origin}
 
 
 def validate_websocket_origin(origin: str | None, db: Session) -> bool:

@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,6 +24,25 @@ DEFAULT_META_OAUTH_REDIRECT_URI = "http://localhost:8000/integrations/meta/callb
 RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
 RELEASE_PLEASE_VERSION_NAME = ".release-please-version.json"
 FALLBACK_APP_VERSION = "0.54.0"
+
+
+def _normalize_origin(origin: str) -> str:
+    return origin.strip().rstrip("/")
+
+
+def _loopback_origin_aliases(origin: str) -> set[str]:
+    normalized = _normalize_origin(origin)
+    parsed = urlparse(normalized)
+    host = parsed.hostname or ""
+    if parsed.scheme not in {"http", "https"} or host not in {"localhost", "127.0.0.1"}:
+        return {normalized}
+
+    port = f":{parsed.port}" if parsed.port else ""
+    alias_host = "127.0.0.1" if host == "localhost" else "localhost"
+    return {
+        normalized,
+        f"{parsed.scheme}://{alias_host}{port}",
+    }
 
 
 def _read_release_please_manifest_version(path: Path) -> str | None:
@@ -425,6 +445,19 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS into a list."""
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        """Return merged CORS origins, expanding localhost aliases in dev/test."""
+        origins: set[str] = set()
+        for origin in [*self.cors_origins_list, self.FRONTEND_URL, self.OPS_FRONTEND_URL]:
+            if not origin:
+                continue
+            if self.is_dev:
+                origins.update(_loopback_origin_aliases(origin))
+            else:
+                origins.add(_normalize_origin(origin))
+        return sorted(origins)
 
     @property
     def trusted_proxy_hosts(self) -> list[str] | str:

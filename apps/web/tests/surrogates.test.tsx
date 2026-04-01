@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { SurrogatesPageClient as SurrogatesPage } from '../app/(app)/surrogates/page.client'
 
 // ============================================================================
@@ -201,7 +201,53 @@ describe('SurrogatesPage', () => {
         render(<SurrogatesPage />)
         expect(screen.getByText('John Doe')).toBeInTheDocument()
         expect(screen.getByText('#S12345')).toBeInTheDocument()
-        expect(screen.getByText('john@example.com')).toBeInTheDocument()
+        expect(screen.getByText('Manual')).toBeInTheDocument()
+    })
+
+    it('removes the email column and keeps source as the last named table column', () => {
+        const mockSurrogates = [
+            {
+                id: '1',
+                surrogate_number: 'S12345',
+                full_name: 'John Doe',
+                stage_id: 's1',
+                stage_slug: 'new_unread',
+                stage_type: 'intake',
+                status_label: 'New Unread',
+                source: 'manual',
+                email: 'john@example.com',
+                phone: '+15551234567',
+                state: 'CA',
+                race: 'white',
+                owner_type: 'user',
+                owner_id: 'u1',
+                owner_name: 'Owner',
+                created_at: '2024-03-03T12:00:00.000Z',
+                last_activity_at: '2024-03-04T12:00:00.000Z',
+                is_priority: false,
+                is_archived: false,
+                age: 34,
+                bmi: 24.1,
+            },
+        ]
+
+        mockUseSurrogates.mockReturnValue({
+            data: { items: mockSurrogates, total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        const table = screen.getByRole('table')
+        const namedHeaders = within(table)
+            .getAllByRole('columnheader')
+            .map((header) => header.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+            .filter(Boolean)
+
+        expect(namedHeaders.some((header) => /email/i.test(header))).toBe(false)
+        expect(within(table).queryByText('john@example.com')).not.toBeInTheDocument()
+        expect(namedHeaders.at(-1)).toMatch(/source/i)
     })
 
     it('preserves current filters in surrogate detail links', () => {

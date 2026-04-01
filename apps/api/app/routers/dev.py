@@ -127,17 +127,12 @@ def get_cors_config() -> object:
             rf"^{scheme}://([a-z0-9-]+\.)?{re.escape(settings.PLATFORM_BASE_DOMAIN)}$"
         )
 
-    cors_origins = set(settings.cors_origins_list)
-    for origin in (settings.FRONTEND_URL, settings.OPS_FRONTEND_URL):
-        if origin:
-            cors_origins.add(origin)
-
     return {
         "env": settings.ENV,
         "platform_base_domain": settings.PLATFORM_BASE_DOMAIN,
         "frontend_url": settings.FRONTEND_URL,
         "ops_frontend_url": settings.OPS_FRONTEND_URL,
-        "allow_origins": sorted(cors_origins),
+        "allow_origins": settings.cors_allowed_origins,
         "allow_origin_regex": tenant_origin_regex,
     }
 

@@ -130,7 +130,7 @@ export function ReportsChartsGrid({
                                 <ChartTooltip content={<ChartTooltipContent />} />
                                 <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                                     {statusChartData.map((item) => (
-                                        <Cell key={`${item.status}-${item.fill}`} fill={item.fill} />
+                                        <Cell key={`${item.status}-${item.fill}`} fill={item.fill ?? "#94a3b8"} />
                                     ))}
                                 </Bar>
                             </BarChart>

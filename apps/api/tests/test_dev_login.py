@@ -27,6 +27,23 @@ async def test_dev_login_creates_session(client, db, test_user):
 
 
 @pytest.mark.asyncio
+async def test_dev_login_preflight_allows_loopback_origin_alias(client, test_user):
+    response = await client.options(
+        f"/dev/login-as/{test_user.id}",
+        headers={
+            "Origin": "http://127.0.0.1:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "X-Dev-Secret",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
+    assert "X-Dev-Secret" in response.headers["access-control-allow-headers"]
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
+@pytest.mark.asyncio
 async def test_dev_seed_idempotent_and_includes_developer(client):
     headers = {"X-Dev-Secret": settings.DEV_SECRET}
 

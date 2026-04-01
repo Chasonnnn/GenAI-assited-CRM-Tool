@@ -1542,12 +1542,11 @@ export function SurrogatesPageClient() {
                                         <SortableTableHead column="race" label="Race" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Phone</TableHead>
-                                        <TableHead>Email</TableHead>
                                         <TableHead>Stage</TableHead>
-                                        <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Assigned To</TableHead>
                                         <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <SortableTableHead column="last_modified_at" label="Last Modified" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                                        <SortableTableHead column="source" label="Source" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead className="w-[50px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -1594,17 +1593,9 @@ export function SurrogatesPageClient() {
                                                 <TableCell className={mutedCellClass}>
                                                     {surrogateItem.phone || "—"}
                                                 </TableCell>
-                                                <TableCell className={cn("max-w-[200px] truncate", mutedCellClass)} title={surrogateItem.email}>
-                                                    {surrogateItem.email}
-                                                </TableCell>
                                                 <TableCell>
                                                     <Badge style={{ backgroundColor: statusColor, color: "white" }}>
                                                         {statusLabel}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {getSourceFilterLabel(surrogateItem.source)}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
@@ -1637,6 +1628,11 @@ export function SurrogatesPageClient() {
                                                             surrogateItem.last_activity_at,
                                                         )
                                                     )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary" className="capitalize">
+                                                        {getSourceFilterLabel(surrogateItem.source)}
+                                                    </Badge>
                                                 </TableCell>
                                                 <TableCell>
                                                     <DropdownMenu>

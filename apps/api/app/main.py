@@ -480,11 +480,7 @@ if settings.PLATFORM_BASE_DOMAIN:
     scheme = "https?" if settings.is_dev else "https"
     tenant_origin_regex = rf"^{scheme}://([a-z0-9-]+\.)?{re.escape(settings.PLATFORM_BASE_DOMAIN)}$"
 
-cors_origins = set(settings.cors_origins_list)
-for origin in (settings.FRONTEND_URL, settings.OPS_FRONTEND_URL):
-    if origin:
-        cors_origins.add(origin)
-allow_origins = sorted(cors_origins)
+allow_origins = settings.cors_allowed_origins
 
 app.add_middleware(
     CORSMiddleware,
