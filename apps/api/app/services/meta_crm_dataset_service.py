@@ -19,6 +19,7 @@ from app.services import (
     job_service,
     meta_capi,
     meta_crm_dataset_monitor_service,
+    meta_outbound_service,
     meta_crm_dataset_settings_service,
     zapier_settings_service,
 )
@@ -111,11 +112,6 @@ def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
         or _find_json_value_by_key(meta_lead.field_data or {}, FBC_CANDIDATE_KEYS)
         or _find_json_value_by_key(meta_lead.raw_payload or {}, FBC_CANDIDATE_KEYS)
     )
-
-
-def _resolve_dedupe_key(stage_key: str, mapping: list[dict]) -> str:
-    bucket = zapier_settings_service.resolve_meta_stage_bucket(stage_key, mapping)
-    return bucket or stage_key
 
 
 def _skip_event(
@@ -336,8 +332,12 @@ def enqueue_stage_event(
             lead_id=meta_lead.meta_lead_id,
         )
 
-    dedupe_key = _resolve_dedupe_key(stage_key, mapping)
-    event_id = f"meta_crm_dataset:{meta_lead.meta_lead_id}:{dedupe_key}"
+    event_id = meta_outbound_service.build_stage_event_key(
+        "meta_crm_dataset",
+        meta_lead.meta_lead_id,
+        stage_key,
+        mapping,
+    )
     body = build_stage_event_payload(
         lead_id=meta_lead.meta_lead_id,
         event_name=event_name,

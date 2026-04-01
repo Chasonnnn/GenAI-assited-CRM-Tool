@@ -21,6 +21,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.meta_api import compute_appsecret_proof
+from app.services import meta_outbound_service
 from app.types import JsonObject
 
 if TYPE_CHECKING:
@@ -36,10 +37,10 @@ CAPI_URL = f"https://graph.facebook.com/{settings.META_API_VERSION}"
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 # Meta Ads lead status labels (must match configured labels in Meta)
-META_STATUS_INTAKE = "Intake"
-META_STATUS_QUALIFIED = "Qualified/Converted"
-META_STATUS_DISQUALIFIED = "Not qualified/Lost"
-META_STATUS_LOST = "Lost"
+META_STATUS_INTAKE = meta_outbound_service.META_STATUS_INTAKE
+META_STATUS_QUALIFIED = meta_outbound_service.META_STATUS_QUALIFIED
+META_STATUS_DISQUALIFIED = meta_outbound_service.META_STATUS_DISQUALIFIED
+META_STATUS_LOST = meta_outbound_service.META_STATUS_LOST
 
 # Surrogate status mapping (slug -> Meta status bucket)
 META_INTAKE_STATUSES = {
@@ -91,15 +92,7 @@ def map_surrogate_status_to_meta_status(surrogate_status: str) -> str | None:
 
 
 def _map_integration_bucket_to_meta_status(bucket: str | None) -> str | None:
-    if bucket == "lost":
-        return META_STATUS_LOST
-    if bucket == "not_qualified":
-        return META_STATUS_DISQUALIFIED
-    if bucket in {"qualified", "converted"}:
-        return META_STATUS_QUALIFIED
-    if bucket == "intake":
-        return META_STATUS_INTAKE
-    return None
+    return meta_outbound_service.map_bucket_to_meta_status(bucket)
 
 
 def map_stage_key_to_meta_status_for_org(
@@ -107,25 +100,10 @@ def map_stage_key_to_meta_status_for_org(
     organization_id,
     stage_key: str | None,
 ) -> str | None:
-    from app.services import pipeline_semantics_service, pipeline_service
-
-    if not stage_key:
-        return None
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, organization_id)
-    snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(db, pipeline)
-    stage = snapshot.stage_by_key.get(stage_key)
-    if not stage:
-        normalized = next(
-            (
-                snapshot_stage
-                for snapshot_stage in snapshot.stages
-                if snapshot_stage.slug == stage_key
-            ),
-            None,
-        )
-        stage = normalized
-    return _map_integration_bucket_to_meta_status(
-        stage.semantics.integration_bucket if stage else None
+    return meta_outbound_service.map_stage_key_to_meta_status_for_org(
+        db,
+        organization_id,
+        stage_key,
     )
 
 

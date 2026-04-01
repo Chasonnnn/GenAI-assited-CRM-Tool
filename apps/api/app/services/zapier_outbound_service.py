@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 from app.core.stage_definitions import LABEL_OVERRIDES
 from app.db.enums import JobType, SurrogateSource
 from app.db.models import MetaLead, Surrogate
-from app.services import job_service, meta_capi, zapier_monitor_service, zapier_settings_service
+from app.services import (
+    job_service,
+    meta_capi,
+    meta_outbound_service,
+    zapier_monitor_service,
+    zapier_settings_service,
+)
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
@@ -99,12 +105,6 @@ def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
         or _find_json_value_by_key(meta_lead.field_data or {}, FBC_CANDIDATE_KEYS)
         or _find_json_value_by_key(meta_lead.raw_payload or {}, FBC_CANDIDATE_KEYS)
     )
-
-
-def _resolve_dedupe_key(stage_key: str, mapping: list[dict]) -> str:
-    """Deduplicate funnel updates once per Meta status bucket."""
-    bucket = zapier_settings_service.resolve_meta_stage_bucket(stage_key, mapping)
-    return bucket or stage_key
 
 
 def _skip_event(
@@ -359,8 +359,12 @@ def enqueue_stage_event(
             lead_id=meta_lead.meta_lead_id,
         )
     meta_fields = _extract_meta_fields(meta_lead, surrogate)
-    dedupe_key = _resolve_dedupe_key(stage_key, mapping)
-    event_id = f"zapier_stage:{meta_lead.meta_lead_id}:{dedupe_key}"
+    event_id = meta_outbound_service.build_stage_event_key(
+        "zapier_stage",
+        meta_lead.meta_lead_id,
+        stage_key,
+        mapping,
+    )
     payload = build_stage_event_payload(
         lead_id=meta_lead.meta_lead_id,
         event_name=event_name,
@@ -391,7 +395,7 @@ def enqueue_stage_event(
         "data": payload,
         "webhook_id": settings.webhook_id,
     }
-    idempotency_key = f"zapier_stage:{meta_lead.meta_lead_id}:{dedupe_key}"
+    idempotency_key = event_id
 
     existing_job = job_service.get_job_by_idempotency_key(
         db,
