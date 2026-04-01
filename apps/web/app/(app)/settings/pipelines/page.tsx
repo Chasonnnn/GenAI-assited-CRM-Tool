@@ -228,7 +228,10 @@ const SUGGESTION_PROFILE_OPTIONS = [
 ]
 
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    // structuredClone is more performant than JSON.parse(JSON.stringify(value))
+    // because it avoids allocating intermediate serialized string memory
+    // and correctly handles complex types like Sets, Maps, and Dates natively.
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
