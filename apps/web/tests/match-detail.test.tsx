@@ -5,6 +5,8 @@ import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page.cli
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
+const mockInvalidateQueries = vi.fn()
+const mockAcceptMatchMutateAsync = vi.fn()
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -36,7 +38,7 @@ vi.mock('@tanstack/react-query', async () => {
     return {
         ...actual,
         useQueryClient: () => ({
-            invalidateQueries: vi.fn(),
+            invalidateQueries: mockInvalidateQueries,
         }),
     }
 })
@@ -64,7 +66,12 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogate: (id: string) => mockUseSurrogate(id),
     useSurrogateActivity: (id: string) => mockUseSurrogateActivity(id),
     useChangeSurrogateStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    surrogateKeys: { detail: (id: string) => ['surrogates', 'detail', id], lists: () => ['surrogates', 'list'] },
+    surrogateKeys: {
+        detail: (id: string) => ['surrogates', 'detail', id],
+        lists: () => ['surrogates', 'list'],
+        activity: (id: string) => ['surrogates', 'detail', id, 'activity'],
+        history: (id: string) => ['surrogates', 'detail', id, 'history'],
+    },
 }))
 
 // Mock notes hook
@@ -75,12 +82,18 @@ vi.mock('@/lib/hooks/use-notes', () => ({
 
 // Mock IP hooks
 const mockUseIntendedParent = vi.fn()
+const mockUseIntendedParentHistory = vi.fn()
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParent: (id: string) => mockUseIntendedParent(id),
     useIntendedParentNotes: () => ({ data: [] }),
-    useIntendedParentHistory: () => ({ data: [] }),
+    useIntendedParentHistory: (id: string) => mockUseIntendedParentHistory(id),
     useCreateIntendedParentNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    intendedParentKeys: { detail: (id: string) => ['intended-parents', 'detail', id], lists: () => ['intended-parents', 'list'], notes: (id: string) => ['intended-parents', 'notes', id] },
+    intendedParentKeys: {
+        detail: (id: string) => ['intended-parents', 'detail', id],
+        lists: () => ['intended-parents', 'list'],
+        history: (id: string) => ['intended-parents', 'history', id],
+        notes: (id: string) => ['intended-parents', 'notes', id],
+    },
 }))
 
 // Mock attachments hook
@@ -182,6 +195,8 @@ describe('MatchDetailPage', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        mockInvalidateQueries.mockReset()
+        mockAcceptMatchMutateAsync.mockReset()
 
         mockUseMatch.mockReturnValue({
             data: mockMatch,
@@ -201,8 +216,10 @@ describe('MatchDetailPage', () => {
             data: mockIP,
             isLoading: false,
         })
+        mockUseIntendedParentHistory.mockReturnValue({ data: [] })
 
-        mockUseAcceptMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockAcceptMatchMutateAsync.mockResolvedValue(mockMatch)
+        mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: false })
         mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -338,6 +355,26 @@ describe('MatchDetailPage', () => {
         expect(screen.getByText('Connected')).toBeInTheDocument()
         expect(screen.queryByText(/^matched$/)).not.toBeInTheDocument()
     })
+
+    it('refreshes source activity and history queries after accepting a match', async () => {
+        render(<MatchDetailPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /accept match/i }))
+
+        await waitFor(() =>
+            expect(mockAcceptMatchMutateAsync).toHaveBeenCalledWith({ matchId: 'match1' })
+        )
+
+        expect(mockInvalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['surrogates', 'detail', 'surrogate1', 'activity'],
+        })
+        expect(mockInvalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['surrogates', 'detail', 'surrogate1', 'history'],
+        })
+        expect(mockInvalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['intended-parents', 'history', 'ip1'],
+        })
+    })
 })
 
 describe('MatchDetailPage with different statuses', () => {
@@ -384,7 +421,13 @@ describe('MatchDetailPage with different statuses', () => {
             isLoading: false,
         })
 
-        mockUseAcceptMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockAcceptMatchMutateAsync.mockResolvedValue({
+            id: 'match1',
+            surrogate_id: 'surrogate1',
+            intended_parent_id: 'ip1',
+            status: 'accepted',
+        })
+        mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: false })
         mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })

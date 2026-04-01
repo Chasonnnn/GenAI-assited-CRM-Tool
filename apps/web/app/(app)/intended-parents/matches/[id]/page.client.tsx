@@ -148,37 +148,57 @@ export default function MatchDetailPage() {
         })
     }
 
+    const invalidateMatchSourceQueries = (
+        entityIds?: {
+            surrogate_id?: string | null
+            intended_parent_id?: string | null
+        } | null,
+    ) => {
+        const surrogateId = entityIds?.surrogate_id ?? match?.surrogate_id
+        const intendedParentId = entityIds?.intended_parent_id ?? match?.intended_parent_id
+
+        if (surrogateId) {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) })
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+            queryClient.invalidateQueries({
+                queryKey: [...surrogateKeys.detail(surrogateId), "activity"],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [...surrogateKeys.detail(surrogateId), "history"],
+            })
+        }
+
+        if (intendedParentId) {
+            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(intendedParentId) })
+            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: intendedParentKeys.history(intendedParentId) })
+        }
+    }
+
     // Handle Accept match
     const handleAcceptMatch = async () => {
-        await acceptMatchMutation.mutateAsync({ matchId })
-        // Invalidate all related queries to refresh UI
-        if (match?.surrogate_id) {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(match.surrogate_id) })
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
-        }
-        if (match?.intended_parent_id) {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(match.intended_parent_id) })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-        }
+        const updatedMatch = await acceptMatchMutation.mutateAsync({ matchId })
+        invalidateMatchSourceQueries(updatedMatch)
         queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
     }
 
     // Handle Reject match
     const handleRejectMatch = async (reason: string) => {
-        await rejectMatchMutation.mutateAsync({ matchId, data: { rejection_reason: reason } })
-        // Refresh related data after rejection
-        if (match?.surrogate_id) {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(match.surrogate_id) })
-        }
-        if (match?.intended_parent_id) {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(match.intended_parent_id) })
-        }
+        const updatedMatch = await rejectMatchMutation.mutateAsync({
+            matchId,
+            data: { rejection_reason: reason },
+        })
+        invalidateMatchSourceQueries(updatedMatch)
         queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
         queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
     const handleCancelMatch = async (reason?: string) => {
-        await cancelMatchMutation.mutateAsync({ matchId, data: reason ? { reason } : {} })
+        const updatedMatch = await cancelMatchMutation.mutateAsync({
+            matchId,
+            data: reason ? { reason } : {},
+        })
+        invalidateMatchSourceQueries(updatedMatch)
         queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
         queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
