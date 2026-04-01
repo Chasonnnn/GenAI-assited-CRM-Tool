@@ -311,6 +311,94 @@ function filterBySource<T extends { source: DataSource }>(
     return items.filter((item) => item.source === sourceFilter)
 }
 
+export function buildMatchCombinedActivity({
+    surrogateActivity,
+    intendedParentNotes,
+    intendedParentFiles,
+    intendedParentHistory,
+    match,
+}: Pick<
+    UseMatchDetailTabDataParams,
+    | "surrogateActivity"
+    | "intendedParentNotes"
+    | "intendedParentFiles"
+    | "intendedParentHistory"
+    | "match"
+>): CombinedActivity[] {
+    const activity: CombinedActivity[] = []
+
+    for (const surrogateEvent of surrogateActivity?.items || []) {
+        const eventType = getSurrogateActivityEventType(surrogateEvent.activity_type)
+        activity.push({
+            id: surrogateEvent.id,
+            event_type: eventType,
+            description: getSurrogateActivityDescription(surrogateEvent),
+            actor_name: surrogateEvent.actor_name,
+            created_at: surrogateEvent.created_at,
+            source: "surrogate",
+        })
+    }
+
+    for (const intendedParentNote of intendedParentNotes) {
+        activity.push({
+            id: `ip-note-${intendedParentNote.id}`,
+            event_type: "Note",
+            description: stripHtml(intendedParentNote.content),
+            actor_name: null,
+            created_at: intendedParentNote.created_at,
+            source: "ip",
+        })
+    }
+
+    for (const intendedParentFile of intendedParentFiles) {
+        activity.push({
+            id: `ip-file-${intendedParentFile.id}`,
+            event_type: "File uploaded",
+            description: intendedParentFile.filename,
+            actor_name: null,
+            created_at: intendedParentFile.created_at,
+            source: "ip",
+        })
+    }
+
+    for (const history of intendedParentHistory || []) {
+        activity.push({
+            id: `ip-history-${history.id}`,
+            event_type: "Status Change",
+            description: formatStatusChangeDescription(
+                history.old_status,
+                history.new_status,
+                history.reason,
+            ),
+            actor_name: history.changed_by_name,
+            created_at: history.changed_at,
+            source: "ip",
+        })
+    }
+
+    const hasCanonicalMatchProposed = (surrogateActivity?.items || []).some((surrogateEvent) =>
+        matchesCurrentMatch(surrogateEvent, match),
+    )
+
+    if (match?.proposed_at && !hasCanonicalMatchProposed) {
+        activity.push({
+            id: "match-proposed",
+            event_type: "Match Proposed",
+            description: "Match was proposed",
+            actor_name: null,
+            created_at: match.proposed_at,
+            source: "match",
+        })
+    }
+
+    activity.sort((a, b) => {
+        const timeDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        return timeDiff !== 0 ? timeDiff : a.id.localeCompare(b.id)
+    })
+
+    return activity
+}
+
 export function useMatchDetailTabData({
     sourceFilter,
     surrogateNotes,
@@ -423,78 +511,17 @@ export function useMatchDetailTabData({
         return Array.from(taskMap.values())
     }, [intendedParentTasks, surrogateTasks])
 
-    const combinedActivity = useMemo<CombinedActivity[]>(() => {
-        const activity: CombinedActivity[] = []
-
-        for (const surrogateEvent of surrogateActivity?.items || []) {
-            activity.push({
-                id: surrogateEvent.id,
-                event_type: getSurrogateActivityEventType(surrogateEvent.activity_type),
-                description: getSurrogateActivityDescription(surrogateEvent),
-                actor_name: surrogateEvent.actor_name,
-                created_at: surrogateEvent.created_at,
-                source: "surrogate",
-            })
-        }
-
-        for (const intendedParentNote of intendedParentNotes) {
-            activity.push({
-                id: `ip-note-${intendedParentNote.id}`,
-                event_type: "Note",
-                description: stripHtml(intendedParentNote.content),
-                actor_name: null,
-                created_at: intendedParentNote.created_at,
-                source: "ip",
-            })
-        }
-
-        for (const intendedParentFile of intendedParentFiles) {
-            activity.push({
-                id: `ip-file-${intendedParentFile.id}`,
-                event_type: "File uploaded",
-                description: intendedParentFile.filename,
-                actor_name: null,
-                created_at: intendedParentFile.created_at,
-                source: "ip",
-            })
-        }
-
-        for (const history of intendedParentHistory || []) {
-            activity.push({
-                id: `ip-history-${history.id}`,
-                event_type: "Status Change",
-                description: formatStatusChangeDescription(
-                    history.old_status,
-                    history.new_status,
-                    history.reason,
-                ),
-                actor_name: history.changed_by_name,
-                created_at: history.changed_at,
-                source: "ip",
-            })
-        }
-
-        const hasCanonicalMatchProposed = (surrogateActivity?.items || []).some((surrogateEvent) =>
-            matchesCurrentMatch(surrogateEvent, match),
-        )
-
-        if (match?.proposed_at && !hasCanonicalMatchProposed) {
-            activity.push({
-                id: "match-proposed",
-                event_type: "Match Proposed",
-                description: "Match was proposed",
-                actor_name: null,
-                created_at: match.proposed_at,
-                source: "match",
-            })
-        }
-
-        activity.sort((a, b) => {
-            const timeDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            return timeDiff !== 0 ? timeDiff : a.id.localeCompare(b.id)
-        })
-        return activity
-    }, [intendedParentFiles, intendedParentHistory, intendedParentNotes, match, surrogateActivity])
+    const combinedActivity = useMemo<CombinedActivity[]>(
+        () =>
+            buildMatchCombinedActivity({
+                surrogateActivity,
+                intendedParentNotes,
+                intendedParentFiles,
+                intendedParentHistory,
+                match,
+            }),
+        [intendedParentFiles, intendedParentHistory, intendedParentNotes, match, surrogateActivity],
+    )
 
     const filteredNotes = useMemo(
         () => filterBySource(combinedNotes, sourceFilter),
