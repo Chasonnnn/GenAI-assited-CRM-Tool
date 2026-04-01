@@ -40,6 +40,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { formatRelativeTime } from "@/lib/formatters"
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import type {
     PipelineChangePreview,
     PipelineDependencyGraph,
@@ -228,7 +229,7 @@ const SUGGESTION_PROFILE_OPTIONS = [
 ]
 
 function deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T
+    return structuredClone(value)
 }
 
 function createLocalId(): string {
@@ -2205,25 +2206,47 @@ function usePipelineSettingsEditor() {
 
     const isLoading = pipelinesLoading || pipelineLoading
     const baselineDraft = useMemo(() => buildDraft(pipeline, entityType), [entityType, pipeline])
-    const draft = draftOverride?.contextKey === editorContextKey ? draftOverride.value : null
+    const scopedDraft = draftOverride?.contextKey === editorContextKey ? draftOverride : null
+    const debouncedScopedDraft = useDebouncedValue(scopedDraft, 1200)
+    const draft = scopedDraft?.value ?? null
+    const debouncedDraft = debouncedScopedDraft?.contextKey === editorContextKey ? debouncedScopedDraft.value : null
     const deleteStageState =
         deleteStageOverride?.contextKey === editorContextKey ? deleteStageOverride.value : null
     const currentDraft = draft ?? baselineDraft
+    const baselineDraftFingerprint = useMemo(
+        () => (baselineDraft ? stringifyDraft(baselineDraft) : null),
+        [baselineDraft],
+    )
+    const debouncedDraftFingerprint = useMemo(
+        () => (debouncedDraft ? stringifyDraft(debouncedDraft) : null),
+        [debouncedDraft],
+    )
+    const draftIsDebounced = scopedDraft === debouncedScopedDraft
     const hasChanges = useMemo(() => {
-        if (!baselineDraft || !currentDraft) return false
-        return stringifyDraft(baselineDraft) !== stringifyDraft(currentDraft)
-    }, [baselineDraft, currentDraft])
-    const previewDraft = useMemo(() => {
-        if (!currentDraft || !hasChanges) return null
+        if (!scopedDraft) return false
+        if (!draftIsDebounced) return true
+        return debouncedDraftFingerprint !== baselineDraftFingerprint
+    }, [baselineDraftFingerprint, debouncedDraftFingerprint, draftIsDebounced, scopedDraft])
+    const previewDraftPayload = useMemo(() => {
+        if (!debouncedDraft || debouncedDraftFingerprint === baselineDraftFingerprint) return null
         return {
-            ...buildApiDraft(currentDraft),
+            ...buildApiDraft(debouncedDraft),
             ...(pipeline?.current_version
                 ? { expected_version: pipeline.current_version }
                 : {}),
         }
-    }, [currentDraft, hasChanges, pipeline?.current_version])
-    const previewQuery = usePipelineChangePreview(defaultPipeline?.id || null, previewDraft, entityType)
-    const preview: PipelineChangePreview | null = previewQuery.data ?? null
+    }, [baselineDraftFingerprint, debouncedDraft, debouncedDraftFingerprint, pipeline?.current_version])
+    const previewDraftFingerprint = useMemo(
+        () => (previewDraftPayload ? JSON.stringify(previewDraftPayload) : ""),
+        [previewDraftPayload],
+    )
+    const previewQuery = usePipelineChangePreview(
+        defaultPipeline?.id || null,
+        previewDraftPayload,
+        entityType,
+        previewDraftFingerprint,
+    )
+    const preview: PipelineChangePreview | null = previewDraftPayload ? previewQuery.data ?? null : null
     const dependencyGraph = preview?.dependency_graph ?? dependencyGraphQuery.data ?? null
 
     const currentStages = currentDraft?.stages ?? []

@@ -93,12 +93,12 @@ export function usePipelineChangePreview(
     id: string | null,
     draft: PipelineDraft | null,
     entityType: PipelineEntityType = 'surrogate',
+    draftKey = '',
 ) {
-    const draftKey = draft ? JSON.stringify(draft) : '';
     return useQuery({
         queryKey: pipelineKeys.preview(id || '', entityType, draftKey),
         queryFn: () => pipelinesApi.previewPipelineChanges(id!, draft!, entityType),
-        enabled: !!id && !!draft,
+        enabled: !!id && !!draft && !!draftKey,
     });
 }
 

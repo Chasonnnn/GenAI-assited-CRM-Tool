@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import PipelinesSettingsPage from "../app/(app)/settings/pipelines/page"
 
 const mockUseAuth = vi.fn()
@@ -36,8 +36,12 @@ vi.mock("@/lib/hooks/use-pipelines", () => ({
         mockUsePipelineVersions(id, entityType),
     usePipelineDependencyGraph: (id: string | null, entityType?: string) =>
         mockUsePipelineDependencyGraph(id, entityType),
-    usePipelineChangePreview: (id: string | null, draft: unknown, entityType?: string) =>
-        mockUsePipelineChangePreview(id, draft, entityType),
+    usePipelineChangePreview: (
+        id: string | null,
+        draft: unknown,
+        entityType?: string,
+        draftFingerprint?: string,
+    ) => mockUsePipelineChangePreview(id, draft, entityType, draftFingerprint),
     useRollbackPipeline: () => ({ mutateAsync: mockRollbackPipeline, isPending: false }),
     useApplyPipelineDraft: () => ({ mutateAsync: mockApplyPipelineDraft, isPending: false }),
     useRecommendedPipelineDraft: () => ({
@@ -448,10 +452,16 @@ describe("PipelinesSettingsPage", () => {
                 : dependencyGraphFixture,
             isLoading: false,
         }))
-        mockUsePipelineChangePreview.mockImplementation((_id: string | null, _draft: unknown, entityType?: string) => ({
-            data: entityType === "intended_parent" ? intendedParentPreviewFixture : previewFixture,
-            isLoading: false,
-        }))
+        mockUsePipelineChangePreview.mockImplementation(
+            (_id: string | null, draft: unknown, entityType?: string) => ({
+                data: draft
+                    ? (entityType === "intended_parent"
+                        ? intendedParentPreviewFixture
+                        : previewFixture)
+                    : null,
+                isLoading: false,
+            }),
+        )
         mockApplyPipelineDraft.mockResolvedValue({})
         mockUseRecommendedPipelineDraft.mockImplementation(
             async ({ entityType }: { entityType?: string }) => ({
@@ -618,6 +628,42 @@ describe("PipelinesSettingsPage", () => {
                     && stage.stage_key === "matching_review",
             ),
         ).toBe(true)
+    })
+
+    it("marks changes immediately and delays preview payloads until edits settle", () => {
+        vi.useFakeTimers()
+
+        render(<PipelinesSettingsPage />)
+
+        const labelInputs = screen.getAllByPlaceholderText("Label")
+        fireEvent.change(labelInputs[1] as HTMLInputElement, {
+            target: { value: "Contacted Updated" },
+        })
+
+        expect(screen.getByText("Unsaved changes")).toBeInTheDocument()
+        expect(mockUsePipelineChangePreview.mock.lastCall?.[1]).toBeNull()
+        expect(mockUsePipelineChangePreview.mock.lastCall?.[3]).toBe("")
+
+        act(() => {
+            vi.advanceTimersByTime(1199)
+        })
+
+        expect(mockUsePipelineChangePreview.mock.lastCall?.[1]).toBeNull()
+
+        act(() => {
+            vi.advanceTimersByTime(1)
+        })
+
+        expect(mockUsePipelineChangePreview.mock.lastCall?.[1]).toMatchObject({
+            stages: expect.arrayContaining([
+                expect.objectContaining({ label: "Contacted Updated" }),
+            ]),
+        })
+        expect(mockUsePipelineChangePreview.mock.lastCall?.[3]).toEqual(
+            expect.any(String),
+        )
+
+        vi.useRealTimers()
     })
 
     it("deletes a stage with a remap target and applies the draft", async () => {
