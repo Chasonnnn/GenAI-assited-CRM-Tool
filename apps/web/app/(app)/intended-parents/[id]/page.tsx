@@ -80,6 +80,7 @@ import {
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import { parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
+import { useAuth } from "@/lib/auth-context"
 
 export default function IntendedParentDetailPage() {
     const params = useParams<{ id: string }>()
@@ -91,6 +92,7 @@ export default function IntendedParentDetailPage() {
     const [formData, setFormData] = useState<IntendedParentFormValues>(EMPTY_INTENDED_PARENT_FORM_VALUES)
     const [proposeMatchOpen, setProposeMatchOpen] = useState(false)
     const [changeStatusModalOpen, setChangeStatusModalOpen] = useState(false)
+    const { user } = useAuth()
 
     // Queries
     const { data: ip, isLoading } = useIntendedParent(id)
@@ -599,6 +601,7 @@ export default function IntendedParentDetailPage() {
                     ip.status_label,
                 )}
                 entityLabel="Stage"
+                canSelfApproveRegression={["admin", "developer"].includes(user?.role ?? "")}
                 onSubmit={handleStatusChange}
                 isPending={statusMutation.isPending}
             />

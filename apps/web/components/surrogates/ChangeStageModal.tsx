@@ -56,6 +56,7 @@ interface ChangeStageModalProps {
     initialDeliveryBabyGender?: string | null
     initialDeliveryBabyWeight?: string | null
     onHoldFollowUpAssigneeLabel?: string | null
+    canSelfApproveRegression?: boolean
 }
 
 export function ChangeStageModal({
@@ -72,6 +73,7 @@ export function ChangeStageModal({
     initialDeliveryBabyGender = null,
     initialDeliveryBabyWeight = null,
     onHoldFollowUpAssigneeLabel = null,
+    canSelfApproveRegression = false,
 }: ChangeStageModalProps) {
     // State
     const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
@@ -127,6 +129,7 @@ export function ChangeStageModal({
         if (!selectedStage || !comparisonStage) return false
         return !isResumeSelection && selectedStage.order < comparisonStage.order
     }, [selectedStage, comparisonStage, isResumeSelection])
+    const requiresApproval = isRegression && !canSelfApproveRegression
 
     const hasTime = selectedTime.trim().length > 0
     const effectiveDateTime = useMemo(() => {
@@ -219,12 +222,12 @@ export function ChangeStageModal({
     // Button text based on context
     const submitButtonText = isResumeSelection
         ? "Resume"
-        : isRegression
+        : requiresApproval
             ? "Request Approval"
             : "Save Change"
     const submitButtonLoadingText = isResumeSelection
         ? "Resuming..."
-        : isRegression
+        : requiresApproval
             ? "Requesting..."
             : "Saving..."
 
@@ -457,13 +460,24 @@ export function ChangeStageModal({
                     )}
 
                     {/* Regression Warning Banner */}
-                    {isRegression && (
+                    {requiresApproval && (
                         <Alert className="border-amber-500/30 bg-amber-500/5">
                             <AlertTriangleIcon className="size-4 text-amber-600" />
                             <AlertTitle className="text-amber-600">Admin Approval Required</AlertTitle>
                             <AlertDescription className="text-amber-600/80">
                                 Moving to an earlier {label.toLowerCase()} requires admin approval.
                                 Your request will be submitted for review.
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    {isRegression && canSelfApproveRegression && (
+                        <Alert className="border-blue-500/30 bg-blue-500/5">
+                            <AlertCircleIcon className="size-4 text-blue-600" />
+                            <AlertTitle className="text-blue-600">Earlier Stage Change</AlertTitle>
+                            <AlertDescription className="text-blue-600/80">
+                                You can apply this earlier stage change immediately.
+                                A reason is still required for audit purposes.
                             </AlertDescription>
                         </Alert>
                     )}

@@ -20,6 +20,15 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockPush }),
 }))
 
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => ({
+        user: { role: 'developer', user_id: 'user-1' },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+    }),
+}))
+
 const mockUseIntendedParent = vi.fn()
 
 vi.mock('@/lib/hooks/use-intended-parents', () => ({

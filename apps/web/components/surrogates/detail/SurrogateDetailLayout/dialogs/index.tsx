@@ -5,6 +5,7 @@ import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 import { LogContactAttemptDialog } from "@/components/surrogates/LogContactAttemptDialog"
 import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
+import { useAuth } from "@/lib/auth-context"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
@@ -15,6 +16,7 @@ import { ReleaseQueueDialog } from "./ReleaseQueueDialog"
 import { ZoomMeetingDialog } from "./ZoomMeetingDialog"
 
 export function Dialogs() {
+    const { user } = useAuth()
     const {
         surrogate,
         visibleStageOptions,
@@ -79,6 +81,7 @@ export function Dialogs() {
                 currentStageId={surrogate.stage_id}
                 comparisonStageId={surrogate.paused_from_stage_id ?? surrogate.stage_id}
                 currentStageLabel={statusLabel}
+                canSelfApproveRegression={["admin", "developer"].includes(user?.role ?? "")}
                 onSubmit={changeStatus}
                 isPending={isChangeStatusPending}
                 deliveryFieldsEnabled

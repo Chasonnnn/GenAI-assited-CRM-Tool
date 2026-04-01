@@ -146,4 +146,45 @@ describe("ChangeStageModal", () => {
         expect(screen.getByLabelText(/baby gender/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/baby weight/i)).toBeInTheDocument()
     })
+
+    it("shows approval copy for regressions without self-approval capability", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_delivered"
+                currentStageLabel="Delivered"
+                onSubmit={vi.fn().mockResolvedValue({ status: "pending_approval" })}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /new unread/i }))
+
+        expect(screen.getByText("Admin Approval Required")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Request Approval" })).toBeInTheDocument()
+    })
+
+    it("shows immediate-apply copy for regressions with self-approval capability", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_delivered"
+                currentStageLabel="Delivered"
+                canSelfApproveRegression
+                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /new unread/i }))
+
+        expect(screen.getByText("Earlier Stage Change")).toBeInTheDocument()
+        expect(
+            screen.getByText(/you can apply this earlier stage change immediately/i)
+        ).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Save Change" })).toBeInTheDocument()
+        expect(screen.queryByText("Admin Approval Required")).not.toBeInTheDocument()
+    })
 })
