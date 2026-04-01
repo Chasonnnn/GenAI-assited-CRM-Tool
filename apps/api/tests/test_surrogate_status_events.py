@@ -592,6 +592,77 @@ def test_status_change_dedupes_qualified_stage_updates(monkeypatch, db, test_org
     assert jobs[0].payload["data"]["event_name"] == "Qualified"
 
 
+def test_status_change_dedupes_zapier_qualified_stage_updates_through_interview_scheduled(
+    monkeypatch, db, test_org, test_user
+):
+    from app.services import zapier_settings_service
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    settings.outbound_webhook_secret_encrypted = zapier_settings_service.encrypt_secret(
+        "zapier-secret"
+    )
+    settings.outbound_enabled = True
+    settings.outbound_event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        },
+        {
+            "stage_key": "interview_scheduled",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        },
+    ]
+    db.commit()
+
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    surrogate.meta_lead_id = lead.id
+    surrogate.meta_form_id = lead.meta_form_id
+    db.commit()
+
+    pre_qualified = _get_stage(db, test_org.id, "pre_qualified")
+    interview_scheduled = _get_stage(db, test_org.id, "interview_scheduled")
+
+    monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *_args, **_kwargs: None)
+    from app.services import notification_facade, workflow_triggers
+
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    first_event_kwargs = _event_kwargs(surrogate, pre_qualified, user_id=test_user.id)
+    first_event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**first_event_kwargs)
+
+    second_event_kwargs = _event_kwargs(
+        surrogate,
+        interview_scheduled,
+        old_stage=pre_qualified,
+        user_id=test_user.id,
+    )
+    second_event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**second_event_kwargs)
+
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .order_by(Job.created_at.asc())
+        .all()
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].payload["data"]["event_name"] == "Qualified"
+
+
 def test_status_change_dedupes_meta_crm_dataset_qualified_stage_updates(
     monkeypatch, db, test_org, test_user
 ):
