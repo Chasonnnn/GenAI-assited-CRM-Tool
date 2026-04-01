@@ -13,6 +13,7 @@ from httpx import AsyncClient
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog
 from app.core.encryption import hash_email
+from app.core.security import create_oauth_state_payload, generate_oauth_nonce
 from app.utils.normalization import normalize_email
 
 
@@ -21,6 +22,101 @@ def _next_weekday_local(current_date: date, weekday: int) -> date:
     if delta == 0:
         delta = 7
     return current_date + timedelta(days=delta)
+
+
+@pytest.fixture
+def rate_limiter_reset():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
+def _stub_oauth_connect(monkeypatch: pytest.MonkeyPatch, path: str) -> dict[str, int]:
+    from app.services import oauth_service
+
+    calls = {"count": 0}
+
+    def build_auth_url(*_args, **_kwargs) -> str:
+        calls["count"] += 1
+        return "https://example.com/oauth?state=test-state"
+
+    if path == "/integrations/gmail/connect":
+        monkeypatch.setattr(oauth_service, "get_gmail_auth_url", build_auth_url)
+    elif path == "/integrations/google-calendar/connect":
+        monkeypatch.setattr(oauth_service, "get_google_calendar_auth_url", build_auth_url)
+    elif path == "/integrations/gcp/connect":
+        monkeypatch.setattr(oauth_service, "get_gcp_auth_url", build_auth_url)
+    elif path == "/integrations/zoom/connect":
+        monkeypatch.setattr(oauth_service, "get_zoom_auth_url", build_auth_url)
+    else:
+        raise AssertionError(f"Unhandled connect path: {path}")
+
+    return calls
+
+
+def _stub_oauth_callback(monkeypatch: pytest.MonkeyPatch, path: str) -> dict[str, int]:
+    from app.services import oauth_service
+
+    calls = {"count": 0}
+
+    async def exchange_code(*_args, **_kwargs):
+        calls["count"] += 1
+        return {
+            "access_token": "access-token",
+            "refresh_token": "refresh-token",
+            "expires_in": 3600,
+            "scope": "openid email profile",
+        }
+
+    async def get_user_info(*_args, **_kwargs):
+        return {"email": "integration@example.com"}
+
+    monkeypatch.setattr(oauth_service, "save_integration", lambda *_args, **_kwargs: None)
+
+    if path == "/integrations/gmail/callback":
+        monkeypatch.setattr(oauth_service, "exchange_gmail_code", exchange_code)
+        monkeypatch.setattr(oauth_service, "get_gmail_user_info", get_user_info)
+    elif path == "/integrations/google-calendar/callback":
+        from app.services import appointment_integrations, calendar_service, google_tasks_sync_service
+
+        async def ensure_google_calendar_watch(*_args, **_kwargs):
+            return True
+
+        async def sync_manual_google_events_for_appointments_async(*_args, **_kwargs):
+            return 0
+
+        async def sync_google_tasks_for_user_async(*_args, **_kwargs):
+            return 0
+
+        monkeypatch.setattr(oauth_service, "exchange_google_calendar_code", exchange_code)
+        monkeypatch.setattr(oauth_service, "get_google_calendar_user_info", get_user_info)
+        monkeypatch.setattr(
+            calendar_service,
+            "ensure_google_calendar_watch",
+            ensure_google_calendar_watch,
+        )
+        monkeypatch.setattr(
+            appointment_integrations,
+            "sync_manual_google_events_for_appointments_async",
+            sync_manual_google_events_for_appointments_async,
+        )
+        monkeypatch.setattr(
+            google_tasks_sync_service,
+            "sync_google_tasks_for_user_async",
+            sync_google_tasks_for_user_async,
+        )
+    elif path == "/integrations/gcp/callback":
+        monkeypatch.setattr(oauth_service, "exchange_gcp_code", exchange_code)
+        monkeypatch.setattr(oauth_service, "get_gcp_user_info", get_user_info)
+    elif path == "/integrations/zoom/callback":
+        monkeypatch.setattr(oauth_service, "exchange_zoom_code", exchange_code)
+        monkeypatch.setattr(oauth_service, "get_zoom_user_info", get_user_info)
+    else:
+        raise AssertionError(f"Unhandled callback path: {path}")
+
+    return calls
 
 
 @pytest.mark.asyncio
@@ -178,6 +274,78 @@ async def test_gcp_connect_sets_state_cookie_and_returns_auth_url(
     payload = json.loads(cookie_value.value)
     assert payload["state"] == state
     assert "ua_hash" in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/integrations/gmail/connect",
+        "/integrations/google-calendar/connect",
+        "/integrations/gcp/connect",
+        "/integrations/zoom/connect",
+    ],
+)
+async def test_oauth_connect_routes_rate_limited(
+    authed_client: AsyncClient,
+    monkeypatch,
+    rate_limiter_reset,
+    path: str,
+):
+    calls = _stub_oauth_connect(monkeypatch, path)
+
+    for _ in range(5):
+        response = await authed_client.get(path)
+        assert response.status_code == 200, response.text
+
+    blocked = await authed_client.get(path)
+
+    assert blocked.status_code == 429
+    assert calls["count"] == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "cookie_name"),
+    [
+        ("/integrations/gmail/callback", "integration_oauth_state_gmail"),
+        ("/integrations/google-calendar/callback", "integration_oauth_state_google_calendar"),
+        ("/integrations/gcp/callback", "integration_oauth_state_gcp"),
+        ("/integrations/zoom/callback", "integration_oauth_state_zoom"),
+    ],
+)
+async def test_oauth_callback_routes_rate_limited(
+    authed_client: AsyncClient,
+    monkeypatch,
+    rate_limiter_reset,
+    path: str,
+    cookie_name: str,
+):
+    calls = _stub_oauth_callback(monkeypatch, path)
+    user_agent = "pytest-integrations-agent"
+    state = "test-state"
+    state_payload = create_oauth_state_payload(state, generate_oauth_nonce(), user_agent)
+
+    for _ in range(5):
+        authed_client.cookies.set(cookie_name, state_payload)
+        response = await authed_client.get(
+            path,
+            params={"code": "dummy-code", "state": state},
+            follow_redirects=False,
+            headers={"user-agent": user_agent},
+        )
+        assert response.status_code == 302, response.text
+
+    authed_client.cookies.set(cookie_name, state_payload)
+    blocked = await authed_client.get(
+        path,
+        params={"code": "dummy-code", "state": state},
+        follow_redirects=False,
+        headers={"user-agent": user_agent},
+    )
+
+    assert blocked.status_code == 429
+    assert calls["count"] == 5
 
 
 @pytest.mark.asyncio
