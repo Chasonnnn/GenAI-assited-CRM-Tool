@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.6...surrogacy-crm-platform-v0.91.7) (2026-04-01)
+
+
+### Bug Fixes
+
+* align local auth hosts and update surrogate table ([9dc7407](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9dc740795c3d3ced1afec40fe9e783f0ec711edd))
+* align report stage colors with pipelines ([74b02a1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/74b02a1a4745df70399df203a6c443b95a6ee8e5))
+* auto-remap pipeline reset drafts ([7720f3f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7720f3fe993270085a0c388ff64d79251c7655ce))
+* debounce pipeline preview updates ([f3da4f4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f3da4f47a28498395c24caba6959379a913d8039))
+* improve icon-button accessibility ([4ab70fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4ab70fdc0d6a5562bd1a24e09f5decdf4b5561b0))
+* patch pygments audit dependency ([e1cc43b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e1cc43baf7c58a959ee94c87434a0ccf92b68ead))
+* rate limit integration oauth routes ([85c995d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/85c995d1680bce9ba0c7278c6d8d327980604edb))
+* refresh match source activity queries ([6fa627b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6fa627be0e8de92d0925ee76b4371f2923fc2285))
+* self-approve intended parent stage regressions ([d48ec99](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d48ec993d52a323564135fe35e834f3f185df399))
+* self-approve surrogate stage regressions ([b87d733](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b87d733e686fe3d8d11a1957eb10394e2669c2d6))
+* sync match activity aggregation ([e0d994d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e0d994dbf306ed279562a0492244e4ab727a0537))
+* sync pipeline remaps across workflows and labels ([63248f2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/63248f22c666aef16c8449838effed545b6cfff0))
+* update regression approval messaging for admins ([e2a9e74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e2a9e74c6dc0666664886975639b746da4ea717a))
+
 ## [0.91.6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.5...surrogacy-crm-platform-v0.91.6) (2026-03-30)
 
 
