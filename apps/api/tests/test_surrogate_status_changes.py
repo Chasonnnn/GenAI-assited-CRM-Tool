@@ -1,13 +1,20 @@
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from uuid import UUID
 import uuid
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
+from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role
 from app.db.models import Membership, StatusChangeRequest, Surrogate, SurrogateStatusHistory, User
+from app.main import app
 from app.services import pipeline_service
+from app.services import session_service
 
 
 def _org_timezone() -> ZoneInfo:
@@ -31,6 +38,57 @@ async def _create_surrogate(authed_client):
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+@asynccontextmanager
+async def _client_for_role(db, org_id: UUID, role: Role):
+    user = User(
+        id=uuid.uuid4(),
+        email=f"{role.value}-{uuid.uuid4().hex[:8]}@test.com",
+        display_name=f"{role.value} user",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            organization_id=org_id,
+            role=role,
+            is_active=True,
+        )
+    )
+    db.flush()
+
+    token = create_session_token(
+        user_id=user.id,
+        org_id=org_id,
+        role=role.value,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(db=db, user_id=user.id, org_id=org_id, token=token, request=None)
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    csrf_token = generate_csrf_token()
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+            headers={CSRF_HEADER: csrf_token},
+        ) as client:
+            yield user, client
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -83,36 +141,38 @@ async def test_surrogate_status_change_today_date_no_time_is_effective_now(
 
 
 @pytest.mark.asyncio
-async def test_surrogate_status_regression_creates_pending_request(authed_client, db, test_auth):
+async def test_surrogate_status_regression_creates_pending_request_for_non_admin(db, test_org):
     """Regression outside the 5-minute undo grace period requires admin approval."""
-    surrogate = await _create_surrogate(authed_client)
-    contacted_stage = _get_stage(db, test_auth.org.id, "contacted")
-    new_unread_stage = _get_stage(db, test_auth.org.id, "new_unread")
+    contacted_stage = _get_stage(db, test_org.id, "contacted")
+    new_unread_stage = _get_stage(db, test_org.id, "new_unread")
 
-    response = await authed_client.patch(
-        f"/surrogates/{surrogate['id']}/status",
-        json={"stage_id": str(contacted_stage.id)},
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == "applied"
+    async with _client_for_role(db, test_org.id, Role.INTAKE_SPECIALIST) as (_, client):
+        surrogate = await _create_surrogate(client)
 
-    # Move the history record's recorded_at back to be outside the 5-minute undo grace period
-    surrogate_id = UUID(surrogate["id"])
-    history = (
-        db.query(SurrogateStatusHistory)
-        .filter(SurrogateStatusHistory.surrogate_id == surrogate_id)
-        .first()
-    )
-    history.recorded_at = datetime.now(_org_timezone()) - timedelta(minutes=10)
-    db.commit()
+        response = await client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(contacted_stage.id)},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "applied"
 
-    regression = await authed_client.patch(
-        f"/surrogates/{surrogate['id']}/status",
-        json={"stage_id": str(new_unread_stage.id), "reason": "Requested correction"},
-    )
-    assert regression.status_code == 200, regression.text
-    regression_payload = regression.json()
-    assert regression_payload["status"] == "pending_approval"
+        # Move the history record's recorded_at back to be outside the 5-minute undo grace period
+        surrogate_id = UUID(surrogate["id"])
+        history = (
+            db.query(SurrogateStatusHistory)
+            .filter(SurrogateStatusHistory.surrogate_id == surrogate_id)
+            .first()
+        )
+        history.recorded_at = datetime.now(_org_timezone()) - timedelta(minutes=10)
+        db.commit()
+
+        regression = await client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(new_unread_stage.id), "reason": "Requested correction"},
+        )
+        assert regression.status_code == 200, regression.text
+        regression_payload = regression.json()
+        assert regression_payload["status"] == "pending_approval"
 
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
     assert surrogate_row is not None
@@ -140,39 +200,41 @@ async def test_surrogate_status_regression_creates_pending_request(authed_client
 
 
 @pytest.mark.asyncio
-async def test_approve_status_change_request_applies_regression(authed_client, db, test_auth):
+async def test_approve_status_change_request_applies_regression(db, test_org):
     """Admin approval of a regression request applies the change and records audit trail."""
-    surrogate = await _create_surrogate(authed_client)
-    contacted_stage = _get_stage(db, test_auth.org.id, "contacted")
-    new_unread_stage = _get_stage(db, test_auth.org.id, "new_unread")
+    contacted_stage = _get_stage(db, test_org.id, "contacted")
+    new_unread_stage = _get_stage(db, test_org.id, "new_unread")
 
-    response = await authed_client.patch(
-        f"/surrogates/{surrogate['id']}/status",
-        json={"stage_id": str(contacted_stage.id)},
-    )
-    assert response.status_code == 200, response.text
+    async with _client_for_role(db, test_org.id, Role.INTAKE_SPECIALIST) as (_, requester_client):
+        surrogate = await _create_surrogate(requester_client)
 
-    # Move history outside undo grace period
-    surrogate_id = UUID(surrogate["id"])
-    history = (
-        db.query(SurrogateStatusHistory)
-        .filter(SurrogateStatusHistory.surrogate_id == surrogate_id)
-        .first()
-    )
-    history.recorded_at = datetime.now(_org_timezone()) - timedelta(minutes=10)
-    db.commit()
+        response = await requester_client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(contacted_stage.id)},
+        )
+        assert response.status_code == 200, response.text
 
-    regression = await authed_client.patch(
-        f"/surrogates/{surrogate['id']}/status",
-        json={"stage_id": str(new_unread_stage.id), "reason": "Regression request"},
-    )
-    assert regression.status_code == 200, regression.text
-    assert regression.json()["status"] == "pending_approval"
-    request_id = UUID(regression.json()["request_id"])
+        surrogate_id = UUID(surrogate["id"])
+        history = (
+            db.query(SurrogateStatusHistory)
+            .filter(SurrogateStatusHistory.surrogate_id == surrogate_id)
+            .first()
+        )
+        history.recorded_at = datetime.now(_org_timezone()) - timedelta(minutes=10)
+        db.commit()
 
-    approve = await authed_client.post(f"/status-change-requests/{request_id}/approve")
-    assert approve.status_code == 200, approve.text
-    assert approve.json()["status"] == "approved"
+        regression = await requester_client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(new_unread_stage.id), "reason": "Regression request"},
+        )
+        assert regression.status_code == 200, regression.text
+        assert regression.json()["status"] == "pending_approval"
+        request_id = UUID(regression.json()["request_id"])
+
+    async with _client_for_role(db, test_org.id, Role.DEVELOPER) as (approver, approver_client):
+        approve = await approver_client.post(f"/status-change-requests/{request_id}/approve")
+        assert approve.status_code == 200, approve.text
+        assert approve.json()["status"] == "approved"
 
     surrogate_row = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
     assert surrogate_row is not None
@@ -188,7 +250,75 @@ async def test_approve_status_change_request_applies_regression(authed_client, d
         .first()
     )
     assert regression_history is not None
-    assert regression_history.approved_by_user_id == test_auth.user.id
+    assert regression_history.approved_by_user_id == approver.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
+async def test_surrogate_status_regression_self_approves_for_admin_or_developer(
+    db, test_org, role
+):
+    contacted_stage = _get_stage(db, test_org.id, "contacted")
+    new_unread_stage = _get_stage(db, test_org.id, "new_unread")
+
+    async with _client_for_role(db, test_org.id, role) as (user, client):
+        surrogate = await _create_surrogate(client)
+
+        response = await client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(contacted_stage.id)},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "applied"
+
+        surrogate_id = UUID(surrogate["id"])
+        history = (
+            db.query(SurrogateStatusHistory)
+            .filter(SurrogateStatusHistory.surrogate_id == surrogate_id)
+            .order_by(SurrogateStatusHistory.recorded_at.desc())
+            .first()
+        )
+        assert history is not None
+        history.recorded_at = datetime.now(_org_timezone()) - timedelta(minutes=10)
+        db.commit()
+
+        regression = await client.patch(
+            f"/surrogates/{surrogate['id']}/status",
+            json={"stage_id": str(new_unread_stage.id), "reason": "Requested correction"},
+        )
+        assert regression.status_code == 200, regression.text
+        assert regression.json()["status"] == "applied"
+        assert regression.json()["request_id"] is None
+
+    surrogate_row = db.query(Surrogate).filter(Surrogate.id == surrogate_id).first()
+    assert surrogate_row is not None
+    assert surrogate_row.stage_id == new_unread_stage.id
+
+    request_count = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.entity_type == "surrogate",
+            StatusChangeRequest.entity_id == surrogate_id,
+            StatusChangeRequest.status == "pending",
+        )
+        .count()
+    )
+    assert request_count == 0
+
+    regression_history = (
+        db.query(SurrogateStatusHistory)
+        .filter(
+            SurrogateStatusHistory.surrogate_id == surrogate_id,
+            SurrogateStatusHistory.to_stage_id == new_unread_stage.id,
+        )
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert regression_history is not None
+    assert regression_history.request_id is None
+    assert regression_history.changed_by_user_id == user.id
+    assert regression_history.approved_by_user_id == user.id
+    assert regression_history.approved_at is not None
 
 
 @pytest.mark.asyncio

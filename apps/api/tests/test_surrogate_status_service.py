@@ -60,7 +60,7 @@ def test_status_change_regression_creates_pending_request(db, test_org, test_use
         surrogate=surrogate,
         new_stage_id=contacted_stage.id,
         user_id=test_user.id,
-        user_role=Role.DEVELOPER,
+        user_role=Role.INTAKE_SPECIALIST,
     )
     assert applied["status"] == "applied"
 
@@ -78,7 +78,7 @@ def test_status_change_regression_creates_pending_request(db, test_org, test_use
         surrogate=surrogate,
         new_stage_id=new_unread_stage.id,
         user_id=test_user.id,
-        user_role=Role.DEVELOPER,
+        user_role=Role.INTAKE_SPECIALIST,
         reason="Requested correction",
     )
     assert regression["status"] == "pending_approval"
@@ -97,6 +97,72 @@ def test_status_change_regression_creates_pending_request(db, test_org, test_use
     assert request is not None
     assert request.status == "pending"
     assert request.target_stage_id == new_unread_stage.id
+
+
+@pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
+def test_status_change_regression_self_approves_for_admin_or_developer(
+    db, test_org, test_user, role
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    contacted_stage = _get_stage(db, test_org.id, "contacted")
+    new_unread_stage = _get_stage(db, test_org.id, "new_unread")
+
+    applied = surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=contacted_stage.id,
+        user_id=test_user.id,
+        user_role=role,
+    )
+    assert applied["status"] == "applied"
+
+    history = (
+        db.query(SurrogateStatusHistory)
+        .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+        .first()
+    )
+    assert history is not None
+    history.recorded_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    db.commit()
+
+    regression = surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=new_unread_stage.id,
+        user_id=test_user.id,
+        user_role=role,
+        reason="Requested correction",
+    )
+    assert regression["status"] == "applied"
+
+    db.refresh(surrogate)
+    assert surrogate.stage_id == new_unread_stage.id
+
+    request_count = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.entity_type == "surrogate",
+            StatusChangeRequest.entity_id == surrogate.id,
+            StatusChangeRequest.status == "pending",
+        )
+        .count()
+    )
+    assert request_count == 0
+
+    regression_history = (
+        db.query(SurrogateStatusHistory)
+        .filter(
+            SurrogateStatusHistory.surrogate_id == surrogate.id,
+            SurrogateStatusHistory.to_stage_id == new_unread_stage.id,
+        )
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert regression_history is not None
+    assert regression_history.request_id is None
+    assert regression_history.changed_by_user_id == test_user.id
+    assert regression_history.approved_by_user_id == test_user.id
+    assert regression_history.approved_at is not None
 
 
 def test_status_change_undo_within_grace_period_applies(db, test_org, test_user):

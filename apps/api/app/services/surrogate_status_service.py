@@ -195,7 +195,7 @@ def change_status(
     Supports:
     - Normal changes (effective now)
     - Backdated changes (effective in the past, requires reason)
-    - Regressions (earlier stage, requires admin approval)
+    - Regressions (earlier stage, requires approval unless actor is admin/developer)
 
     Args:
         effective_at: When the change actually occurred. None = now.
@@ -351,6 +351,37 @@ def change_status(
         raise ValueError("Reason required for backdated or regressed stage changes")
 
     if is_regression:
+        if role_str in {Role.ADMIN.value, Role.DEVELOPER.value}:
+            result = apply_status_change(
+                db=db,
+                surrogate=surrogate,
+                new_stage=new_stage,
+                current_stage=current_stage,
+                old_stage_id=old_stage_id,
+                old_label=old_label,
+                old_slug=old_slug,
+                user_id=user_id,
+                reason=reason,
+                effective_at=normalized_effective_at,
+                recorded_at=now,
+                org_timezone_str=org_tz_str,
+                is_undo=False,
+                approved_by_user_id=user_id,
+                approved_at=now,
+                paused_from_stage=(
+                    effective_old_stage
+                    if pipeline_service.stage_matches_key(new_stage, "on_hold")
+                    else paused_from_stage
+                ),
+                on_hold_follow_up_months=on_hold_follow_up_months,
+                trigger_workflows=trigger_workflows,
+            )
+            if emit_events:
+                from app.services import dashboard_events
+
+                dashboard_events.push_dashboard_stats(db, surrogate.organization_id)
+            return result
+
         request = StatusChangeRequest(
             organization_id=surrogate.organization_id,
             entity_type="surrogate",
