@@ -66,6 +66,7 @@ import {
     useRollbackPipeline,
 } from "@/lib/hooks/use-pipelines"
 import { getStageSemantics, normalizeStageKey } from "@/lib/surrogate-stage-context"
+import { buildRecommendedDraftRemaps } from "@/lib/pipeline-reset-remaps"
 
 type EditableStage = PipelineStage & {
     category: StageType
@@ -359,6 +360,7 @@ function normalizeEditableStage(
     const category = stage.category ?? stage.stage_type
     return {
         ...stage,
+        id: stage.id || stage.stage_key,
         category,
         stage_type: category,
         is_locked: stage.is_locked ?? false,
@@ -2366,13 +2368,17 @@ function usePipelineSettingsEditor() {
                 id: pipeline.id,
                 entityType,
             })
-            setScopedDraft(
-                buildDraft({
+            const nextDraft = buildDraft(
+                {
                     name: recommended.name,
                     stages: recommended.stages as PipelineStage[],
                     feature_config: recommended.feature_config,
-                }, entityType),
+                },
+                entityType,
             )
+            if (!nextDraft) return
+            nextDraft.remaps = buildRecommendedDraftRemaps(pipeline.stages, nextDraft.stages)
+            setScopedDraft(nextDraft)
         } catch {
             // Hook toasts surface the error.
         }
