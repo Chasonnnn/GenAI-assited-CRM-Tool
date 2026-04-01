@@ -267,9 +267,10 @@ function VersionItem({
 
                 <DropdownMenu>
                     <DropdownMenuTrigger
+                        aria-label={`Version history actions for version ${version.version}`}
                         className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
                     >
-                        <MoreVerticalIcon className="h-4 w-4" />
+                        <MoreVerticalIcon className="h-4 w-4" aria-hidden="true" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         {previousVersion && (

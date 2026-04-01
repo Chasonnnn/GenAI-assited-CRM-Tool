@@ -182,13 +182,14 @@ describe('SurrogateInterviewTab', () => {
 
         await waitFor(() => {
             expect(screen.getByRole("button", { name: "Interview actions" })).toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Interview detail actions" })).toBeInTheDocument()
         })
 
         await waitFor(() => {
             expect(screen.getByText('Phone Interview')).toBeDefined()
         })
 
-        fireEvent.click(screen.getByText('Attachments'))
+        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
 
         const transcribeButton = await screen.findByRole('button', { name: /transcribe/i })
         fireEvent.click(transcribeButton)

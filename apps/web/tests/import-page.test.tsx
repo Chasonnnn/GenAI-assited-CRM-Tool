@@ -118,6 +118,10 @@ describe('CSVImportPage', () => {
     it('shows errored rows and reasons when viewing errors', () => {
         render(<CSVImportPage />)
 
+        expect(
+            screen.getByRole('button', { name: 'Import actions for surrogates.csv' })
+        ).toBeInTheDocument()
+
         fireEvent.click(screen.getByRole('button', { name: /view errors/i }))
 
         expect(screen.getByText('Import errors')).toBeInTheDocument()

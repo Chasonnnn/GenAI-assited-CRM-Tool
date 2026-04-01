@@ -255,6 +255,21 @@ describe('DashboardPage', () => {
         expect(await screen.findByText('Reset filters')).toBeInTheDocument()
     })
 
+    it('adds focus-visible styles to dashboard section toggles', () => {
+        render(<DashboardPage />)
+
+        expect(screen.getByRole('button', { name: /Attention Needed/i })).toHaveClass(
+            'focus-visible:ring-2',
+            'focus-visible:ring-ring',
+            'focus-visible:ring-offset-2'
+        )
+        expect(screen.getByRole('button', { name: /Upcoming This Week/i })).toHaveClass(
+            'focus-visible:ring-2',
+            'focus-visible:ring-ring',
+            'focus-visible:ring-offset-2'
+        )
+    })
+
     it('uses consistent dashboard filters for all trend queries', async () => {
         mockUseSearchParams.mockReturnValue(new URLSearchParams('range=week&assignee=user-1'))
         mockUseSurrogatesTrend.mockClear()

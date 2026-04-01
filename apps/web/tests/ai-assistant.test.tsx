@@ -263,4 +263,35 @@ describe('AIAssistantPage', () => {
             conversation_id: 'conv-previous',
         })
     })
+
+    it('adds focus-visible styles to custom suggested-action and chat-history buttons', async () => {
+        sessionStorage.setItem(
+            'ai-assistant-chat-history-v1',
+            JSON.stringify([
+                {
+                    id: 'session-1',
+                    label: 'Session 1',
+                    preview: 'Earlier message',
+                    updatedAt: new Date().toISOString(),
+                    entityType: 'global',
+                    entityId: null,
+                },
+            ])
+        )
+
+        render(<AIAssistantPage />)
+
+        expect(screen.getByRole('button', { name: 'Summarize recent activity' })).toHaveClass(
+            'focus-visible:ring-2',
+            'focus-visible:ring-ring',
+            'focus-visible:ring-offset-2'
+        )
+
+        expect(await screen.findByText('Session 1')).toBeInTheDocument()
+        expect(screen.getAllByTestId('chat-history-item').at(-1)).toHaveClass(
+            'focus-visible:ring-2',
+            'focus-visible:ring-ring',
+            'focus-visible:ring-offset-2'
+        )
+    })
 })

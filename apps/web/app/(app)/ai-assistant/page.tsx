@@ -691,7 +691,7 @@ export default function AIAssistantPage() {
                                         key={suggestion}
                                         onClick={() => setMessage(suggestion)}
                                         disabled={!isAIEnabled || isStreaming}
-                                        className="flex w-full items-start gap-2 rounded-md py-1 text-left hover:bg-muted/50 transition-colors disabled:opacity-50"
+                                        className="flex w-full items-start gap-2 rounded-md py-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
                                     >
                                         <SparklesIcon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-teal-500" />
                                         <span className="text-sm leading-tight">{suggestion}</span>
@@ -724,7 +724,7 @@ export default function AIAssistantPage() {
                                                 data-testid="chat-history-item"
                                                 onClick={() => handleSelectSession(session)}
                                                 disabled={isStreaming}
-                                                className={`w-full rounded-md border px-2 py-1.5 text-left transition-colors ${session.id === activeSessionId
+                                                className={`w-full rounded-md border px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${session.id === activeSessionId
                                                     ? "border-primary/30 bg-primary/5"
                                                     : "border-transparent bg-muted/40 hover:bg-muted/60"
                                                     }`}

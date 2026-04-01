@@ -294,11 +294,12 @@ export default function CSVImportPage() {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {showRetry || showRunInline || showDelete || showErrors ? (
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger
-                                                                render={(props) => (
-                                                                    <Button
-                                                                        {...props}
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger
+                                                                    aria-label={`Import actions for ${imp.filename}`}
+                                                                    render={(props) => (
+                                                                        <Button
+                                                                            {...props}
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         disabled={
@@ -307,7 +308,7 @@ export default function CSVImportPage() {
                                                                             runInlineMutation.isPending
                                                                         }
                                                                     >
-                                                                        <MoreHorizontalIcon className="size-4" />
+                                                                        <MoreHorizontalIcon className="size-4" aria-hidden="true" />
                                                                     </Button>
                                                                 )}
                                                             />
