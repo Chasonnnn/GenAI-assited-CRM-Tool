@@ -283,7 +283,7 @@ export function SurrogateTasksCalendar({
                                                 {onTaskClick ? (
                                                     <button
                                                         type="button"
-                                                        className="flex-1 min-w-0 text-left"
+                                                        className="flex-1 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                                                         onClick={() => onTaskClick(task)}
                                                     >
                                                         <span
@@ -372,7 +372,7 @@ export function SurrogateTasksCalendar({
                                                 {onTaskClick ? (
                                                     <button
                                                         type="button"
-                                                        className="flex-1 min-w-0 text-left text-sm line-through text-muted-foreground"
+                                                        className="flex-1 min-w-0 text-left text-sm line-through text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                                                         onClick={() => onTaskClick(task)}
                                                     >
                                                         {task.title}
