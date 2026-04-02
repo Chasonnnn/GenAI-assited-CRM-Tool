@@ -249,7 +249,6 @@ def get_match_stats(
     org_id: UUID,
 ) -> tuple[int, dict[str, int]]:
     """Return total matches and counts by status."""
-    total = db.query(Match).filter(Match.organization_id == org_id).count()
     counts = {status.value: 0 for status in MatchStatus}
     rows = (
         db.query(Match.status, func.count(Match.id))
@@ -261,6 +260,8 @@ def get_match_stats(
     for status, count in rows:
         counts[status] = count
 
+    # Optimization: Calculate total from group counts to save an extra DB query
+    total = sum(counts.values())
     return total, counts
 
 
