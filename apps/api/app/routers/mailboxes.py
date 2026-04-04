@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.rate_limit import limiter
 from app.core.security import (
     create_oauth_state_payload,
     generate_oauth_nonce,
@@ -107,6 +108,7 @@ def list_mailboxes(
     response_model=OAuthStartResponse,
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def start_journal_oauth(
     request: Request,
     response: Response,
@@ -139,6 +141,7 @@ def start_journal_oauth(
 
 
 @router.get("/journal/gmail/oauth/callback")
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def complete_journal_oauth(
     request: Request,
     code: str,
