@@ -38,7 +38,7 @@ export function NotFoundState({
             <Empty>
                 <EmptyHeader>
                     <EmptyMedia variant="icon">
-                        <FileQuestion className="size-6" />
+                        <FileQuestion className="size-6" aria-hidden="true" />
                     </EmptyMedia>
                     <EmptyTitle>{title}</EmptyTitle>
                     <EmptyDescription>{description}</EmptyDescription>

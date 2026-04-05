@@ -51,7 +51,7 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
         <button
             type="button"
             className={cn(
-                "w-full p-4 border-b text-left cursor-pointer transition-colors",
+                "w-full p-4 border-b text-left cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded",
                 isSelected ? "bg-primary/5" : "hover:bg-muted/50"
             )}
             onClick={onClick}
