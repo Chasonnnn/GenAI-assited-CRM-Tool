@@ -1,0 +1,3 @@
+## 2024-04-05 - Avoid .count() queries on pagination
+**Learning:** For SQLAlchemy queries that calculate both standard data and total counts for pagination (e.g., in `paginate_query`), running a `.count()` is redundant and expensive when the returned items indicate the total size. If the length of the fetched result list is less than the `.limit()` amount, you can infer you're on the last page.
+**Action:** In paginated endpoints, always execute the item fetch `.limit().offset().all()` first. If `len(items) < limit` and `(offset == 0 or len(items) > 0)`, skip the `.count()` query entirely and just set `total = offset + len(items)`.
