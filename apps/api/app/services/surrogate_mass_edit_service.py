@@ -38,6 +38,7 @@ from app.utils.normalization import (
     normalize_phone,
     normalize_search_text,
 )
+from app.utils.height import height_ft_to_total_inches_expr
 
 
 MAX_APPLY = 2000
@@ -155,7 +156,7 @@ def _build_base_query(db: Session, org_id: UUID, filters: SurrogateMassEditStage
 
     # BMI range (DB-filterable)
     if filters.bmi_min is not None or filters.bmi_max is not None:
-        rounded_height_inches = cast(func.round(cast(Surrogate.height_ft, Float) * 12.0), Float)
+        rounded_height_inches = height_ft_to_total_inches_expr(Surrogate.height_ft)
         bmi_expr = (
             cast(Surrogate.weight_lb, Float) / (rounded_height_inches * rounded_height_inches)
         ) * 703.0

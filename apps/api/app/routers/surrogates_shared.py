@@ -8,6 +8,7 @@ from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
 from app.services import queue_service, surrogate_service, surrogate_stage_context, user_service
 from app.services.surrogate_checklist_service import build_eligibility_checklist
+from app.utils.height import height_ft_to_total_inches
 
 
 def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
@@ -176,7 +177,7 @@ def _surrogate_to_list_item(surrogate, db: Session, last_activity_at=None) -> Su
 
     bmi = None
     if surrogate.height_ft and surrogate.weight_lb:
-        height_inches = round(float(surrogate.height_ft) * 12)
+        height_inches = height_ft_to_total_inches(surrogate.height_ft) or 0
         if height_inches > 0:
             bmi = round((surrogate.weight_lb / (height_inches**2)) * 703, 1)
 
