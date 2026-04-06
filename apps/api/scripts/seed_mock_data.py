@@ -38,6 +38,7 @@ from app.db.enums import (
     SurrogateSource,
 )
 from app.services import dev_service, match_service, pipeline_service, template_seeder
+from app.utils.height import total_inches_to_height_ft
 
 # Sample data pools
 FIRST_NAMES_FEMALE = [
@@ -761,7 +762,7 @@ def create_surrogates(
             # Demographics
             date_of_birth=dob,
             race=random.choice(RACES),
-            height_ft=Decimal(str(round(random.uniform(5.0, 6.0), 1))),
+            height_ft=total_inches_to_height_ft(random.randint(60, 72)),
             weight_lb=random.randint(110, 180),
             # Eligibility
             is_age_eligible=True,

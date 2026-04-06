@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, field_serializer
 
 from app.db.enums import SurrogateSource, OwnerType
+from app.utils.height import canonicalize_height_ft
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_phone, normalize_state, format_race_label
 
@@ -214,6 +215,11 @@ class SurrogateCreate(BaseModel):
             raise ValueError("Invalid journey timing preference")
         return normalized
 
+    @field_validator("height_ft")
+    @classmethod
+    def validate_height_ft(cls, v: Decimal | None) -> Decimal | None:
+        return canonicalize_height_ft(v)
+
 
 class SurrogateUpdate(BaseModel):
     """Request schema for updating a surrogate (partial)."""
@@ -409,6 +415,11 @@ class SurrogateUpdate(BaseModel):
         if normalized is None:
             raise ValueError("Invalid journey timing preference")
         return normalized
+
+    @field_validator("height_ft")
+    @classmethod
+    def validate_height_ft(cls, v: Decimal | None) -> Decimal | None:
+        return canonicalize_height_ft(v)
 
 
 class BulkAssign(BaseModel):

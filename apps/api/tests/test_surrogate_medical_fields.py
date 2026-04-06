@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 import pytest
 
@@ -148,3 +149,26 @@ async def test_update_surrogate_logs_medical_insurance_pregnancy_activity(authed
     assert "medical_info_updated" in activity_types
     assert "insurance_info_updated" in activity_types
     assert "pregnancy_dates_updated" in activity_types
+
+
+@pytest.mark.asyncio
+async def test_create_surrogate_canonicalizes_numeric_height_to_nearest_inch(authed_client):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Canonical Height",
+            "email": f"canonical-height-{uuid.uuid4().hex[:8]}@example.com",
+            "height_ft": 4.8,
+            "weight_lb": 120,
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    created = create_res.json()
+
+    assert Decimal(created["height_ft"]) == Decimal("4.83")
+
+    get_res = await authed_client.get(f"/surrogates/{created['id']}")
+    assert get_res.status_code == 200, get_res.text
+    fetched = get_res.json()
+
+    assert Decimal(fetched["height_ft"]) == Decimal("4.83")

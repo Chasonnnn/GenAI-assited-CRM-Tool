@@ -19,6 +19,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable, TypeAlias
 
+from app.utils.height import canonicalize_height_ft
 from app.utils.normalization import normalize_phone, normalize_state
 
 
@@ -380,7 +381,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         if Decimal("3") <= feet_from_inches <= Decimal("8"):
             warnings.append(f"Interpreted '{value}' as inches, converted to feet")
             return TransformOutput(
-                value=feet_from_inches.quantize(Decimal("0.1")),
+                value=canonicalize_height_ft(feet_from_inches),
                 success=True,
                 warnings=warnings,
             )
@@ -400,7 +401,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             decimal_feet = Decimal(str(feet)) + Decimal(str(inches)) / Decimal("12")
             warnings.append(f"Interpreted '{value}' as feet/inches notation")
             return TransformOutput(
-                value=decimal_feet.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+                value=canonicalize_height_ft(decimal_feet),
                 success=True,
                 warnings=warnings,
             )
@@ -423,7 +424,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             decimal_feet = Decimal(str(feet)) + Decimal(str(inches)) / Decimal("12")
             warnings.append(f"Interpreted '{value}' as feet/inches notation")
             return TransformOutput(
-                value=decimal_feet.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+                value=canonicalize_height_ft(decimal_feet),
                 success=True,
                 warnings=warnings,
             )
@@ -434,7 +435,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         # Sanity check: reasonable height range 3-8 feet
         if Decimal("3") <= decimal_value <= Decimal("8"):
             return TransformOutput(
-                value=decimal_value.quantize(Decimal("0.1")),
+                value=canonicalize_height_ft(decimal_value),
                 success=True,
                 warnings=[],
             )
@@ -444,7 +445,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             if Decimal("3") <= feet_from_inches <= Decimal("8"):
                 warnings.append(f"Interpreted '{value}' as inches, converted to feet")
                 return TransformOutput(
-                    value=feet_from_inches.quantize(Decimal("0.1")),
+                    value=canonicalize_height_ft(feet_from_inches),
                     success=True,
                     warnings=warnings,
                 )
@@ -846,7 +847,7 @@ def _height_transform_result(feet: int, inches: Decimal, warnings: list[str]) ->
         local_warnings.append(f"Inches value {inches} >= 12, may be incorrect")
     decimal_feet = Decimal(str(feet)) + inches / Decimal("12")
     return TransformOutput(
-        value=decimal_feet.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP),
+        value=canonicalize_height_ft(decimal_feet),
         success=True,
         warnings=local_warnings,
     )

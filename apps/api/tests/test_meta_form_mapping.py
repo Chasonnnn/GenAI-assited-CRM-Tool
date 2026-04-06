@@ -669,7 +669,7 @@ def test_meta_lead_mapping_applies_default_transformers_when_mapping_has_none(
 
     assert error is None
     assert surrogate is not None
-    assert surrogate.height_ft == Decimal("5.3")
+    assert surrogate.height_ft == Decimal("5.33")
     assert surrogate.num_deliveries == 1
     assert surrogate.num_csections == 0
     assert surrogate.phone == "+15552223333"
@@ -769,8 +769,8 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
 @pytest.mark.parametrize(
     ("meta_lead_id", "height_value", "expected_height", "num_csections_value"),
     [
-        ("zapier-9c807da9-d5f9-423f-bacd-9732aa39ca5f", "4”ft 11", "4.9", None),
-        ("zapier-71fef5b9-320d-4107-9d97-dcc49dd10a6c", "5’3inch", "5.3", "No"),
+        ("zapier-9c807da9-d5f9-423f-bacd-9732aa39ca5f", "4”ft 11", "4.92", None),
+        ("zapier-71fef5b9-320d-4107-9d97-dcc49dd10a6c", "5’3inch", "5.25", "No"),
     ],
 )
 def test_meta_lead_mapping_handles_additional_height_formats(

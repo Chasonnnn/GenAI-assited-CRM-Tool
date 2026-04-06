@@ -212,7 +212,7 @@ class Surrogate(Base):
     # Demographics
     date_of_birth: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     race: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    height_ft: Mapped[Decimal | None] = mapped_column(Numeric(3, 1), nullable=True)
+    height_ft: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
     weight_lb: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Eligibility

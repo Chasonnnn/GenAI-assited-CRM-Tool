@@ -604,7 +604,7 @@ def test_submission_service_normalizes_decimal_height_notation_for_bmi(
 
 def test_coerce_surrogate_height_accepts_space_separated_feet_inches():
     coerced = form_submission_service._coerce_surrogate_value("height_ft", "5 7")
-    assert coerced == Decimal("5.6")
+    assert coerced == Decimal("5.58")
 
 
 def test_coerce_surrogate_weight_accepts_prefixed_units():

@@ -47,6 +47,7 @@ from app.db.models import (
     WorkflowTemplate,
 )
 from app.utils.journey_timing import normalize_journey_timing_preference
+from app.utils.height import canonicalize_height_ft
 from app.utils.normalization import (
     extract_email_domain,
     extract_phone_last4,
@@ -82,10 +83,14 @@ def _parse_int(value: str | None) -> int | None:
 def _parse_decimal(value: str | None) -> Decimal | None:
     if value is None or value == "":
         return None
+    try:
+        return canonicalize_height_ft(Decimal(value))
+    except Exception:
+        pass
     transformed = transform_height_flexible(value)
     if transformed.success and transformed.value is not None:
         return transformed.value
-    return Decimal(value)
+    return canonicalize_height_ft(Decimal(value))
 
 
 def _parse_date(value: str | None) -> date | None:
