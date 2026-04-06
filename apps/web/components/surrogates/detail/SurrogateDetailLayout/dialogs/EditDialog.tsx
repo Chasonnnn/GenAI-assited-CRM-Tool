@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { useAuth } from "@/lib/auth-context"
+import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
@@ -45,6 +46,7 @@ export function EditDialog() {
             ? surrogate.eligibility_checklist
             : FALLBACK_CHECKLIST_ITEMS
     const visibleChecklistKeys = new Set(editableChecklistItems.map((item) => item.key))
+    const heightSelection = splitHeightFt(surrogate.height_ft)
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
@@ -76,8 +78,10 @@ export function EditDialog() {
                         const race = getString("race")
                         data.race = race || null
 
-                        const heightFt = getString("height_ft")
-                        data.height_ft = heightFt ? parseFloat(heightFt) : null
+                        data.height_ft = serializeHeightSelection(
+                            getString("height_feet"),
+                            getString("height_inches"),
+                        )
                         const weightLb = getString("weight_lb")
                         data.weight_lb = weightLb ? parseFloat(weightLb) : null
                         const numDeliveries = getString("num_deliveries")
@@ -148,9 +152,39 @@ export function EditDialog() {
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="height_ft">Height (ft)</Label>
-                                <Input id="height_ft" name="height_ft" type="number" step="0.1" defaultValue={surrogate.height_ft ?? ""} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="height_feet">Height Feet</Label>
+                                    <NativeSelect
+                                        id="height_feet"
+                                        name="height_feet"
+                                        defaultValue={heightSelection.feet}
+                                        className="w-full"
+                                    >
+                                        <NativeSelectOption value="">ft</NativeSelectOption>
+                                        {Array.from({ length: 9 }, (_, value) => value).map((value) => (
+                                            <NativeSelectOption key={`height-feet-${value}`} value={String(value)}>
+                                                {value} ft
+                                            </NativeSelectOption>
+                                        ))}
+                                    </NativeSelect>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="height_inches">Height Inches</Label>
+                                    <NativeSelect
+                                        id="height_inches"
+                                        name="height_inches"
+                                        defaultValue={heightSelection.inches}
+                                        className="w-full"
+                                    >
+                                        <NativeSelectOption value="">in</NativeSelectOption>
+                                        {Array.from({ length: 12 }, (_, value) => value).map((value) => (
+                                            <NativeSelectOption key={`height-inches-${value}`} value={String(value)}>
+                                                {value} in
+                                            </NativeSelectOption>
+                                        ))}
+                                    </NativeSelect>
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="weight_lb">Weight (lb)</Label>

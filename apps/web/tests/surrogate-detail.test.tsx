@@ -1173,4 +1173,45 @@ describe('SurrogateDetailPage', () => {
             })
         })
     })
+
+    it('edits height with feet and inches controls and saves canonical decimal feet', async () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                height_ft: 4.92,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+        fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
+
+        const feetSelect = await screen.findByLabelText('Height Feet')
+        const inchesSelect = screen.getByLabelText('Height Inches')
+
+        expect(feetSelect).toHaveValue('4')
+        expect(inchesSelect).toHaveValue('11')
+
+        fireEvent.change(feetSelect, { target: { value: '4' } })
+        fireEvent.change(inchesSelect, { target: { value: '11' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: expect.objectContaining({
+                    height_ft: 4.92,
+                }),
+            })
+        })
+    })
 })

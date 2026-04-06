@@ -1,4 +1,5 @@
 import { parseDateInput } from "@/lib/utils/date"
+import { heightFtToTotalInches } from "@/lib/height"
 
 export function formatDateTime(dateString: string): string {
     const parsed = parseDateInput(dateString)
@@ -23,23 +24,18 @@ export function formatDate(dateString: string): string {
 }
 
 export function formatHeight(heightFt: number | string | null | undefined): string {
-    const numericHeight =
-        typeof heightFt === "number"
-            ? heightFt
-            : typeof heightFt === "string"
-                ? Number(heightFt.trim())
-                : Number.NaN
-    if (!Number.isFinite(numericHeight)) return "-"
-    const totalInches = Math.round(numericHeight * 12)
+    const totalInches = heightFtToTotalInches(heightFt)
+    if (totalInches === null) return "-"
     if (totalInches <= 0) return "-"
     const feet = Math.floor(totalInches / 12)
     const inches = totalInches % 12
     return `${feet} ft ${inches} in`
 }
 
-export function computeBmi(heightFt: number | null, weightLb: number | null): number | null {
-    if (!heightFt || !weightLb) return null
-    const heightInches = Math.round(heightFt * 12)
+export function computeBmi(heightFt: number | string | null | undefined, weightLb: number | null): number | null {
+    if (!weightLb) return null
+    const heightInches = heightFtToTotalInches(heightFt)
+    if (heightInches === null) return null
     if (heightInches <= 0) return null
     return Math.round((weightLb / (heightInches ** 2)) * 703 * 10) / 10
 }

@@ -88,12 +88,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
     const surrogate = data.surrogate
-    const bmi = computeBmi(
-        surrogate.height_ft !== null && surrogate.height_ft !== undefined
-            ? Number(surrogate.height_ft)
-            : null,
-        surrogate.weight_lb ?? null,
-    )
+    const bmi = computeBmi(surrogate.height_ft, surrogate.weight_lb ?? null)
     const { overdue, upcoming } = taskGroups(data.tasks)
 
     return (

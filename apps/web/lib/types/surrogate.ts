@@ -40,7 +40,7 @@ export type SurrogateRead = Omit<
     age: number | null;
     bmi: number | null;
     last_activity_at: string | null;
-    height_ft: number | null;
+    height_ft: number | string | null;
     delivery_baby_gender: string | null;
     delivery_baby_weight: string | null;
     lead_intake_warnings?: SurrogateLeadIntakeWarning[];

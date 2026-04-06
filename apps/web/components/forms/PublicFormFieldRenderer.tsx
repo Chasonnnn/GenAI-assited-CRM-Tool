@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import type { FormField } from "@/lib/api/forms"
+import { splitHeightFt, totalInchesToHeightFt } from "@/lib/height"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
@@ -51,18 +52,9 @@ function isDobField(field: FormField): boolean {
 }
 
 function parseHeightSelection(value: PublicFormAnswerValue | undefined): { feet: string; inches: string } {
-    const numericValue =
-        typeof value === "string" ? parseFloat(value) : typeof value === "number" ? value : NaN
-
-    if (Number.isNaN(numericValue) || numericValue < 0) {
-        return { feet: "", inches: "" }
-    }
-
-    const totalInches = Math.round(numericValue * 12)
-    return {
-        feet: String(Math.floor(totalInches / 12)),
-        inches: String(totalInches % 12),
-    }
+    return splitHeightFt(
+        typeof value === "string" || typeof value === "number" ? value : null,
+    )
 }
 
 function serializeHeightSelection(feet: string, inches: string): string | null {
@@ -70,7 +62,8 @@ function serializeHeightSelection(feet: string, inches: string): string | null {
         return null
     }
 
-    return (Number(feet || 0) + Number(inches || 0) / 12).toFixed(2)
+    const normalizedHeight = totalInchesToHeightFt((Number(feet || 0) * 12) + Number(inches || 0))
+    return normalizedHeight === null ? null : normalizedHeight.toFixed(2)
 }
 
 function normalizeFixedTableRows(
