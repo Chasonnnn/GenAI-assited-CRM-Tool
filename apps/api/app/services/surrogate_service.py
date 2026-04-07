@@ -1157,6 +1157,25 @@ def get_surrogates_by_ids(db: Session, org_id: UUID, surrogate_ids: list[UUID]) 
     )
 
 
+def get_surrogate_archive_state_by_ids(
+    db: Session,
+    org_id: UUID,
+    surrogate_ids: list[UUID],
+) -> dict[UUID, bool]:
+    """Return org-scoped archived state keyed by surrogate id."""
+    if not surrogate_ids:
+        return {}
+    rows = (
+        db.query(Surrogate.id, Surrogate.is_archived)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.id.in_(surrogate_ids),
+        )
+        .all()
+    )
+    return {surrogate_id: is_archived for surrogate_id, is_archived in rows}
+
+
 def get_surrogate_by_number(db: Session, org_id: UUID, surrogate_number: str) -> Surrogate | None:
     """Get surrogateby surrogatenumber (org-scoped)."""
     return (

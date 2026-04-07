@@ -17,7 +17,6 @@ from app.core.surrogate_access import (
     ensure_can_manage_surrogate_priority,
 )
 from app.db.enums import AuditEventType, OwnerType, Role
-from app.db.models import Surrogate
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
     BulkAssign,
@@ -399,17 +398,11 @@ def bulk_assign_surrogates(
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
 
-    surrogate_state_rows = (
-        db.query(Surrogate.id, Surrogate.is_archived)
-        .filter(
-            Surrogate.organization_id == session.org_id,
-            Surrogate.id.in_(data.surrogate_ids),
-        )
-        .all()
+    surrogate_archived_by_id = surrogate_service.get_surrogate_archive_state_by_ids(
+        db,
+        session.org_id,
+        data.surrogate_ids,
     )
-    surrogate_archived_by_id = {
-        surrogate_id: is_archived for surrogate_id, is_archived in surrogate_state_rows
-    }
     active_surrogate_ids = [
         surrogate_id
         for surrogate_id, is_archived in surrogate_archived_by_id.items()
@@ -417,15 +410,12 @@ def bulk_assign_surrogates(
     ]
     surrogate_map = {
         surrogate.id: surrogate
-        for surrogate in (
-            db.query(Surrogate)
-            .filter(
-                Surrogate.organization_id == session.org_id,
-                Surrogate.id.in_(active_surrogate_ids),
-                Surrogate.is_archived.is_(False),
-            )
-            .all()
+        for surrogate in surrogate_service.get_surrogates_by_ids(
+            db,
+            session.org_id,
+            active_surrogate_ids,
         )
+        if not surrogate.is_archived
     }
 
     results = {"assigned": 0, "failed": []}
@@ -514,17 +504,11 @@ def bulk_change_surrogates_stage(
             detail="Bulk stage changes only support immediate stages",
         )
 
-    surrogate_state_rows = (
-        db.query(Surrogate.id, Surrogate.is_archived)
-        .filter(
-            Surrogate.organization_id == session.org_id,
-            Surrogate.id.in_(data.surrogate_ids),
-        )
-        .all()
+    surrogate_archived_by_id = surrogate_service.get_surrogate_archive_state_by_ids(
+        db,
+        session.org_id,
+        data.surrogate_ids,
     )
-    surrogate_archived_by_id = {
-        surrogate_id: is_archived for surrogate_id, is_archived in surrogate_state_rows
-    }
     failed: list[dict[str, str]] = []
     applied = 0
 
