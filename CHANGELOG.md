@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.7...surrogacy-crm-platform-v0.91.8) (2026-04-07)
+
+
+### Bug Fixes
+
+* align surrogate bmi with canonical heights ([9418493](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/94184933682cb01c84629d991428682c4e6ca981))
+* canonicalize surrogate height storage ([b33d4ff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b33d4ffaf6efee6488ae356226b26991be506085))
+* pin vite to patched version ([d0bf54e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d0bf54e40cd68c08177a919f733d16a8fa574857))
+* use feet and inches for surrogate height edits ([93405ac](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/93405ac7d7a1d01c440a5ea0d68326cf9b0b5cb4))
+
 ## [0.91.7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.6...surrogacy-crm-platform-v0.91.7) (2026-04-01)
 
 
