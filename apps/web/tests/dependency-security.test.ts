@@ -59,6 +59,17 @@ describe("Dependency security guards", () => {
         expect(compareVersions(picomatchOverride!, "4.0.4")).toBeGreaterThanOrEqual(0)
     })
 
+    it("pins vite to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const viteOverride = packageJson.pnpm?.overrides?.vite
+
+        expect(viteOverride).toBeDefined()
+        expect(compareVersions(viteOverride!, "7.3.2")).toBeGreaterThanOrEqual(0)
+    })
+
     it("resolves only non-vulnerable flatted versions in pnpm-lock.yaml", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
@@ -98,6 +109,20 @@ describe("Dependency security guards", () => {
 
         for (const resolvedVersion of resolvedVersions) {
             expect(compareVersions(resolvedVersion, "4.0.4")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable vite versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}vite@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "7.3.2")).toBeGreaterThanOrEqual(0)
         }
     })
 })
