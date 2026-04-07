@@ -515,17 +515,50 @@ describe("PipelinesSettingsPage", () => {
         ).toBeInTheDocument()
     })
 
-    it("keeps the stage action buttons centered inside their action box", () => {
+    it("uses dedicated order slots and aligned action rails for locked and unlocked stages", () => {
         render(<PipelinesSettingsPage />)
 
-        const toggleDetailsButton = screen.getByRole("button", { name: /edit details for new unread/i })
-        const actionGroup = toggleDetailsButton.parentElement
-        const actionBox = actionGroup?.parentElement
-        const editorGrid = actionBox?.parentElement
+        const lockedOrderSlot = screen.getByTestId("stage-order-slot-s1")
+        const editableOrderSlot = screen.getByTestId("stage-order-slot-s2")
+        const lockedActionRail = screen.getByTestId("stage-action-rail-s1")
+        const editableActionRail = screen.getByTestId("stage-action-rail-s2")
 
-        expect(actionGroup).toHaveClass("items-center", "justify-center")
-        expect(actionBox).toHaveClass("justify-center", "overflow-hidden")
-        expect(editorGrid?.className).toContain("lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.1fr)_152px_168px]")
+        expect(lockedOrderSlot).toHaveTextContent("#1")
+        expect(editableOrderSlot).toHaveTextContent("#2")
+
+        expect(editableActionRail).toContainElement(
+            screen.getByRole("button", { name: /duplicate contacted/i }),
+        )
+        expect(editableActionRail).toContainElement(
+            screen.getByRole("button", { name: /remove contacted/i }),
+        )
+        expect(editableActionRail).toContainElement(
+            screen.getByRole("button", { name: /edit details for contacted/i }),
+        )
+
+        expect(lockedActionRail).toHaveTextContent("Locked")
+        expect(lockedActionRail).toContainElement(
+            screen.getByRole("button", { name: /edit details for new unread/i }),
+        )
+        expect(
+            screen.queryByRole("button", { name: /duplicate new unread/i }),
+        ).not.toBeInTheDocument()
+        expect(
+            screen.queryByRole("button", { name: /remove new unread/i }),
+        ).not.toBeInTheDocument()
+    })
+
+    it("keeps edit details as the trailing action in every stage row", () => {
+        render(<PipelinesSettingsPage />)
+
+        const lockedActionRail = screen.getByTestId("stage-action-rail-s1")
+        const editableActionRail = screen.getByTestId("stage-action-rail-s2")
+
+        const lockedButtons = within(lockedActionRail).getAllByRole("button")
+        const editableButtons = within(editableActionRail).getAllByRole("button")
+
+        expect(lockedButtons.at(-1)).toHaveAccessibleName(/edit details for new unread/i)
+        expect(editableButtons.at(-1)).toHaveAccessibleName(/edit details for contacted/i)
     })
 
     it("stacks the entity selector with version history in the sidebar column", () => {

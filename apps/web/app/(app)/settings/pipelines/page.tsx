@@ -1051,21 +1051,56 @@ function StageSummaryFields({
                     }))
                 }
             />
-            <div className="flex min-h-9 w-full items-center justify-center overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs">
-                <div className="flex min-w-0 items-center justify-center gap-1">
+            <div className="grid min-h-9 w-full grid-cols-[44px_92px] items-center justify-end gap-2 overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs sm:grid-cols-[44px_108px]">
+                <div
+                    data-testid={`stage-order-slot-${stage.id}`}
+                    className="flex items-center justify-center"
+                >
                     <Badge variant="outline" className="shrink-0 tabular-nums">
                         #{index + 1}
                     </Badge>
+                </div>
+                <div
+                    data-testid={`stage-action-rail-${stage.id}`}
+                    className="grid grid-cols-[28px_28px_28px] items-center justify-items-center gap-1 sm:grid-cols-[32px_32px_32px]"
+                >
                     {stage.is_locked ? (
-                        <Badge variant="secondary" className="shrink-0" aria-label="System stage">
+                        <Badge
+                            variant="secondary"
+                            className="col-span-2 w-full shrink-0"
+                            aria-label="System stage"
+                        >
                             Locked
                         </Badge>
-                    ) : null}
+                    ) : (
+                        <>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="size-7 shrink-0 sm:size-8"
+                                onClick={onDuplicateStage}
+                                aria-label={`Duplicate ${stage.label}`}
+                            >
+                                <CopyIcon className="size-4" aria-hidden="true" />
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className="size-7 shrink-0 sm:size-8"
+                                onClick={onRequestDeleteStage}
+                                aria-label={`Remove ${stage.label}`}
+                            >
+                                <Trash2Icon className="size-4" aria-hidden="true" />
+                            </Button>
+                        </>
+                    )}
                     <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        className="size-7 shrink-0 sm:size-8"
+                        className="col-start-3 size-7 shrink-0 sm:size-8"
                         onClick={onToggleDetails}
                         aria-expanded={isExpanded}
                         aria-controls={`stage-details-${stage.id}`}
@@ -1078,30 +1113,6 @@ function StageSummaryFields({
                             <ChevronDownIcon className="size-4" aria-hidden="true" />
                         )}
                     </Button>
-                    {!stage.is_locked ? (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="size-7 shrink-0 sm:size-8"
-                            onClick={onDuplicateStage}
-                            aria-label={`Duplicate ${stage.label}`}
-                        >
-                            <CopyIcon className="size-4" aria-hidden="true" />
-                        </Button>
-                    ) : null}
-                    {!stage.is_locked ? (
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="size-7 shrink-0 sm:size-8"
-                            onClick={onRequestDeleteStage}
-                            aria-label={`Remove ${stage.label}`}
-                        >
-                            <Trash2Icon className="size-4" aria-hidden="true" />
-                        </Button>
-                    ) : null}
                 </div>
             </div>
         </div>
