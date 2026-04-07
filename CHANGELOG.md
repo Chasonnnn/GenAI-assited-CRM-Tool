@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.8...surrogacy-crm-platform-v0.91.9) (2026-04-07)
+
+
+### Features
+
+* add bulk surrogate stage change api ([21ca50e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/21ca50eaa05cfbdf2047c5d8aeeb7db61de29eb7))
+* add selected surrogate bulk stage changes ([540e6ec](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/540e6ec005c0fac827d79e287521a98d9c509c45))
+
+
+### Bug Fixes
+
+* align pipeline stage action rail ([2c24a19](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2c24a192d62429d48022865c8dc1c455da2372ac))
+* remove model imports from surrogate router ([29c8a19](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/29c8a19c5f7ca03c8eff4e593146ea689d7b4f55))
+
 ## [0.91.8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.7...surrogacy-crm-platform-v0.91.8) (2026-04-07)
 
 
