@@ -3063,6 +3063,12 @@
       "422"
     ]
   },
+  "/surrogates/bulk-change-stage": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/surrogates/claim-queue": {
     "GET": [
       "200",

@@ -382,6 +382,33 @@ async def test_surrogate_write_routes_emit_semantic_audit_events(authed_client, 
     assert bulk_assign_response.status_code == 200, bulk_assign_response.text
     assert _event_count(db, test_auth.org.id, AuditEventType.SURROGATE_BULK_ASSIGNED) >= 1
 
+    bulk_stage_target = pipeline_service.get_stage_by_slug(
+        db,
+        pipeline_service.get_or_create_default_pipeline(db, test_auth.org.id).id,
+        "contacted",
+    )
+    assert bulk_stage_target is not None
+    bulk_stage_response = await authed_client.post(
+        "/surrogates/bulk-change-stage",
+        json={
+            "surrogate_ids": [surrogate_3["id"], surrogate_4["id"]],
+            "stage_id": str(bulk_stage_target.id),
+        },
+    )
+    assert bulk_stage_response.status_code == 200, bulk_stage_response.text
+    bulk_stage_event = _latest_event(
+        db,
+        test_auth.org.id,
+        AuditEventType.SURROGATE_BULK_STATUS_CHANGED,
+        actor_user_id=test_auth.user.id,
+    )
+    assert bulk_stage_event is not None
+    assert bulk_stage_event.details["requested_count"] == 2
+    assert bulk_stage_event.details["applied_count"] == 2
+    assert bulk_stage_event.details["failed_count"] == 0
+    assert bulk_stage_event.details["target_stage_id"] == str(bulk_stage_target.id)
+    assert bulk_stage_event.details["target_stage_slug"] == "contacted"
+
     # archive -> restore -> delete
     archive_response = await authed_client.post(f"/surrogates/{surrogate_1_id}/archive")
     assert archive_response.status_code == 200, archive_response.text
