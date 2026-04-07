@@ -42,6 +42,7 @@ const mockUseCreateSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
+const mockUseBulkChangeStage = vi.fn()
 const mockUseIntelligentSuggestionSummary = vi.fn()
 const mockUseSurrogateCreatedDates = vi.fn()
 const mockUseQueues = vi.fn()
@@ -55,6 +56,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useAssignees: () => mockUseAssignees(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
+    useBulkChangeStage: () => mockUseBulkChangeStage(),
     useIntelligentSuggestionSummary: () => mockUseIntelligentSuggestionSummary(),
     useSurrogateCreatedDates: (...args: unknown[]) => mockUseSurrogateCreatedDates(...args),
     useSurrogateActivity: () => ({ data: { items: [] } }),
@@ -85,6 +87,7 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
             id: 'p1',
             stages: [
                 { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', is_active: true },
+                { id: 's2', slug: 'contacted', label: 'Contacted', color: '#0ea5e9', stage_type: 'intake', is_active: true },
             ],
         },
         isLoading: false,
@@ -136,6 +139,7 @@ describe('SurrogatesPage Accessibility', () => {
         mockUseAssignees.mockReturnValue({ data: [{ id: 'u1', name: 'User 1' }] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseBulkChangeStage.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseIntelligentSuggestionSummary.mockReturnValue({
             data: { total: 0, counts: {}, has_suggestions: false },
         })

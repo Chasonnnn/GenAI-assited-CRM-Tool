@@ -16,7 +16,9 @@ vi.mock('next/link', () => ({
 const mockSearchParams = new URLSearchParams()
 const mockRouterReplace = vi.fn()
 const mockMassEditStageModal = vi.fn()
+const mockBulkChangeStageModal = vi.fn()
 const mockUseAuth = vi.fn()
+const mockUseBulkChangeStage = vi.fn()
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
@@ -35,6 +37,23 @@ vi.mock('@/components/surrogates/MassEditStageModal', () => ({
     MassEditStageModal: (props: unknown) => {
         mockMassEditStageModal(props)
         return null
+    },
+}))
+
+vi.mock('@/components/surrogates/BulkChangeStageModal', () => ({
+    BulkChangeStageModal: (props: {
+        open: boolean
+        onSubmit: (stageId: string) => Promise<void> | void
+    }) => {
+        mockBulkChangeStageModal(props)
+        if (!props.open) return null
+        return (
+            <div role="dialog">
+                <button type="button" onClick={() => props.onSubmit('s2')}>
+                    Mock submit bulk stage change
+                </button>
+            </div>
+        )
     },
 }))
 
@@ -60,6 +79,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useAssignees: () => mockUseAssignees(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
+    useBulkChangeStage: () => mockUseBulkChangeStage(),
     useIntelligentSuggestionSummary: () => mockUseIntelligentSuggestionSummary(),
     useSurrogateCreatedDates: (...args: unknown[]) => mockUseSurrogateCreatedDates(...args),
 }))
@@ -84,11 +104,65 @@ vi.mock('@/lib/hooks/use-pipelines', () => ({
             id: 'p1',
             stages: [
                 { id: 's1', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', is_active: true },
+                { id: 's2', slug: 'contacted', label: 'Contacted', color: '#0ea5e9', stage_type: 'intake', is_active: true },
+                { id: 's3', slug: 'on_hold', label: 'On Hold', color: '#f59e0b', stage_type: 'paused', is_active: true },
+                { id: 's4', slug: 'delivered', label: 'Delivered', color: '#22c55e', stage_type: 'post_approval', is_active: true },
             ],
         },
         isLoading: false,
     }),
 }))
+
+function buildSurrogateListItem(
+    overrides: Partial<{
+        id: string
+        surrogate_number: string
+        full_name: string
+        stage_id: string
+        stage_slug: string
+        stage_type: string
+        status_label: string
+        source: string
+        email: string
+        phone: string | null
+        state: string | null
+        race: string | null
+        owner_type: string
+        owner_id: string
+        owner_name: string
+        created_at: string
+        last_activity_at: string
+        is_priority: boolean
+        is_archived: boolean
+        age: number | null
+        bmi: number | null
+    }> = {},
+) {
+    return {
+        id: '1',
+        surrogate_number: 'S12345',
+        full_name: 'John Doe',
+        stage_id: 's1',
+        stage_slug: 'new_unread',
+        stage_type: 'intake',
+        status_label: 'New Unread',
+        source: 'manual',
+        email: 'john@example.com',
+        phone: null,
+        state: null,
+        race: null,
+        owner_type: 'user',
+        owner_id: 'u1',
+        owner_name: 'Owner',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        is_priority: false,
+        is_archived: false,
+        age: null,
+        bmi: null,
+        ...overrides,
+    }
+}
 
 // ============================================================================
 // Tests
@@ -116,11 +190,13 @@ describe('SurrogatesPage', () => {
         mockUseAssignees.mockReset()
         mockUseBulkAssign.mockReset()
         mockUseBulkArchive.mockReset()
+        mockUseBulkChangeStage.mockReset()
         mockUseIntelligentSuggestionSummary.mockReset()
         mockUseSurrogateCreatedDates.mockReset()
         mockUseQueues.mockReset()
         mockRouterReplace.mockReset()
         mockMassEditStageModal.mockReset()
+        mockBulkChangeStageModal.mockReset()
         mockUseAuth.mockReset()
         mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'admin-1' } })
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -130,6 +206,7 @@ describe('SurrogatesPage', () => {
         mockUseAssignees.mockReturnValue({ data: [] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseBulkChangeStage.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseIntelligentSuggestionSummary.mockReturnValue({
             data: { total: 0, counts: {}, has_suggestions: false },
         })
@@ -166,31 +243,7 @@ describe('SurrogatesPage', () => {
     })
 
     it('renders surrogates list', () => {
-        const mockSurrogates = [
-            {
-                id: '1',
-                surrogate_number: 'S12345',
-                full_name: 'John Doe',
-                stage_id: 's1',
-                stage_slug: 'new_unread',
-                stage_type: 'intake',
-                status_label: 'New Unread',
-                source: 'manual',
-                email: 'john@example.com',
-                phone: null,
-                state: null,
-                race: null,
-                owner_type: 'user',
-                owner_id: 'u1',
-                owner_name: 'Owner',
-                created_at: new Date().toISOString(),
-                last_activity_at: new Date().toISOString(),
-                is_priority: false,
-                is_archived: false,
-                age: null,
-                bmi: null,
-            },
-        ]
+        const mockSurrogates = [buildSurrogateListItem()]
 
         mockUseSurrogates.mockReturnValue({
             data: { items: mockSurrogates, total: 1, pages: 1 },
@@ -206,29 +259,15 @@ describe('SurrogatesPage', () => {
 
     it('removes the email column and keeps source as the last named table column', () => {
         const mockSurrogates = [
-            {
-                id: '1',
-                surrogate_number: 'S12345',
-                full_name: 'John Doe',
-                stage_id: 's1',
-                stage_slug: 'new_unread',
-                stage_type: 'intake',
-                status_label: 'New Unread',
-                source: 'manual',
-                email: 'john@example.com',
+            buildSurrogateListItem({
                 phone: '+15551234567',
                 state: 'CA',
                 race: 'white',
-                owner_type: 'user',
-                owner_id: 'u1',
-                owner_name: 'Owner',
                 created_at: '2024-03-03T12:00:00.000Z',
                 last_activity_at: '2024-03-04T12:00:00.000Z',
-                is_priority: false,
-                is_archived: false,
                 age: 34,
                 bmi: 24.1,
-            },
+            }),
         ]
 
         mockUseSurrogates.mockReturnValue({
@@ -258,27 +297,7 @@ describe('SurrogatesPage', () => {
             data: {
                 items: [
                     {
-                        id: '1',
-                        surrogate_number: 'S12345',
-                        full_name: 'John Doe',
-                        stage_id: 's1',
-                        stage_slug: 'new_unread',
-                        stage_type: 'intake',
-                        status_label: 'New Unread',
-                        source: 'manual',
-                        email: 'john@example.com',
-                        phone: null,
-                        state: null,
-                        race: null,
-                        owner_type: 'user',
-                        owner_id: 'u1',
-                        owner_name: 'Owner',
-                        created_at: new Date().toISOString(),
-                        last_activity_at: new Date().toISOString(),
-                        is_priority: false,
-                        is_archived: false,
-                        age: null,
-                        bmi: null,
+                        ...buildSurrogateListItem(),
                     },
                 ],
                 total: 1,
@@ -315,31 +334,7 @@ describe('SurrogatesPage', () => {
     })
 
     it('shows the priority action only for admin and developer users', () => {
-        const mockSurrogates = [
-            {
-                id: '1',
-                surrogate_number: 'S12345',
-                full_name: 'John Doe',
-                stage_id: 's1',
-                stage_slug: 'new_unread',
-                stage_type: 'intake',
-                status_label: 'New Unread',
-                source: 'manual',
-                email: 'john@example.com',
-                phone: null,
-                state: null,
-                race: null,
-                owner_type: 'user',
-                owner_id: 'u1',
-                owner_name: 'Owner',
-                created_at: new Date().toISOString(),
-                last_activity_at: new Date().toISOString(),
-                is_priority: false,
-                is_archived: false,
-                age: null,
-                bmi: null,
-            },
-        ]
+        const mockSurrogates = [buildSurrogateListItem()]
 
         mockUseSurrogates.mockReturnValue({
             data: { items: mockSurrogates, total: 1, pages: 1 },
@@ -361,31 +356,7 @@ describe('SurrogatesPage', () => {
     })
 
     it('renders Last Modified column label', () => {
-        const mockSurrogates = [
-            {
-                id: '1',
-                surrogate_number: 'S12345',
-                full_name: 'John Doe',
-                stage_id: 's1',
-                stage_slug: 'new_unread',
-                stage_type: 'intake',
-                status_label: 'New Unread',
-                source: 'manual',
-                email: 'john@example.com',
-                phone: null,
-                state: null,
-                race: null,
-                owner_type: 'user',
-                owner_id: 'u1',
-                owner_name: 'Owner',
-                created_at: new Date().toISOString(),
-                last_activity_at: new Date().toISOString(),
-                is_priority: false,
-                is_archived: false,
-                age: null,
-                bmi: null,
-            },
-        ]
+        const mockSurrogates = [buildSurrogateListItem()]
 
         mockUseSurrogates.mockReturnValue({
             data: { items: mockSurrogates, total: 1, pages: 1 },
@@ -395,6 +366,105 @@ describe('SurrogatesPage', () => {
 
         render(<SurrogatesPage />)
         expect(screen.getByText('Last Modified')).toBeInTheDocument()
+    })
+
+    it('shows Change stage... in the floating selection bar only for admin and developer users', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+
+        const adminView = render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+        expect(screen.getByRole('button', { name: 'Change stage...' })).toBeInTheDocument()
+        adminView.unmount()
+
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
+        const caseManagerView = render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+        expect(screen.queryByRole('button', { name: 'Change stage...' })).not.toBeInTheDocument()
+        caseManagerView.unmount()
+
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+        expect(screen.queryByRole('button', { name: 'Change stage...' })).not.toBeInTheDocument()
+    })
+
+    it('submits selected surrogate ids through the bulk change stage flow', async () => {
+        const mutateAsync = vi.fn().mockResolvedValue({
+            requested: 2,
+            applied: 2,
+            failed: [],
+        })
+        mockUseBulkChangeStage.mockReturnValue({ mutateAsync, isPending: false })
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    buildSurrogateListItem({ id: '1', surrogate_number: 'S10001', full_name: 'Jane Doe' }),
+                    buildSurrogateListItem({ id: '2', surrogate_number: 'S10002', full_name: 'Mia Ross' }),
+                    buildSurrogateListItem({ id: '3', surrogate_number: 'S10003', full_name: 'Ava Cole' }),
+                ],
+                total: 3,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByLabelText('Select Jane Doe'))
+        fireEvent.click(screen.getByLabelText('Select Mia Ross'))
+        fireEvent.click(screen.getByRole('button', { name: 'Change stage...' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
+
+        await waitFor(() =>
+            expect(mutateAsync).toHaveBeenCalledWith({
+                surrogate_ids: ['1', '2'],
+                stage_id: 's2',
+            })
+        )
+    })
+
+    it('keeps failed surrogate ids selected after a partial bulk stage change failure', async () => {
+        const mutateAsync = vi.fn().mockResolvedValue({
+            requested: 2,
+            applied: 1,
+            failed: [{ surrogate_id: '2', reason: 'Target stage is same as current stage' }],
+        })
+        mockUseBulkChangeStage.mockReturnValue({ mutateAsync, isPending: false })
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    buildSurrogateListItem({ id: '1', surrogate_number: 'S10001', full_name: 'Jane Doe' }),
+                    buildSurrogateListItem({
+                        id: '2',
+                        surrogate_number: 'S10002',
+                        full_name: 'Mia Ross',
+                        stage_id: 's2',
+                        stage_slug: 'contacted',
+                        status_label: 'Contacted',
+                    }),
+                ],
+                total: 2,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByLabelText('Select Jane Doe'))
+        fireEvent.click(screen.getByLabelText('Select Mia Ross'))
+        fireEvent.click(screen.getByRole('button', { name: 'Change stage...' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
+
+        await waitFor(() => expect(screen.getByText('1 surrogate selected')).toBeInTheDocument())
+        expect(screen.getByLabelText('Select Jane Doe')).not.toBeChecked()
+        expect(screen.getByLabelText('Select Mia Ross')).toBeChecked()
     })
 
     it('opens New Surrogates dialog', () => {
