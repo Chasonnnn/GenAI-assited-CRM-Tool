@@ -421,11 +421,29 @@ export interface BulkAssignResult {
     failed: { surrogate_id: string; reason: string }[];
 }
 
+export interface BulkChangeStagePayload {
+    surrogate_ids: string[];
+    stage_id: string;
+}
+
+export interface BulkChangeStageResult {
+    requested: number;
+    applied: number;
+    failed: { surrogate_id: string; reason: string }[];
+}
+
 /**
  * Bulk assign multiple surrogates to a user.
  */
 export function bulkAssignSurrogates(data: BulkAssignPayload): Promise<BulkAssignResult> {
     return api.post<BulkAssignResult>('/surrogates/bulk-assign', data);
+}
+
+/**
+ * Bulk change stage for explicitly selected surrogates.
+ */
+export function bulkChangeStage(data: BulkChangeStagePayload): Promise<BulkChangeStageResult> {
+    return api.post<BulkChangeStageResult>('/surrogates/bulk-change-stage', data);
 }
 
 /**

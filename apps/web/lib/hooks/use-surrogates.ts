@@ -279,6 +279,27 @@ export function useBulkAssign() {
 }
 
 /**
+ * Bulk change stage for explicitly selected surrogates.
+ */
+export function useBulkChangeStage() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: surrogatesApi.bulkChangeStage,
+        onSuccess: (_result, variables) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+
+            for (const surrogateId of variables.surrogate_ids) {
+                queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+                queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+                queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
+            }
+        },
+    });
+}
+
+/**
  * Bulk archive multiple surrogates.
  */
 export function useBulkArchive() {

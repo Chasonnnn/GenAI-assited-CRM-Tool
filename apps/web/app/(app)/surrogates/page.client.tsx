@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon, SlidersHorizontalIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
@@ -31,7 +31,9 @@ import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
+import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageModal"
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
+import type { PipelineStage } from "@/lib/api/pipelines"
 
 // Format date for display
 function formatDate(dateString: string | null | undefined): string {
@@ -66,18 +68,25 @@ function getInitials(name: string | null): string {
 function FloatingActionBar({
     selectedCount,
     selectedSurrogateIds,
+    stages,
     onClear,
+    onSelectionChange,
 }: {
     selectedCount: number
     selectedSurrogateIds: string[]
+    stages: PipelineStage[]
     onClear: () => void
+    onSelectionChange: (surrogateIds: string[]) => void
 }) {
     const { user } = useAuth()
     const { data: assignees } = useAssignees()
     const bulkAssignMutation = useBulkAssign()
     const bulkArchiveMutation = useBulkArchive()
+    const bulkChangeStageMutation = useBulkChangeStage()
+    const [isChangeStageOpen, setIsChangeStageOpen] = useState(false)
 
     const canAssign = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
+    const canBulkChangeStage = user?.role && ['admin', 'developer'].includes(user.role)
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
@@ -93,50 +102,106 @@ function FloatingActionBar({
         onClear()
     }
 
-    const isLoading = bulkAssignMutation.isPending || bulkArchiveMutation.isPending
+    const handleBulkStageChange = async (stageId: string) => {
+        try {
+            const result = await bulkChangeStageMutation.mutateAsync({
+                surrogate_ids: selectedSurrogateIds,
+                stage_id: stageId,
+            })
+            setIsChangeStageOpen(false)
+
+            if (result.failed.length === 0) {
+                onClear()
+                toast.success(
+                    `Changed stage for ${result.applied} surrogate${result.applied === 1 ? '' : 's'}.`
+                )
+                return
+            }
+
+            const failedIds = result.failed.map((entry) => entry.surrogate_id)
+            onSelectionChange(failedIds)
+
+            if (result.applied > 0) {
+                toast.warning(
+                    `Changed stage for ${result.applied} surrogate${result.applied === 1 ? '' : 's'}; ${result.failed.length} failed.`
+                )
+                return
+            }
+
+            const firstReason = result.failed[0]?.reason ?? "Bulk stage change failed"
+            toast.error(`${firstReason} (${result.failed.length} failed).`)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to change stage"
+            toast.error(message)
+        }
+    }
+
+    const isLoading =
+        bulkAssignMutation.isPending ||
+        bulkArchiveMutation.isPending ||
+        bulkChangeStageMutation.isPending
 
     return (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-            <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
-                <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
-                <div className="h-4 w-px bg-primary-foreground/30" />
+        <>
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+                <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+                    <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
+                    <div className="h-4 w-px bg-primary-foreground/30" />
 
-                {/* Assign Dropdown - case_manager+ only */}
-                {canAssign && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                    {canAssign && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                                disabled={isLoading}
+                                aria-label="Assign to user"
+                            >
+                                <span className="inline-flex items-center gap-1">
+                                    <UserPlusIcon className="h-4 w-4" />
+                                    Assign to...
+                                </span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                {assignees?.map((user) => (
+                                    <DropdownMenuItem key={user.id} onClick={() => handleAssign(user.id)}>
+                                        {user.name}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+
+                    {canBulkChangeStage && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setIsChangeStageOpen(true)}
                             disabled={isLoading}
-                            aria-label="Assign to user"
                         >
-                            <span className="inline-flex items-center gap-1">
-                                <UserPlusIcon className="h-4 w-4" />
-                                Assign to...
-                            </span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            {assignees?.map((user) => (
-                                <DropdownMenuItem key={user.id} onClick={() => handleAssign(user.id)}>
-                                    {user.name}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
+                            Change stage...
+                        </Button>
+                    )}
 
-                {/* Archive Button */}
-                <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
-                    <ArchiveIcon className="h-4 w-4 mr-1" />
-                    Archive
-                </Button>
+                    <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
+                        <ArchiveIcon className="h-4 w-4 mr-1" />
+                        Archive
+                    </Button>
 
-                {/* Clear Button */}
-                <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
-                    <XIcon className="h-4 w-4 mr-1" />
-                    Clear
-                </Button>
+                    <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
+                        <XIcon className="h-4 w-4 mr-1" />
+                        Clear
+                    </Button>
+                </div>
             </div>
-        </div>
+
+            <BulkChangeStageModal
+                open={isChangeStageOpen}
+                onOpenChange={setIsChangeStageOpen}
+                selectedCount={selectedCount}
+                stages={stages}
+                isPending={bulkChangeStageMutation.isPending}
+                onSubmit={handleBulkStageChange}
+            />
+        </>
     )
 }
 
@@ -1737,7 +1802,11 @@ export function SurrogatesPageClient() {
                     <FloatingActionBar
                         selectedCount={selectedSurrogates.size}
                         selectedSurrogateIds={Array.from(selectedSurrogates)}
+                        stages={stageOptions}
                         onClear={clearSelection}
+                        onSelectionChange={(surrogateIds) => {
+                            setSelectedSurrogates(new Set(surrogateIds))
+                        }}
                     />
                 )}
             </div>
