@@ -113,6 +113,17 @@ def _stub_oauth_callback(monkeypatch: pytest.MonkeyPatch, path: str) -> dict[str
     elif path == "/integrations/zoom/callback":
         monkeypatch.setattr(oauth_service, "exchange_zoom_code", exchange_code)
         monkeypatch.setattr(oauth_service, "get_zoom_user_info", get_user_info)
+    elif path == "/mailboxes/journal/gmail/oauth/callback":
+        from app.services import ticketing_service
+        from app.services import audit_service
+        import uuid
+
+        monkeypatch.setattr(oauth_service, "exchange_gmail_code", exchange_code)
+        monkeypatch.setattr(oauth_service, "get_gmail_user_info", get_user_info)
+        monkeypatch.setattr(
+            ticketing_service, "create_or_update_journal_mailbox", lambda *_args, **_kwargs: type("Mailbox", (), {"id": uuid.uuid4()})()
+        )
+        monkeypatch.setattr(audit_service, "log_event", lambda *_args, **_kwargs: None)
     else:
         raise AssertionError(f"Unhandled callback path: {path}")
 
@@ -312,6 +323,7 @@ async def test_oauth_connect_routes_rate_limited(
         ("/integrations/google-calendar/callback", "integration_oauth_state_google_calendar"),
         ("/integrations/gcp/callback", "integration_oauth_state_gcp"),
         ("/integrations/zoom/callback", "integration_oauth_state_zoom"),
+        ("/mailboxes/journal/gmail/oauth/callback", "journal_mailbox_oauth_state"),
     ],
 )
 async def test_oauth_callback_routes_rate_limited(
