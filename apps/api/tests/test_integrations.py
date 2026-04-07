@@ -113,6 +113,14 @@ def _stub_oauth_callback(monkeypatch: pytest.MonkeyPatch, path: str) -> dict[str
     elif path == "/integrations/zoom/callback":
         monkeypatch.setattr(oauth_service, "exchange_zoom_code", exchange_code)
         monkeypatch.setattr(oauth_service, "get_zoom_user_info", get_user_info)
+    elif path == "/mailboxes/journal/gmail/oauth/callback":
+        from app.services import ticketing_service
+
+        monkeypatch.setattr(oauth_service, "exchange_gmail_code", exchange_code)
+        monkeypatch.setattr(oauth_service, "get_gmail_user_info", get_user_info)
+        monkeypatch.setattr(
+            ticketing_service, "create_or_update_journal_mailbox", lambda *_args, **_kwargs: type("Mailbox", (), {"id": "123"})()
+        )
     else:
         raise AssertionError(f"Unhandled callback path: {path}")
 
