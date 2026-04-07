@@ -17,9 +17,12 @@ from app.core.surrogate_access import (
     ensure_can_manage_surrogate_priority,
 )
 from app.db.enums import AuditEventType, OwnerType, Role
+from app.db.models import Surrogate
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import (
     BulkAssign,
+    BulkStageChange,
+    BulkStageChangeResult,
     InterviewOutcomeCreate,
     SurrogateActivityRead,
     SurrogateAssign,
@@ -396,8 +399,34 @@ def bulk_assign_surrogates(
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
 
-    surrogates = surrogate_service.get_surrogates_by_ids(db, session.org_id, data.surrogate_ids)
-    surrogate_map = {surrogate.id: surrogate for surrogate in surrogates}
+    surrogate_state_rows = (
+        db.query(Surrogate.id, Surrogate.is_archived)
+        .filter(
+            Surrogate.organization_id == session.org_id,
+            Surrogate.id.in_(data.surrogate_ids),
+        )
+        .all()
+    )
+    surrogate_archived_by_id = {
+        surrogate_id: is_archived for surrogate_id, is_archived in surrogate_state_rows
+    }
+    active_surrogate_ids = [
+        surrogate_id
+        for surrogate_id, is_archived in surrogate_archived_by_id.items()
+        if not is_archived
+    ]
+    surrogate_map = {
+        surrogate.id: surrogate
+        for surrogate in (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.organization_id == session.org_id,
+                Surrogate.id.in_(active_surrogate_ids),
+                Surrogate.is_archived.is_(False),
+            )
+            .all()
+        )
+    }
 
     results = {"assigned": 0, "failed": []}
     for s_id in data.surrogate_ids:
@@ -434,6 +463,174 @@ def bulk_assign_surrogates(
     db.commit()
 
     return results
+
+
+@router.post(
+    "/bulk-change-stage",
+    response_model=BulkStageChangeResult,
+    dependencies=[Depends(require_csrf_header)],
+)
+def bulk_change_surrogates_stage(
+    request: Request,
+    data: BulkStageChange,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["change_status"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> BulkStageChangeResult:
+    """Bulk change stage for explicitly selected surrogates."""
+    from app.services import (
+        pipeline_service,
+        pipeline_semantics_service,
+        surrogate_stage_context,
+        surrogate_status_service,
+    )
+
+    if session.role not in {Role.ADMIN, Role.DEVELOPER}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admins and developers can bulk change surrogate stages",
+        )
+
+    surrogate_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        session.org_id,
+    )
+    target_stage = pipeline_service.get_stage_by_id(db, data.stage_id)
+    if (
+        not target_stage
+        or not target_stage.is_active
+        or target_stage.pipeline_id != surrogate_pipeline.id
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or inactive stage")
+
+    target_semantics = pipeline_semantics_service.get_stage_semantics(target_stage)
+    if (
+        target_semantics.pause_behavior != "none"
+        or target_semantics.capabilities.requires_delivery_details
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Bulk stage changes only support immediate stages",
+        )
+
+    surrogate_state_rows = (
+        db.query(Surrogate.id, Surrogate.is_archived)
+        .filter(
+            Surrogate.organization_id == session.org_id,
+            Surrogate.id.in_(data.surrogate_ids),
+        )
+        .all()
+    )
+    surrogate_archived_by_id = {
+        surrogate_id: is_archived for surrogate_id, is_archived in surrogate_state_rows
+    }
+    failed: list[dict[str, str]] = []
+    applied = 0
+
+    for surrogate_id in data.surrogate_ids:
+        if surrogate_id not in surrogate_archived_by_id:
+            failed.append({"surrogate_id": str(surrogate_id), "reason": "Surrogate not found"})
+            continue
+
+        if surrogate_archived_by_id.get(surrogate_id):
+            failed.append(
+                {
+                    "surrogate_id": str(surrogate_id),
+                    "reason": "Cannot change status of archived surrogate",
+                }
+            )
+            continue
+        db.expunge_all()
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if surrogate is None:
+            failed.append({"surrogate_id": str(surrogate_id), "reason": "Surrogate not found"})
+            continue
+        if surrogate.is_archived:
+            failed.append(
+                {
+                    "surrogate_id": str(surrogate_id),
+                    "reason": "Cannot change status of archived surrogate",
+                }
+            )
+            continue
+
+        stage_context = surrogate_stage_context.get_stage_context(db, surrogate)
+        if stage_context.is_on_hold:
+            failed.append(
+                {
+                    "surrogate_id": str(surrogate_id),
+                    "reason": "Cannot bulk change stage for surrogates currently on hold",
+                }
+            )
+            continue
+        if surrogate.stage_id == data.stage_id:
+            failed.append(
+                {
+                    "surrogate_id": str(surrogate_id),
+                    "reason": "Target stage is same as current stage",
+                }
+            )
+            continue
+        if (
+            stage_context.effective_stage is not None
+            and target_stage.order < stage_context.effective_stage.order
+        ):
+            failed.append(
+                {
+                    "surrogate_id": str(surrogate_id),
+                    "reason": "Bulk stage changes do not support regressions",
+                }
+            )
+            continue
+
+        try:
+            result = surrogate_status_service.change_status(
+                db=db,
+                surrogate=surrogate,
+                new_stage_id=data.stage_id,
+                user_id=session.user_id,
+                user_role=session.role,
+                emit_events=True,
+            )
+        except ValueError as exc:
+            db.rollback()
+            failed.append({"surrogate_id": str(surrogate_id), "reason": str(exc)})
+            continue
+
+        if result["status"] == "applied":
+            applied += 1
+            continue
+
+        failed.append(
+            {
+                "surrogate_id": str(surrogate_id),
+                "reason": result.get("message") or "Stage change was not applied",
+            }
+        )
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SURROGATE_BULK_STATUS_CHANGED,
+        actor_user_id=session.user_id,
+        target_type="surrogate",
+        details={
+            "requested_count": len(data.surrogate_ids),
+            "applied_count": applied,
+            "failed_count": len(failed),
+            "target_stage_id": str(data.stage_id),
+            "target_stage_slug": target_stage.slug,
+        },
+        request=request,
+    )
+    db.commit()
+
+    return BulkStageChangeResult(
+        requested=len(data.surrogate_ids),
+        applied=applied,
+        failed=failed,
+    )
 
 
 @router.post(

@@ -79,6 +79,7 @@ class AuditEventType(str, Enum):
     SURROGATE_CLAIMED = "surrogate_claimed"
     SURROGATE_ASSIGNED = "surrogate_assigned"
     SURROGATE_BULK_ASSIGNED = "surrogate_bulk_assigned"
+    SURROGATE_BULK_STATUS_CHANGED = "surrogate_bulk_status_changed"
 
     INTENDED_PARENT_CREATED = "intended_parent_created"
     INTENDED_PARENT_UPDATED = "intended_parent_updated"

@@ -430,6 +430,28 @@ class BulkAssign(BaseModel):
     owner_id: UUID
 
 
+class BulkStageChangeFailure(BaseModel):
+    """Single-row failure details for bulk stage changes."""
+
+    surrogate_id: UUID
+    reason: str
+
+
+class BulkStageChange(BaseModel):
+    """Request schema for selected-row bulk surrogate stage changes."""
+
+    surrogate_ids: list[UUID] = Field(min_length=1, max_length=100)
+    stage_id: UUID
+
+
+class BulkStageChangeResult(BaseModel):
+    """Response schema for selected-row bulk surrogate stage changes."""
+
+    requested: int
+    applied: int
+    failed: list[BulkStageChangeFailure]
+
+
 class SurrogateLeadIntakeWarning(BaseModel):
     """Lead intake value that needs manual review on the surrogate record."""
 
