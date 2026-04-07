@@ -312,6 +312,7 @@ async def test_oauth_connect_routes_rate_limited(
         ("/integrations/google-calendar/callback", "integration_oauth_state_google_calendar"),
         ("/integrations/gcp/callback", "integration_oauth_state_gcp"),
         ("/integrations/zoom/callback", "integration_oauth_state_zoom"),
+        ("/mailboxes/journal/gmail/oauth/callback", "journal_mailbox_oauth_state"),
     ],
 )
 async def test_oauth_callback_routes_rate_limited(
