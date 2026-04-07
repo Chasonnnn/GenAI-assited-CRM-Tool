@@ -1,0 +1,3 @@
+## 2024-05-18 - [Pagination Count Optimization]
+**Learning:** Found a common backend anti-pattern where paginated queries systematically execute a secondary `.count()` query, even when the number of returned items strictly implies the total count (e.g. fewer results than the limit).
+**Action:** Implemented a short-circuit in the base pagination utility `paginate_query` to mathematically infer the total count as `offset + len(items)` when we fetch fewer items than the `limit`. This safely avoids an N+1 query pattern on the backend, particularly on the last page of results, without affecting total counts on earlier pages.
