@@ -174,7 +174,7 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                         onClick={() => setEditingField(fieldKey)}
                         aria-label={`Edit ${field.label}`}
                     >
@@ -187,7 +187,7 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                         onClick={() => toggleReveal(fieldKey)}
                         aria-label={isRevealed ? "Hide field value" : "Reveal field value"}
                         title={isRevealed ? "Hide field value" : "Reveal field value"}
@@ -205,7 +205,7 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                         onClick={() => toggleHidden(fieldKey)}
                         aria-label={isHidden ? "Unhide field" : "Hide field"}
                         title={isHidden ? "Unhide field" : "Hide field"}
