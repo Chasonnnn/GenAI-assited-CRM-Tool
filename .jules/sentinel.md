@@ -1,0 +1,4 @@
+## 2025-04-04 - [Missing Rate Limits on OAuth Callback Endpoints]
+**Vulnerability:** Found OAuth start and callback endpoints (`/journal/gmail/oauth/start` and `/journal/gmail/oauth/callback`) missing explicit `@limiter.limit` decorators.
+**Learning:** Even though core auth or integrations may have rate limiting, new or secondary OAuth implementations (like mailbox integration) can sometimes be overlooked. All endpoints handling authentication states, OAuth challenges/callbacks, or sensitive connections must enforce explicit rate-limiting to prevent DoS, brute-force state guessing, and MFA fatigue attacks.
+**Prevention:** Always verify that newly added OAuth-related routes (connect, start, callback) have the `@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")` decorator applied during PR review.
