@@ -42,7 +42,7 @@ export function ErrorState({
             <Empty>
                 <EmptyHeader>
                     <EmptyMedia variant="icon">
-                        <AlertCircle className="size-6 text-destructive" />
+                        <AlertCircle className="size-6 text-destructive" aria-hidden="true" />
                     </EmptyMedia>
                     <EmptyTitle>Something went wrong</EmptyTitle>
                     <EmptyDescription>
