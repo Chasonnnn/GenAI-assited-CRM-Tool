@@ -41,6 +41,12 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { formatRelativeTime } from "@/lib/formatters"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
+import {
+    CUSTOM_STAGE_COLOR_PRESETS,
+    resolveStageColor,
+    shouldAutoRefreshStageColor,
+    suggestStageColor,
+} from "@/lib/pipeline-stage-colors"
 import type {
     PipelineChangePreview,
     PipelineDependencyGraph,
@@ -128,6 +134,7 @@ const STAGE_CATEGORIES: StageType[] = [
 ]
 
 const CUSTOM_STAGE_CATEGORIES: StageType[] = ["intake", "post_approval"]
+const DEFAULT_CUSTOM_STAGE_COLOR = "#6b7280"
 const RESERVED_CAPABILITY_KEYS = new Set<StageCapabilityKey>([
     "eligible_for_matching",
     "locks_match_state",
@@ -363,6 +370,15 @@ function normalizeEditableStage(
         id: stage.id || stage.stage_key,
         category,
         stage_type: category,
+        color: resolveStageColor({
+            color: stage.color,
+            label: stage.label,
+            slug: stage.slug,
+            stage_key: stage.stage_key,
+            stage_type: category,
+            order: stage.order,
+            is_locked: stage.is_locked ?? false,
+        }),
         is_locked: stage.is_locked ?? false,
         system_role: stage.system_role ?? null,
         lock_reason: stage.lock_reason ?? null,
@@ -713,12 +729,30 @@ function buildNewStage(
         previousStage?.stage_type === "post_approval" || nextStage?.stage_type === "post_approval"
             ? "post_approval"
             : "intake"
+    const presetPalette = CUSTOM_STAGE_COLOR_PRESETS[category]
+    const presetIndex =
+        draft.stages.slice(0, insertIndex).filter((stage) => stage.stage_type === category).length
+        % presetPalette.length
+    const neighborColors = new Set(
+        [previousStage?.color, nextStage?.color]
+            .filter((color): color is string => Boolean(color))
+            .map((color) => color.toLowerCase()),
+    )
+    const presetColor =
+        presetPalette.find(
+            (color, offset) =>
+                offset >= presetIndex
+                && !neighborColors.has(color.toLowerCase()),
+        )
+        ?? presetPalette.find((color) => !neighborColors.has(color.toLowerCase()))
+        ?? presetPalette[presetIndex]
+        ?? DEFAULT_CUSTOM_STAGE_COLOR
     const base: EditableStage = {
         id: createLocalId(),
         stage_key: stageKey,
         slug,
         label: "New Stage",
-        color: "#6B7280",
+        color: presetColor,
         order: draft.stages.length + 1,
         category,
         stage_type: category,
@@ -734,6 +768,24 @@ function buildNewStage(
         }),
     }
     return base
+}
+
+function withAutoStageColor(current: EditableStage, next: EditableStage): EditableStage {
+    if (!shouldAutoRefreshStageColor(current)) {
+        return next
+    }
+    return {
+        ...next,
+        color: suggestStageColor({
+            color: next.color,
+            label: next.label,
+            slug: next.slug,
+            stage_key: next.stage_key,
+            stage_type: next.stage_type,
+            order: next.order,
+            is_locked: next.is_locked ?? false,
+        }),
+    }
 }
 
 function buildDuplicateStage(source: EditableStage, draft: PipelineDraftState): EditableStage {
@@ -1011,10 +1063,12 @@ function StageSummaryFields({
                 value={stage.label}
                 disabled={stage.is_locked}
                 onChange={(event) =>
-                    onStageChange((current) => ({
-                        ...current,
-                        label: event.target.value,
-                    }))
+                    onStageChange((current) =>
+                        withAutoStageColor(current, {
+                            ...current,
+                            label: event.target.value,
+                        }),
+                    )
                 }
                 placeholder="Label"
                 className="h-9 truncate"
@@ -1025,11 +1079,11 @@ function StageSummaryFields({
                 onChange={(event) =>
                     onStageChange((current) => {
                         const slug = normalizeIdentifier(event.target.value)
-                        return {
+                        return withAutoStageColor(current, {
                             ...current,
                             slug,
                             stage_key: isUuidLike(current.id) ? current.stage_key : slug || current.stage_key,
-                        }
+                        })
                     })
                 }
                 className="h-9 truncate font-mono text-sm"
@@ -1044,11 +1098,13 @@ function StageSummaryFields({
                 disabled={Boolean(stage.is_locked)}
                 srOnlyLabel
                 onValueChange={(value) =>
-                    onStageChange((current) => ({
-                        ...current,
-                        category: value as StageType,
-                        stage_type: value as StageType,
-                    }))
+                    onStageChange((current) =>
+                        withAutoStageColor(current, {
+                            ...current,
+                            category: value as StageType,
+                            stage_type: value as StageType,
+                        }),
+                    )
                 }
             />
             <div className="grid min-h-9 w-full grid-cols-[44px_92px] items-center justify-end gap-2 overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs sm:grid-cols-[44px_108px]">
