@@ -1,0 +1,4 @@
+## 2023-10-27 - [HIGH] Missing Rate Limit on Mailbox OAuth Endpoints
+**Vulnerability:** The Journal Mailbox OAuth endpoints in `apps/api/app/routers/mailboxes.py` (`/journal/gmail/oauth/start` and `/journal/gmail/oauth/callback`) were missing rate limiting.
+**Learning:** While primary OAuth endpoints in `integrations.py` had rate limiting, secondary integration routes can sometimes be missed, creating inconsistent security boundaries. This leaves the endpoints vulnerable to abuse, brute-force attacks on OAuth state handling, or simple DoS attacks.
+**Prevention:** Always apply the `@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")` decorator to all endpoints handling OAuth flows, regardless of which file they are implemented in. Ensure that `request: Request` is present in the router function signature so that `slowapi` can successfully rate-limit the client IP or unique identifiers.
