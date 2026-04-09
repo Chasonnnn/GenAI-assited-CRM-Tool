@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import canonicalize_stage_key, get_stage_protection_metadata
 from app.db.models import Pipeline, PipelineStage
 from app.schemas.pipeline_semantics import (
@@ -129,7 +130,15 @@ def get_pipeline_semantics_snapshot(
             stage_key=canonicalize_stage_key(stage.stage_key or stage.slug),
             slug=stage.slug,
             label=stage.label,
-            color=stage.color,
+            color=resolve_stage_color(
+                color=stage.color,
+                label=stage.label,
+                slug=stage.slug,
+                stage_key=stage.stage_key,
+                stage_type=stage.stage_type,
+                order=stage.order,
+                is_locked=stage.is_locked,
+            ),
             order=stage.order,
             category=stage.stage_type,
             stage_type=stage.stage_type,

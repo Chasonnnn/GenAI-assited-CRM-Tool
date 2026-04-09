@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.match_status_definitions import MATCH_STATUS_DEFINITIONS
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.deps import get_current_session, get_db
@@ -111,7 +112,15 @@ def list_intended_parent_statuses(
             "stage_key": stage.stage_key,
             "stage_slug": stage.slug,
             "stage_type": stage.stage_type,
-            "color": stage.color,
+            "color": resolve_stage_color(
+                color=stage.color,
+                label=stage.label,
+                slug=stage.slug,
+                stage_key=stage.stage_key,
+                stage_type=stage.stage_type,
+                order=stage.order,
+                is_locked=stage.is_locked,
+            ),
             "order": stage.order,
         }
         for stage in pipeline_service.get_stages(db, pipeline.id, include_inactive=False)

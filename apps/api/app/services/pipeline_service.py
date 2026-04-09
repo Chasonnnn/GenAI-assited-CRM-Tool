@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import (
     INTENDED_PARENT_PIPELINE_ENTITY,
     SURROGATE_PIPELINE_ENTITY,
@@ -311,7 +312,15 @@ def _pipeline_payload(pipeline: Pipeline) -> dict:
                 "stage_key": stage.stage_key,
                 "slug": stage.slug,
                 "label": stage.label,
-                "color": stage.color,
+                "color": resolve_stage_color(
+                    color=stage.color,
+                    label=stage.label,
+                    slug=stage.slug,
+                    stage_key=stage.stage_key,
+                    stage_type=stage.stage_type,
+                    order=stage.order,
+                    is_locked=stage.is_locked,
+                ),
                 "order": stage.order,
                 "stage_type": stage.stage_type,
                 "is_active": stage.is_active,
@@ -336,7 +345,15 @@ def _serialize_stage(
         "stage_key": _normalize_stage_key(stage.stage_key or stage.slug),
         "slug": stage.slug,
         "label": stage.label,
-        "color": stage.color,
+        "color": resolve_stage_color(
+            color=stage.color,
+            label=stage.label,
+            slug=stage.slug,
+            stage_key=stage.stage_key,
+            stage_type=stage.stage_type,
+            order=stage.order,
+            is_locked=stage.is_locked,
+        ),
         "order": stage.order,
         "category": stage.stage_type,
         "stage_type": stage.stage_type,

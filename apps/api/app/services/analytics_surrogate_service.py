@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import func, text, and_, case
 from sqlalchemy.orm import Session
 
+from app.core.pipeline_stage_colors import resolve_stage_color
 from app.db.enums import OwnerType
 from app.db.models import (
     Membership,
@@ -896,7 +897,15 @@ def _build_performance_columns(analytics_config: dict[str, Any]) -> list[dict[st
             {
                 "stage_key": stage.stage_key,
                 "label": stage.label,
-                "color": stage.color,
+                "color": resolve_stage_color(
+                    color=stage.color,
+                    label=stage.label,
+                    slug=stage.slug,
+                    stage_key=stage.stage_key,
+                    stage_type=stage.stage_type,
+                    order=stage.order,
+                    is_locked=getattr(stage, "is_locked", False),
+                ),
                 "order": stage.order,
             }
         )
