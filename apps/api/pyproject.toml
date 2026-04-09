@@ -39,7 +39,7 @@ dependencies = [
     # Email
     "resend==2.21.0",
     # Encryption (for Meta page tokens)
-    "cryptography==46.0.6",
+    "cryptography==46.0.7",
     # Rate limiting
     "slowapi==0.1.9",
     # Error tracking (optional)
