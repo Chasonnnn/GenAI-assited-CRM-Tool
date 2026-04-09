@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.10](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.9...surrogacy-crm-platform-v0.91.10) (2026-04-09)
+
+
+### Bug Fixes
+
+* resolve semantic colors for pipeline stages ([b7c7e12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b7c7e12870a999243e09926f2fd6e055394beefd))
+* suggest pipeline stage colors in editor ([26fc22e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26fc22e93cccb70d11df6dac499ee13f9a34af6d))
+
 ## [0.91.9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.8...surrogacy-crm-platform-v0.91.9) (2026-04-07)
 
 
