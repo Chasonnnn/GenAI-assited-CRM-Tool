@@ -8,6 +8,7 @@ from uuid import UUID
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import get_default_stage_defs
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
@@ -165,6 +166,64 @@ def test_create_stage_clamps_custom_stage_order_between_protected_anchors(db, te
     assert active_stage_keys[0] == "new_unread"
     assert active_stage_keys[-1] == "disqualified"
     assert active_stage_keys[1] == stage.stage_key
+
+
+def test_resolve_stage_color_uses_keyword_presets_for_gray_custom_stages():
+    assert (
+        resolve_stage_color(
+            color="#6B7280",
+            label="Pending-DocuSign",
+            slug="pending_docusign",
+            stage_key="pending_docusign",
+            stage_type="post_approval",
+            order=18,
+            is_locked=False,
+        )
+        == "#f59e0b"
+    )
+    assert (
+        resolve_stage_color(
+            color="#6B7280",
+            label="Life Insurance Application Started",
+            slug="life_insurance_application_started",
+            stage_key="life_insurance_application_started",
+            stage_type="post_approval",
+            order=19,
+            is_locked=False,
+        )
+        == "#0891b2"
+    )
+    assert (
+        resolve_stage_color(
+            color="#6B7280",
+            label="PBO Process Started",
+            slug="pbo_process_started",
+            stage_key="pbo_process_started",
+            stage_type="post_approval",
+            order=20,
+            is_locked=False,
+        )
+        == "#db2777"
+    )
+
+
+def test_serialize_stage_recolors_gray_custom_stage_payload(db, test_org, test_user):
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+
+    stage = pipeline_service.create_stage(
+        db=db,
+        pipeline_id=pipeline.id,
+        slug="pending_docusign",
+        label="Pending-DocuSign",
+        color="#6B7280",
+        stage_type="post_approval",
+        order=999,
+        user_id=test_user.id,
+    )
+
+    serialized = pipeline_service._serialize_stage(stage, pipeline.entity_type)
+
+    assert serialized["color"] == "#f59e0b"
 
 
 @pytest.mark.asyncio

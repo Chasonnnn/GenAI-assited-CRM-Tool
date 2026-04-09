@@ -663,6 +663,140 @@ describe("PipelinesSettingsPage", () => {
         ).toBe(true)
     })
 
+    it("assigns an intake preset color to new custom stages instead of gray", () => {
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
+
+        expect((screen.getByLabelText("Stage 3 color") as HTMLInputElement).value).toBe("#14b8a6")
+    })
+
+    it("recolors draft stages from stage keywords while the user is naming them", () => {
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
+        fireEvent.change(screen.getByDisplayValue("New Stage"), {
+            target: { value: "Pending-DocuSign" },
+        })
+
+        expect((screen.getByLabelText("Stage 3 color") as HTMLInputElement).value).toBe("#f59e0b")
+    })
+
+    it("assigns a post-approval preset color when adding a custom intended-parent stage", async () => {
+        mockUsePipelines.mockImplementation(() => ({
+            data: [intendedParentPipelineFixture],
+            isLoading: false,
+        }))
+        mockUsePipeline.mockImplementation(() => ({
+            data: intendedParentPipelineFixture,
+            isLoading: false,
+        }))
+        mockUsePipelineDependencyGraph.mockImplementation(() => ({
+            data: intendedParentDependencyGraphFixture,
+            isLoading: false,
+        }))
+        mockUsePipelineChangePreview.mockImplementation((_id: string | null, draft: unknown) => ({
+            data: draft ? intendedParentPreviewFixture : null,
+            isLoading: false,
+        }))
+
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
+
+        expect((screen.getByLabelText("Stage 4 color") as HTMLInputElement).value).toBe("#4f46e5")
+    })
+
+    it("rehydrates saved gray custom stages with suggested colors", () => {
+        const colorizedPipelineFixture = {
+            ...pipelineFixture,
+            stages: [
+                pipelineFixture.stages[0],
+                pipelineFixture.stages[1],
+                {
+                    id: "gray-stage",
+                    stage_key: "pending_docusign",
+                    slug: "pending_docusign",
+                    label: "Pending-DocuSign",
+                    color: "#6B7280",
+                    order: 3,
+                    stage_type: "post_approval" as const,
+                    is_active: true,
+                    is_locked: false,
+                    system_role: null,
+                    lock_reason: null,
+                    locked_fields: [],
+                    semantics: {
+                        capabilities: {
+                            counts_as_contacted: true,
+                            eligible_for_matching: false,
+                            locks_match_state: false,
+                            shows_pregnancy_tracking: false,
+                            requires_delivery_details: false,
+                            tracks_interview_outcome: false,
+                        },
+                        pause_behavior: "none" as const,
+                        terminal_outcome: "none" as const,
+                        integration_bucket: "qualified" as const,
+                        analytics_bucket: "under_review",
+                        suggestion_profile_key: "under_review_followup",
+                        requires_reason_on_enter: false,
+                    },
+                },
+                ...pipelineFixture.stages.slice(2).map((stage, index) => ({
+                    ...stage,
+                    order: index + 4,
+                })),
+            ],
+        }
+        const colorizedDependencyGraphFixture = {
+            ...dependencyGraphFixture,
+            stages: colorizedPipelineFixture.stages.map((stage) => ({
+                stage_id: stage.id,
+                stage_key: stage.stage_key,
+                slug: stage.slug,
+                label: stage.label,
+                category: stage.stage_type,
+                stage_type: stage.stage_type,
+                is_active: stage.is_active,
+                surrogate_count: 0,
+                journey_milestone_slugs: [],
+                analytics_funnel: false,
+                intelligent_suggestion_rules: [],
+                integration_refs: [],
+                campaign_refs: [],
+                workflow_refs: [],
+                role_visibility_roles: [],
+                role_mutation_roles: [],
+            })),
+        }
+        const colorizedPreviewFixture = {
+            ...previewFixture,
+            dependency_graph: colorizedDependencyGraphFixture,
+        }
+
+        mockUsePipelines.mockImplementation(() => ({
+            data: [colorizedPipelineFixture],
+            isLoading: false,
+        }))
+        mockUsePipeline.mockImplementation(() => ({
+            data: colorizedPipelineFixture,
+            isLoading: false,
+        }))
+        mockUsePipelineDependencyGraph.mockImplementation(() => ({
+            data: colorizedDependencyGraphFixture,
+            isLoading: false,
+        }))
+        mockUsePipelineChangePreview.mockImplementation((_id: string | null, draft: unknown) => ({
+            data: draft ? colorizedPreviewFixture : null,
+            isLoading: false,
+        }))
+
+        render(<PipelinesSettingsPage />)
+
+        expect((screen.getByLabelText("Stage 3 color") as HTMLInputElement).value).toBe("#f59e0b")
+    })
+
     it("auto-remaps removed custom stages when resetting to default", async () => {
         const resettablePipelineFixture = {
             ...pipelineFixture,
