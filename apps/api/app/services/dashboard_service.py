@@ -311,30 +311,33 @@ def get_attention_items(
         )
 
     # Total count for unreached (without limit)
-    unreached_total = (
-        db.query(func.count(Surrogate.id))
-        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .outerjoin(
-            latest_activity_subquery,
-            latest_activity_subquery.c.surrogate_id == Surrogate.id,
+    if len(unreached_results) < limit:
+        unreached_count = len(unreached_results)
+    else:
+        unreached_total = (
+            db.query(func.count(Surrogate.id))
+            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+            .outerjoin(
+                latest_activity_subquery,
+                latest_activity_subquery.c.surrogate_id == Surrogate.id,
+            )
+            .filter(
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+                PipelineStage.stage_type == "intake",
+                PipelineStage.order <= 2,
+                Surrogate.created_at < unreached_cutoff,
+                last_touch_at < unreached_cutoff,
+                or_(
+                    Surrogate.last_contacted_at.is_(None),
+                    Surrogate.last_contacted_at < unreached_cutoff,
+                ),
+                *owner_filters,
+            )
         )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            PipelineStage.stage_type == "intake",
-            PipelineStage.order <= 2,
-            Surrogate.created_at < unreached_cutoff,
-            last_touch_at < unreached_cutoff,
-            or_(
-                Surrogate.last_contacted_at.is_(None),
-                Surrogate.last_contacted_at < unreached_cutoff,
-            ),
-            *owner_filters,
-        )
-    )
-    if pipeline_id:
-        unreached_total = unreached_total.filter(PipelineStage.pipeline_id == pipeline_id)
-    unreached_count = unreached_total.scalar() or 0
+        if pipeline_id:
+            unreached_total = unreached_total.filter(PipelineStage.pipeline_id == pipeline_id)
+        unreached_count = unreached_total.scalar() or 0
 
     # -------------------------------------------------------------------------
     # 2. Overdue Tasks
@@ -369,7 +372,7 @@ def get_attention_items(
             ]
         )
 
-    overdue_tasks_query = (
+    overdue_tasks_results = (
         overdue_tasks_query.filter(and_(*task_filters))
         .order_by(Task.due_date.asc())
         .limit(limit)
@@ -377,7 +380,7 @@ def get_attention_items(
     )
 
     overdue_tasks = []
-    for task in overdue_tasks_query:
+    for task in overdue_tasks_results:
         days_overdue = (today - task.due_date).days if task.due_date else 0
         overdue_tasks.append(
             {
@@ -390,13 +393,16 @@ def get_attention_items(
         )
 
     # Total count for overdue tasks (without limit)
-    overdue_count_query = db.query(func.count(Task.id))
-    if pipeline_id:
-        overdue_count_query = overdue_count_query.join(
-            Surrogate, Task.surrogate_id == Surrogate.id
-        ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+    if len(overdue_tasks_results) < limit:
+        overdue_count = len(overdue_tasks_results)
+    else:
+        overdue_count_query_agg = db.query(func.count(Task.id))
+        if pipeline_id:
+            overdue_count_query_agg = overdue_count_query_agg.join(
+                Surrogate, Task.surrogate_id == Surrogate.id
+            ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
 
-    overdue_count = overdue_count_query.filter(and_(*task_filters)).scalar() or 0
+        overdue_count = overdue_count_query_agg.filter(and_(*task_filters)).scalar() or 0
 
     # -------------------------------------------------------------------------
     # 3. Stuck Surrogates
@@ -459,24 +465,27 @@ def get_attention_items(
         )
 
     # Total count for stuck (without limit)
-    stuck_total_query = (
-        db.query(func.count(Surrogate.id))
-        .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
-        .outerjoin(
-            latest_stage_change_subquery,
-            latest_stage_change_subquery.c.surrogate_id == Surrogate.id,
+    if len(stuck_results) < limit:
+        stuck_count = len(stuck_results)
+    else:
+        stuck_total_query = (
+            db.query(func.count(Surrogate.id))
+            .join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+            .outerjoin(
+                latest_stage_change_subquery,
+                latest_stage_change_subquery.c.surrogate_id == Surrogate.id,
+            )
+            .filter(
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+                *attention_stuck_stage_filters(),
+                last_change_col < stuck_cutoff,
+                *owner_filters,
+            )
         )
-        .filter(
-            Surrogate.organization_id == org_id,
-            Surrogate.is_archived.is_(False),
-            *attention_stuck_stage_filters(),
-            last_change_col < stuck_cutoff,
-            *owner_filters,
-        )
-    )
-    if pipeline_id:
-        stuck_total_query = stuck_total_query.filter(PipelineStage.pipeline_id == pipeline_id)
-    stuck_count = stuck_total_query.scalar() or 0
+        if pipeline_id:
+            stuck_total_query = stuck_total_query.filter(PipelineStage.pipeline_id == pipeline_id)
+        stuck_count = stuck_total_query.scalar() or 0
 
     return {
         "unreached_leads": unreached_leads,
