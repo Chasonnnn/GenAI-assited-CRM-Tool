@@ -82,6 +82,15 @@ def paginate_query(query: SQLAlchemyQuery, pagination: PaginationParams) -> tupl
     Returns:
         (items, total_count)
     """
-    total = query.count()
     items = query.offset(pagination.offset).limit(pagination.per_page).all()
+
+    # ⚡ Bolt Optimization: Skip expensive count() query when possible
+    # If we fetch fewer items than the limit, we're on the last page.
+    # If we're on the first page, or we actually got items back, we know the exact total.
+    items_len = len(items)
+    if items_len < pagination.per_page and (pagination.offset == 0 or items_len > 0):
+        total = pagination.offset + items_len
+    else:
+        total = query.count()
+
     return items, total
