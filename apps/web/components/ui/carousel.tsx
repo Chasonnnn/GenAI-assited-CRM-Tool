@@ -193,11 +193,11 @@ function CarouselPrevious({
       )}
       disabled={!canScrollPrev}
       onClick={scrollPrev}
+      aria-label="Previous slide"
       {...props}
     >
       <ChevronLeftIcon
-      />
-      <span className="sr-only">Previous slide</span>
+       aria-hidden="true" />
     </Button>
   )
 }
@@ -224,11 +224,11 @@ function CarouselNext({
       )}
       disabled={!canScrollNext}
       onClick={scrollNext}
+      aria-label="Next slide"
       {...props}
     >
       <ChevronRightIcon
-      />
-      <span className="sr-only">Next slide</span>
+       aria-hidden="true" />
     </Button>
   )
 }
