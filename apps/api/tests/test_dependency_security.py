@@ -12,9 +12,9 @@ def test_dependency_pins_meet_security_fix_floors():
     dependencies = pyproject.get("project", {}).get("dependencies", [])
 
     expected_minimums = {
-        "cryptography": "46.0.6",
+        "cryptography": "46.0.7",
         "pyjwt": "2.12.0",
-        "pypdf": "6.9.2",
+        "pypdf": "6.10.0",
         "requests": "2.33.0",
     }
 
