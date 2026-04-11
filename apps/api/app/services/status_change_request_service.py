@@ -57,11 +57,19 @@ def get_pending_requests(
     if entity_type:
         query = query.filter(StatusChangeRequest.entity_type == entity_type)
 
-    total = query.count()
     offset = (page - 1) * per_page
     requests = (
         query.order_by(StatusChangeRequest.requested_at.desc()).offset(offset).limit(per_page).all()
     )
+
+    # ⚡ Bolt Optimization: Avoid executing an expensive `query.count()`
+    # when the total number of records can be inferred from the fetched results.
+    # Impact: Eliminates a redundant database query on the last page of results
+    # or when the total dataset is smaller than the requested limit.
+    if len(requests) < per_page and (offset == 0 or len(requests) > 0):
+        total = offset + len(requests)
+    else:
+        total = query.count()
 
     return requests, total
 
