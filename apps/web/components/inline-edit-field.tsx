@@ -120,7 +120,7 @@ export function InlineEditField({
                     {value || placeholder}
                 </span>
                 <PencilIcon
-                    className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity"
                     aria-hidden="true"
                 />
             </div>
