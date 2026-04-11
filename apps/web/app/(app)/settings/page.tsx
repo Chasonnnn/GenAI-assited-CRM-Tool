@@ -550,7 +550,7 @@ function ProfileSection() {
               type="button"
               onClick={handleDeleteAvatar}
               disabled={deleteAvatarMutation.isPending}
-              className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
               aria-label="Remove profile photo"
             >
               <TrashIcon className="size-3" aria-hidden="true" />
