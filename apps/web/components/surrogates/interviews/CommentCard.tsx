@@ -141,7 +141,7 @@ const ReplyItem = memo(function ReplyItem({
                         size="sm"
                         onClick={() => onDelete(reply.id)}
                         data-comment-card-interaction="true"
-                        className="size-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        className="size-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                         aria-label={`Delete reply from ${reply.author_name}`}
                     >
                         <Trash2Icon className="size-3" />
