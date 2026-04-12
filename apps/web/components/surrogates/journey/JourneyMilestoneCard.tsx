@@ -117,7 +117,7 @@ export function JourneyMilestoneCard({
 
                 {/* Edit button overlay - only for case_manager+ */}
                 {canEdit && onEditImage && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100 print:hidden">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100 focus-within:bg-black/40 focus-within:opacity-100 print:hidden">
                         <Button
                             variant="secondary"
                             size="sm"

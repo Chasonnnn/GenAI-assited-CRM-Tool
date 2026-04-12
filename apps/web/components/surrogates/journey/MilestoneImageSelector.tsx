@@ -186,7 +186,7 @@ export function MilestoneImageSelector({
                                             </div>
                                         )}
                                         {/* Filename tooltip on hover */}
-                                        <div className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                        <div className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                                             {attachment.filename}
                                         </div>
                                     </button>
