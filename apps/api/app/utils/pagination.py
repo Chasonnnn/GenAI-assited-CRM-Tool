@@ -82,6 +82,14 @@ def paginate_query(query: SQLAlchemyQuery, pagination: PaginationParams) -> tupl
     Returns:
         (items, total_count)
     """
-    total = query.count()
     items = query.offset(pagination.offset).limit(pagination.per_page).all()
+    if len(items) < pagination.per_page:
+        if pagination.page == 1:
+            total = len(items)
+        elif items:
+            total = pagination.offset + len(items)
+        else:
+            total = query.count()
+    else:
+        total = query.count()
     return items, total

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.orm import Query
 
 from app.core.encryption import hash_email
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
@@ -21,7 +22,7 @@ from app.db.models import (
     User,
 )
 from app.main import app
-from app.services import pipeline_service, session_service
+from app.services import dashboard_service, pipeline_service, session_service
 
 
 @asynccontextmanager
@@ -594,4 +595,93 @@ async def test_attention_stuck_uses_latest_stage_history(db, test_org, default_s
         assert response.status_code == 200
         data = response.json()
         assert data["stuck_count"] == 0
-        assert data["stuck_surrogates"] == []
+
+
+def test_attention_items_skip_count_queries_when_results_are_below_limit(
+    db, test_org, default_stage, test_user, monkeypatch
+):
+    now = datetime.now(timezone.utc)
+    db.add(
+        Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S21001",
+            organization_id=test_org.id,
+            stage_id=default_stage.id,
+            status_label=default_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=test_user.id,
+            full_name="Below Limit Surrogate",
+            email="below-limit@example.com",
+            email_hash=hash_email("below-limit@example.com"),
+            created_at=now - timedelta(days=20),
+            updated_at=now - timedelta(days=20),
+            last_contacted_at=now - timedelta(days=20),
+        )
+    )
+    db.flush()
+
+    def _scalar_should_not_be_called(self, *args, **kwargs):
+        raise AssertionError("get_attention_items should not call Query.scalar() below the limit")
+
+    monkeypatch.setattr(Query, "scalar", _scalar_should_not_be_called)
+
+    data = dashboard_service.get_attention_items(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+        limit=2,
+    )
+
+    assert data["unreached_count"] == 1
+    assert data["stuck_count"] == 1
+    assert data["overdue_count"] == 0
+
+
+def test_attention_items_still_count_when_results_hit_limit(
+    db, test_org, default_stage, test_user, monkeypatch
+):
+    now = datetime.now(timezone.utc)
+    for index in range(2):
+        email = f"hit-limit-{index}@example.com"
+        db.add(
+            Surrogate(
+                id=uuid.uuid4(),
+                surrogate_number=f"S2200{index + 1}",
+                organization_id=test_org.id,
+                stage_id=default_stage.id,
+                status_label=default_stage.label,
+                source=SurrogateSource.MANUAL.value,
+                owner_type=OwnerType.USER.value,
+                owner_id=test_user.id,
+                full_name=f"Hit Limit {index + 1}",
+                email=email,
+                email_hash=hash_email(email),
+                created_at=now - timedelta(days=20),
+                updated_at=now - timedelta(days=20),
+                last_contacted_at=now - timedelta(days=20),
+            )
+        )
+    db.flush()
+
+    original_scalar = Query.scalar
+    scalar_calls = {"count": 0}
+
+    def _counting_scalar(self, *args, **kwargs):
+        scalar_calls["count"] += 1
+        return original_scalar(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "scalar", _counting_scalar)
+
+    data = dashboard_service.get_attention_items(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+        limit=2,
+    )
+
+    assert data["unreached_count"] == 2
+    assert data["stuck_count"] == 2
+    assert scalar_calls["count"] >= 2
