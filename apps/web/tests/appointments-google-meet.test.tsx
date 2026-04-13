@@ -208,6 +208,40 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByText(/Google Meet/i)).toBeInTheDocument()
     })
 
+    it("uses an accessible icon button for deleting appointment types", () => {
+        mockUseAppointmentTypes.mockReturnValue({
+            data: [
+                {
+                    id: "type-delete",
+                    user_id: "u1",
+                    name: "Screening Call",
+                    slug: "screening-call",
+                    description: "First touchpoint",
+                    duration_minutes: 30,
+                    buffer_before_minutes: 0,
+                    buffer_after_minutes: 5,
+                    meeting_mode: "zoom",
+                    meeting_modes: ["zoom"],
+                    meeting_location: null,
+                    dial_in_number: null,
+                    auto_approve: false,
+                    reminder_hours_before: 24,
+                    is_active: true,
+                    created_at: "2024-01-01T00:00:00Z",
+                    updated_at: "2024-01-01T00:00:00Z",
+                },
+            ],
+            isLoading: false,
+        })
+
+        render(<AppointmentSettings />)
+
+        const deleteButton = screen.getByRole("button", {
+            name: "Delete Screening Call appointment type",
+        })
+        expect(deleteButton).toHaveClass("size-8")
+    })
+
     it("labels Google Meet appointment types on the public booking page", () => {
         mockUseBookingPreviewPage.mockReturnValue({
             data: {
