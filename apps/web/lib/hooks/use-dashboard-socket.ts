@@ -10,8 +10,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { surrogateKeys } from './use-surrogates';
 import { useAuth } from '@/lib/auth-context';
+import { getWebSocketUrl } from '@/lib/websocket-url';
 
-const WS_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace('http', 'ws') || 'ws://localhost:8000';
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
 const INITIAL_RECONNECT_DELAY = 1000; // Start with 1 second
 
@@ -50,7 +50,7 @@ export function useDashboardSocket(enabled: boolean = true) {
         }
 
         try {
-            const ws = new WebSocket(`${WS_URL}/ws/notifications`);
+            const ws = new WebSocket(getWebSocketUrl('/ws/notifications'));
 
             ws.onopen = () => {
                 if (!isActiveRef.current || !enabled || !user) {

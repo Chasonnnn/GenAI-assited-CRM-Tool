@@ -2,9 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useDashboardSocket } from '@/lib/hooks/use-dashboard-socket'
+import { getWebSocketUrl } from '@/lib/websocket-url'
 
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { id: 'user-1' } }),
+}))
+
+vi.mock('@/lib/websocket-url', () => ({
+    getWebSocketUrl: vi.fn(() => 'ws://127.0.0.1:8000/ws/notifications'),
 }))
 
 class MockWebSocket {
@@ -93,5 +98,17 @@ describe('useDashboardSocket', () => {
             queryKey: ['surrogates', 'stats'],
             refetchType: 'active',
         })
+    })
+
+    it('uses the shared websocket URL resolver for loopback-safe connections', () => {
+        render(<DashboardSocketHarness />)
+
+        const ws = MockWebSocket.instances[0]
+        if (!ws) {
+            throw new Error('WebSocket instance was not created')
+        }
+
+        expect(getWebSocketUrl).toHaveBeenCalledWith('/ws/notifications')
+        expect(ws.url).toBe('ws://127.0.0.1:8000/ws/notifications')
     })
 })

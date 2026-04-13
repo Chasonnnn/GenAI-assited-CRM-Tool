@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/auth-context'
+import { getWebSocketUrl } from '@/lib/websocket-url'
 
 export interface NotificationSocketMessage {
     type: 'notification' | 'count_update'
@@ -64,10 +65,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
             return
         }
 
-        // Determine WebSocket URL
-        // In dev: API is on port 8000, frontend on 3000
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
-        const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/notifications'
+        const wsUrl = getWebSocketUrl('/ws/notifications')
 
         try {
             const ws = new WebSocket(wsUrl)
