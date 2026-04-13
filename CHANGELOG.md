@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.10](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.9...surrogacy-crm-platform-v0.91.10) (2026-04-13)
+
+
+### Bug Fixes
+
+* align websocket hosts for local dev ([f11568c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f11568c8f9f087804a67165116adeda4453cde7c))
+* bump vulnerable backend dependencies ([683f583](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/683f5839d737e07cfaadf6270955392c0cc4baa7))
+* improve keyboard visibility for hidden controls ([2642469](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2642469086df81b787d427295e0c5494e5481fc3))
+* optimize stats queries and rate limit journal oauth ([e15e51c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e15e51cfd2b77be8ee01a2dd15e00b5e086b5d47))
+* resolve semantic colors for pipeline stages ([b7c7e12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b7c7e12870a999243e09926f2fd6e055394beefd))
+* suggest pipeline stage colors in editor ([26fc22e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26fc22e93cccb70d11df6dac499ee13f9a34af6d))
+* tighten icon button accessibility labels ([3f6974e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3f6974ef40a61d852954c42caf92163cc52f59ab))
+* upgrade next to patched release ([19739f0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/19739f0ef5ccbe057c18b3b29bfeef2492258121))
+
 ## [0.91.9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.8...surrogacy-crm-platform-v0.91.9) (2026-04-07)
 
 
