@@ -95,6 +95,7 @@ describe("Inline field accessibility", () => {
         expect(pencilIcons.length).toBeGreaterThan(0)
         pencilIcons.forEach((icon) => {
             expect(icon).toHaveAttribute("aria-hidden", "true")
+            expect(icon).toHaveClass("group-focus-visible:opacity-100")
         })
     })
 })

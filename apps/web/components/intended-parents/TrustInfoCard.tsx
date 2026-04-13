@@ -170,7 +170,7 @@ function TrustAddressField({
                     {addressSummary || "Not provided"}
                 </span>
                 <PencilIcon
-                    className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
             </div>
@@ -331,7 +331,7 @@ function TrustNotesField({
                     {value || "Not provided"}
                 </span>
                 <PencilIcon
-                    className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
             </div>

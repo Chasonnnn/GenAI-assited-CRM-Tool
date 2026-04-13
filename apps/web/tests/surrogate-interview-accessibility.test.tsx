@@ -75,9 +75,13 @@ describe("Surrogate interview accessibility labels", () => {
             />,
         )
 
-        expect(
-            screen.getByRole("button", { name: /Video interview on/ }),
-        ).toBeInTheDocument()
+        const listRowButton = screen.getByRole("button", { name: /Video interview on/ })
+        expect(listRowButton).toBeInTheDocument()
+        expect(listRowButton).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-ring",
+            "focus-visible:ring-offset-2",
+        )
     })
 
     it("adds an aria-label to latest attachment download actions", () => {
@@ -205,8 +209,8 @@ describe("Surrogate interview accessibility labels", () => {
             />,
         )
 
-        expect(
-            screen.getByRole("button", { name: "Delete reply from Reviewer" }),
-        ).toBeInTheDocument()
+        const deleteReplyButton = screen.getByRole("button", { name: "Delete reply from Reviewer" })
+        expect(deleteReplyButton).toBeInTheDocument()
+        expect(deleteReplyButton).toHaveClass("focus-visible:opacity-100")
     })
 })

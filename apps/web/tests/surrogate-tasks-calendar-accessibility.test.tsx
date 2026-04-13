@@ -78,6 +78,11 @@ describe("SurrogateTasksCalendar accessibility", () => {
         const activeTitleButton = await screen.findByRole("button", {
             name: /Initial Consultation/,
         })
+        expect(activeTitleButton).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-ring",
+            "focus-visible:ring-offset-2",
+        )
         fireEvent.click(activeTitleButton)
         expect(onTaskClick).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }))
 
@@ -90,6 +95,11 @@ describe("SurrogateTasksCalendar accessibility", () => {
         const completedTitleButton = await screen.findByRole("button", {
             name: /Background Check/,
         })
+        expect(completedTitleButton).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-ring",
+            "focus-visible:ring-offset-2",
+        )
         fireEvent.click(completedTitleButton)
         expect(onTaskClick).toHaveBeenCalledWith(expect.objectContaining({ id: "t2" }))
 

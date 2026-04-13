@@ -135,7 +135,7 @@ export function InlineDateField({
                 </span>
                 {!disabled && (
                     <PencilIcon
-                        className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                         aria-hidden="true"
                     />
                 )}
