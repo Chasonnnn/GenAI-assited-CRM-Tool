@@ -11,11 +11,16 @@ def test_dependency_pins_meet_security_fix_floors():
 
     dependencies = pyproject.get("project", {}).get("dependencies", [])
 
+    test_dependencies = pyproject.get("project", {}).get("optional-dependencies", {}).get("test", [])
+    dependencies.extend(test_dependencies)
+
     expected_minimums = {
         "cryptography": "46.0.6",
         "pyjwt": "2.12.0",
         "pypdf": "6.9.2",
         "requests": "2.33.0",
+        "pillow": "12.2.0",
+        "pytest": "9.0.3",
     }
 
     for dependency_name, minimum_version in expected_minimums.items():
