@@ -112,6 +112,16 @@ def _get_local_storage_path() -> str:
     return path
 
 
+def resolve_local_storage_path(storage_key: str) -> str:
+    """Safely resolve a local storage key to an absolute path, preventing path traversal."""
+    base_dir = os.path.abspath(_get_local_storage_path())
+    normalized = os.path.normpath(storage_key)
+    file_path = os.path.abspath(os.path.join(base_dir, normalized))
+    if os.path.commonpath([file_path, base_dir]) != base_dir:
+        raise ValueError("Invalid storage key: path traversal detected")
+    return file_path
+
+
 # =============================================================================
 # File Operations
 # =============================================================================
@@ -237,7 +247,7 @@ def store_file(storage_key: str, file: BinaryIO, content_type: str) -> None:
         )
     else:
         # Local storage
-        path = os.path.join(_get_local_storage_path(), storage_key)
+        path = resolve_local_storage_path(storage_key)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             file.seek(0)
@@ -388,7 +398,7 @@ def load_file_bytes(storage_key: str) -> bytes:
             raise FileNotFoundError(f"Attachment storage object missing: {storage_key}")
         return body.read()
 
-    path = os.path.join(_get_local_storage_path(), storage_key)
+    path = resolve_local_storage_path(storage_key)
     if not os.path.exists(path):
         raise FileNotFoundError(f"Attachment storage object missing: {storage_key}")
     with open(path, "rb") as f:
@@ -404,7 +414,7 @@ def delete_file(storage_key: str) -> None:
         bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
         s3.delete_object(Bucket=bucket, Key=storage_key)
     else:
-        path = os.path.join(_get_local_storage_path(), storage_key)
+        path = resolve_local_storage_path(storage_key)
         if os.path.exists(path):
             os.remove(path)
 
