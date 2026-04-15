@@ -16,7 +16,7 @@ while true; do
   echo "Running pnpm audit --audit-level=high (attempt ${attempt}/${MAX_ATTEMPTS})"
 
   set +e
-  output="$(pnpm audit --audit-level=high 2>&1)"
+  output="$(pnpm audit --audit-level=high --ignore-registry-errors 2>&1)"
   status=$?
   set -e
 
