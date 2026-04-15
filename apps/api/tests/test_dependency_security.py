@@ -16,6 +16,7 @@ def test_dependency_pins_meet_security_fix_floors():
         "pyjwt": "2.12.0",
         "pypdf": "6.9.2",
         "requests": "2.33.0",
+        "pillow": "12.2.0",
     }
 
     for dependency_name, minimum_version in expected_minimums.items():
