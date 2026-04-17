@@ -203,6 +203,17 @@ def test_scan_attachment_fail_closed_when_scanner_missing_non_dev(
     assert attachment.quarantined is True
 
 
+@pytest.mark.parametrize("storage_key", ["../escape.pdf", "/tmp/escape.pdf"])
+def test_download_storage_key_to_temp_rejects_escaped_local_storage_keys(
+    monkeypatch, tmp_path, storage_key
+):
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
+
+    with pytest.raises(ValueError):
+        scan_attachment._download_storage_key_to_temp(storage_key)
+
+
 def test_form_submission_file_enqueues_scan_job(
     db, test_org, test_user, default_stage, monkeypatch
 ):

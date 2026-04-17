@@ -1,4 +1,5 @@
 from io import BytesIO
+import os
 from unittest.mock import Mock
 import uuid
 
@@ -97,6 +98,56 @@ def test_store_file_retries_signature_mismatch_for_s3_compat(monkeypatch):
     assert captured["Body"] == b"%PDF-1.4"
     assert captured["ContentType"] == "application/pdf"
     assert captured["ContentLength"] == len(b"%PDF-1.4")
+
+
+@pytest.mark.parametrize("storage_key", ["../escape.txt", "/tmp/escape.txt"])
+def test_resolve_local_storage_path_rejects_escaped_keys(monkeypatch, tmp_path, storage_key):
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
+
+    with pytest.raises(ValueError):
+        attachment_service.resolve_local_storage_path(storage_key)
+
+
+@pytest.mark.parametrize("storage_key", ["../escape.txt", "/tmp/escape.txt"])
+def test_store_file_rejects_escaped_local_storage_keys(monkeypatch, tmp_path, storage_key):
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
+
+    with pytest.raises(ValueError):
+        attachment_service.store_file(storage_key, BytesIO(b"blocked"), "text/plain")
+
+
+@pytest.mark.parametrize("storage_key", ["../escape.txt", "/tmp/escape.txt"])
+def test_load_file_bytes_rejects_escaped_local_storage_keys(monkeypatch, tmp_path, storage_key):
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
+
+    with pytest.raises(ValueError):
+        attachment_service.load_file_bytes(storage_key)
+
+
+@pytest.mark.parametrize("storage_key", ["../escape.txt", "/tmp/escape.txt"])
+def test_delete_file_rejects_escaped_local_storage_keys(monkeypatch, tmp_path, storage_key):
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
+
+    with pytest.raises(ValueError):
+        attachment_service.delete_file(storage_key)
+
+
+def test_local_store_load_delete_round_trip_uses_resolved_storage_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
+
+    storage_key = "org/key/file.txt"
+    attachment_service.store_file(storage_key, BytesIO(b"safe-bytes"), "text/plain")
+
+    resolved_path = attachment_service.resolve_local_storage_path(storage_key)
+    assert resolved_path == os.path.join(str(tmp_path), "org", "key", "file.txt")
+    assert attachment_service.load_file_bytes(storage_key) == b"safe-bytes"
+
+    attachment_service.delete_file(storage_key)
+    assert not os.path.exists(resolved_path)
 
 
 @pytest.mark.asyncio

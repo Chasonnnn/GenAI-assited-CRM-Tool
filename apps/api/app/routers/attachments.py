@@ -511,7 +511,7 @@ def download_local_attachment(
 ) -> object:
     """Serve local attachments (dev only)."""
     from fastapi.responses import FileResponse
-    from app.services.attachment_service import _get_local_storage_path
+    from app.services.attachment_service import resolve_local_storage_path
 
     attachment = attachment_service.get_attachment_by_storage_key(
         db=db,
@@ -557,7 +557,10 @@ def download_local_attachment(
     )
     db.commit()
 
-    file_path = f"{_get_local_storage_path()}/{storage_key}"
+    try:
+        file_path = resolve_local_storage_path(storage_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Attachment not found") from exc
     return FileResponse(
         file_path,
         media_type=attachment.content_type,

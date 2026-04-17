@@ -42,7 +42,7 @@ def _download_storage_key_to_temp(storage_key: str) -> str:
             return tmp.name
 
     # Local storage - file already on disk
-    return os.path.join(attachment_service._get_local_storage_path(), storage_key)
+    return attachment_service.resolve_local_storage_path(storage_key)
 
 
 def _download_to_temp(attachment: Attachment) -> str:

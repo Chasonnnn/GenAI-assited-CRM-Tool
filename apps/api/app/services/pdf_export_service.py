@@ -104,9 +104,9 @@ def _merge_pdf_bytes(pdf_documents: list[bytes]) -> bytes:
 def _load_file_bytes(storage_key: str) -> tuple[bytes | None, str | None]:
     """Load file bytes from configured storage backend."""
     from app.services.attachment_service import (
-        _get_local_storage_path,
         _get_s3_client,
         _get_storage_backend,
+        resolve_local_storage_path,
     )
 
     backend = _get_storage_backend()
@@ -118,7 +118,10 @@ def _load_file_bytes(storage_key: str) -> tuple[bytes | None, str | None]:
             return None, None
         return obj["Body"].read(), obj.get("ContentType")
 
-    path = os.path.join(_get_local_storage_path(), storage_key)
+    try:
+        path = resolve_local_storage_path(storage_key)
+    except ValueError:
+        return None, None
     if not os.path.exists(path):
         return None, None
     with open(path, "rb") as f:
