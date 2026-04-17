@@ -7,8 +7,6 @@ on:
     branches: [main, develop]
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   backend-tests:
     name: Backend Tests
@@ -39,17 +37,17 @@ jobs:
       ENV: test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
       
       - name: Install dependencies
         working-directory: apps/api
@@ -68,7 +66,7 @@ jobs:
         run: PYTHONPATH=. uv run -m pytest tests/ -v --tb=short --cov=app --cov-branch --cov-report=xml --cov-report=term-missing:skip-covered
 
       - name: Upload backend coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: backend-coverage-xml
           path: apps/api/coverage.xml
@@ -92,17 +90,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         working-directory: apps/api
@@ -148,15 +146,15 @@ jobs:
       ENV: test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         working-directory: apps/api
@@ -181,12 +179,13 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
+          package-manager-cache: false
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
@@ -215,10 +214,10 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       
@@ -227,9 +226,10 @@ jobs:
         run: python -m py_compile app/main.py
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
+          package-manager-cache: false
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
@@ -248,12 +248,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.6.6"
+      - name: Install Terraform CLI
+        env:
+          TERRAFORM_VERSION: "1.6.6"
+        run: |
+          set -euo pipefail
+          os="linux"
+          arch="amd64"
+          base_url="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}"
+          zip_name="terraform_${TERRAFORM_VERSION}_${os}_${arch}.zip"
+          archive_path="/tmp/${zip_name}"
+          checksums_path="/tmp/terraform_${TERRAFORM_VERSION}_SHA256SUMS"
+          install_dir="$(mktemp -d)"
+
+          curl -fsSLo "${archive_path}" "${base_url}/${zip_name}"
+          curl -fsSLo "${checksums_path}" "${base_url}/terraform_${TERRAFORM_VERSION}_SHA256SUMS"
+
+          expected_sha="$(grep " ${zip_name}$" "${checksums_path}" | awk '{print $1}')"
+          echo "${expected_sha}  ${archive_path}" | sha256sum -c -
+
+          unzip -q "${archive_path}" -d "${install_dir}"
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+          "${install_dir}/terraform" version
 
       - name: Terraform fmt
         run: terraform fmt -check -recursive infra/terraform
@@ -286,15 +304,15 @@ jobs:
       ENV: test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Install Python dependencies
         working-directory: apps/api
@@ -309,9 +327,10 @@ jobs:
         run: uv run --with pip-audit -- python scripts/pip_audit_guard.py
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
+          package-manager-cache: false
 
       - name: Enable pnpm via corepack
         working-directory: apps/web
@@ -376,7 +395,7 @@ jobs:
           fi
       
       - name: Upload ZAP Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: zap-baseline-report
