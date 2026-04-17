@@ -1,0 +1,3 @@
+## 2024-06-25 - Avoid nested `<span className="sr-only">` inside `<Button>` components for accessible names
+**Learning:** Adding a screen-reader only `<span>` inside a `Button` to act as its accessible label is considered an anti-pattern. While it might read out, it adds an extra node to the accessibility tree and isn't as explicitly tied to the interactive element's semantic name as standard properties.
+**Action:** Always prefer setting `aria-label="..."` directly on the `<Button>` component itself, and use `aria-hidden="true"` on the inner presentation elements like SVG icons so they are skipped by screen readers.
