@@ -77,6 +77,7 @@ _GMAIL_INBOUND_SCOPES = {
 
 _REPLY_TO_TOKEN_RE = re.compile(r"^ticket\+([a-z0-9\-]+)@", re.IGNORECASE)
 _RFC_ID_RE = re.compile(r"<[^>]+>")
+_SAFE_STORAGE_EXTENSION_RE = re.compile(r"^[a-z0-9]{1,16}$")
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,18 @@ def _extract_rfc_ids(value: str | None) -> list[str]:
     if not value:
         return []
     return [v.strip() for v in _RFC_ID_RE.findall(value) if v.strip()]
+
+
+def _attachment_storage_suffix(filename: str | None) -> str:
+    if not filename:
+        return ""
+    basename = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    if "." not in basename:
+        return ""
+    ext = basename.rsplit(".", 1)[-1].strip().lower()
+    if not _SAFE_STORAGE_EXTENSION_RE.fullmatch(ext):
+        return ""
+    return f".{ext}"
 
 
 def _mailbox_sync_job_key(
@@ -3161,7 +3174,10 @@ def _store_message_attachment(
     content_type = str(attachment_payload.get("content_type") or "application/octet-stream")
 
     checksum_sha256 = hashlib.sha256(raw_bytes).hexdigest()
-    storage_key = f"email-attachments/{organization_id}/{uuid4()}/{filename}"
+    storage_key = (
+        f"email-attachments/{organization_id}/{uuid4()}"
+        f"{_attachment_storage_suffix(filename)}"
+    )
     attachment_service.store_file(storage_key, io.BytesIO(raw_bytes), content_type)
 
     attachment = Attachment(

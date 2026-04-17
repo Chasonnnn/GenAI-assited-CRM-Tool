@@ -199,3 +199,57 @@ def test_process_occurrence_parse_marks_failed_without_raw_blob(db, test_org):
     db.refresh(occurrence)
     assert occurrence.state == EmailOccurrenceState.FAILED
     assert occurrence.parse_error == "missing raw_blob_id"
+
+
+def test_store_message_attachment_does_not_embed_inbound_filename_in_storage_key(
+    db, test_org, monkeypatch
+):
+    from app.db.enums import EmailDirection
+    from app.db.models import Attachment, EmailMessage
+
+    message = EmailMessage(
+        id=uuid4(),
+        organization_id=test_org.id,
+        direction=EmailDirection.INBOUND,
+        subject_norm="Dangerous Attachment",
+        fingerprint_sha256="a" * 64,
+        signature_sha256="b" * 64,
+    )
+    db.add(message)
+    db.flush()
+
+    captured: dict[str, object] = {}
+
+    def _store_file(storage_key, file_obj, content_type):
+        file_obj.seek(0)
+        captured["storage_key"] = storage_key
+        captured["content_type"] = content_type
+        captured["payload"] = file_obj.read()
+
+    monkeypatch.setattr(ticketing_service.attachment_service, "store_file", _store_file)
+
+    filename = "../../steal-me.PNG"
+    link = ticketing_service._store_message_attachment(
+        db=db,
+        organization_id=test_org.id,
+        email_message_id=message.id,
+        attachment_payload={
+            "bytes": b"payload",
+            "filename": filename,
+            "content_type": "image/png",
+        },
+    )
+
+    attachment = db.query(Attachment).filter(Attachment.id == link.attachment_id).one()
+    storage_key = str(captured["storage_key"])
+
+    assert attachment.filename == filename
+    assert link.filename == filename
+    assert captured["content_type"] == "image/png"
+    assert captured["payload"] == b"payload"
+    assert storage_key == attachment.storage_key
+    assert storage_key.startswith(f"email-attachments/{test_org.id}/")
+    assert storage_key.lower().endswith(".png")
+    assert filename not in storage_key
+    assert "steal-me" not in storage_key
+    assert ".." not in storage_key
