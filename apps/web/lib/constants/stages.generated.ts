@@ -58,11 +58,19 @@ export const STAGE_DEFS: StageDef[] = [
         "stageType": "intake"
     },
     {
+        "stageKey": "pending_docusign",
+        "slug": "pending_docusign",
+        "label": "Pending-DocuSign",
+        "color": "#F59E0B",
+        "order": 6,
+        "stageType": "intake"
+    },
+    {
         "stageKey": "under_review",
         "slug": "under_review",
         "label": "Under Review",
         "color": "#F59E0B",
-        "order": 6,
+        "order": 7,
         "stageType": "intake"
     },
     {
@@ -70,7 +78,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "approved",
         "label": "Approved",
         "color": "#22C55E",
-        "order": 7,
+        "order": 8,
         "stageType": "intake"
     },
     {
@@ -78,7 +86,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "ready_to_match",
         "label": "Ready to Match",
         "color": "#0EA5E9",
-        "order": 8,
+        "order": 9,
         "stageType": "post_approval"
     },
     {
@@ -86,7 +94,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "matched",
         "label": "Matched",
         "color": "#6366F1",
-        "order": 9,
+        "order": 10,
         "stageType": "post_approval"
     },
     {
@@ -94,7 +102,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "medical_clearance_passed",
         "label": "Medical Clearance Passed",
         "color": "#14B8A6",
-        "order": 10,
+        "order": 11,
         "stageType": "post_approval"
     },
     {
@@ -102,7 +110,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "legal_clearance_passed",
         "label": "Legal Clearance Passed",
         "color": "#059669",
-        "order": 11,
+        "order": 12,
         "stageType": "post_approval"
     },
     {
@@ -110,7 +118,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "transfer_cycle",
         "label": "Transfer Cycle Initiated",
         "color": "#0D9488",
-        "order": 12,
+        "order": 13,
         "stageType": "post_approval"
     },
     {
@@ -118,7 +126,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "second_hcg_confirmed",
         "label": "Second hCG confirmed",
         "color": "#10B981",
-        "order": 13,
+        "order": 14,
         "stageType": "post_approval"
     },
     {
@@ -126,7 +134,15 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "heartbeat_confirmed",
         "label": "Heartbeat Confirmed",
         "color": "#22C55E",
-        "order": 14,
+        "order": 15,
+        "stageType": "post_approval"
+    },
+    {
+        "stageKey": "life_insurance_application_started",
+        "slug": "life_insurance_application_started",
+        "label": "Life Insurance Application Started",
+        "color": "#0891B2",
+        "order": 16,
         "stageType": "post_approval"
     },
     {
@@ -134,7 +150,15 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "ob_care_established",
         "label": "OB Care Established",
         "color": "#84CC16",
-        "order": 15,
+        "order": 17,
+        "stageType": "post_approval"
+    },
+    {
+        "stageKey": "pbo_process_started",
+        "slug": "pbo_process_started",
+        "label": "PBO Process Started",
+        "color": "#DB2777",
+        "order": 18,
         "stageType": "post_approval"
     },
     {
@@ -142,7 +166,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "anatomy_scanned",
         "label": "Anatomy Scanned",
         "color": "#16A34A",
-        "order": 16,
+        "order": 19,
         "stageType": "post_approval"
     },
     {
@@ -150,7 +174,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "delivered",
         "label": "Delivered",
         "color": "#16A34A",
-        "order": 17,
+        "order": 20,
         "stageType": "post_approval"
     },
     {
@@ -158,15 +182,23 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "on_hold",
         "label": "On-Hold",
         "color": "#B4536A",
-        "order": 18,
+        "order": 21,
         "stageType": "paused"
+    },
+    {
+        "stageKey": "cold_leads",
+        "slug": "cold_leads",
+        "label": "Cold Leads",
+        "color": "#64748B",
+        "order": 22,
+        "stageType": "terminal"
     },
     {
         "stageKey": "lost",
         "slug": "lost",
         "label": "Lost",
         "color": "#EF4444",
-        "order": 19,
+        "order": 23,
         "stageType": "terminal"
     },
     {
@@ -174,7 +206,7 @@ export const STAGE_DEFS: StageDef[] = [
         "slug": "disqualified",
         "label": "Disqualified",
         "color": "#EF4444",
-        "order": 20,
+        "order": 24,
         "stageType": "terminal"
     }
 ]
@@ -183,18 +215,22 @@ export const STAGE_TYPE_MAP: Record<string, StageType> = {
     "anatomy_scanned": "post_approval",
     "application_submitted": "intake",
     "approved": "intake",
+    "cold_leads": "terminal",
     "contacted": "intake",
     "delivered": "post_approval",
     "disqualified": "terminal",
     "heartbeat_confirmed": "post_approval",
     "interview_scheduled": "intake",
     "legal_clearance_passed": "post_approval",
+    "life_insurance_application_started": "post_approval",
     "lost": "terminal",
     "matched": "post_approval",
     "medical_clearance_passed": "post_approval",
     "new_unread": "intake",
     "ob_care_established": "post_approval",
     "on_hold": "paused",
+    "pbo_process_started": "post_approval",
+    "pending_docusign": "intake",
     "pre_qualified": "intake",
     "ready_to_match": "post_approval",
     "second_hcg_confirmed": "post_approval",
@@ -208,6 +244,7 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "pre_qualified",
     "application_submitted",
     "interview_scheduled",
+    "pending_docusign",
     "under_review",
     "approved",
     "ready_to_match",
@@ -217,10 +254,13 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "transfer_cycle",
     "second_hcg_confirmed",
     "heartbeat_confirmed",
+    "life_insurance_application_started",
     "ob_care_established",
+    "pbo_process_started",
     "anatomy_scanned",
     "delivered",
     "on_hold",
+    "cold_leads",
     "lost",
     "disqualified"
 ]

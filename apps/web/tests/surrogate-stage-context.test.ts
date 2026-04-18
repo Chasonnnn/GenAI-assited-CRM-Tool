@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { getSurrogateStageContext } from "@/lib/surrogate-stage-context"
+import { getStageSemantics, getSurrogateStageContext } from "@/lib/surrogate-stage-context"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
 const stageById = new Map<string, PipelineStage>([
@@ -53,5 +53,71 @@ describe("getSurrogateStageContext", () => {
         expect(context.effectiveStage?.id).toBe("stage_ready")
         expect(context.effectiveStageKey).toBe("ready_to_match")
         expect(context.effectiveStageSlug).toBe("matching_queue")
+    })
+
+    it("resolves the new platform surrogate stage semantics conservatively", () => {
+        expect(
+            getStageSemantics({
+                stage_key: "pending_docusign",
+                stage_type: "intake",
+            })
+        ).toMatchObject({
+            terminal_outcome: "none",
+            integration_bucket: "qualified",
+            capabilities: {
+                counts_as_contacted: true,
+                eligible_for_matching: false,
+                locks_match_state: false,
+                shows_pregnancy_tracking: false,
+                requires_delivery_details: false,
+                tracks_interview_outcome: false,
+            },
+        })
+
+        expect(
+            getStageSemantics({
+                stage_key: "life_insurance_application_started",
+                stage_type: "post_approval",
+            })
+        ).toMatchObject({
+            terminal_outcome: "none",
+            integration_bucket: "converted",
+            capabilities: {
+                locks_match_state: true,
+                shows_pregnancy_tracking: true,
+                requires_delivery_details: false,
+            },
+        })
+
+        expect(
+            getStageSemantics({
+                stage_key: "pbo_process_started",
+                stage_type: "post_approval",
+            })
+        ).toMatchObject({
+            terminal_outcome: "none",
+            integration_bucket: "converted",
+            capabilities: {
+                locks_match_state: true,
+                shows_pregnancy_tracking: true,
+                requires_delivery_details: false,
+            },
+        })
+
+        expect(
+            getStageSemantics({
+                stage_key: "cold_leads",
+                stage_type: "terminal",
+            })
+        ).toMatchObject({
+            terminal_outcome: "none",
+            integration_bucket: "none",
+            capabilities: {
+                counts_as_contacted: false,
+                locks_match_state: false,
+                shows_pregnancy_tracking: false,
+                requires_delivery_details: false,
+            },
+        })
     })
 })
