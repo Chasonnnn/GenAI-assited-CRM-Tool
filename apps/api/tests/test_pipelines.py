@@ -213,8 +213,8 @@ def test_serialize_stage_recolors_gray_custom_stage_payload(db, test_org, test_u
     stage = pipeline_service.create_stage(
         db=db,
         pipeline_id=pipeline.id,
-        slug="pending_docusign",
-        label="Pending-DocuSign",
+        slug="pending_docusign_followup",
+        label="Pending-DocuSign Follow-up",
         color="#6B7280",
         stage_type="post_approval",
         order=999,

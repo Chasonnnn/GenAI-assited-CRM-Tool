@@ -18,7 +18,6 @@ SYSTEM_STAGE_LOCKED_FIELDS = (
     "slug",
     "label",
     "color",
-    "order",
     "category",
     "stage_type",
     "semantics",
@@ -43,9 +42,11 @@ SURROGATE_DEFAULT_COLORS = {
     "pre_qualified": "#10B981",  # Green
     "interview_scheduled": "#A855F7",  # Purple
     "application_submitted": "#8B5CF6",  # Violet
+    "pending_docusign": "#F59E0B",  # Amber
     "under_review": "#F59E0B",  # Amber
     "approved": "#22C55E",  # Green
     "on_hold": "#B4536A",  # Muted brick
+    "cold_leads": "#64748B",  # Slate
     "disqualified": "#EF4444",  # Red
     "lost": "#EF4444",  # Red
     # Stage B: Post-Approval (darker shades)
@@ -56,7 +57,9 @@ SURROGATE_DEFAULT_COLORS = {
     "transfer_cycle": "#0D9488",  # Teal
     "second_hcg_confirmed": "#10B981",  # Green
     "heartbeat_confirmed": "#22C55E",  # Green
+    "life_insurance_application_started": "#0891B2",  # Cyan
     "ob_care_established": "#84CC16",  # Lime
+    "pbo_process_started": "#DB2777",  # Pink
     "anatomy_scanned": "#16A34A",  # Green
     "delivered": "#16A34A",  # Green (success)
 }
@@ -74,6 +77,7 @@ SURROGATE_STAGE_TYPE_MAP = {
     "pre_qualified": "intake",
     "interview_scheduled": "intake",
     "application_submitted": "intake",
+    "pending_docusign": "intake",
     "under_review": "intake",
     "approved": "intake",
     "on_hold": "paused",
@@ -84,9 +88,12 @@ SURROGATE_STAGE_TYPE_MAP = {
     "transfer_cycle": "post_approval",
     "second_hcg_confirmed": "post_approval",
     "heartbeat_confirmed": "post_approval",
+    "life_insurance_application_started": "post_approval",
     "ob_care_established": "post_approval",
+    "pbo_process_started": "post_approval",
     "anatomy_scanned": "post_approval",
     "delivered": "post_approval",
+    "cold_leads": "terminal",
     "lost": "terminal",
     "disqualified": "terminal",
 }
@@ -105,9 +112,13 @@ SURROGATE_LABEL_OVERRIDES = {
     "on_hold": "On-Hold",
     "pre_qualified": "Pre-Qualified",
     "second_hcg_confirmed": "Second hCG confirmed",
+    "pending_docusign": "Pending-DocuSign",
     "ready_to_match": "Ready to Match",
     "transfer_cycle": "Transfer Cycle Initiated",
+    "life_insurance_application_started": "Life Insurance Application Started",
     "ob_care_established": "OB Care Established",
+    "pbo_process_started": "PBO Process Started",
+    "cold_leads": "Cold Leads",
 }
 
 INTENDED_PARENT_LABEL_OVERRIDES = {
@@ -192,6 +203,7 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
         "pre_qualified",
         "application_submitted",
         "interview_scheduled",
+        "pending_docusign",
         "under_review",
         "approved",
         "ready_to_match",
@@ -201,10 +213,13 @@ DEFAULT_STAGE_ORDER_BY_ENTITY = {
         "transfer_cycle",
         "second_hcg_confirmed",
         "heartbeat_confirmed",
+        "life_insurance_application_started",
         "ob_care_established",
+        "pbo_process_started",
         "anatomy_scanned",
         "delivered",
         "on_hold",
+        "cold_leads",
         "lost",
         "disqualified",
     ],

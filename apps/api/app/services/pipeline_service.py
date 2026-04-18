@@ -140,8 +140,6 @@ def _protected_stage_update_errors(
         attempted_fields.append("label")
     if color is not None and color != stage.color:
         attempted_fields.append("color")
-    if order is not None and order != stage.order:
-        attempted_fields.append("order")
     if (
         stage_type is not None
         and pipeline_change_service.normalize_stage_category(stage_type) != stage.stage_type

@@ -307,12 +307,6 @@ def validate_guarded_invariants(
             continue
         semantics = pipeline_semantics_service.get_stage_semantics(stage)
         stage_type = stage.get("stage_type")
-        if (
-            stage_type == "terminal"
-            and semantics.terminal_outcome == "none"
-            and not semantics.capabilities.requires_delivery_details
-        ):
-            raise ValueError("Terminal stages must declare a terminal outcome")
         if semantics.pause_behavior != "none" and stage_type != "paused":
             raise ValueError("Only paused stages can use pause behavior")
         if semantics.pause_behavior != "none" and semantics.terminal_outcome != "none":

@@ -103,7 +103,7 @@ DEFAULT_JOURNEY_MILESTONES = [
         slug="screening_interviews",
         label="Screening & Interviews",
         description="Background screening and interviews in progress.",
-        mapped_stage_keys=["under_review", "interview_scheduled", "approved"],
+        mapped_stage_keys=["interview_scheduled", "pending_docusign", "under_review", "approved"],
     ),
     JourneyMilestoneDefinition(
         slug="approved_matching",
@@ -139,7 +139,12 @@ DEFAULT_JOURNEY_MILESTONES = [
         slug="ongoing_care",
         label="Ongoing Pregnancy Care",
         description="Regular prenatal care and monitoring in progress.",
-        mapped_stage_keys=["ob_care_established", "anatomy_scanned"],
+        mapped_stage_keys=[
+            "life_insurance_application_started",
+            "ob_care_established",
+            "pbo_process_started",
+            "anatomy_scanned",
+        ],
     ),
     JourneyMilestoneDefinition(
         slug="delivery_preparation",
@@ -270,6 +275,7 @@ def default_stage_semantics(
             "pre_qualified",
             "interview_scheduled",
             "application_submitted",
+            "pending_docusign",
             "under_review",
             "approved",
         },
@@ -282,14 +288,18 @@ def default_stage_semantics(
             "transfer_cycle",
             "second_hcg_confirmed",
             "heartbeat_confirmed",
+            "life_insurance_application_started",
             "ob_care_established",
+            "pbo_process_started",
             "anatomy_scanned",
             "delivered",
         },
         shows_pregnancy_tracking=normalized_key
         in {
             "heartbeat_confirmed",
+            "life_insurance_application_started",
             "ob_care_established",
+            "pbo_process_started",
             "anatomy_scanned",
             "delivered",
         },
@@ -304,6 +314,7 @@ def default_stage_semantics(
         "pre_qualified",
         "interview_scheduled",
         "application_submitted",
+        "pending_docusign",
         "under_review",
         "approved",
     }:
@@ -316,7 +327,9 @@ def default_stage_semantics(
         "transfer_cycle",
         "second_hcg_confirmed",
         "heartbeat_confirmed",
+        "life_insurance_application_started",
         "ob_care_established",
+        "pbo_process_started",
         "anatomy_scanned",
         "delivered",
     }:
