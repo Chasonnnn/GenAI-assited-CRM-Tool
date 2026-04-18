@@ -57,11 +57,20 @@ def get_pending_requests(
     if entity_type:
         query = query.filter(StatusChangeRequest.entity_type == entity_type)
 
-    total = query.count()
     offset = (page - 1) * per_page
     requests = (
         query.order_by(StatusChangeRequest.requested_at.desc()).offset(offset).limit(per_page).all()
     )
+
+    if len(requests) < per_page:
+        if offset == 0:
+            total = len(requests)
+        elif requests:
+            total = offset + len(requests)
+        else:
+            total = query.count()
+    else:
+        total = query.count()
 
     return requests, total
 

@@ -178,7 +178,8 @@ def list_campaigns(
     if status:
         base_query = base_query.filter(Campaign.status == status)
 
-    total = base_query.count()
+    # We will compute total count AFTER we fetch items if possible
+    # We defer calling .count() on base_query to apply pagination optimization.
 
     # Subquery: Get latest run per campaign using window function
     # This avoids N+1 queries by fetching all latest runs in one query
@@ -225,6 +226,16 @@ def list_campaigns(
         query = query.filter(Campaign.status == status)
 
     rows = query.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
+
+    if len(rows) < limit:
+        if offset == 0:
+            total = len(rows)
+        elif rows:
+            total = offset + len(rows)
+        else:
+            total = base_query.count()
+    else:
+        total = base_query.count()
 
     # Build result from joined data
     result = []

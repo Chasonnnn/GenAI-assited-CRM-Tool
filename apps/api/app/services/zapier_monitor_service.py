@@ -209,13 +209,24 @@ def list_events(
     query = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.organization_id == org_id)
     if status:
         query = query.filter(ZapierOutboundEvent.status == status)
-    total = query.count()
+    _offset = max(0, offset)
+    _limit = max(1, min(limit, 200))
     items = (
         query.order_by(ZapierOutboundEvent.created_at.desc())
-        .offset(max(0, offset))
-        .limit(max(1, min(limit, 200)))
+        .offset(_offset)
+        .limit(_limit)
         .all()
     )
+
+    if len(items) < _limit:
+        if _offset == 0:
+            total = len(items)
+        elif items:
+            total = _offset + len(items)
+        else:
+            total = query.count()
+    else:
+        total = query.count()
     return items, total
 
 
