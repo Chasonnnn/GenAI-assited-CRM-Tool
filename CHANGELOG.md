@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.10...surrogacy-crm-platform-v0.91.11) (2026-04-18)
+
+
+### Features
+
+* add surrogate default rollout tooling ([2765601](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2765601728cf92252b2ba31eca7d6120d7ae3145))
+* expand surrogate platform default stages ([e3323a9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e3323a965abe0a2eaa43513b9ecc3d027dba9d3f))
+* sync web surrogate stage defaults ([75bed1b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/75bed1bca603c067f170beb0393b4077e624cac2))
+
+
+### Bug Fixes
+
+* harden local attachment storage paths ([212a507](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/212a5070a3dfec7a729165f3bb193078896c4df7))
+* remove empty ci workflow env block ([f552a25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f552a25b0e64eb8c87783ad84213a0691d9bc21c))
+* sanitize ticket attachment storage keys ([41d56bf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/41d56bfe5975009a2b9d6a0258ccdf3371f48dc7))
+
+
+### Maintenance
+
+* pin audited backend dependencies ([2a0de11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2a0de1107fe61bc7088b5941f4b4fc72a8ac484b))
+* update ci actions for node24 runtime ([f4bddf3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f4bddf38fd2cf844aed3c0d0dab18b29f3f55ffd))
+
 ## [0.91.10](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.9...surrogacy-crm-platform-v0.91.10) (2026-04-13)
 
 
