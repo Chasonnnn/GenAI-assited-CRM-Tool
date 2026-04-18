@@ -9,6 +9,7 @@ from app.db.enums import JobType, Role
 from app.db.models import Organization, OrgInvite, User, Membership
 from app.db.session import SessionLocal
 from app.services import job_service, org_service
+from app.services.pipeline_default_rollout_service import rollout_surrogate_default_pipelines
 
 
 @click.group()
@@ -727,6 +728,55 @@ def replay_failed_jobs_cli(
             reason=reason,
         )
         click.echo(f"[OK] Replayed {len(replayed)} failed job(s)")
+    except Exception as exc:
+        db.rollback()
+        click.echo(f"[ERROR] Error: {exc}")
+        raise
+    finally:
+        db.close()
+
+
+@cli.command("rollout-surrogate-default-pipeline")
+@click.option("--org-slug", "org_slugs", multiple=True, help="Limit rollout to one or more org slugs")
+@click.option("--apply", is_flag=True, help="Apply the rollout. Default is dry-run.")
+def rollout_surrogate_default_pipeline_cli(org_slugs: tuple[str, ...], apply: bool):
+    """Preview or apply the platform surrogate default pipeline rollout."""
+    db = SessionLocal()
+    try:
+        reports = rollout_surrogate_default_pipelines(
+            db,
+            org_slugs=list(org_slugs) or None,
+            apply=apply,
+        )
+
+        for report in reports:
+            click.echo(
+                f"[{'APPLY' if apply else 'DRY-RUN'}] org={report['organization_slug']} "
+                f"pipeline={report['pipeline_id'] or 'missing'}"
+            )
+            click.echo(f"  missing: {', '.join(report['missing_stage_keys']) or 'none'}")
+            click.echo(
+                f"  existing: {', '.join(report['existing_matching_stage_keys']) or 'none'}"
+            )
+            click.echo(
+                f"  reorder: {', '.join(report['reordered_stage_keys']) or 'none'}"
+            )
+            click.echo(
+                "  insertions: "
+                + (
+                    ", ".join(
+                        f"{item['stage_key']} after {item['after_stage_key']} before {item['before_stage_key']}"
+                        for item in report["target_insertions"]
+                    )
+                    or "none"
+                )
+            )
+            if report["blockers"]:
+                click.echo("  blockers:")
+                for blocker in report["blockers"]:
+                    click.echo(f"    - {blocker}")
+            else:
+                click.echo(f"  applied: {'yes' if report['applied'] else 'no'}")
     except Exception as exc:
         db.rollback()
         click.echo(f"[ERROR] Error: {exc}")
