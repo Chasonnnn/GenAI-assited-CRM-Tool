@@ -1,0 +1,3 @@
+## 2024-04-19 - Accessibility Anti-Pattern: sr-only in icon-only buttons
+**Learning:** Adding `<span className="sr-only">` inside icon-only buttons (e.g., `<Button><XIcon /><span className="sr-only">Close</span></Button>`) is an accessibility anti-pattern. While it does provide an accessible name, it creates a nested DOM structure that can be brittle and less standard for components like Dialog/Sheet close buttons.
+**Action:** When implementing icon-only buttons, apply the `aria-label` directly to the `<Button>` element itself (e.g., `<Button aria-label="Close">`) and apply `aria-hidden="true"` to the inner SVG icon (e.g., `<XIcon aria-hidden="true" />`). This ensures a cleaner, standard, and explicitly labeled interactive element without redundant announcements.
