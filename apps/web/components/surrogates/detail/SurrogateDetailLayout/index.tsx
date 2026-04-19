@@ -70,6 +70,8 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         <div className="flex flex-1 flex-col">
             <SurrogateDetailHeader
                 surrogateNumber={surrogate.surrogate_number}
+                currentStageKey={surrogate.stage_key ?? null}
+                currentStageSlug={surrogate.stage_slug ?? null}
                 statusLabel={statusLabel}
                 statusColor={statusColor}
                 latestContactOutcome={surrogate.latest_contact_outcome}
