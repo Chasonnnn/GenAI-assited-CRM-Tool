@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.11...surrogacy-crm-platform-v0.91.12) (2026-04-19)
+
+
+### Features
+
+* add surrogate outcome summaries ([620a6c6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/620a6c67b97c694626f65620c507582575d149ea))
+* show surrogate outcome badges ([6b1476b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6b1476beff3f41abf2b468ca0226a9205f080908))
+
+
+### Bug Fixes
+
+* limit header outcome badges to active stage ([bf5c0cc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bf5c0ccc7a1806c27e924c442e4e3aa048ede561))
+
 ## [0.91.11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.10...surrogacy-crm-platform-v0.91.11) (2026-04-18)
 
 
