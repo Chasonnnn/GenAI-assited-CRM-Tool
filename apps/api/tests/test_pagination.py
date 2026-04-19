@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.utils.pagination import PaginationParams, paginate_query
+from app.utils.pagination import PaginationParams, paginate_query, paginate_query_by_offset
 
 
 class MockQuery:
@@ -61,6 +61,46 @@ def test_paginate_query_counts_for_empty_out_of_range_page() -> None:
     query = MockQuery([1, 2, 3])
 
     items, total = paginate_query(query, PaginationParams(page=2, per_page=5))
+
+    assert items == []
+    assert total == 3
+    assert query.count_calls == 1
+
+
+def test_paginate_query_by_offset_skips_count_for_short_first_slice() -> None:
+    query = MockQuery([1, 2, 3])
+
+    items, total = paginate_query_by_offset(query, offset=0, limit=5)
+
+    assert items == [1, 2, 3]
+    assert total == 3
+    assert query.count_calls == 0
+
+
+def test_paginate_query_by_offset_skips_count_for_short_later_slice() -> None:
+    query = MockQuery([1, 2, 3, 4, 5, 6, 7])
+
+    items, total = paginate_query_by_offset(query, offset=5, limit=5)
+
+    assert items == [6, 7]
+    assert total == 7
+    assert query.count_calls == 0
+
+
+def test_paginate_query_by_offset_counts_for_full_slice() -> None:
+    query = MockQuery([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    items, total = paginate_query_by_offset(query, offset=0, limit=5)
+
+    assert items == [1, 2, 3, 4, 5]
+    assert total == 10
+    assert query.count_calls == 1
+
+
+def test_paginate_query_by_offset_counts_for_empty_out_of_range_slice() -> None:
+    query = MockQuery([1, 2, 3])
+
+    items, total = paginate_query_by_offset(query, offset=5, limit=5)
 
     assert items == []
     assert total == 3

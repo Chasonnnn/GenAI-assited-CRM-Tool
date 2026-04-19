@@ -75,7 +75,27 @@ class PaginatedResponse(Generic[T]):
         )
 
 
-def paginate_query(query: SQLAlchemyQuery, pagination: PaginationParams) -> tuple[list, int]:
+def _resolve_total(
+    items: list,
+    *,
+    offset: int,
+    limit: int,
+    count_query: SQLAlchemyQuery,
+) -> int:
+    if len(items) < limit:
+        if offset == 0:
+            return len(items)
+        if items:
+            return offset + len(items)
+    return count_query.count()
+
+
+def paginate_query(
+    query: SQLAlchemyQuery,
+    pagination: PaginationParams,
+    *,
+    count_query: SQLAlchemyQuery | None = None,
+) -> tuple[list, int]:
     """
     Apply pagination to a SQLAlchemy query.
 
@@ -83,13 +103,27 @@ def paginate_query(query: SQLAlchemyQuery, pagination: PaginationParams) -> tupl
         (items, total_count)
     """
     items = query.offset(pagination.offset).limit(pagination.per_page).all()
-    if len(items) < pagination.per_page:
-        if pagination.page == 1:
-            total = len(items)
-        elif items:
-            total = pagination.offset + len(items)
-        else:
-            total = query.count()
-    else:
-        total = query.count()
+    total = _resolve_total(
+        items,
+        offset=pagination.offset,
+        limit=pagination.per_page,
+        count_query=count_query or query,
+    )
+    return items, total
+
+
+def paginate_query_by_offset(
+    query: SQLAlchemyQuery,
+    *,
+    offset: int,
+    limit: int,
+    count_query: SQLAlchemyQuery | None = None,
+) -> tuple[list, int]:
+    items = query.offset(offset).limit(limit).all()
+    total = _resolve_total(
+        items,
+        offset=offset,
+        limit=limit,
+        count_query=count_query or query,
+    )
     return items, total
