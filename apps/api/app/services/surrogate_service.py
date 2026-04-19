@@ -30,6 +30,7 @@ from app.db.models import (
 )
 from app.schemas.auth import UserSession
 from app.schemas.surrogate import InterviewOutcomeCreate, SurrogateCreate, SurrogateUpdate
+from app.utils.pagination import PaginationParams, paginate_query
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -1760,9 +1761,11 @@ def list_claim_queue(
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
     ).order_by(Surrogate.updated_at.desc())
 
-    total = base_query.count()
-    offset = (page - 1) * per_page
-    surrogates = query.offset(offset).limit(per_page).all()
+    surrogates, total = paginate_query(
+        query,
+        PaginationParams(page=page, per_page=per_page),
+        count_query=base_query,
+    )
     _attach_last_activity_to_surrogates(db, org_id, surrogates)
 
     return surrogates, total
@@ -1799,9 +1802,11 @@ def list_unassigned_queue(
         joinedload(Surrogate.owner_queue).load_only(Queue.name),
     ).order_by(Surrogate.updated_at.desc())
 
-    total = base_query.count()
-    offset = (page - 1) * per_page
-    surrogates = query.offset(offset).limit(per_page).all()
+    surrogates, total = paginate_query(
+        query,
+        PaginationParams(page=page, per_page=per_page),
+        count_query=base_query,
+    )
     _attach_last_activity_to_surrogates(db, org_id, surrogates)
 
     return surrogates, total

@@ -256,6 +256,79 @@ def test_list_surrogates_does_not_use_query_count(db, test_org, test_user, monke
     assert len(surrogates) >= 1
 
 
+def test_list_claim_queue_does_not_use_query_count(db, test_org, test_user, monkeypatch):
+    org_id = test_org.id
+    user_id = test_user.id
+
+    pool_queue = queue_service.get_or_create_surrogate_pool_queue(db, org_id)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id, user_id)
+    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+    assert approved_stage is not None
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        org_id,
+        user_id,
+        SurrogateCreate(
+            full_name="Claim Queue Count Optimization",
+            email=f"claim-queue-count-{uuid4().hex[:8]}@example.com",
+            assign_to_user=False,
+        ),
+    )
+    surrogate.owner_type = "queue"
+    surrogate.owner_id = pool_queue.id
+    surrogate.stage_id = approved_stage.id
+    surrogate.status_label = approved_stage.label
+    db.flush()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "Surrogate":
+            raise AssertionError("list_claim_queue should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    surrogates, total = surrogate_service.list_claim_queue(db=db, org_id=org_id, page=1, per_page=20)
+
+    assert total >= 1
+    assert any(item.id == surrogate.id for item in surrogates)
+
+
+def test_list_unassigned_queue_does_not_use_query_count(db, test_org, test_user, monkeypatch):
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Unassigned Queue Count Optimization",
+            email=f"unassigned-queue-count-{uuid4().hex[:8]}@example.com",
+            assign_to_user=False,
+        ),
+    )
+    db.flush()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "Surrogate":
+            raise AssertionError("list_unassigned_queue should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    surrogates, total = surrogate_service.list_unassigned_queue(
+        db=db,
+        org_id=test_org.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert total >= 1
+    assert any(item.id == surrogate.id for item in surrogates)
+
+
 def test_list_surrogate_activity_does_not_use_query_count(db, test_org, test_user, monkeypatch):
     surrogate = surrogate_service.create_surrogate(
         db,

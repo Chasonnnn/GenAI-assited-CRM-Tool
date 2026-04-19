@@ -31,6 +31,7 @@ from app.schemas.campaign import (
     RecipientPreview,
     FilterCriteria,
 )
+from app.utils.pagination import paginate_query_by_offset
 
 
 CAMPAIGN_SEND_BATCH_SIZE = int(os.getenv("CAMPAIGN_SEND_BATCH_SIZE", "200"))
@@ -178,8 +179,6 @@ def list_campaigns(
     if status:
         base_query = base_query.filter(Campaign.status == status)
 
-    total = base_query.count()
-
     # Subquery: Get latest run per campaign using window function
     # This avoids N+1 queries by fetching all latest runs in one query
     run_subq = (
@@ -224,7 +223,12 @@ def list_campaigns(
     if status:
         query = query.filter(Campaign.status == status)
 
-    rows = query.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
+    rows, total = paginate_query_by_offset(
+        query.order_by(Campaign.created_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=base_query,
+    )
 
     # Build result from joined data
     result = []
@@ -533,8 +537,7 @@ def preview_recipients(
     """Preview recipients matching the filter criteria."""
     query = _build_recipient_query(db, org_id, recipient_type, filter_criteria)
 
-    total_count = query.count()
-    entities = query.limit(limit).all()
+    entities, total_count = paginate_query_by_offset(query, offset=0, limit=limit)
 
     # Get suppressed emails for this org (handle SA 2.0 Row objects)
     suppression_query = db.query(EmailSuppression.email, EmailSuppression.reason).filter(
@@ -970,8 +973,12 @@ def list_suppressions(
     """List suppressed emails for an organization."""
     query = db.query(EmailSuppression).filter(EmailSuppression.organization_id == org_id)
 
-    total = query.count()
-    items = query.order_by(EmailSuppression.created_at.desc()).offset(offset).limit(limit).all()
+    items, total = paginate_query_by_offset(
+        query.order_by(EmailSuppression.created_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=query,
+    )
 
     return items, total
 

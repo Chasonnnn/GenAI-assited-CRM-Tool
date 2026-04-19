@@ -15,6 +15,7 @@ from app.db.models import (
     IntendedParent,
     Match,
 )
+from app.utils.pagination import PaginationParams, paginate_query
 from app.utils.presentation import humanize_identifier
 
 
@@ -57,10 +58,10 @@ def get_pending_requests(
     if entity_type:
         query = query.filter(StatusChangeRequest.entity_type == entity_type)
 
-    total = query.count()
-    offset = (page - 1) * per_page
-    requests = (
-        query.order_by(StatusChangeRequest.requested_at.desc()).offset(offset).limit(per_page).all()
+    requests, total = paginate_query(
+        query.order_by(StatusChangeRequest.requested_at.desc()),
+        PaginationParams(page=page, per_page=per_page),
+        count_query=query,
     )
 
     return requests, total

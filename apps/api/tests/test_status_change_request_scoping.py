@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import uuid
 
 import pytest
+from sqlalchemy.orm import Query
 
 from app.core.encryption import hash_email
 from app.db.enums import Role
@@ -183,3 +184,53 @@ def test_status_change_request_target_stage_scoped_to_org(db, test_auth, default
 
     assert details is not None
     assert details["target_stage_label"] is None
+
+
+def test_get_pending_requests_skips_count_for_short_first_page(
+    db, test_auth, default_stage, monkeypatch
+):
+    email = f"pending-request-{uuid.uuid4().hex[:8]}@example.com"
+    surrogate = Surrogate(
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        organization_id=test_auth.org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        owner_type="user",
+        owner_id=test_auth.user.id,
+        full_name="Pending Request Surrogate",
+        email=normalize_email(email),
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+
+    request = StatusChangeRequest(
+        organization_id=test_auth.org.id,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        target_stage_id=default_stage.id,
+        effective_at=datetime.now(timezone.utc),
+        reason="Regression request",
+        status="pending",
+    )
+    db.add(request)
+    db.flush()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "StatusChangeRequest":
+            raise AssertionError("get_pending_requests should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    items, total = status_change_request_service.get_pending_requests(
+        db=db,
+        org_id=test_auth.org.id,
+        page=1,
+        per_page=20,
+    )
+
+    assert total == 1
+    assert [item.id for item in items] == [request.id]

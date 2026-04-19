@@ -13,6 +13,7 @@ from app.db.enums import JobStatus
 from app.db.models import ZapierOutboundEvent
 from app.db.session import SessionLocal
 from app.services import job_service
+from app.utils.pagination import paginate_query_by_offset
 
 logger = logging.getLogger(__name__)
 
@@ -209,12 +210,13 @@ def list_events(
     query = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.organization_id == org_id)
     if status:
         query = query.filter(ZapierOutboundEvent.status == status)
-    total = query.count()
-    items = (
-        query.order_by(ZapierOutboundEvent.created_at.desc())
-        .offset(max(0, offset))
-        .limit(max(1, min(limit, 200)))
-        .all()
+    effective_offset = max(0, offset)
+    effective_limit = max(1, min(limit, 200))
+    items, total = paginate_query_by_offset(
+        query.order_by(ZapierOutboundEvent.created_at.desc()),
+        offset=effective_offset,
+        limit=effective_limit,
+        count_query=query,
     )
     return items, total
 

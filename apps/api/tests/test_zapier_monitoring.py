@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import pytest
+from sqlalchemy.orm import Query
 
 
 @pytest.mark.asyncio
@@ -228,3 +229,37 @@ def test_mark_zapier_event_job_lifecycle_updates(db, test_org):
     assert failed_event.status == "failed"
     assert failed_event.last_error == "Webhook timeout"
     assert failed_event.attempts == 3
+
+
+def test_list_events_skips_count_for_short_first_page(db, test_org, monkeypatch):
+    from app.db.models import ZapierOutboundEvent
+    from app.services import zapier_monitor_service
+
+    event = ZapierOutboundEvent(
+        organization_id=test_org.id,
+        source="automatic",
+        status="queued",
+        event_id="evt-short-page",
+        event_name="Lead",
+        lead_id="lead-short-page",
+        stage_key="new_unread",
+        stage_label="New Unread",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "ZapierOutboundEvent":
+            raise AssertionError("list_events should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    items, total = zapier_monitor_service.list_events(db, org_id=test_org.id, limit=50, offset=0)
+
+    assert total == 1
+    assert [item.id for item in items] == [event.id]

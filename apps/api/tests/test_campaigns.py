@@ -8,6 +8,7 @@ from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 
 import pytest
+from sqlalchemy.orm import Query
 
 from app.core.encryption import hash_email
 from app.utils.normalization import normalize_email
@@ -307,6 +308,84 @@ def test_campaign_preview_filters_intended_parent_status(db, test_org):
 
     assert preview.total_count == 1
     assert preview.sample_recipients[0].entity_id == ip_matched.id
+
+
+def test_campaign_service_list_skips_count_for_short_first_page(
+    db, test_org, test_campaign, monkeypatch
+):
+    from app.services import campaign_service
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "Campaign":
+            raise AssertionError("list_campaigns should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    campaigns, total = campaign_service.list_campaigns(db, test_org.id, limit=50, offset=0)
+
+    assert total == 1
+    assert [campaign.id for campaign in campaigns] == [test_campaign.id]
+
+
+def test_campaign_preview_skips_count_for_short_first_page(db, test_org, test_user, monkeypatch):
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import campaign_service, surrogate_service
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Preview Count Skip",
+            email=f"preview-count-skip-{uuid4().hex[:8]}@example.com",
+        ),
+    )
+    db.flush()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "Surrogate":
+            raise AssertionError("preview_recipients should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    preview = campaign_service.preview_recipients(db, test_org.id, "case", {}, limit=50)
+
+    assert preview.total_count == 1
+    assert [recipient.entity_id for recipient in preview.sample_recipients] == [surrogate.id]
+
+
+def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkeypatch):
+    from app.db.models import EmailSuppression
+    from app.services import campaign_service
+
+    suppression = EmailSuppression(
+        id=uuid4(),
+        organization_id=test_org.id,
+        email="suppressed-short-page@example.com",
+        reason="opt_out",
+    )
+    db.add(suppression)
+    db.flush()
+
+    original_count = Query.count
+
+    def _count_should_not_be_called(self, *args, **kwargs):
+        if self.column_descriptions and self.column_descriptions[0].get("name") == "EmailSuppression":
+            raise AssertionError("list_suppressions should not call Query.count()")
+        return original_count(self, *args, **kwargs)
+
+    monkeypatch.setattr(Query, "count", _count_should_not_be_called)
+
+    items, total = campaign_service.list_suppressions(db, test_org.id, limit=50, offset=0)
+
+    assert total == 1
+    assert [item.id for item in items] == [suppression.id]
 
 
 def test_is_email_suppressed(db, test_org):
