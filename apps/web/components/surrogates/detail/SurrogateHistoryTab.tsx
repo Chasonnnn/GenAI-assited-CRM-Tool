@@ -2,8 +2,14 @@
 
 import type { ReactNode } from "react"
 
+import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
+import {
+    getSurrogateOutcomePresentation,
+    type SurrogateOutcomeKind,
+} from "@/lib/surrogate-outcome-presentation"
+import { cn } from "@/lib/utils"
 
 type SurrogateActivityEntry = {
     id: string
@@ -110,6 +116,28 @@ function formatDateDetail(
 function addAiPrefix(lines: string[], details: Record<string, unknown>): string[] {
     if (details?.source !== "ai" || lines.length === 0) return lines
     return [`AI-generated · ${lines[0]}`, ...lines.slice(1)]
+}
+
+function formatContactMethods(value: unknown): string | null {
+    if (!Array.isArray(value) || value.length === 0) return null
+    return value
+        .map((method) => String(method))
+        .map((method) => method.charAt(0).toUpperCase() + method.slice(1))
+        .join(", ")
+}
+
+function getActivityOutcomeMeta(
+    type: string,
+    details: Record<string, unknown> | null | undefined
+): { kind: SurrogateOutcomeKind; value: string } | null {
+    if (!details || typeof details.outcome !== "string") return null
+    if (type === "contact_attempt") {
+        return { kind: "contact", value: details.outcome }
+    }
+    if (type === "interview_outcome_logged") {
+        return { kind: "interview", value: details.outcome }
+    }
+    return null
 }
 
 function formatActivityDetails(
@@ -244,12 +272,12 @@ function formatActivityDetails(
             return aiPrefix ? `AI-generated · ${parts.join(" • ")}` : parts.join(" • ")
         }
         case "contact_attempt": {
-            const methods = Array.isArray(details.contact_methods)
-                ? details.contact_methods.map((method) => String(method)).join(", ")
-                : ""
-            const outcome = String(details.outcome || "").replace(/_/g, " ")
+            const methods = formatContactMethods(details.contact_methods)
             const backdated = details.is_backdated ? " (backdated)" : ""
-            const lines = addAiPrefix([`${methods}: ${outcome}${backdated}`], details)
+            const lines = addAiPrefix(
+                [methods ? `Method${methods.includes(",") ? "s" : ""}: ${methods}${backdated}` : `Contact attempt${backdated}`],
+                details
+            )
             const attemptedAt = formatDateDetail(details.attempted_at, formatDateTime)
             if (attemptedAt && attemptedAt !== createdAtFormatted) {
                 lines.push(`Attempted: ${attemptedAt}`)
@@ -261,8 +289,7 @@ function formatActivityDetails(
             return lines
         }
         case "interview_outcome_logged": {
-            const outcome = String(details.outcome || "").replace(/_/g, " ")
-            const lines = addAiPrefix([`Outcome: ${outcome}`], details)
+            const lines = addAiPrefix(["Interview outcome recorded"], details)
             const occurredAt = formatDateDetail(details.occurred_at, formatDateTime)
             if (occurredAt) lines.push(`Occurred: ${occurredAt}`)
             const scheduledStart = formatDateDetail(details.scheduled_start, formatDateTime)
@@ -290,17 +317,34 @@ export function SurrogateHistoryTab({ activities, formatDateTime }: SurrogateHis
                 {activities.length > 0 ? (
                     activities.map((entry, idx) => {
                         const isLast = idx === activities.length - 1
+                        const outcomeMeta = getActivityOutcomeMeta(entry.activity_type, entry.details)
+                        const outcomePresentation = outcomeMeta
+                            ? getSurrogateOutcomePresentation(outcomeMeta.kind, outcomeMeta.value)
+                            : null
                         return (
                             <div key={entry.id} className="flex gap-3">
                                 <div className="relative">
-                                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary"></div>
+                                    <div
+                                        className={cn(
+                                            "mt-1.5 h-2 w-2 rounded-full",
+                                            outcomePresentation?.dotClassName ?? "bg-primary"
+                                        )}
+                                    ></div>
                                     {!isLast && (
                                         <div className="absolute left-1 top-4 h-full w-px bg-border"></div>
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-1 pb-4">
-                                    <div className="text-sm font-medium">
-                                        {formatActivityType(entry.activity_type)}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <div className="text-sm font-medium">
+                                            {formatActivityType(entry.activity_type)}
+                                        </div>
+                                        {outcomeMeta && (
+                                            <OutcomeBadge
+                                                kind={outcomeMeta.kind}
+                                                outcome={outcomeMeta.value}
+                                            />
+                                        )}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
                                         {entry.actor_name || "System"} •{" "}

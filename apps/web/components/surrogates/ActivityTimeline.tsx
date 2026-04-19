@@ -18,6 +18,7 @@ import {
     UserPlusIcon,
     CalendarIcon,
 } from "lucide-react"
+import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import { useSurrogateHistory } from "@/lib/hooks/use-surrogates"
 import type { SurrogateActivity, SurrogateStatusHistory } from "@/lib/api/surrogates"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { getSurrogateOutcomePresentation, type SurrogateOutcomeKind } from "@/lib/surrogate-outcome-presentation"
 import type { TaskListItem } from "@/lib/types/task"
 import type { LucideIcon } from "lucide-react"
 import { isTerminalStage } from "@/lib/surrogate-stage-context"
@@ -65,6 +67,8 @@ interface ActivityItem {
     preview: string
     relativeDate: string
     timestamp: string
+    outcomeKind?: SurrogateOutcomeKind
+    outcomeValue?: string
 }
 
 // ============================================================================
@@ -123,6 +127,14 @@ function getActivityPreview(activity: SurrogateActivity): string {
 
     if (!details) return ""
 
+    const formatContactMethods = (value: unknown): string | undefined => {
+        if (!Array.isArray(value)) return undefined
+        return value
+            .map((method) => String(method))
+            .map((method) => method.charAt(0).toUpperCase() + method.slice(1))
+            .join(", ")
+    }
+
     switch (type) {
         case "email_sent":
             {
@@ -158,21 +170,13 @@ function getActivityPreview(activity: SurrogateActivity): string {
             }
         case "contact_attempt":
             return [
-                details.outcome as string | undefined,
-                Array.isArray(details.contact_methods)
-                    ? (details.contact_methods as string[]).join(", ")
-                    : undefined,
+                formatContactMethods(details.contact_methods),
                 (details.note_preview as string | undefined) || undefined,
             ]
                 .filter(Boolean)
                 .join(" • ")
         case "interview_outcome_logged":
             {
-                const rawOutcome =
-                    typeof details.outcome === "string"
-                        ? details.outcome.replace(/_/g, " ")
-                        : ""
-
                 const formatTimestamp = (value: unknown): string | null => {
                     if (typeof value !== "string") return null
                     const date = new Date(value)
@@ -199,7 +203,6 @@ function getActivityPreview(activity: SurrogateActivity): string {
                                 : ""
 
                 return [
-                    rawOutcome ? `Outcome: ${rawOutcome}` : "",
                     occurredAt ? `Occurred: ${occurredAt}` : "",
                     appointmentContext,
                     (details.notes as string | undefined) || "",
@@ -225,6 +228,23 @@ function getActivityPreview(activity: SurrogateActivity): string {
 function getActivityTitle(activity: SurrogateActivity): string {
     const config = getActivityConfig(activity.activity_type)
     return config.label
+}
+
+function getActivityOutcomeMeta(activity: SurrogateActivity): {
+    outcomeKind?: SurrogateOutcomeKind
+    outcomeValue?: string
+} {
+    const details = activity.details as Record<string, unknown> | null
+    if (!details || typeof details.outcome !== "string") {
+        return {}
+    }
+    if (activity.activity_type === "contact_attempt") {
+        return { outcomeKind: "contact", outcomeValue: details.outcome }
+    }
+    if (activity.activity_type === "interview_outcome_logged") {
+        return { outcomeKind: "interview", outcomeValue: details.outcome }
+    }
+    return {}
 }
 
 // ============================================================================
@@ -383,6 +403,7 @@ function buildTimelineData(
             preview: getActivityPreview(activity),
             relativeDate: formatDistanceToNow(new Date(activity.created_at), { addSuffix: true }),
             timestamp: activity.created_at,
+            ...getActivityOutcomeMeta(activity),
         }
         if (!stageId) continue
         const items = activitiesByStage.get(stageId) || []
@@ -444,7 +465,18 @@ function buildTimelineData(
 // ============================================================================
 
 const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) {
-    const config = getActivityConfig(item.type)
+    const baseConfig = getActivityConfig(item.type)
+    const outcomePresentation =
+        item.outcomeKind && item.outcomeValue
+            ? getSurrogateOutcomePresentation(item.outcomeKind, item.outcomeValue)
+            : null
+    const config = outcomePresentation
+        ? {
+              ...baseConfig,
+              color: outcomePresentation.accentClassName,
+              bgColor: outcomePresentation.iconContainerClassName,
+          }
+        : baseConfig
     const Icon = config.icon
 
     return (
@@ -459,7 +491,12 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) 
                 <Icon className="size-3.5" />
             </div>
             <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{item.title}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-medium truncate">{item.title}</div>
+                    {item.outcomeKind && item.outcomeValue && (
+                        <OutcomeBadge kind={item.outcomeKind} outcome={item.outcomeValue} />
+                    )}
+                </div>
                 {item.preview && (
                     <div className="text-xs text-muted-foreground line-clamp-2">{item.preview}</div>
                 )}

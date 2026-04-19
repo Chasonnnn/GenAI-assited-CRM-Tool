@@ -3,13 +3,17 @@
 import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
 
+import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import type { LatestContactOutcome, LatestInterviewOutcome } from "@/lib/types/surrogate"
 
 type SurrogateDetailHeaderProps = {
     surrogateNumber: string
     statusLabel: string
     statusColor: string
+    latestContactOutcome?: LatestContactOutcome | null
+    latestInterviewOutcome?: LatestInterviewOutcome | null
     pausedFromLabel?: string | null
     isArchived: boolean
     onBack: () => void
@@ -20,6 +24,8 @@ export function SurrogateDetailHeader({
     surrogateNumber,
     statusLabel,
     statusColor,
+    latestContactOutcome = null,
+    latestInterviewOutcome = null,
     pausedFromLabel,
     isArchived,
     onBack,
@@ -34,6 +40,20 @@ export function SurrogateDetailHeader({
                 </Button>
                 <h1 className="text-xl font-semibold">Surrogate #{surrogateNumber}</h1>
                 <Badge style={{ backgroundColor: statusColor, color: "white" }}>{statusLabel}</Badge>
+                {latestContactOutcome && (
+                    <OutcomeBadge
+                        kind="contact"
+                        outcome={latestContactOutcome.outcome}
+                        prefix="Contact"
+                    />
+                )}
+                {latestInterviewOutcome && (
+                    <OutcomeBadge
+                        kind="interview"
+                        outcome={latestInterviewOutcome.outcome}
+                        prefix="Interview"
+                    />
+                )}
                 {pausedFromLabel && (
                     <span className="text-sm text-muted-foreground">
                         Paused from: <span className="font-medium text-foreground">{pausedFromLabel}</span>

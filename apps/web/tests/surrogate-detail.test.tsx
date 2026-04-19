@@ -196,6 +196,8 @@ const baseSurrogateData = {
     actual_delivery_date: null,
     delivery_baby_gender: null,
     delivery_baby_weight: null,
+    latest_contact_outcome: null,
+    latest_interview_outcome: null,
 }
 
 const defaultPipelineStages = [
@@ -441,6 +443,24 @@ describe('SurrogateDetailPage', () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Back" }))
         expect(onBack).toHaveBeenCalled()
+    })
+
+    it("shows latest contact and interview outcome pills without changing the stage badge color", () => {
+        render(
+            <SurrogateDetailHeader
+                surrogateNumber="S12345"
+                statusLabel="New Unread"
+                statusColor="#111111"
+                latestContactOutcome={{ outcome: "reached", at: "2024-02-01T10:00:00Z" }}
+                latestInterviewOutcome={{ outcome: "no_show", at: "2024-02-01T12:00:00Z" }}
+                isArchived={false}
+                onBack={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText("Contact: Reached")).toBeInTheDocument()
+        expect(screen.getByText("Interview: No Show")).toBeInTheDocument()
+        expect(screen.getByText("New Unread")).toHaveStyle({ backgroundColor: "#111111" })
     })
 
     it('returns to the filtered surrogates list when return_to is present', () => {

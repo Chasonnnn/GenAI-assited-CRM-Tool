@@ -55,7 +55,9 @@ describe("SurrogateHistoryTab", () => {
         )
 
         expect(screen.getByText("Contact Attempt")).toBeInTheDocument()
-        expect(screen.getByText(/phone: no answer/i)).toBeInTheDocument()
+        expect(screen.getByText("No Answer")).toBeInTheDocument()
+        expect(screen.queryByText(/phone: no answer/i)).not.toBeInTheDocument()
+        expect(screen.getByText(/phone/i)).toBeInTheDocument()
         expect(screen.getByText(/attempted:/i)).toBeInTheDocument()
         expect(screen.getByText(/left voicemail requesting callback/i)).toBeInTheDocument()
     })
@@ -83,7 +85,8 @@ describe("SurrogateHistoryTab", () => {
         )
 
         expect(screen.getByText("Interview Outcome Logged")).toBeInTheDocument()
-        expect(screen.getByText(/outcome: no show/i)).toBeInTheDocument()
+        expect(screen.getByText("No Show")).toBeInTheDocument()
+        expect(screen.queryByText(/outcome: no show/i)).not.toBeInTheDocument()
         expect(screen.getByText(/occurred:/i)).toBeInTheDocument()
         expect(screen.getByText(/appointment:/i)).toBeInTheDocument()
         expect(screen.getByText(/did not join the call/i)).toBeInTheDocument()

@@ -72,6 +72,8 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                 surrogateNumber={surrogate.surrogate_number}
                 statusLabel={statusLabel}
                 statusColor={statusColor}
+                latestContactOutcome={surrogate.latest_contact_outcome}
+                latestInterviewOutcome={surrogate.latest_interview_outcome}
                 pausedFromLabel={
                     surrogate.paused_from_stage_id
                         ? surrogate.paused_from_stage_label ?? pausedFromStage?.label ?? null

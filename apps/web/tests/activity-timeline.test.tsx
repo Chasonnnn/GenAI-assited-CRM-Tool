@@ -497,7 +497,8 @@ describe('ActivityTimeline', () => {
             />
         )
 
-        expect(screen.getByText(/no_answer/i)).toBeInTheDocument()
+        expect(screen.getByText('No Answer')).toBeInTheDocument()
+        expect(screen.queryByText(/no_answer/i)).not.toBeInTheDocument()
         expect(screen.getByText(/left voicemail and asked for callback/i)).toBeInTheDocument()
     })
 
@@ -532,7 +533,8 @@ describe('ActivityTimeline', () => {
         )
 
         expect(screen.getByText(/interview outcome/i)).toBeInTheDocument()
-        expect(screen.getByText(/no show/i)).toBeInTheDocument()
+        expect(screen.getByText('No Show')).toBeInTheDocument()
+        expect(screen.queryByText(/no_show/i)).not.toBeInTheDocument()
         expect(screen.getByText(/asked to reschedule next week/i)).toBeInTheDocument()
     })
 
