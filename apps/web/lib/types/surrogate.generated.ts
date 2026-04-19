@@ -28,6 +28,16 @@ export interface SurrogateListItem {
     updated_at: string;
 }
 
+export interface LatestContactOutcomeRead {
+    outcome: "reached" | "no_answer" | "voicemail" | "wrong_number" | "email_bounced";
+    at: string;
+}
+
+export interface LatestInterviewOutcomeRead {
+    outcome: "completed" | "no_show" | "rescheduled" | "cancelled";
+    at: string;
+}
+
 export interface SurrogateEligibilityChecklistItem {
     key: string;
     label: string;
@@ -66,6 +76,8 @@ export interface SurrogateRead {
     phone: string | null;
     state: string | null;
     lead_intake_warnings?: SurrogateLeadIntakeWarning[];
+    latest_contact_outcome?: LatestContactOutcomeRead | null;
+    latest_interview_outcome?: LatestInterviewOutcomeRead | null;
     date_of_birth: string | null;
     race: string | null;
     height_ft: string | null;

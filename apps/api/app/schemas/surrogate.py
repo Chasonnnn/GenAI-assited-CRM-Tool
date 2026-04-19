@@ -498,6 +498,8 @@ class SurrogateRead(BaseModel):
     phone: str | None
     state: str | None
     lead_intake_warnings: list[SurrogateLeadIntakeWarning] = Field(default_factory=list)
+    latest_contact_outcome: "LatestContactOutcomeRead | None" = None
+    latest_interview_outcome: "LatestInterviewOutcomeRead | None" = None
 
     # Demographics
     date_of_birth: date | None
@@ -803,6 +805,13 @@ class InterviewOutcomeCreate(BaseModel):
         return v
 
 
+class LatestInterviewOutcomeRead(BaseModel):
+    """Latest interview outcome summary for surrogate detail views."""
+
+    outcome: Literal["completed", "no_show", "rescheduled", "cancelled"]
+    at: datetime
+
+
 # =============================================================================
 # Contact Attempts Tracking
 # =============================================================================
@@ -834,6 +843,13 @@ class ContactAttemptCreate(BaseModel):
         if v not in valid_outcomes:
             raise ValueError(f"Invalid outcome: {v}")
         return v
+
+
+class LatestContactOutcomeRead(BaseModel):
+    """Latest contact outcome summary for surrogate detail views."""
+
+    outcome: Literal["reached", "no_answer", "voicemail", "wrong_number", "email_bounced"]
+    at: datetime
 
 
 class ContactAttemptResponse(BaseModel):

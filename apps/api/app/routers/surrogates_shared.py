@@ -6,7 +6,13 @@ from sqlalchemy.orm.attributes import NO_VALUE
 
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
-from app.services import queue_service, surrogate_service, surrogate_stage_context, user_service
+from app.services import (
+    queue_service,
+    surrogate_outcome_summary_service,
+    surrogate_service,
+    surrogate_stage_context,
+    user_service,
+)
 from app.services.surrogate_checklist_service import build_eligibility_checklist
 from app.utils.height import height_ft_to_total_inches
 
@@ -61,6 +67,12 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         phone=surrogate.phone,
         state=surrogate.state,
         lead_intake_warnings=surrogate_service.build_lead_intake_warnings(db, surrogate),
+        latest_contact_outcome=surrogate_outcome_summary_service.get_latest_contact_outcome(
+            surrogate, db
+        ),
+        latest_interview_outcome=surrogate_outcome_summary_service.get_latest_interview_outcome(
+            surrogate, db
+        ),
         date_of_birth=surrogate.date_of_birth,
         race=surrogate.race,
         height_ft=surrogate.height_ft,

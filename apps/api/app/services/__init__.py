@@ -45,6 +45,7 @@ from app.services import scan_dispatch_service
 from app.services import surrogate_events
 from app.services import wif_oidc_service
 from app.services import duo_admin_service
+from app.services import surrogate_outcome_summary_service
 
 __all__ = [
     # Auth service
@@ -87,4 +88,5 @@ __all__ = [
     "surrogate_events",
     "wif_oidc_service",
     "duo_admin_service",
+    "surrogate_outcome_summary_service",
 ]

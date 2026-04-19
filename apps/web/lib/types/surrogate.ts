@@ -30,9 +30,25 @@ export type SurrogateLeadIntakeWarning = {
     raw_value: string;
 };
 
+export type LatestContactOutcome = {
+    outcome: 'reached' | 'no_answer' | 'voicemail' | 'wrong_number' | 'email_bounced';
+    at: string;
+};
+
+export type LatestInterviewOutcome = {
+    outcome: 'completed' | 'no_show' | 'rescheduled' | 'cancelled';
+    at: string;
+};
+
 export type SurrogateRead = Omit<
     GeneratedSurrogateRead,
-    'owner_type' | 'height_ft' | 'delivery_baby_gender' | 'delivery_baby_weight' | 'lead_intake_warnings'
+    | 'owner_type'
+    | 'height_ft'
+    | 'delivery_baby_gender'
+    | 'delivery_baby_weight'
+    | 'lead_intake_warnings'
+    | 'latest_contact_outcome'
+    | 'latest_interview_outcome'
 > & {
     owner_type: 'user' | 'queue' | null;
     stage_slug: string | null;
@@ -44,6 +60,8 @@ export type SurrogateRead = Omit<
     delivery_baby_gender: string | null;
     delivery_baby_weight: string | null;
     lead_intake_warnings?: SurrogateLeadIntakeWarning[];
+    latest_contact_outcome: LatestContactOutcome | null;
+    latest_interview_outcome: LatestInterviewOutcome | null;
 };
 
 export type SurrogateListResponse = Omit<GeneratedSurrogateListResponse, 'items'> & {
