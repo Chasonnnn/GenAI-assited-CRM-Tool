@@ -24,7 +24,7 @@ from app.db.models import (
 
 logger = logging.getLogger(__name__)
 
-ATTENTION_STUCK_EXCLUDED_STAGE_TYPES = ("paused", "terminal")
+ATTENTION_STUCK_EXCLUDED_STAGE_TYPES = ("post_approval", "paused", "terminal")
 ATTENTION_STUCK_EXCLUDED_STAGE_KEYS = ("on_hold", "lost", "disqualified")
 
 
@@ -33,7 +33,7 @@ def _is_admin_role(role: Role | str | None) -> bool:
 
 
 def attention_stuck_stage_filters():
-    """Exclude paused/terminal stages and legacy semantic stage keys from stuck queries."""
+    """Exclude post-approval, paused, terminal, and legacy semantic stage keys."""
     return (
         PipelineStage.stage_type.notin_(ATTENTION_STUCK_EXCLUDED_STAGE_TYPES),
         PipelineStage.stage_key.notin_(ATTENTION_STUCK_EXCLUDED_STAGE_KEYS),

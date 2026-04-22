@@ -464,6 +464,60 @@ async def test_attention_stuck_excludes_on_hold(db, test_org):
 
 
 @pytest.mark.asyncio
+async def test_attention_stuck_excludes_post_approval_stages_but_keeps_approved(db, test_org):
+    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+        approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+        ready_to_match_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "ready_to_match")
+        assert approved_stage is not None
+        assert ready_to_match_stage is not None
+
+        now = datetime.now(timezone.utc)
+        approved_stuck = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20007",
+            organization_id=test_org.id,
+            stage_id=approved_stage.id,
+            status_label=approved_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Approved Stuck Surrogate",
+            email="approved-stuck@example.com",
+            email_hash=hash_email("approved-stuck@example.com"),
+            created_at=now - timedelta(days=30),
+            updated_at=now - timedelta(days=30),
+            last_contacted_at=now,
+        )
+        post_approval_stuck = Surrogate(
+            id=uuid.uuid4(),
+            surrogate_number="S20008",
+            organization_id=test_org.id,
+            stage_id=ready_to_match_stage.id,
+            status_label=ready_to_match_stage.label,
+            source=SurrogateSource.MANUAL.value,
+            owner_type=OwnerType.USER.value,
+            owner_id=user.id,
+            full_name="Post Approval Stuck Surrogate",
+            email="post-approval-stuck@example.com",
+            email_hash=hash_email("post-approval-stuck@example.com"),
+            created_at=now - timedelta(days=30),
+            updated_at=now - timedelta(days=30),
+            last_contacted_at=now,
+        )
+        db.add_all([approved_stuck, post_approval_stuck])
+        db.flush()
+
+        response = await client.get("/dashboard/attention?days_stuck=14")
+        assert response.status_code == 200
+        data = response.json()
+
+        stuck_ids = {item["id"] for item in data["stuck_surrogates"]}
+        assert data["stuck_count"] == 1
+        assert stuck_ids == {str(approved_stuck.id)}
+
+
+@pytest.mark.asyncio
 async def test_attention_stuck_excludes_terminal_and_paused_stage_keys_even_with_legacy_types(
     db, test_org, default_stage
 ):
@@ -496,7 +550,7 @@ async def test_attention_stuck_excludes_terminal_and_paused_stage_keys_even_with
         now = datetime.now(timezone.utc)
         active_stuck = Surrogate(
             id=uuid.uuid4(),
-            surrogate_number="S20007",
+            surrogate_number="S20009",
             organization_id=test_org.id,
             stage_id=default_stage.id,
             status_label=default_stage.label,
@@ -513,7 +567,7 @@ async def test_attention_stuck_excludes_terminal_and_paused_stage_keys_even_with
         excluded_surrogates = [
             Surrogate(
                 id=uuid.uuid4(),
-                surrogate_number=f"S2000{8 + index}",
+                surrogate_number=f"S2001{index}",
                 organization_id=test_org.id,
                 stage_id=stage.id,
                 status_label=stage.label,

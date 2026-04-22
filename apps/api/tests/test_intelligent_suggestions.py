@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import OwnerType, SurrogateSource
 from app.db.models import PipelineStage, Surrogate, SurrogateActivityLog
+from app.services import pipeline_service
 
 
 def _ensure_intelligent_schema(db) -> None:
@@ -294,31 +295,42 @@ async def test_surrogates_dynamic_filter_attention_unreached_excludes_recent_act
 
 
 @pytest.mark.asyncio
-async def test_surrogates_dynamic_filter_attention_stuck_matches_dashboard_stage_scope(
+async def test_surrogates_dynamic_filter_attention_stuck_excludes_post_approval_stages_but_keeps_approved(
     authed_client,
     db,
     test_org,
     default_stage,
     test_user,
 ):
-    post_approval_stage = PipelineStage(
-        id=uuid.uuid4(),
-        pipeline_id=default_stage.pipeline_id,
-        slug="approved",
-        label="Approved",
-        color="#10B981",
-        stage_type="post_approval",
-        order=2,
-        is_active=True,
-        is_intake_stage=False,
-    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    approved_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "approved")
+    ready_to_match_stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "ready_to_match")
+    assert approved_stage is not None
+    assert ready_to_match_stage is not None
+
     now = datetime.now(timezone.utc)
-    stuck = Surrogate(
+    approved_stuck = Surrogate(
         id=uuid.uuid4(),
         surrogate_number="S91005",
         organization_id=test_org.id,
-        stage_id=post_approval_stage.id,
-        status_label=post_approval_stage.label,
+        stage_id=approved_stage.id,
+        status_label=approved_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Attention Stuck Approved",
+        email="attention-stuck-approved@example.com",
+        email_hash=hash_email("attention-stuck-approved@example.com"),
+        created_at=now - timedelta(days=35),
+        updated_at=now - timedelta(days=35),
+        last_contacted_at=now,
+    )
+    post_approval_stuck = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91006",
+        organization_id=test_org.id,
+        stage_id=ready_to_match_stage.id,
+        status_label=ready_to_match_stage.label,
         source=SurrogateSource.MANUAL.value,
         owner_type=OwnerType.USER.value,
         owner_id=test_user.id,
@@ -329,7 +341,7 @@ async def test_surrogates_dynamic_filter_attention_stuck_matches_dashboard_stage
         updated_at=now - timedelta(days=35),
         last_contacted_at=now,
     )
-    db.add_all([post_approval_stage, stuck])
+    db.add_all([approved_stuck, post_approval_stuck])
     db.flush()
 
     response = await authed_client.get(
@@ -339,7 +351,8 @@ async def test_surrogates_dynamic_filter_attention_stuck_matches_dashboard_stage
     assert response.status_code == 200, response.text
     data = response.json()
     ids = {item["id"] for item in data["items"]}
-    assert str(stuck.id) in ids
+    assert str(approved_stuck.id) in ids
+    assert str(post_approval_stuck.id) not in ids
 
 
 @pytest.mark.asyncio
@@ -350,17 +363,17 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
     default_stage,
     test_user,
 ):
-    post_approval_stage = PipelineStage(
+    approved_like_stage = PipelineStage(
         id=uuid.uuid4(),
         pipeline_id=default_stage.pipeline_id,
-        slug="ready_to_match",
-        stage_key="ready_to_match",
-        label="Ready to Match",
-        color="#0EA5E9",
-        stage_type="post_approval",
-        order=2,
+        stage_key="approved",
+        slug="approved-scope-test",
+        label="Approved",
+        color="#10B981",
+        stage_type="intake",
+        order=default_stage.order + 1,
         is_active=True,
-        is_intake_stage=False,
+        is_intake_stage=True,
     )
     legacy_excluded_stages = [
         PipelineStage(
@@ -371,7 +384,7 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
             label=label,
             color="#EF4444",
             stage_type="intake",
-            order=3 + index,
+            order=approved_like_stage.order + 1 + index,
             is_active=True,
             is_intake_stage=True,
         )
@@ -386,10 +399,10 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
     now = datetime.now(timezone.utc)
     active_stuck = Surrogate(
         id=uuid.uuid4(),
-        surrogate_number="S91006",
+        surrogate_number="S91007",
         organization_id=test_org.id,
-        stage_id=post_approval_stage.id,
-        status_label=post_approval_stage.label,
+        stage_id=approved_like_stage.id,
+        status_label=approved_like_stage.label,
         source=SurrogateSource.MANUAL.value,
         owner_type=OwnerType.USER.value,
         owner_id=test_user.id,
@@ -419,7 +432,7 @@ async def test_surrogates_dynamic_filter_attention_stuck_excludes_terminal_and_p
         )
         for index, stage in enumerate(legacy_excluded_stages, start=1)
     ]
-    db.add_all([post_approval_stage, *legacy_excluded_stages, active_stuck, *excluded_surrogates])
+    db.add_all([approved_like_stage, *legacy_excluded_stages, active_stuck, *excluded_surrogates])
     db.flush()
 
     response = await authed_client.get(
