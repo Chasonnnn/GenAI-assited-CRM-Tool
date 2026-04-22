@@ -31,6 +31,7 @@ def test_dependency_pins_match_security_fixes():
         "pillow": "12.2.0",
         "pypdf": "6.10.2",
         "python-multipart": "0.0.26",
+        "python-dotenv": "1.2.2",
     }
     expected_test_exact_pins = {"pytest": "9.0.3"}
 
