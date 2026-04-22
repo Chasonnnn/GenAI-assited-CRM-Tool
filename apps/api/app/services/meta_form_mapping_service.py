@@ -10,6 +10,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from app.utils.pagination import paginate_query_by_offset
 
 from app.core.encryption import hash_email
 from app.core.constants import SYSTEM_USER_ID
@@ -260,8 +261,7 @@ def list_unconverted_leads_for_form(
         MetaLead.meta_form_id == form_external_id,
         MetaLead.is_converted.is_(False),
     )
-    total = base_query.count()
-    items = base_query.order_by(MetaLead.received_at.desc()).offset(offset).limit(limit).all()
+    items, total = paginate_query_by_offset(base_query.order_by(MetaLead.received_at.desc()), offset=offset, limit=limit)
     return items, total
 
 

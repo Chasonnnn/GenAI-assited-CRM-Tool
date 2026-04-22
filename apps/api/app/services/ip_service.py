@@ -8,7 +8,8 @@ import logging
 
 from fastapi import Request
 from sqlalchemy import func, or_, text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload
 
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.core.encryption import hash_email, hash_phone

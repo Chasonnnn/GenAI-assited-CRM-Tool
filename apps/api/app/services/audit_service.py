@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 from fastapi import Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from app.utils.pagination import paginate_query_by_offset
 
 from app.core.client_ip import get_client_ip
 from app.core.request_audit_context import mark_explicit_event_emitted
@@ -245,9 +246,8 @@ def list_audit_logs(
     if end_date:
         query = query.filter(AuditLog.created_at <= end_date)
 
-    total = query.count()
     offset = (page - 1) * per_page
-    logs = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
+    logs, total = paginate_query_by_offset(query.order_by(AuditLog.created_at.desc()), offset=offset, limit=per_page)
 
     actor_ids = {log.actor_user_id for log in logs if log.actor_user_id}
     actor_names = _get_actor_names(db, actor_ids)

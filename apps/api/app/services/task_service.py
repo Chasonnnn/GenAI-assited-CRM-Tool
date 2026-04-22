@@ -28,6 +28,7 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.services import membership_service, queue_service
+from app.utils.pagination import paginate_query_by_offset
 from app.utils.normalization import escape_like_string
 
 
@@ -710,12 +711,9 @@ def list_tasks(
             Task.created_at.desc(),
         )
 
-    # Count
-    total = query.count()
-
-    # Paginate
+    # Count and Paginate
     offset = (page - 1) * per_page
-    tasks = query.offset(offset).limit(per_page).all()
+    tasks, total = paginate_query_by_offset(query, offset=offset, limit=per_page)
 
     return tasks, total
 

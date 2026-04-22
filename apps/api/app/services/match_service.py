@@ -4,7 +4,9 @@ from datetime import datetime, date, timezone
 from uuid import UUID
 
 from sqlalchemy import asc, desc, func, and_, or_, text
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
+from app.utils.pagination import paginate_query_by_offset
+from sqlalchemy.orm import joinedload
 
 from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
 from app.db.models import (
@@ -186,8 +188,6 @@ def list_matches(
             )
         )
 
-    total = query.count()
-
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
         "match_number": Match.match_number,
@@ -201,7 +201,8 @@ def list_matches(
     else:
         query = query.order_by(Match.proposed_at.desc())
 
-    matches = query.offset((page - 1) * per_page).limit(per_page).all()
+    offset = (page - 1) * per_page
+    matches, total = paginate_query_by_offset(query, offset=offset, limit=per_page)
     return matches, total
 
 

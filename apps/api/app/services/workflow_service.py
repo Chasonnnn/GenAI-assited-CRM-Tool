@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
+from app.utils.pagination import paginate_query_by_offset
 
 from app.db.models import (
     AutomationWorkflow,
@@ -1201,8 +1202,7 @@ def list_executions(
     """List executions for a workflow with pagination."""
     query = db.query(WorkflowExecution).filter(WorkflowExecution.workflow_id == workflow_id)
 
-    total = query.count()
-    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
+    items, total = paginate_query_by_offset(query.order_by(WorkflowExecution.executed_at.desc()), offset=offset, limit=limit)
 
     return items, total
 
@@ -1245,8 +1245,7 @@ def list_org_executions(
     if workflow_id:
         query = query.filter(WorkflowExecution.workflow_id == workflow_id)
 
-    total = query.count()
-    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
+    items, total = paginate_query_by_offset(query.order_by(WorkflowExecution.executed_at.desc()), offset=offset, limit=limit)
 
     # Build response with workflow name
     result = []
