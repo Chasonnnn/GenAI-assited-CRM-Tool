@@ -398,7 +398,9 @@ async def test_meta_form_reconvert_endpoint_queues_only_eligible_leads(
     assert job.payload["lead_ids"] == [str(eligible.id)]
 
 
-def test_meta_lead_mapping_creates_review_task_on_unmapped_fields(db, test_org, test_user):
+def test_meta_lead_mapping_persists_unmapped_fields_without_review_task_on_success(
+    db, test_org, test_user
+):
     from app.db.enums import TaskType
     from app.db.models import MetaForm, MetaFormVersion, MetaLead, Task
     from app.services import meta_lead_service
@@ -479,6 +481,66 @@ def test_meta_lead_mapping_creates_review_task_on_unmapped_fields(db, test_org, 
     assert error is None
     assert surrogate is not None
     assert surrogate.created_at.replace(tzinfo=timezone.utc) == created_time
+    db.refresh(lead)
+    assert lead.unmapped_fields is not None
+    assert lead.unmapped_fields.get("extra_field") == "Extra value"
+
+    review_task = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == test_org.id,
+            Task.task_type == TaskType.REVIEW,
+            Task.title == f"Review Meta form mapping: {form.form_name}",
+        )
+        .first()
+    )
+    assert review_task is None
+
+
+def test_process_stored_meta_lead_creates_review_task_when_mapping_is_awaiting_review(db, test_org):
+    from app.db.enums import TaskType
+    from app.db.models import MetaForm, MetaFormVersion, MetaLead, Task
+    from app.services import meta_lead_service
+
+    form = MetaForm(
+        organization_id=test_org.id,
+        page_id="page_awaiting_review",
+        form_external_id="form_awaiting_review",
+        form_name="Awaiting Review Form",
+        mapping_status="unmapped",
+    )
+    db.add(form)
+    db.flush()
+
+    version = MetaFormVersion(
+        form_id=form.id,
+        version_number=1,
+        field_schema=[
+            {"key": "full_name", "type": "FULL_NAME", "label": "Full Name"},
+            {"key": "email", "type": "EMAIL", "label": "Email"},
+        ],
+        schema_hash="hash_awaiting_review",
+    )
+    db.add(version)
+    db.flush()
+    form.current_version_id = version.id
+
+    lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id="lead_awaiting_review",
+        meta_form_id=form.form_external_id,
+        meta_page_id=form.page_id,
+        field_data={"full_name": "Awaiting Review", "email": "awaiting@example.com"},
+        field_data_raw={"full_name": "Awaiting Review", "email": "awaiting@example.com"},
+        meta_created_time=datetime.now(timezone.utc),
+    )
+    db.add(lead)
+    db.commit()
+
+    status, surrogate = meta_lead_service.process_stored_meta_lead(db, lead)
+
+    assert status == "awaiting_mapping"
+    assert surrogate is None
 
     review_task = (
         db.query(Task)
@@ -490,6 +552,110 @@ def test_meta_lead_mapping_creates_review_task_on_unmapped_fields(db, test_org, 
         .first()
     )
     assert review_task is not None
+    assert "Reason: Mapping missing" in (review_task.description or "")
+
+
+def test_meta_lead_mapping_creates_review_task_on_mapping_related_conversion_failure(
+    monkeypatch, db, test_org
+):
+    from types import SimpleNamespace
+
+    from app.db.models import MetaForm, MetaFormVersion, MetaLead
+    from app.services import meta_lead_service
+
+    org_id = test_org.id
+    form_name = "Mapping Failure Form"
+
+    form = MetaForm(
+        organization_id=org_id,
+        page_id="page_mapping_failure",
+        form_external_id="form_mapping_failure",
+        form_name=form_name,
+        mapping_status="mapped",
+    )
+    db.add(form)
+    db.flush()
+
+    version = MetaFormVersion(
+        form_id=form.id,
+        version_number=1,
+        field_schema=[
+            {"key": "full_name", "type": "FULL_NAME", "label": "Full Name"},
+            {"key": "email", "type": "EMAIL", "label": "Email"},
+        ],
+        schema_hash="hash_mapping_failure",
+    )
+    db.add(version)
+    db.flush()
+    form.current_version_id = version.id
+    form.mapping_version_id = version.id
+    form.mapping_rules = [
+        {
+            "csv_column": "full_name",
+            "surrogate_field": "full_name",
+            "transformation": None,
+            "action": "map",
+            "custom_field_key": None,
+        },
+        {
+            "csv_column": "email",
+            "surrogate_field": "email",
+            "transformation": None,
+            "action": "map",
+            "custom_field_key": None,
+        },
+    ]
+
+    lead = MetaLead(
+        organization_id=org_id,
+        meta_lead_id="lead_mapping_failure",
+        meta_form_id=form.form_external_id,
+        meta_page_id=form.page_id,
+        field_data={"full_name": "Mapping Failure", "email": "failure@example.com"},
+        field_data_raw={"full_name": "Mapping Failure", "email": "failure@example.com"},
+        meta_created_time=datetime.now(timezone.utc),
+    )
+    db.add(lead)
+    db.commit()
+    form_stub = SimpleNamespace(
+        id=form.id,
+        organization_id=org_id,
+        form_name=form_name,
+        form_external_id=form.form_external_id,
+    )
+
+    def _raise_mapping_failure(*args, **kwargs):
+        raise ValueError("Mapped field validation failed")
+
+    monkeypatch.setattr(
+        "app.services.meta_lead_service.surrogate_service.create_surrogate",
+        _raise_mapping_failure,
+    )
+    monkeypatch.setattr(
+        "app.services.meta_lead_service._record_conversion_failure_alert",
+        lambda lead, exc: None,
+    )
+    monkeypatch.setattr(
+        "app.services.meta_form_mapping_service.get_form_by_external_id",
+        lambda db, org_id, form_external_id: form_stub,
+    )
+    captured_reasons: list[str] = []
+    monkeypatch.setattr(
+        "app.services.meta_form_mapping_service.ensure_mapping_review_task",
+        lambda db, form, reason: captured_reasons.append(reason),
+    )
+
+    surrogate, error = meta_lead_service.convert_to_surrogate_with_mapping(
+        db=db,
+        meta_lead=lead,
+        mapping_rules=form.mapping_rules or [],
+        unknown_column_behavior="metadata",
+        user_id=None,
+    )
+
+    assert surrogate is None
+    assert error is not None
+    assert captured_reasons == ["Mapping conversion failed: Mapped field validation failed"]
 
 
 def test_meta_lead_mapping_persists_meta_tracking_metadata(db, test_org, test_user):
@@ -679,26 +845,53 @@ def test_meta_lead_mapping_applies_default_transformers_when_mapping_has_none(
 def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test_org, test_user):
     from types import SimpleNamespace
 
-    from app.db.models import MetaLead
+    from app.db.enums import TaskType
+    from app.db.models import MetaForm, MetaFormVersion, MetaLead, Task
     from app.schemas.surrogate import SurrogateCreate
     from app.services import meta_lead_service
     from app.services import surrogate_service
 
     captured: list[tuple[str, str]] = []
+    org_id = test_org.id
+    form_name = "Alert Failure Form"
     monkeypatch.setattr(
         "app.services.meta_lead_service._record_conversion_failure_alert",
         lambda lead, exc: captured.append((lead.meta_lead_id, type(exc).__name__)),
     )
 
+    form = MetaForm(
+        organization_id=org_id,
+        page_id="page_alert_failure",
+        form_external_id="form_alert_failure",
+        form_name=form_name,
+        mapping_status="mapped",
+    )
+    db.add(form)
+    db.flush()
+
+    version = MetaFormVersion(
+        form_id=form.id,
+        version_number=1,
+        field_schema=[
+            {"key": "full_name", "type": "FULL_NAME", "label": "Full Name"},
+            {"key": "email", "type": "EMAIL", "label": "Email"},
+        ],
+        schema_hash="hash_alert_failure",
+    )
+    db.add(version)
+    db.flush()
+    form.current_version_id = version.id
+    form.mapping_version_id = version.id
+
     surrogate_service.create_surrogate(
         db=db,
-        org_id=test_org.id,
+        org_id=org_id,
         user_id=test_user.id,
         data=SurrogateCreate(full_name="Existing Alert Failure", email="alert@example.com"),
     )
 
     lead = MetaLead(
-        organization_id=test_org.id,
+        organization_id=org_id,
         meta_lead_id="lead_alert_failure",
         meta_form_id="form_alert_failure",
         meta_page_id="page_alert_failure",
@@ -764,6 +957,17 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
     assert error is not None
     assert captured
     assert captured[0] == ("lead_alert_failure", "IntegrityError")
+
+    review_task = (
+        db.query(Task)
+        .filter(
+            Task.organization_id == org_id,
+            Task.task_type == TaskType.REVIEW,
+            Task.title == f"Review Meta form mapping: {form_name}",
+        )
+        .first()
+    )
+    assert review_task is None
 
 
 @pytest.mark.parametrize(

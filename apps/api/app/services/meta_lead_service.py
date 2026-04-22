@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -67,6 +68,70 @@ def _mark_conversion_failed(
             _record_conversion_failure_alert(persisted_lead, error)
     finally:
         isolated.close()
+
+
+def _is_mapping_related_conversion_failure(error: Exception) -> bool:
+    """Classify whether a conversion failure should send the user back to form mapping."""
+    if isinstance(error, IntegrityError):
+        return False
+
+    message = str(error).lower()
+    if any(
+        marker in message
+        for marker in (
+            "duplicate key value",
+            "unique constraint",
+            "already converted",
+            "already has a linked surrogate",
+        )
+    ):
+        return False
+
+    if isinstance(error, (ValidationError, ValueError)):
+        return True
+
+    return any(
+        marker in message
+        for marker in (
+            "mapped field",
+            "mapping",
+            "validation",
+            "invalid",
+            "required field",
+            "transform",
+            "parse",
+        )
+    )
+
+
+def _ensure_review_task_for_mapping_conversion_failure(
+    db: Session,
+    organization_id: UUID | None,
+    meta_form_id: str | None,
+    error: Exception,
+) -> None:
+    if not organization_id or not meta_form_id or not _is_mapping_related_conversion_failure(error):
+        return
+
+    try:
+        from app.services import meta_form_mapping_service
+
+        form = meta_form_mapping_service.get_form_by_external_id(
+            db,
+            organization_id,
+            meta_form_id,
+        )
+        if not form:
+            return
+
+        error_message = str(error).strip() or type(error).__name__
+        meta_form_mapping_service.ensure_mapping_review_task(
+            db,
+            form,
+            reason=f"Mapping conversion failed: {error_message[:200]}",
+        )
+    except Exception as exc:
+        logger.warning("Failed to create mapping review task after conversion failure: %s", exc)
 
 
 def store_meta_lead(
@@ -470,6 +535,7 @@ def convert_to_surrogate_with_mapping(
     persisted_lead_id = identity[0] if identity else None
     organization_id = meta_lead.organization_id
     external_meta_lead_id = meta_lead.meta_lead_id
+    meta_form_id = meta_lead.meta_form_id
 
     try:
         surrogate_data, dropped_invalid_fields = _validate_surrogate_row_lenient(row_data)
@@ -519,9 +585,6 @@ def convert_to_surrogate_with_mapping(
 
         surrogate_events.handle_surrogate_created(db=db, surrogate=surrogate)
 
-        if unmapped_fields and unknown_column_behavior != "ignore":
-            _notify_unmapped_fields(db, meta_lead)
-
         return surrogate, None
 
     except Exception as e:
@@ -534,6 +597,7 @@ def convert_to_surrogate_with_mapping(
             unmapped_fields=unmapped_fields,
             emit_alert=True,
         )
+        _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, e)
         return None, f"Conversion failed: {e}"
 
 
@@ -805,32 +869,6 @@ def _build_meta_tracking_fields(db: Session, meta_lead: MetaLead) -> dict[str, s
         tracking["meta_platform"] = _stringify_value(platform)
 
     return tracking
-
-
-def _notify_unmapped_fields(db: Session, meta_lead: MetaLead) -> None:
-    """Create a review task when new unmapped fields appear."""
-    if not meta_lead.meta_form_id:
-        return
-    try:
-        from app.services import meta_form_mapping_service
-
-        form = meta_form_mapping_service.get_form_by_external_id(
-            db,
-            meta_lead.organization_id,
-            meta_lead.meta_form_id,
-        )
-        if not form:
-            return
-
-        meta_form_mapping_service.ensure_mapping_review_task(
-            db,
-            form,
-            reason="Unmapped fields detected in recent Meta lead(s).",
-        )
-    except Exception as exc:
-        logger.warning(f"Failed to create mapping review task: {exc}")
-
-
 def _record_conversion_failure_alert(meta_lead: MetaLead, error: Exception) -> None:
     from app.services import alert_service
 
