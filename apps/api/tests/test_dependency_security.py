@@ -25,6 +25,7 @@ def test_dependency_pins_match_security_fixes():
     expected_minimum_pins = {
         "cryptography": "46.0.6",
         "pyjwt": "2.12.0",
+        "python-dotenv": "1.2.2",
         "requests": "2.33.0",
     }
     expected_exact_pins = {
