@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.13](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.12...surrogacy-crm-platform-v0.91.13) (2026-04-23)
+
+
+### Bug Fixes
+
+* bump python-dotenv security pin ([4890b4b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4890b4b1e51627c43609b047baeee420fe8b950a))
+* exclude post-approval stages from stuck attention ([3e94554](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3e945540fe3921d2203d400b19f1d22956cd2ba3))
+* narrow meta mapping review tasks ([050b53e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/050b53e9d354603fd01cbd0ccf693065eb751702))
+
 ## [0.91.12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.11...surrogacy-crm-platform-v0.91.12) (2026-04-19)
 
 
