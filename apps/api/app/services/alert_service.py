@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.db.models import SystemAlert
+from app.utils.pagination import paginate_query_by_offset
 from app.db.enums import AlertType, AlertSeverity, AlertStatus
 from app.db.session import SessionLocal
 
@@ -183,7 +184,7 @@ def list_alerts(
     severity: AlertSeverity | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[SystemAlert]:
+) -> tuple[list[SystemAlert], int]:
     """List alerts with optional filtering."""
     query = db.query(SystemAlert).filter(SystemAlert.organization_id == org_id)
 
@@ -192,22 +193,11 @@ def list_alerts(
     if severity:
         query = query.filter(SystemAlert.severity == severity.value)
 
-    return query.order_by(SystemAlert.last_seen_at.desc()).offset(offset).limit(limit).all()
-
-
-def count_alerts(
-    db: Session,
-    org_id: UUID,
-    status: AlertStatus | None = None,
-    severity: AlertSeverity | None = None,
-) -> int:
-    """Count alerts with optional status and severity filter."""
-    query = db.query(SystemAlert).filter(SystemAlert.organization_id == org_id)
-    if status:
-        query = query.filter(SystemAlert.status == status.value)
-    if severity:
-        query = query.filter(SystemAlert.severity == severity.value)
-    return query.count()
+    return paginate_query_by_offset(
+        query.order_by(SystemAlert.last_seen_at.desc()),
+        offset=offset,
+        limit=limit,
+    )
 
 
 def get_alert_for_org(db: Session, org_id: UUID, alert_id: UUID) -> SystemAlert | None:
