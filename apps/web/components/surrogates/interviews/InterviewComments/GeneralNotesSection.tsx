@@ -40,8 +40,9 @@ export function GeneralNotesSection({ className }: GeneralNotesSectionProps) {
                         onClick={startAddingGeneralNote}
                         className="h-6 px-1.5 text-xs"
                         disabled={isAddingNote}
+                        aria-label="Add general note"
                     >
-                        <PlusIcon className="size-3" />
+                        <PlusIcon className="size-3" aria-hidden="true" />
                     </Button>
                 )}
             </div>
