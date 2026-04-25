@@ -29,6 +29,7 @@ from app.schemas.task import (
 )
 from app.services import membership_service, queue_service
 from app.utils.normalization import escape_like_string
+from app.utils.pagination import paginate_query_by_offset
 
 
 logger = logging.getLogger(__name__)
@@ -710,12 +711,13 @@ def list_tasks(
             Task.created_at.desc(),
         )
 
-    # Count
-    total = query.count()
-
-    # Paginate
+    # ⚡ Bolt Optimization:
+    # Use paginate_query_by_offset instead of manual .count() followed by paginated fetching.
+    # Impact: Eliminates a redundant sequential database COUNT query when the current page length
+    # is less than the page limit, which is frequently the case on the last page or in sparse lists.
+    # Reduces DB round-trips for sparse task boards by 50%.
     offset = (page - 1) * per_page
-    tasks = query.offset(offset).limit(per_page).all()
+    tasks, total = paginate_query_by_offset(query, offset=offset, limit=per_page)
 
     return tasks, total
 
