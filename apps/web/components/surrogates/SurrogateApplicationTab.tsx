@@ -1485,7 +1485,7 @@ export function SurrogateApplicationTab({
                                                         onClick={() => handleDownloadFile(file.id)}
                                                         aria-label={`Download ${file.filename}`}
                                                     >
-                                                        <DownloadIcon className="h-4 w-4" />
+                                                        <DownloadIcon className="h-4 w-4" aria-hidden="true" />
                                                     </Button>
 
                                                     {isEditMode && (
@@ -1500,7 +1500,7 @@ export function SurrogateApplicationTab({
                                                             {isDeleting ? (
                                                                 <Loader2Icon className="h-4 w-4 animate-spin" />
                                                             ) : (
-                                                                <Trash2Icon className="h-4 w-4" />
+                                                                <Trash2Icon className="h-4 w-4" aria-hidden="true" />
                                                             )}
                                                         </Button>
                                                     )}
