@@ -180,7 +180,7 @@ export function PregnancyTrackerCard({
                                     <Badge
                                         variant={hasManualDueDate ? "outline" : "secondary"}
                                         className="text-xs cursor-pointer select-none"
-                                        render={<button type="button" />}
+                                        render={<button type="button" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" />}
                                         onClick={handleEditDueDate}
                                         title="Edit due date"
                                     >

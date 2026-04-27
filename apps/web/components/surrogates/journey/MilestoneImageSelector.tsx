@@ -119,13 +119,14 @@ export function MilestoneImageSelector({
                         onClick={() => setSelectedId(null)}
                         className={cn(
                             "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             selectedId === null
                                 ? "border-primary bg-primary/5"
                                 : "border-border hover:border-primary/50 hover:bg-muted/50"
                         )}
                     >
                         <div className="flex size-10 items-center justify-center rounded-md bg-stone-100 dark:bg-stone-800">
-                            <ImageOffIcon className="size-5 text-muted-foreground" />
+                            <ImageOffIcon className="size-5 text-muted-foreground" aria-hidden="true" />
                         </div>
                         <div className="flex-1">
                             <p className="text-sm font-medium">Use Default Image</p>
@@ -162,6 +163,7 @@ export function MilestoneImageSelector({
                                         onClick={() => setSelectedId(attachment.id)}
                                         className={cn(
                                             "group relative aspect-square overflow-hidden rounded-lg border-2 transition-all",
+                                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                                             isSelected
                                                 ? "border-primary ring-2 ring-primary/20"
                                                 : "border-transparent hover:border-primary/50"
@@ -169,7 +171,7 @@ export function MilestoneImageSelector({
                                     >
                                         {isLoading || !url ? (
                                             <div className="flex size-full items-center justify-center bg-stone-100 dark:bg-stone-800">
-                                                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                                                <Loader2Icon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
                                             </div>
                                         ) : (
                                             <img
@@ -186,7 +188,7 @@ export function MilestoneImageSelector({
                                             </div>
                                         )}
                                         {/* Filename tooltip on hover */}
-                                        <div className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                        <div className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                                             {attachment.filename}
                                         </div>
                                     </button>
