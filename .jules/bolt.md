@@ -1,0 +1,3 @@
+## 2025-04-27 - [Optimize API Pagination]
+**Learning:** Found multiple places running a query.count() unconditionally before fetching paginated results via limit/offset. When fetching small results sets that fit on a single page, running a separate COUNT query adds an unnecessary DB roundtrip.
+**Action:** Replaced inline `query.count()` and `query.limit().offset()` execution with the `app.utils.pagination.paginate_query_by_offset` (or `paginate_query`) utility, which avoids running the `.count()` query when the number of items fetched is less than the limit. This optimization is particularly noticeable when querying records mapped to specific organizations or pipelines where results naturally fall within limits.
