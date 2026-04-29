@@ -1,0 +1,3 @@
+## 2024-04-29 - Accessible Calendar Month Navigation
+**Learning:** Calendar month navigation requires specific accessibility attributes to be fully usable by screen readers. Icon-only navigation buttons must have `aria-label`s, their inner SVGs must be hidden with `aria-hidden="true"`, and the current month/year text display must use `aria-live="polite"` so screen readers announce the new month when the user navigates.
+**Action:** When creating or updating custom calendar components, ensure the month text has `aria-live="polite"` and the previous/next icon-only buttons have descriptive `aria-label`s with hidden SVGs.
