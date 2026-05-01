@@ -1,0 +1,1 @@
+1. **Explore `apps/api/app/services`**: Replace manual `.offset().limit()` followed by `.count()` with the more optimal `paginate_query_by_offset` (which skips `count()` query when the fetched rows are less than the limit) from `app.utils.pagination` everywhere possible.

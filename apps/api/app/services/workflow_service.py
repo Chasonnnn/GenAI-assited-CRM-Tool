@@ -49,6 +49,7 @@ from app.schemas.workflow import (
 )
 from app.services import user_service
 from app.services.workflow_email_provider import validate_email_provider
+from app.utils.pagination import paginate_query_by_offset
 
 
 # =============================================================================
@@ -1201,8 +1202,14 @@ def list_executions(
     """List executions for a workflow with pagination."""
     query = db.query(WorkflowExecution).filter(WorkflowExecution.workflow_id == workflow_id)
 
-    total = query.count()
-    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
+    # ⚡ Bolt Optimization: Use paginate_query_by_offset to skip redundant .count()
+    # execution when the returned row count is strictly less than the requested limit.
+    items, total = paginate_query_by_offset(
+        query.order_by(WorkflowExecution.executed_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=query,
+    )
 
     return items, total
 
@@ -1245,8 +1252,14 @@ def list_org_executions(
     if workflow_id:
         query = query.filter(WorkflowExecution.workflow_id == workflow_id)
 
-    total = query.count()
-    items = query.order_by(WorkflowExecution.executed_at.desc()).offset(offset).limit(limit).all()
+    # ⚡ Bolt Optimization: Use paginate_query_by_offset to skip redundant .count()
+    # execution when the returned row count is strictly less than the requested limit.
+    items, total = paginate_query_by_offset(
+        query.order_by(WorkflowExecution.executed_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=query,
+    )
 
     # Build response with workflow name
     result = []
