@@ -416,6 +416,115 @@ const intendedParentPreviewFixture = {
     dependency_graph: intendedParentDependencyGraphFixture,
 }
 
+function buildPreQualifiedPipelineFixture() {
+    const preQualifiedStage = {
+        ...pipelineFixture.stages[1],
+        id: "s-pre",
+        stage_key: "pre_qualified",
+        slug: "pre_qualified",
+        label: "Pre-Qualified",
+        color: "#10b981",
+        order: 3,
+        semantics: {
+            ...pipelineFixture.stages[1].semantics,
+            analytics_bucket: "pre_qualified",
+            suggestion_profile_key: "qualified_followup",
+        },
+    }
+    const applicationSubmittedStage = {
+        ...pipelineFixture.stages[1],
+        id: "s-app",
+        stage_key: "application_submitted",
+        slug: "application_submitted",
+        label: "Application Submitted",
+        color: "#8b5cf6",
+        order: 4,
+        semantics: {
+            ...pipelineFixture.stages[1].semantics,
+            analytics_bucket: "application_submitted",
+            suggestion_profile_key: "application_submitted_followup",
+        },
+    }
+    const stages = [
+        pipelineFixture.stages[0],
+        pipelineFixture.stages[1],
+        preQualifiedStage,
+        applicationSubmittedStage,
+        ...pipelineFixture.stages.slice(2).map((stage, index) => ({
+            ...stage,
+            order: index + 5,
+        })),
+    ]
+    return {
+        ...pipelineFixture,
+        stages,
+        feature_config: {
+            ...pipelineFixture.feature_config,
+            journey: {
+                ...pipelineFixture.feature_config.journey,
+                milestones: [
+                    {
+                        ...pipelineFixture.feature_config.journey.milestones[0],
+                        mapped_stage_keys: [
+                            "new_unread",
+                            "contacted",
+                            "pre_qualified",
+                            "application_submitted",
+                        ],
+                    },
+                ],
+            },
+            analytics: {
+                ...pipelineFixture.feature_config.analytics,
+                funnel_stage_keys: [
+                    "new_unread",
+                    "contacted",
+                    "pre_qualified",
+                    "application_submitted",
+                ],
+                performance_stage_keys: [
+                    "contacted",
+                    "pre_qualified",
+                    "application_submitted",
+                    "lost",
+                ],
+                qualification_stage_key: "pre_qualified",
+            },
+        },
+    }
+}
+
+function buildPreQualifiedDependencyGraphFixture(
+    pipeline: ReturnType<typeof buildPreQualifiedPipelineFixture>,
+) {
+    return {
+        pipeline_id: pipeline.id,
+        version: pipeline.current_version,
+        stages: pipeline.stages.map((stage) => ({
+            stage_id: stage.id,
+            stage_key: stage.stage_key,
+            slug: stage.slug,
+            label: stage.label,
+            category: stage.stage_type,
+            stage_type: stage.stage_type,
+            is_active: stage.is_active,
+            surrogate_count: stage.stage_key === "pre_qualified" ? 55 : 0,
+            journey_milestone_slugs:
+                stage.stage_key === "pre_qualified" ? ["application_intake"] : [],
+            analytics_funnel: stage.stage_key === "pre_qualified",
+            intelligent_suggestion_rules: [],
+            integration_refs:
+                stage.stage_key === "pre_qualified"
+                    ? ["zapier_outbound", "meta_crm_dataset"]
+                    : [],
+            campaign_refs: [],
+            workflow_refs: [],
+            role_visibility_roles: [],
+            role_mutation_roles: [],
+        })),
+    }
+}
+
 describe("PipelinesSettingsPage", () => {
     beforeEach(() => {
         mockUseAuth.mockReset()
@@ -1142,6 +1251,61 @@ describe("PipelinesSettingsPage", () => {
             {
                 removed_stage_key: "contacted",
                 target_stage_key: "new_unread",
+            },
+        ])
+    })
+
+    it("requires and preselects a remap target when removing pre-qualified with integration dependencies", async () => {
+        const preQualifiedPipeline = buildPreQualifiedPipelineFixture()
+        const preQualifiedDependencyGraph = buildPreQualifiedDependencyGraphFixture(preQualifiedPipeline)
+        const preQualifiedPreview = {
+            ...previewFixture,
+            impact_areas: ["analytics", "integrations", "journey", "ui_gating"],
+            dependency_graph: preQualifiedDependencyGraph,
+        }
+        mockUsePipelines.mockReturnValue({
+            data: [preQualifiedPipeline],
+            isLoading: false,
+        })
+        mockUsePipeline.mockReturnValue({
+            data: preQualifiedPipeline,
+            isLoading: false,
+        })
+        mockUsePipelineDependencyGraph.mockReturnValue({
+            data: preQualifiedDependencyGraph,
+            isLoading: false,
+        })
+        mockUsePipelineChangePreview.mockImplementation((_id: string | null, draft: unknown) => ({
+            data: draft ? preQualifiedPreview : null,
+            isLoading: false,
+        }))
+
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /remove pre-qualified/i }))
+        const dialog = screen.getByRole("dialog")
+
+        expect(within(dialog).getByText(/55 active surrogates/i)).toBeInTheDocument()
+        expect(within(dialog).getByText(/integration mappings/i)).toBeInTheDocument()
+        expect(within(dialog).getByText(/remap target is required/i)).toBeInTheDocument()
+        expect(within(dialog).getByRole("combobox", { name: "Remap target stage" })).toHaveTextContent(
+            "Application Submitted",
+        )
+
+        fireEvent.mouseDown(within(dialog).getByRole("combobox", { name: "Remap target stage" }))
+        expect(screen.queryByRole("option", { name: "No remap" })).not.toBeInTheDocument()
+        fireEvent.click(within(dialog).getByRole("button", { name: /confirm removal/i }))
+        fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+
+        await waitFor(() => {
+            expect(mockApplyPipelineDraft).toHaveBeenCalled()
+        })
+
+        const call = mockApplyPipelineDraft.mock.calls[0][0]
+        expect(call.data.remaps).toEqual([
+            {
+                removed_stage_key: "pre_qualified",
+                target_stage_key: "application_submitted",
             },
         ])
     })

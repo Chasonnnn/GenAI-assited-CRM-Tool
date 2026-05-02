@@ -30,6 +30,7 @@ from app.schemas.campaign import CampaignCreate
 from app.schemas.workflow import WorkflowCreate
 from app.services import (
     campaign_service,
+    meta_crm_dataset_settings_service,
     pipeline_service,
     session_service,
     workflow_service,
@@ -89,6 +90,48 @@ def _remove_stage_key_refs(feature_config: dict, stage_key: str) -> dict:
         for rule in next_config[rules_key].values():
             rule["stage_keys"] = [key for key in rule["stage_keys"] if key != stage_key]
     return next_config
+
+
+def _remap_stage_key_refs(feature_config: dict, removed_stage_key: str, target_stage_key: str) -> dict:
+    next_config = deepcopy(feature_config)
+
+    def replace_keys(values: list[str]) -> list[str]:
+        replaced = [
+            target_stage_key if key == removed_stage_key else key
+            for key in values
+        ]
+        return list(dict.fromkeys(replaced))
+
+    for milestone in next_config["journey"]["milestones"]:
+        milestone["mapped_stage_keys"] = replace_keys(milestone["mapped_stage_keys"])
+    next_config["analytics"]["funnel_stage_keys"] = replace_keys(
+        next_config["analytics"]["funnel_stage_keys"]
+    )
+    next_config["analytics"]["performance_stage_keys"] = replace_keys(
+        next_config["analytics"]["performance_stage_keys"]
+    )
+    if next_config["analytics"]["qualification_stage_key"] == removed_stage_key:
+        next_config["analytics"]["qualification_stage_key"] = target_stage_key
+    if next_config["analytics"]["conversion_stage_key"] == removed_stage_key:
+        next_config["analytics"]["conversion_stage_key"] = target_stage_key
+    for rules_key in ("role_visibility", "role_mutation"):
+        for rule in next_config[rules_key].values():
+            rule["stage_keys"] = replace_keys(rule["stage_keys"])
+    return next_config
+
+
+def _draft_stage_payload(stage: dict, order: int) -> dict:
+    return {
+        "id": stage["id"],
+        "stage_key": stage["stage_key"],
+        "slug": stage["slug"],
+        "label": stage["label"],
+        "color": stage["color"],
+        "order": order,
+        "category": stage["stage_type"],
+        "is_active": stage["is_active"],
+        "semantics": stage["semantics"],
+    }
 
 
 @pytest.mark.asyncio
@@ -815,6 +858,94 @@ async def test_pipeline_change_preview_requires_remap_for_removed_stage_dependen
 
 
 @pytest.mark.asyncio
+async def test_pipeline_change_preview_requires_remap_for_pre_qualified_integrations(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    pre_qualified_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "pre_qualified"
+    )
+    pre_qualified_db = pipeline_service.get_stage_by_id(db, UUID(pre_qualified_stage["id"]))
+    assert pre_qualified_db is not None
+    _create_surrogate_for_stage(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=pre_qualified_db,
+    )
+
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "PreQualifiedLead",
+            "enabled": True,
+            "bucket": "qualified",
+        }
+    ]
+    meta_settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    meta_settings.event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "PreQualifiedLead",
+            "enabled": True,
+            "bucket": "qualified",
+        }
+    ]
+    db.commit()
+
+    preview_payload = {
+        "name": pipeline["name"],
+        "stages": [
+            _draft_stage_payload(stage, index + 1)
+            for index, stage in enumerate(
+                stage for stage in pipeline["stages"] if stage["stage_key"] != "pre_qualified"
+            )
+        ],
+        "feature_config": _remove_stage_key_refs(
+            pipeline["feature_config"],
+            "pre_qualified",
+        ),
+        "expected_version": pipeline["current_version"],
+        "remaps": [],
+    }
+
+    response = await authed_client.post(
+        f"/settings/pipelines/{pipeline['id']}/change-preview",
+        json=preview_payload,
+    )
+
+    assert response.status_code == 200, response.text
+    preview = response.json()
+    required_remap = next(
+        item for item in preview["required_remaps"] if item["stage_key"] == "pre_qualified"
+    )
+    assert required_remap["surrogate_count"] == 1
+    assert "active_surrogates" in required_remap["reasons"]
+    assert "integrations" in required_remap["reasons"]
+    assert any(
+        "Pre-Qualified" in issue and "remap target" in issue
+        for issue in preview["blocking_issues"]
+    )
+
+    pre_qualified_dependency = next(
+        item
+        for item in preview["dependency_graph"]["stages"]
+        if item["stage_key"] == "pre_qualified"
+    )
+    assert pre_qualified_dependency["integration_refs"] == [
+        "meta_crm_dataset",
+        "zapier_outbound",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_apply_pipeline_draft_rejects_protected_stage_changes(
     authed_client: AsyncClient,
 ):
@@ -1043,6 +1174,101 @@ async def test_apply_pipeline_draft_adds_custom_stage_and_remaps_deleted_stage_d
     assert str(workflow.conditions[0]["value"]) == str(matching_review_stage.id)
     assert workflow.actions[0]["value_stage_key"] == "matching_review"
     assert str(workflow.actions[0]["value"]) == str(matching_review_stage.id)
+
+
+@pytest.mark.asyncio
+async def test_apply_pipeline_draft_removes_pre_qualified_and_remaps_integration_mappings(
+    authed_client: AsyncClient,
+    db,
+    test_org,
+    test_user,
+):
+    default_response = await authed_client.get("/settings/pipelines/default")
+    assert default_response.status_code == 200, default_response.text
+    pipeline = default_response.json()
+
+    pre_qualified_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "pre_qualified"
+    )
+    contacted_stage = next(stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted")
+    pre_qualified_db = pipeline_service.get_stage_by_id(db, UUID(pre_qualified_stage["id"]))
+    contacted_db = pipeline_service.get_stage_by_id(db, UUID(contacted_stage["id"]))
+    assert pre_qualified_db is not None
+    assert contacted_db is not None
+    surrogate = _create_surrogate_for_stage(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=pre_qualified_db,
+    )
+
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "PreQualifiedLead",
+            "enabled": True,
+            "bucket": "qualified",
+        }
+    ]
+    meta_settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    meta_settings.event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "PreQualifiedLead",
+            "enabled": True,
+            "bucket": "qualified",
+        }
+    ]
+    db.commit()
+
+    response = await authed_client.put(
+        f"/settings/pipelines/{pipeline['id']}/apply-draft",
+        json={
+            "name": pipeline["name"],
+            "stages": [
+                _draft_stage_payload(stage, index + 1)
+                for index, stage in enumerate(
+                    stage
+                    for stage in pipeline["stages"]
+                    if stage["stage_key"] != "pre_qualified"
+                )
+            ],
+            "feature_config": _remap_stage_key_refs(
+                pipeline["feature_config"],
+                "pre_qualified",
+                "contacted",
+            ),
+            "expected_version": pipeline["current_version"],
+            "comment": "Removed pre-qualified stage",
+            "remaps": [
+                {
+                    "removed_stage_key": "pre_qualified",
+                    "target_stage_key": "contacted",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert all(
+        stage["stage_key"] != "pre_qualified" or not stage["is_active"]
+        for stage in payload["stages"]
+    )
+
+    db.refresh(surrogate)
+    db.refresh(zapier_settings)
+    db.refresh(meta_settings)
+    assert surrogate.stage_id == contacted_db.id
+    assert surrogate.status_label == contacted_db.label
+
+    zapier_stage_keys = {item["stage_key"] for item in zapier_settings.outbound_event_mapping}
+    meta_stage_keys = {item["stage_key"] for item in meta_settings.event_mapping}
+    assert "pre_qualified" not in zapier_stage_keys
+    assert "pre_qualified" not in meta_stage_keys
+    assert "contacted" in zapier_stage_keys
+    assert "contacted" in meta_stage_keys
 
 
 @pytest.mark.asyncio
