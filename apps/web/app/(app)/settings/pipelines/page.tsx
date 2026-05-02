@@ -849,6 +849,26 @@ function getDeleteRequirements(
     return requirements
 }
 
+function getActiveRemapTargetStages(stages: EditableStage[], stageKey: string): EditableStage[] {
+    return stages
+        .filter((candidate) => candidate.is_active && candidate.stage_key !== stageKey)
+        .sort((left, right) => left.order - right.order)
+}
+
+function getDefaultRemapTargetStageKey(stages: EditableStage[], stageKey: string): string {
+    const orderedStages = stages
+        .filter((stage) => stage.is_active)
+        .sort((left, right) => left.order - right.order)
+    const stageIndex = orderedStages.findIndex((stage) => stage.stage_key === stageKey)
+    if (stageIndex < 0) return ""
+    const previousStages = orderedStages.slice(0, stageIndex).reverse()
+    return (
+        orderedStages.slice(stageIndex + 1).find((stage) => stage.stage_key !== stageKey)?.stage_key
+        ?? previousStages.find((stage) => stage.stage_key !== stageKey)?.stage_key
+        ?? ""
+    )
+}
+
 function VersionHistory({
     pipelineId,
     entityType,
@@ -1847,9 +1867,10 @@ function DeleteStageDialog({
     if (!stage || !state) return null
     const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
     const requirements = getDeleteRequirements(dependencyGraph, stage.stage_key, entityType)
-    const targetOptions = stages.filter((candidate) => candidate.stage_key !== stage.stage_key)
+    const requiresRemap = requirements.length > 0
+    const targetOptions = getActiveRemapTargetStages(stages, stage.stage_key)
     const remapTargetOptions: PipelineSelectOption[] = [
-        { value: "", label: "No remap" },
+        ...(requiresRemap ? [] : [{ value: "", label: "No remap" }]),
         ...targetOptions.map((targetStage) => ({
             value: targetStage.stage_key,
             label: targetStage.label,
@@ -1862,7 +1883,10 @@ function DeleteStageDialog({
                 <DialogHeader>
                     <DialogTitle>Remove {stage.label}?</DialogTitle>
                     <DialogDescription>
-                        Remove this stage from the draft and optionally remap existing{" "}
+                        Remove this stage from the draft
+                        {requiresRemap
+                            ? " and remap existing "
+                            : " and optionally remap existing "}
                         {entityType === "surrogate" ? "surrogates" : "records"} and connected
                         feature references to another stage.
                     </DialogDescription>
@@ -1874,6 +1898,14 @@ function DeleteStageDialog({
                             <InfoIcon className="size-4" aria-hidden="true" />
                             <AlertDescription>
                                 This stage currently has: {requirements.join(", ")}.
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                    {requiresRemap ? (
+                        <Alert>
+                            <InfoIcon className="size-4" aria-hidden="true" />
+                            <AlertDescription>
+                                A remap target is required before this stage can be removed.
                             </AlertDescription>
                         </Alert>
                     ) : null}
@@ -1906,7 +1938,11 @@ function DeleteStageDialog({
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button type="button" onClick={onConfirm}>
+                    <Button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={requiresRemap && !state.targetStageKey}
+                    >
                         Confirm Removal
                     </Button>
                 </DialogFooter>
@@ -2391,7 +2427,17 @@ function usePipelineSettingsEditor() {
     const handleRequestDeleteStage = (stageKey: string) => {
         const stage = currentStages.find((item) => item.stage_key === stageKey)
         if (!stage || stage.is_locked) return
-        setScopedDeleteStageState({ stageKey, targetStageKey: "" })
+        const requiresRemap = getDeleteRequirements(
+            dependencyGraph,
+            stageKey,
+            entityType,
+        ).length > 0
+        setScopedDeleteStageState({
+            stageKey,
+            targetStageKey: requiresRemap
+                ? getDefaultRemapTargetStageKey(currentStages, stageKey)
+                : "",
+        })
     }
 
     const handleConfirmDeleteStage = () => {
