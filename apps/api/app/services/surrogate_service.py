@@ -29,7 +29,12 @@ from app.db.models import (
     User,
 )
 from app.schemas.auth import UserSession
-from app.schemas.surrogate import InterviewOutcomeCreate, SurrogateCreate, SurrogateUpdate
+from app.schemas.surrogate import (
+    InterviewOutcomeCreate,
+    SurrogateCreate,
+    SurrogateUpdate,
+    mask_ssn_last4,
+)
 from app.utils.pagination import PaginationParams, paginate_query
 from app.utils.normalization import (
     escape_like_string,
@@ -67,6 +72,49 @@ _LEAD_WARNING_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("height_ft", ("height_ft", "height", "height_feet", "height_inches")),
     ("weight_lb", ("weight_lb", "weight", "weight_lbs", "weight_pounds")),
 )
+SENSITIVE_INFO_FIELDS = {
+    "marital_status",
+    "ssn",
+    "partner_name",
+    "partner_email",
+    "partner_phone",
+    "partner_ssn",
+    "partner_address_line1",
+    "partner_address_line2",
+    "partner_city",
+    "partner_state",
+    "partner_postal",
+}
+
+
+def _ssn_last4(value: str | None) -> str | None:
+    return value[-4:] if value else None
+
+
+def is_sensitive_info_available(db: Session, surrogate: Surrogate) -> bool:
+    """Return whether Pending-DocuSign-gated personal info can be shown."""
+    from app.services import pipeline_service, surrogate_stage_context
+
+    stage_context = surrogate_stage_context.get_stage_context(
+        db,
+        surrogate,
+        current_stage=surrogate.stage,
+    )
+    effective_stage = stage_context.effective_stage
+    if not effective_stage:
+        return False
+    if pipeline_service.stage_matches_key(effective_stage, "pending_docusign"):
+        return True
+    pending_stage = pipeline_service.get_stage_by_key(
+        db,
+        effective_stage.pipeline_id,
+        "pending_docusign",
+    )
+    return bool(pending_stage and effective_stage.order >= pending_stage.order)
+
+
+def build_masked_ssn(last4: str | None) -> str | None:
+    return mask_ssn_last4(last4)
 
 
 def _normalize_json_key(value: str) -> str:
@@ -479,6 +527,21 @@ def create_surrogate(
             phone_hash=hash_phone(normalized_phone) if normalized_phone else None,
             phone_last4=phone_last4,
             state=data.state,  # Already normalized by schema
+            marital_status=data.marital_status,
+            ssn=data.ssn,
+            ssn_last4=_ssn_last4(data.ssn),
+            partner_name=data.partner_name,
+            partner_email=data.partner_email,
+            partner_email_hash=hash_email(data.partner_email) if data.partner_email else None,
+            partner_phone=data.partner_phone,
+            partner_phone_last4=extract_phone_last4(data.partner_phone),
+            partner_ssn=data.partner_ssn,
+            partner_ssn_last4=_ssn_last4(data.partner_ssn),
+            partner_address_line1=data.partner_address_line1,
+            partner_address_line2=data.partner_address_line2,
+            partner_city=data.partner_city,
+            partner_state=data.partner_state,
+            partner_postal=data.partner_postal,
             date_of_birth=data.date_of_birth,
             race=data.race,
             height_ft=data.height_ft,
@@ -655,6 +718,17 @@ def update_surrogate(
     clearable_fields = {
         "phone",
         "state",
+        "marital_status",
+        "ssn",
+        "partner_name",
+        "partner_email",
+        "partner_phone",
+        "partner_ssn",
+        "partner_address_line1",
+        "partner_address_line2",
+        "partner_city",
+        "partner_state",
+        "partner_postal",
         "date_of_birth",
         "race",
         "height_ft",
@@ -745,6 +819,20 @@ def update_surrogate(
                     pass
             phone_hash = hash_phone(value) if value else None
             phone_last4 = extract_phone_last4(value)
+        elif field == "partner_email":
+            value = normalize_email(value) if value else None
+            partner_email_hash = hash_email(value) if value else None
+        elif field == "partner_phone":
+            if value:
+                try:
+                    value = normalize_phone(value)
+                except ValueError:
+                    pass
+            partner_phone_last4 = extract_phone_last4(value)
+        elif field == "ssn":
+            ssn_last4 = _ssn_last4(value)
+        elif field == "partner_ssn":
+            partner_ssn_last4 = _ssn_last4(value)
 
         # Check if value actually changed
         current_value = getattr(surrogate, field, None)
@@ -770,6 +858,14 @@ def update_surrogate(
             elif field == "phone":
                 surrogate.phone_hash = phone_hash
                 surrogate.phone_last4 = phone_last4
+            elif field == "partner_email":
+                surrogate.partner_email_hash = partner_email_hash
+            elif field == "partner_phone":
+                surrogate.partner_phone_last4 = partner_phone_last4
+            elif field == "ssn":
+                surrogate.ssn_last4 = ssn_last4
+            elif field == "partner_ssn":
+                surrogate.partner_ssn_last4 = partner_ssn_last4
             elif field == "full_name":
                 surrogate.full_name_normalized = normalize_search_text(value)
             elif field == "surrogate_number":

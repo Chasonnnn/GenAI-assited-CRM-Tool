@@ -43,6 +43,8 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
             queue = queue_service.get_queue(db, surrogate.organization_id, surrogate.owner_id)
             owner_name = queue.name if queue else None
 
+    sensitive_info_available = surrogate_service.is_sensitive_info_available(db, surrogate)
+
     return SurrogateRead(
         id=surrogate.id,
         surrogate_number=surrogate.surrogate_number,
@@ -66,6 +68,26 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         email=surrogate.email,
         phone=surrogate.phone,
         state=surrogate.state,
+        sensitive_info_available=sensitive_info_available,
+        marital_status=surrogate.marital_status if sensitive_info_available else None,
+        ssn_masked=(
+            surrogate_service.build_masked_ssn(surrogate.ssn_last4)
+            if sensitive_info_available
+            else None
+        ),
+        partner_name=surrogate.partner_name if sensitive_info_available else None,
+        partner_email=surrogate.partner_email if sensitive_info_available else None,
+        partner_phone=surrogate.partner_phone if sensitive_info_available else None,
+        partner_ssn_masked=(
+            surrogate_service.build_masked_ssn(surrogate.partner_ssn_last4)
+            if sensitive_info_available
+            else None
+        ),
+        partner_address_line1=surrogate.partner_address_line1 if sensitive_info_available else None,
+        partner_address_line2=surrogate.partner_address_line2 if sensitive_info_available else None,
+        partner_city=surrogate.partner_city if sensitive_info_available else None,
+        partner_state=surrogate.partner_state if sensitive_info_available else None,
+        partner_postal=surrogate.partner_postal if sensitive_info_available else None,
         lead_intake_warnings=surrogate_service.build_lead_intake_warnings(db, surrogate),
         latest_contact_outcome=surrogate_outcome_summary_service.get_latest_contact_outcome(
             surrogate, db

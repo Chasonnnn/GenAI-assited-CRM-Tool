@@ -27,9 +27,10 @@ from app.schemas.surrogate import (
     SurrogateAssign,
     SurrogateCreate,
     SurrogateRead,
+    SurrogateSensitiveInfoRevealResponse,
     SurrogateUpdate,
 )
-from app.services import audit_service, membership_service, queue_service, surrogate_service
+from app.services import activity_service, audit_service, membership_service, queue_service, surrogate_service
 
 from .surrogates_shared import _surrogate_to_read
 
@@ -218,6 +219,13 @@ def update_surrogate(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to update this surrogate")
 
+    sensitive_update_fields = sorted(set(update_data) & surrogate_service.SENSITIVE_INFO_FIELDS)
+    if sensitive_update_fields and not surrogate_service.is_sensitive_info_available(db, surrogate):
+        raise HTTPException(
+            status_code=403,
+            detail="Sensitive personal information is only available at Pending-DocuSign or later",
+        )
+
     was_delivery_date_empty = surrogate.actual_delivery_date is None
     is_setting_delivery_date = (
         "actual_delivery_date" in update_data
@@ -284,6 +292,51 @@ def update_surrogate(
     db.commit()
 
     return _surrogate_to_read(surrogate, db)
+
+
+@router.post(
+    "/{surrogate_id:uuid}/sensitive-info/reveal",
+    response_model=SurrogateSensitiveInfoRevealResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def reveal_sensitive_info(
+    surrogate_id: UUID,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    """Reveal full SSN values after the Pending-DocuSign gate."""
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+
+    if not surrogate_service.is_sensitive_info_available(db, surrogate):
+        raise HTTPException(
+            status_code=403,
+            detail="Sensitive personal information is only available at Pending-DocuSign or later",
+        )
+
+    revealed_fields = []
+    if surrogate.ssn:
+        revealed_fields.append("ssn")
+    if surrogate.partner_ssn:
+        revealed_fields.append("partner_ssn")
+
+    if revealed_fields:
+        activity_service.log_sensitive_info_revealed(
+            db=db,
+            surrogate_id=surrogate.id,
+            organization_id=session.org_id,
+            actor_user_id=session.user_id,
+            fields=revealed_fields,
+        )
+        db.commit()
+
+    return SurrogateSensitiveInfoRevealResponse(
+        ssn=surrogate.ssn,
+        partner_ssn=surrogate.partner_ssn,
+    )
 
 
 @router.post(

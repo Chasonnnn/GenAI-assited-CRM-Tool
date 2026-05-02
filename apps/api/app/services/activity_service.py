@@ -108,6 +108,24 @@ def log_info_edited(
     )
 
 
+def log_sensitive_info_revealed(
+    db: Session,
+    surrogate_id: UUID,
+    organization_id: UUID,
+    actor_user_id: UUID,
+    fields: list[str],
+) -> SurrogateActivityLog:
+    """Log that full sensitive values were revealed without storing the values."""
+    return log_activity(
+        db=db,
+        surrogate_id=surrogate_id,
+        organization_id=organization_id,
+        activity_type=SurrogateActivityType.SENSITIVE_INFO_REVEALED,
+        actor_user_id=actor_user_id,
+        details={"fields": fields},
+    )
+
+
 # NOTE: log_status_changed removed - status transitions are tracked in SurrogateStatusHistory (canonical source)
 
 

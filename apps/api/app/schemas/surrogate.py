@@ -1,5 +1,6 @@
 """Pydantic schemas for surrogates."""
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -12,6 +13,36 @@ from app.utils.height import canonicalize_height_ft
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_phone, normalize_state, format_race_label
 
+MaritalStatus = Literal[
+    "Single",
+    "Married",
+    "Partnered",
+    "Committed Relationship",
+    "Divorced",
+    "Separated",
+    "Widowed",
+]
+
+_SSN_DIGITS_RE = re.compile(r"^\d{9}$")
+_SSN_DASHED_RE = re.compile(r"^\d{3}-\d{2}-\d{4}$")
+
+
+def normalize_ssn(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    if _SSN_DASHED_RE.fullmatch(stripped):
+        return stripped
+    if _SSN_DIGITS_RE.fullmatch(stripped):
+        return f"{stripped[:3]}-{stripped[3:5]}-{stripped[5:]}"
+    raise ValueError("SSN must be 9 digits or XXX-XX-XXXX")
+
+
+def mask_ssn_last4(last4: str | None) -> str | None:
+    return f"***-**-{last4}" if last4 else None
+
 
 class SurrogateCreate(BaseModel):
     """Request schema for creating a surrogate."""
@@ -23,6 +54,19 @@ class SurrogateCreate(BaseModel):
     # Contact (optional)
     phone: str | None = Field(None, max_length=20)
     state: str | None = Field(None, max_length=50)
+
+    # Pending DocuSign personal information
+    marital_status: MaritalStatus | None = None
+    ssn: str | None = None
+    partner_name: str | None = Field(None, max_length=255)
+    partner_email: EmailStr | None = None
+    partner_phone: str | None = None
+    partner_ssn: str | None = None
+    partner_address_line1: str | None = None
+    partner_address_line2: str | None = None
+    partner_city: str | None = Field(None, max_length=100)
+    partner_state: str | None = None
+    partner_postal: str | None = Field(None, max_length=20)
 
     # Demographics
     date_of_birth: date | None = None
@@ -163,7 +207,13 @@ class SurrogateCreate(BaseModel):
             return None
         return normalize_state(v)  # Raises ValueError on invalid
 
+    @field_validator("ssn", "partner_ssn")
+    @classmethod
+    def validate_ssn(cls, v: str | None) -> str | None:
+        return normalize_ssn(v)
+
     @field_validator(
+        "partner_phone",
         "insurance_phone",
         "insurance_fax",
         "clinic_phone",
@@ -205,6 +255,15 @@ class SurrogateCreate(BaseModel):
             return None
         return normalize_state(v)
 
+    @field_validator("partner_state")
+    @classmethod
+    def validate_partner_state(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return normalize_state(v)
+
     @field_validator("journey_timing_preference")
     @classmethod
     def validate_journey_timing_preference(cls, v: str | None) -> str | None:
@@ -228,6 +287,17 @@ class SurrogateUpdate(BaseModel):
     email: EmailStr | None = None
     phone: str | None = None
     state: str | None = None
+    marital_status: MaritalStatus | None = None
+    ssn: str | None = None
+    partner_name: str | None = Field(None, max_length=255)
+    partner_email: EmailStr | None = None
+    partner_phone: str | None = None
+    partner_ssn: str | None = None
+    partner_address_line1: str | None = None
+    partner_address_line2: str | None = None
+    partner_city: str | None = Field(None, max_length=100)
+    partner_state: str | None = None
+    partner_postal: str | None = Field(None, max_length=20)
     date_of_birth: date | None = None
     race: str | None = Field(None, max_length=100)
     height_ft: Decimal | None = Field(None, ge=0, le=10)
@@ -362,7 +432,13 @@ class SurrogateUpdate(BaseModel):
             return None
         return normalize_state(v)
 
+    @field_validator("ssn", "partner_ssn")
+    @classmethod
+    def validate_ssn(cls, v: str | None) -> str | None:
+        return normalize_ssn(v)
+
     @field_validator(
+        "partner_phone",
         "insurance_phone",
         "insurance_fax",
         "clinic_phone",
@@ -398,6 +474,15 @@ class SurrogateUpdate(BaseModel):
     @classmethod
     def validate_optional_state(cls, v: str | None) -> str | None:
         """Normalize and validate optional state fields to 2-letter code."""
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return normalize_state(v)
+
+    @field_validator("partner_state")
+    @classmethod
+    def validate_partner_state(cls, v: str | None) -> str | None:
         if v is None:
             return None
         if isinstance(v, str) and v.strip() == "":
@@ -497,6 +582,18 @@ class SurrogateRead(BaseModel):
     email: str
     phone: str | None
     state: str | None
+    sensitive_info_available: bool = False
+    marital_status: str | None = None
+    ssn_masked: str | None = None
+    partner_name: str | None = None
+    partner_email: str | None = None
+    partner_phone: str | None = None
+    partner_ssn_masked: str | None = None
+    partner_address_line1: str | None = None
+    partner_address_line2: str | None = None
+    partner_city: str | None = None
+    partner_state: str | None = None
+    partner_postal: str | None = None
     lead_intake_warnings: list[SurrogateLeadIntakeWarning] = Field(default_factory=list)
     latest_contact_outcome: "LatestContactOutcomeRead | None" = None
     latest_interview_outcome: "LatestInterviewOutcomeRead | None" = None
@@ -712,6 +809,13 @@ class SurrogateStatusChangeResponse(BaseModel):
     surrogate: "SurrogateRead | None" = None
     request_id: UUID | None = None
     message: str | None = None
+
+
+class SurrogateSensitiveInfoRevealResponse(BaseModel):
+    """Full sensitive values returned only by the one-click reveal endpoint."""
+
+    ssn: str | None = None
+    partner_ssn: str | None = None
 
 
 class SurrogateAssign(BaseModel):

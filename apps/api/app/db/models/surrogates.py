@@ -209,6 +209,23 @@ class Surrogate(Base):
     phone_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
     state: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
+    # Pending DocuSign personal information
+    marital_status: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ssn: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    ssn_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    partner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    partner_email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    partner_email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    partner_phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    partner_phone_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    partner_ssn: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    partner_ssn_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    partner_address_line1: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    partner_address_line2: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    partner_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    partner_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    partner_postal: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # Demographics
     date_of_birth: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     race: Mapped[str | None] = mapped_column(String(100), nullable=True)

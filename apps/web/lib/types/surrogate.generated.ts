@@ -75,6 +75,18 @@ export interface SurrogateRead {
     email: string;
     phone: string | null;
     state: string | null;
+    sensitive_info_available?: boolean;
+    marital_status?: string | null;
+    ssn_masked?: string | null;
+    partner_name?: string | null;
+    partner_email?: string | null;
+    partner_phone?: string | null;
+    partner_ssn_masked?: string | null;
+    partner_address_line1?: string | null;
+    partner_address_line2?: string | null;
+    partner_city?: string | null;
+    partner_state?: string | null;
+    partner_postal?: string | null;
     lead_intake_warnings?: SurrogateLeadIntakeWarning[];
     latest_contact_outcome?: LatestContactOutcomeRead | null;
     latest_interview_outcome?: LatestInterviewOutcomeRead | null;
