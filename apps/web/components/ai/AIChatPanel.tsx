@@ -305,7 +305,7 @@ export function AIChatPanel({
                 </div>
                 {onClose && (
                     <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close AI Assistant">
-                        <XIcon className="h-4 w-4" />
+                        <XIcon className="h-4 w-4" aria-hidden="true" />
                     </Button>
                 )}
             </div>
@@ -450,7 +450,7 @@ export function AIChatPanel({
                             variant="outline"
                             aria-label="Stop generating"
                         >
-                            <StopCircleIcon className="h-4 w-4" />
+                            <StopCircleIcon className="h-4 w-4" aria-hidden="true" />
                         </Button>
                     ) : (
                         <Button
@@ -459,7 +459,7 @@ export function AIChatPanel({
                             size="icon"
                             aria-label="Send message"
                         >
-                            <SendIcon className="h-4 w-4" />
+                            <SendIcon className="h-4 w-4" aria-hidden="true" />
                         </Button>
                     )}
                 </div>
@@ -525,7 +525,7 @@ function ActionCard({
                             disabled={isRejecting}
                             aria-label="Reject action"
                         >
-                            <XCircleIcon className="h-4 w-4" />
+                            <XCircleIcon className="h-4 w-4" aria-hidden="true" />
                         </Button>
                         <Button
                             variant="ghost"
@@ -536,9 +536,9 @@ function ActionCard({
                             aria-label="Approve action"
                         >
                             {isApproving ? (
-                                <Loader2Icon className="h-4 w-4 animate-spin" />
+                                <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
-                                <CheckIcon className="h-4 w-4" />
+                                <CheckIcon className="h-4 w-4" aria-hidden="true" />
                             )}
                         </Button>
                     </div>
