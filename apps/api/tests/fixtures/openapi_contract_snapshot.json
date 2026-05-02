@@ -3361,6 +3361,12 @@
       "422"
     ]
   },
+  "/surrogates/{surrogate_id}/sensitive-info/reveal": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/surrogates/{surrogate_id}/send-email": {
     "POST": [
       "200",

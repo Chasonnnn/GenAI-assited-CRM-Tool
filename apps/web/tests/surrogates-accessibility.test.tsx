@@ -45,6 +45,7 @@ const mockUseBulkArchive = vi.fn()
 const mockUseBulkChangeStage = vi.fn()
 const mockUseIntelligentSuggestionSummary = vi.fn()
 const mockUseSurrogateCreatedDates = vi.fn()
+const mockUseRevealSurrogateSensitiveInfo = vi.fn()
 const mockUseQueues = vi.fn()
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({
@@ -59,6 +60,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useBulkChangeStage: () => mockUseBulkChangeStage(),
     useIntelligentSuggestionSummary: () => mockUseIntelligentSuggestionSummary(),
     useSurrogateCreatedDates: (...args: unknown[]) => mockUseSurrogateCreatedDates(...args),
+    useRevealSurrogateSensitiveInfo: () => mockUseRevealSurrogateSensitiveInfo(),
     useSurrogateActivity: () => ({ data: { items: [] } }),
     useSurrogateHistory: () => ({ data: [] }),
 }))
@@ -144,6 +146,7 @@ describe('SurrogatesPage Accessibility', () => {
             data: { total: 0, counts: {}, has_suggestions: false },
         })
         mockUseSurrogateCreatedDates.mockReturnValue({ data: [] })
+        mockUseRevealSurrogateSensitiveInfo.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseQueues.mockReturnValue({ data: [] })
         mockUseCreateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
