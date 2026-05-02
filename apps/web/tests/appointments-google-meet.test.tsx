@@ -329,6 +329,65 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByText(/Select a Date/i)).toBeInTheDocument()
     })
 
+    it("labels public booking calendar month navigation", () => {
+        const now = new Date()
+        const slotStart = new Date(
+            Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0),
+        ).toISOString()
+        const slotEnd = new Date(
+            Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12, 30, 0),
+        ).toISOString()
+
+        mockUsePublicBookingPage.mockReturnValue({
+            data: {
+                staff: {
+                    user_id: "u1",
+                    display_name: "Test User",
+                    avatar_url: null,
+                },
+                appointment_types: [
+                    {
+                        id: "type-calendar",
+                        user_id: "u1",
+                        name: "Intro Call",
+                        slug: "intro-call",
+                        description: null,
+                        duration_minutes: 30,
+                        buffer_before_minutes: 0,
+                        buffer_after_minutes: 5,
+                        meeting_mode: "google_meet",
+                        meeting_location: null,
+                        dial_in_number: null,
+                        auto_approve: false,
+                        reminder_hours_before: 24,
+                        is_active: true,
+                        created_at: "2026-01-01T00:00:00Z",
+                        updated_at: "2026-01-01T00:00:00Z",
+                    },
+                ],
+                org_name: "Demo Org",
+                org_timezone: "America/Los_Angeles",
+            },
+            isLoading: false,
+            error: null,
+        })
+        mockUseAvailableSlots.mockReturnValue({
+            data: {
+                slots: [{ start: slotStart, end: slotEnd }],
+                appointment_type: null,
+            },
+            isLoading: false,
+        })
+
+        render(<PublicBookingPage publicSlug="calendar" />)
+
+        fireEvent.click(screen.getByRole("button", { name: /Intro Call/i }))
+
+        expect(screen.getByRole("button", { name: "Previous month" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Next month" })).toBeInTheDocument()
+        expect(screen.getByText(/^[A-Z][a-z]+ \d{4}$/)).toHaveAttribute("aria-live", "polite")
+    })
+
     it("shows Google Meet join link in appointment details", () => {
         const scheduledStart = new Date("2024-02-01T18:00:00Z").toISOString()
         const scheduledEnd = new Date("2024-02-01T18:30:00Z").toISOString()

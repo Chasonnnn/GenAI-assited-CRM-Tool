@@ -513,13 +513,13 @@ export function MassEditStageModal({
                                                     {formatRace(raceKey)}
                                                     <button
                                                         type="button"
-                                                        className="rounded-sm p-0.5 hover:bg-black/10"
+                                                        className="rounded-sm p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                         onClick={() =>
                                                             setSelectedRaces((prev) => prev.filter((r) => r !== raceKey))
                                                         }
                                                         aria-label={`Remove race ${formatRace(raceKey)}`}
                                                     >
-                                                        <XIcon className="size-3" />
+                                                        <XIcon className="size-3" aria-hidden="true" />
                                                     </button>
                                                 </Badge>
                                             ))}

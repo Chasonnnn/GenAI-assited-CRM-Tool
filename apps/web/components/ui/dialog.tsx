@@ -57,8 +57,19 @@ function DialogContent({
       >
         {children}
         {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" render={<Button variant="ghost" className="absolute top-4 right-4" size="icon-sm"><XIcon
-            /><span className="sr-only">Close</span></Button>} />
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            render={
+              <Button
+                aria-label="Close"
+                variant="ghost"
+                className="absolute top-4 right-4"
+                size="icon-sm"
+              >
+                <XIcon aria-hidden="true" />
+              </Button>
+            }
+          />
         )}
       </DialogPrimitive.Popup>
     </DialogPortal>

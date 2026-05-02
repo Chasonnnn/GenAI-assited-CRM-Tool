@@ -61,6 +61,7 @@ function FieldTile({
             onClick={() => onInsertField(field)}
             className={cn(
                 "group flex min-h-0 flex-col items-center gap-1.5 rounded-xl border border-transparent px-1.5 py-2 text-center transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isPreset
                     ? "hover:bg-sky-50/75 focus-visible:border-sky-200"
                     : "hover:bg-emerald-50/70 focus-visible:border-emerald-200",
@@ -145,6 +146,7 @@ export function FieldLibrarySheet({
                                                 onClick={() => onCategoryChange(category.id)}
                                                 className={cn(
                                                     "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[15px] font-medium leading-5 transition-all",
+                                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                                     isActive
                                                         ? "bg-sky-100/90 text-slate-950"
                                                         : "text-slate-700 hover:bg-white/90 hover:text-slate-950",

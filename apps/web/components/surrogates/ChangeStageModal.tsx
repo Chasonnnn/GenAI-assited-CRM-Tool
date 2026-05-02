@@ -399,6 +399,7 @@ export function ChangeStageModal({
                                             className={cn(
                                                 "rounded-lg border px-3 py-3 text-left transition-colors",
                                                 "hover:border-primary/40 hover:bg-background/80",
+                                                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                                                 isSelected
                                                     ? "border-primary bg-background shadow-sm"
                                                     : "border-border/70 bg-background/40"

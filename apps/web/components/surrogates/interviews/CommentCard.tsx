@@ -144,7 +144,7 @@ const ReplyItem = memo(function ReplyItem({
                         className="size-6 p-0 opacity-0 text-muted-foreground transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
                         aria-label={`Delete reply from ${reply.author_name}`}
                     >
-                        <Trash2Icon className="size-3" />
+                        <Trash2Icon className="size-3" aria-hidden="true" />
                     </Button>
                 )}
             </div>
@@ -428,7 +428,7 @@ export const CommentCard = memo(function CommentCard({
                                 data-comment-card-interaction="true"
                                 className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
                             >
-                                <Trash2Icon className="size-3 mr-1" />
+                                <Trash2Icon className="size-3 mr-1" aria-hidden="true" />
                                 Delete
                             </Button>
                         )}

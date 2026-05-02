@@ -400,12 +400,12 @@ function CalendarView({
                 <CardContent className="pt-4">
                     {/* Month Navigation */}
                     <div className="flex items-center justify-between mb-4">
-                        <Button variant="ghost" size="sm" onClick={prevMonth}>
-                            <ChevronLeftIcon className="size-4" />
+                        <Button variant="ghost" size="sm" onClick={prevMonth} aria-label="Previous month">
+                            <ChevronLeftIcon className="size-4" aria-hidden="true" />
                         </Button>
-                        <span className="font-medium">{format(viewMonth, "MMMM yyyy")}</span>
-                        <Button variant="ghost" size="sm" onClick={nextMonth}>
-                            <ChevronRightIcon className="size-4" />
+                        <span className="font-medium" aria-live="polite">{format(viewMonth, "MMMM yyyy")}</span>
+                        <Button variant="ghost" size="sm" onClick={nextMonth} aria-label="Next month">
+                            <ChevronRightIcon className="size-4" aria-hidden="true" />
                         </Button>
                     </div>
 

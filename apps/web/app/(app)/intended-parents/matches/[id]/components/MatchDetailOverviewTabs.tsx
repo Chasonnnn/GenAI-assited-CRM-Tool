@@ -241,9 +241,10 @@ export function MatchDetailOverviewTabs({
                                             className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
                                             onClick={() => onDownloadFile(file.id)}
                                             disabled={isDownloadPending}
-                                            title="Download file"
+                                            title={`Download ${file.filename}`}
+                                            aria-label={`Download ${file.filename}`}
                                         >
-                                            <DownloadIcon className="size-4" />
+                                            <DownloadIcon className="size-4" aria-hidden="true" />
                                         </Button>
                                         {deletableSource && (
                                             <Button
@@ -252,9 +253,10 @@ export function MatchDetailOverviewTabs({
                                                 className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                                                 onClick={() => onDeleteFile(file.id, deletableSource)}
                                                 disabled={isDeletePending}
-                                                title="Delete file"
+                                                title={`Delete ${file.filename}`}
+                                                aria-label={`Delete ${file.filename}`}
                                             >
-                                                <TrashIcon className="size-4" />
+                                                <TrashIcon className="size-4" aria-hidden="true" />
                                             </Button>
                                         )}
                                     </div>
