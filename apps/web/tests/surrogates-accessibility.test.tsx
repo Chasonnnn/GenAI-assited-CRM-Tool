@@ -61,6 +61,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogateCreatedDates: (...args: unknown[]) => mockUseSurrogateCreatedDates(...args),
     useSurrogateActivity: () => ({ data: { items: [] } }),
     useSurrogateHistory: () => ({ data: [] }),
+    useRevealSurrogateSensitiveInfo: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-queues', () => ({
