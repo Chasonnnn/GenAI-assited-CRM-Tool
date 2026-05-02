@@ -151,6 +151,12 @@ export function useUpdateSurrogate() {
     });
 }
 
+export function useRevealSurrogateSensitiveInfo() {
+    return useMutation({
+        mutationFn: (surrogateId: string) => surrogatesApi.revealSurrogateSensitiveInfo(surrogateId),
+    });
+}
+
 /**
  * Change surrogate status/stage.
  * Returns { status: 'applied' | 'pending_approval', surrogate?, request_id? }

@@ -4,6 +4,7 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { TabsContent } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { InlineEditField } from "@/components/inline-edit-field"
@@ -12,20 +13,23 @@ import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
 import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
-import { useSurrogateActivity, useUpdateSurrogate } from "@/lib/hooks/use-surrogates"
+import { useRevealSurrogateSensitiveInfo, useSurrogateActivity, useUpdateSurrogate } from "@/lib/hooks/use-surrogates"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import {
     AlertTriangleIcon,
     ClipboardCheckIcon,
     CopyIcon,
+    EyeIcon,
     InfoIcon,
     CheckIcon,
+    PencilIcon,
     UserIcon,
     XIcon,
 } from "lucide-react"
 import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 import { useSurrogateDetailContext } from "@/components/surrogates/detail/SurrogateDetailContext"
 import { formatRace } from "@/lib/formatters"
+import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
 import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
 
@@ -92,6 +96,122 @@ function LeadWarningIndicator({
     )
 }
 
+function PersonalInfoRow({
+    label,
+    children,
+}: {
+    label: string
+    children: React.ReactNode
+}) {
+    return (
+        <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-center">
+            <span className="text-sm text-muted-foreground">{label}:</span>
+            <div className="min-w-0 text-sm">{children}</div>
+        </div>
+    )
+}
+
+function SsnField({
+    label,
+    maskedValue,
+    revealedValue,
+    onReveal,
+    onSave,
+    isRevealPending,
+}: {
+    label: string
+    maskedValue: string | null | undefined
+    revealedValue: string | null
+    onReveal: () => Promise<void>
+    onSave: (value: string | null) => Promise<void>
+    isRevealPending: boolean
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState("")
+    const [isSaving, setIsSaving] = React.useState(false)
+    const displayValue = revealedValue || maskedValue || "-"
+
+    const save = async () => {
+        setIsSaving(true)
+        try {
+            await onSave(editValue.trim() || null)
+            setEditValue("")
+            setIsEditing(false)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    if (isEditing) {
+        return (
+            <div className="flex min-w-0 items-center gap-2">
+                <input
+                    aria-label={label}
+                    value={editValue}
+                    onChange={(event) => setEditValue(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                            event.preventDefault()
+                            void save()
+                        }
+                        if (event.key === "Escape") {
+                            setEditValue("")
+                            setIsEditing(false)
+                        }
+                    }}
+                    placeholder="XXX-XX-XXXX"
+                    className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+                />
+                <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => void save()} disabled={isSaving}>
+                    <CheckIcon className="size-3.5" />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => {
+                        setEditValue("")
+                        setIsEditing(false)
+                    }}
+                    disabled={isSaving}
+                >
+                    <XIcon className="size-3.5" />
+                </Button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate">{displayValue}</span>
+            {maskedValue && !revealedValue && (
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => void onReveal()}
+                    disabled={isRevealPending}
+                    aria-label={`Reveal ${label}`}
+                >
+                    <EyeIcon className="size-3.5" />
+                </Button>
+            )}
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setIsEditing(true)}
+                aria-label={`Edit ${label}`}
+            >
+                <PencilIcon className="size-3.5" />
+            </Button>
+        </div>
+    )
+}
+
 export function SurrogateOverviewTab() {
     const params = useParams<{ id: string }>()
     const id = params.id
@@ -106,7 +226,10 @@ export function SurrogateOverviewTab() {
     const { data: activityData } = useSurrogateActivity(id)
     const { data: tasksData } = useTasks({ surrogate_id: id, exclude_approvals: true })
     const updateSurrogateMutation = useUpdateSurrogate()
+    const revealSensitiveInfoMutation = useRevealSurrogateSensitiveInfo()
     const [copiedEmail, setCopiedEmail] = React.useState(false)
+    const [revealedSsn, setRevealedSsn] = React.useState<string | null>(null)
+    const [revealedPartnerSsn, setRevealedPartnerSsn] = React.useState<string | null>(null)
 
     const bmiValue = React.useMemo(() => {
         if (!surrogateData) return null
@@ -146,11 +269,26 @@ export function SurrogateOverviewTab() {
         surrogateData.height_ft != null || surrogateData.weight_lb != null || bmiValue !== null
     const shouldShowHeightRow = hasMeasurementData || Boolean(heightLeadWarning)
     const shouldShowWeightRow = hasMeasurementData || Boolean(weightLeadWarning)
+    const showPersonalInfo = surrogateData.sensitive_info_available === true
+    const maritalStatusOptions = getMaritalStatusOptions(surrogateData.marital_status)
 
     const copyEmail = () => {
         navigator.clipboard.writeText(surrogateData.email)
         setCopiedEmail(true)
         setTimeout(() => setCopiedEmail(false), 2000)
+    }
+
+    const updateSurrogate = async (data: Record<string, string | null>) => {
+        await updateSurrogateMutation.mutateAsync({
+            surrogateId: id,
+            data,
+        })
+    }
+
+    const revealSensitiveInfo = async () => {
+        const payload = await revealSensitiveInfoMutation.mutateAsync(id)
+        setRevealedSsn(payload.ssn)
+        setRevealedPartnerSsn(payload.partner_ssn)
     }
 
     return (
@@ -328,6 +466,128 @@ export function SurrogateOverviewTab() {
                             </>
                         )}
                     </SurrogateOverviewCard>
+
+                    {showPersonalInfo && (
+                        <SurrogateOverviewCard title="Personal Information" icon={InfoIcon}>
+                            <PersonalInfoRow label="Marital Status">
+                                <NativeSelect
+                                    aria-label="Marital status"
+                                    value={surrogateData.marital_status ?? ""}
+                                    onChange={(event) =>
+                                        void updateSurrogate({
+                                            marital_status: event.target.value || null,
+                                        })
+                                    }
+                                    className="h-8 max-w-xs"
+                                >
+                                    <NativeSelectOption value="">Not provided</NativeSelectOption>
+                                    {maritalStatusOptions.map((option) => (
+                                        <NativeSelectOption key={option.value} value={option.value}>
+                                            {option.label}
+                                        </NativeSelectOption>
+                                    ))}
+                                </NativeSelect>
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="SSN">
+                                <SsnField
+                                    label="surrogate SSN"
+                                    maskedValue={surrogateData.ssn_masked}
+                                    revealedValue={revealedSsn}
+                                    isRevealPending={revealSensitiveInfoMutation.isPending}
+                                    onReveal={revealSensitiveInfo}
+                                    onSave={async (value) => {
+                                        await updateSurrogate({ ssn: value })
+                                        setRevealedSsn(null)
+                                    }}
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Partner Name">
+                                <InlineEditField
+                                    value={surrogateData.partner_name}
+                                    onSave={async (value) => updateSurrogate({ partner_name: value || null })}
+                                    placeholder="-"
+                                    label="Partner name"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Partner Email">
+                                <InlineEditField
+                                    value={surrogateData.partner_email}
+                                    onSave={async (value) => updateSurrogate({ partner_email: value || null })}
+                                    type="email"
+                                    placeholder="-"
+                                    validate={(value) => (value && !value.includes("@") ? "Invalid email" : null)}
+                                    label="Partner email"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Partner Phone">
+                                <InlineEditField
+                                    value={surrogateData.partner_phone}
+                                    onSave={async (value) => updateSurrogate({ partner_phone: value || null })}
+                                    type="tel"
+                                    placeholder="-"
+                                    label="Partner phone"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Partner SSN">
+                                <SsnField
+                                    label="partner SSN"
+                                    maskedValue={surrogateData.partner_ssn_masked}
+                                    revealedValue={revealedPartnerSsn}
+                                    isRevealPending={revealSensitiveInfoMutation.isPending}
+                                    onReveal={revealSensitiveInfo}
+                                    onSave={async (value) => {
+                                        await updateSurrogate({ partner_ssn: value })
+                                        setRevealedPartnerSsn(null)
+                                    }}
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Address Line 1">
+                                <InlineEditField
+                                    value={surrogateData.partner_address_line1}
+                                    onSave={async (value) => updateSurrogate({ partner_address_line1: value || null })}
+                                    placeholder="-"
+                                    label="Partner address line 1"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Address Line 2">
+                                <InlineEditField
+                                    value={surrogateData.partner_address_line2}
+                                    onSave={async (value) => updateSurrogate({ partner_address_line2: value || null })}
+                                    placeholder="-"
+                                    label="Partner address line 2"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="City">
+                                <InlineEditField
+                                    value={surrogateData.partner_city}
+                                    onSave={async (value) => updateSurrogate({ partner_city: value || null })}
+                                    placeholder="-"
+                                    label="Partner city"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="State">
+                                <InlineEditField
+                                    value={surrogateData.partner_state}
+                                    onSave={async (value) => updateSurrogate({ partner_state: value || null })}
+                                    placeholder="-"
+                                    validate={(value) =>
+                                        value && value.length !== 2
+                                            ? "Use 2-letter code (e.g., CA, TX)"
+                                            : null
+                                    }
+                                    label="Partner state"
+                                />
+                            </PersonalInfoRow>
+                            <PersonalInfoRow label="Postal Code">
+                                <InlineEditField
+                                    value={surrogateData.partner_postal}
+                                    onSave={async (value) => updateSurrogate({ partner_postal: value || null })}
+                                    placeholder="-"
+                                    label="Partner postal code"
+                                />
+                            </PersonalInfoRow>
+                        </SurrogateOverviewCard>
+                    )}
 
                     <CombinedMedicalInsuranceCard
                         surrogateData={surrogateData}

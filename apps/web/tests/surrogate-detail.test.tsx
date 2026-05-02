@@ -66,6 +66,7 @@ const mockChangeStatus = vi.fn()
 const mockArchive = vi.fn()
 const mockRestore = vi.fn()
 const mockUpdateSurrogate = vi.fn()
+const mockRevealSurrogateSensitiveInfo = vi.fn()
 const mockAssignSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockCreateNote = vi.fn()
@@ -96,6 +97,18 @@ const baseSurrogateData = {
     state: null,
     is_priority: false,
     is_archived: false,
+    sensitive_info_available: false,
+    marital_status: null,
+    ssn_masked: null,
+    partner_name: null,
+    partner_email: null,
+    partner_phone: null,
+    partner_ssn_masked: null,
+    partner_address_line1: null,
+    partner_address_line2: null,
+    partner_city: null,
+    partner_state: null,
+    partner_postal: null,
     owner_type: 'user',
     owner_id: 'u1',
     owner_name: null,
@@ -202,6 +215,7 @@ const baseSurrogateData = {
 
 const defaultPipelineStages = [
     { id: 's1', stage_key: 'new_unread', slug: 'new_unread', label: 'New Unread', color: '#3b82f6', stage_type: 'intake', order: 1, is_active: true },
+    { id: 's1b', stage_key: 'pending_docusign', slug: 'pending_docusign', label: 'Pending-DocuSign', color: '#f59e0b', stage_type: 'intake', order: 6, is_active: true },
     { id: 's2', stage_key: 'ready_to_match', slug: 'ready_to_match', label: 'Ready to Match', color: '#10b981', stage_type: 'post_approval', order: 10, is_active: true },
     { id: 's2b', stage_key: 'matched', slug: 'matched', label: 'Matched', color: '#6366f1', stage_type: 'post_approval', order: 15, is_active: true },
     { id: 's3', stage_key: 'heartbeat_confirmed', slug: 'heartbeat_confirmed', label: 'Heartbeat Confirmed', color: '#f97316', stage_type: 'post_approval', order: 20, is_active: true },
@@ -220,6 +234,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useArchiveSurrogate: () => ({ mutateAsync: mockArchive }),
     useRestoreSurrogate: () => ({ mutateAsync: mockRestore }),
     useUpdateSurrogate: () => ({ mutateAsync: mockUpdateSurrogate }),
+    useRevealSurrogateSensitiveInfo: () => ({ mutateAsync: mockRevealSurrogateSensitiveInfo, isPending: false }),
     useAssignSurrogate: () => ({ mutateAsync: mockAssignSurrogate }),
     useAssignees: () => mockUseAssignees(),
     useSendSurrogateEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -307,6 +322,8 @@ describe('SurrogateDetailPage', () => {
         mockChangeStatus.mockReset()
         mockClaimSurrogate.mockReset()
         mockReleaseSurrogate.mockReset()
+        mockUpdateSurrogate.mockReset()
+        mockRevealSurrogateSensitiveInfo.mockReset()
         const clipboardWriteText = navigator.clipboard.writeText as unknown as { mockClear?: () => void }
         clipboardWriteText.mockClear?.()
     })
@@ -328,6 +345,105 @@ describe('SurrogateDetailPage', () => {
 
         fireEvent.click(copyButton!)
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith('jane@example.com')
+    })
+
+    it('hides personal information before Pending-DocuSign', () => {
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.queryByText('Personal Information')).not.toBeInTheDocument()
+        expect(screen.queryByText('Marital Status:')).not.toBeInTheDocument()
+    })
+
+    it('shows masked personal information and reveals SSN at Pending-DocuSign', async () => {
+        mockRevealSurrogateSensitiveInfo.mockResolvedValueOnce({
+            ssn: '123-45-6789',
+            partner_ssn: '987-65-4321',
+        })
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Pending-DocuSign',
+                stage_id: 's1b',
+                stage_key: 'pending_docusign',
+                stage_slug: 'pending_docusign',
+                sensitive_info_available: true,
+                marital_status: 'Married',
+                ssn_masked: '***-**-6789',
+                partner_name: 'Taylor Partner',
+                partner_email: 'partner@example.com',
+                partner_phone: '+15551234567',
+                partner_ssn_masked: '***-**-4321',
+                partner_address_line1: '123 Partner St',
+                partner_address_line2: 'Apt 4',
+                partner_city: 'Austin',
+                partner_state: 'TX',
+                partner_postal: '78701',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText('Personal Information')).toBeInTheDocument()
+        expect(screen.getByText('Married')).toBeInTheDocument()
+        expect(screen.getByText('***-**-6789')).toBeInTheDocument()
+        expect(screen.getByText('Taylor Partner')).toBeInTheDocument()
+        expect(screen.getByText('***-**-4321')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reveal surrogate SSN' }))
+
+        await waitFor(() => {
+            expect(mockRevealSurrogateSensitiveInfo).toHaveBeenCalledWith('c1')
+        })
+        expect(await screen.findByText('123-45-6789')).toBeInTheDocument()
+        expect(screen.getByText('987-65-4321')).toBeInTheDocument()
+    })
+
+    it('updates personal information fields from the overview section', async () => {
+        mockUpdateSurrogate.mockResolvedValue({
+            ...baseSurrogateData,
+            partner_name: 'Jordan Partner',
+        })
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Pending-DocuSign',
+                stage_id: 's1b',
+                stage_key: 'pending_docusign',
+                stage_slug: 'pending_docusign',
+                sensitive_info_available: true,
+                partner_name: 'Taylor Partner',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Partner name' }))
+        const input = screen.getByLabelText('Partner name')
+        fireEvent.change(input, { target: { value: 'Jordan Partner' } })
+        fireEvent.keyDown(input, { key: 'Enter' })
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { partner_name: 'Jordan Partner' },
+            })
+        })
     })
 
     it('shows Claim Surrogate for queue-owned surrogates', () => {

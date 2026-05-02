@@ -102,6 +102,17 @@ export interface SurrogateCreatePayload {
     email: string;
     phone?: string;
     state?: string;
+    marital_status?: string | null;
+    ssn?: string | null;
+    partner_name?: string | null;
+    partner_email?: string | null;
+    partner_phone?: string | null;
+    partner_ssn?: string | null;
+    partner_address_line1?: string | null;
+    partner_address_line2?: string | null;
+    partner_city?: string | null;
+    partner_state?: string | null;
+    partner_postal?: string | null;
     date_of_birth?: string;
     race?: string;
     height_ft?: number;
@@ -127,6 +138,17 @@ export interface SurrogateUpdatePayload {
     email?: string;
     phone?: string | null;
     state?: string | null;
+    marital_status?: string | null;
+    ssn?: string | null;
+    partner_name?: string | null;
+    partner_email?: string | null;
+    partner_phone?: string | null;
+    partner_ssn?: string | null;
+    partner_address_line1?: string | null;
+    partner_address_line2?: string | null;
+    partner_city?: string | null;
+    partner_state?: string | null;
+    partner_postal?: string | null;
     date_of_birth?: string | null;
     race?: string | null;
     height_ft?: number | null;
@@ -198,6 +220,11 @@ export interface SurrogateUpdatePayload {
     actual_delivery_date?: string | null;
     delivery_baby_gender?: string | null;
     delivery_baby_weight?: string | null;
+}
+
+export interface SurrogateSensitiveInfoRevealResponse {
+    ssn: string | null;
+    partner_ssn: string | null;
 }
 
 // Assign surrogate payload
@@ -333,6 +360,13 @@ export function createSurrogate(data: SurrogateCreatePayload): Promise<Surrogate
  */
 export function updateSurrogate(surrogateId: string, data: SurrogateUpdatePayload): Promise<SurrogateRead> {
     return api.patch<SurrogateRead>(`/surrogates/${surrogateId}`, data);
+}
+
+/**
+ * Reveal full SSN values after the Pending-DocuSign gate.
+ */
+export function revealSurrogateSensitiveInfo(surrogateId: string): Promise<SurrogateSensitiveInfoRevealResponse> {
+    return api.post<SurrogateSensitiveInfoRevealResponse>(`/surrogates/${surrogateId}/sensitive-info/reveal`);
 }
 
 /**
