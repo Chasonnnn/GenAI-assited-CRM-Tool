@@ -15,6 +15,7 @@ from app.db.models import (
     StatusChangeRequest,
 )
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
+from app.utils.pagination import paginate_query_by_offset
 from sqlalchemy.exc import IntegrityError
 
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
@@ -186,8 +187,6 @@ def list_matches(
             )
         )
 
-    total = query.count()
-
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
         "match_number": Match.match_number,
@@ -201,7 +200,8 @@ def list_matches(
     else:
         query = query.order_by(Match.proposed_at.desc())
 
-    matches = query.offset((page - 1) * per_page).limit(per_page).all()
+    offset = (page - 1) * per_page
+    matches, total = paginate_query_by_offset(query, offset=offset, limit=per_page)
     return matches, total
 
 

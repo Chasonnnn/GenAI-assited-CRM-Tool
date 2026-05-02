@@ -36,6 +36,7 @@ from app.db.models import (
 from app.schemas.appointment import AppointmentRead, AppointmentListItem
 from app.db.enums import AppointmentStatus, MeetingMode
 from app.services import appointment_integrations
+from app.utils.pagination import paginate_query_by_offset
 
 
 # =============================================================================
@@ -1798,9 +1799,11 @@ def list_appointments(
     elif intended_parent_id:
         query = query.filter(Appointment.intended_parent_id == intended_parent_id)
 
-    total = query.count()
-    appointments = (
-        query.order_by(Appointment.scheduled_start.desc()).offset(offset).limit(limit).all()
+    appointments, total = paginate_query_by_offset(
+        query.order_by(Appointment.scheduled_start.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=query,
     )
 
     return appointments, total

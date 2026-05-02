@@ -135,7 +135,7 @@ def list_alerts(
     status_enum = AlertStatus(status) if status else None
     severity_enum = AlertSeverity(severity) if severity else None
 
-    alerts = alert_service.list_alerts(
+    alerts, total = alert_service.list_alerts(
         db=db,
         org_id=session.org_id,
         status=status_enum,
@@ -143,9 +143,6 @@ def list_alerts(
         limit=limit,
         offset=offset,
     )
-
-    # Pass severity to count_alerts for consistent pagination
-    total = alert_service.count_alerts(db, session.org_id, status_enum, severity_enum)
 
     return AlertsListResponse(
         items=[

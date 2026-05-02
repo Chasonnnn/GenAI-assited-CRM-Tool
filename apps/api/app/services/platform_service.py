@@ -31,6 +31,7 @@ from app.db.enums import AlertSeverity, AlertType, Role, JobType
 from app.core.security import create_support_session_token
 from app.services import alert_service, duo_admin_service, mfa_service, session_service, job_service
 from app.utils.normalization import escape_like_string
+from app.utils.pagination import paginate_query_by_offset
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
@@ -1573,8 +1574,12 @@ def get_admin_action_logs(
     if org_id:
         query = query.filter(AdminActionLog.target_organization_id == org_id)
 
-    total = query.with_entities(func.count(AdminActionLog.id)).scalar() or 0
-    logs = query.order_by(AdminActionLog.created_at.desc()).offset(offset).limit(limit).all()
+    logs, total = paginate_query_by_offset(
+        query.order_by(AdminActionLog.created_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=query,
+    )
 
     items = []
     for log, actor_email, target_org_name, target_user_email in logs:
@@ -1618,8 +1623,12 @@ def list_platform_alerts(
     if org_id:
         query = query.filter(SystemAlert.organization_id == org_id)
 
-    total = query.with_entities(func.count(SystemAlert.id)).scalar() or 0
-    alerts = query.order_by(SystemAlert.last_seen_at.desc()).offset(offset).limit(limit).all()
+    alerts, total = paginate_query_by_offset(
+        query.order_by(SystemAlert.last_seen_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=query,
+    )
 
     items = []
     for alert, org_name in alerts:

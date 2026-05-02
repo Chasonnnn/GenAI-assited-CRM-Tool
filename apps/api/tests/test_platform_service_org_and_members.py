@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from app.db.enums import Role
-from app.db.models import Membership, SupportSession
+from app.db.enums import AlertSeverity, AlertStatus, AlertType, Role
+from app.db.models import AdminActionLog, Membership, SupportSession, SystemAlert
 from app.services import platform_service
 
 
@@ -150,3 +151,59 @@ def test_platform_update_member_not_found_raises(db, test_org, test_user):
             role=Role.ADMIN.value,
             is_active=True,
         )
+
+
+def test_platform_admin_action_log_pagination_keeps_exact_total(db, test_org, test_user):
+    now = datetime.now(timezone.utc)
+    for index in range(3):
+        db.add(
+            AdminActionLog(
+                actor_user_id=test_user.id,
+                action=f"org.test.{index}",
+                target_organization_id=test_org.id,
+                metadata_={"index": index},
+                created_at=now + timedelta(seconds=index),
+            )
+        )
+    db.flush()
+
+    items, total = platform_service.get_admin_action_logs(
+        db=db,
+        org_id=test_org.id,
+        limit=2,
+        offset=0,
+    )
+
+    assert len(items) == 2
+    assert total == 3
+
+
+def test_platform_alert_pagination_keeps_exact_total_on_full_page(db, test_org):
+    now = datetime.now(timezone.utc)
+    for index in range(3):
+        db.add(
+            SystemAlert(
+                organization_id=test_org.id,
+                dedupe_key=f"platform-alert-{index}",
+                alert_type=AlertType.API_ERROR.value,
+                severity=AlertSeverity.ERROR.value,
+                status=AlertStatus.OPEN.value,
+                title=f"Platform alert {index}",
+                message="Test alert",
+                first_seen_at=now + timedelta(seconds=index),
+                last_seen_at=now + timedelta(seconds=index),
+            )
+        )
+    db.flush()
+
+    items, total = platform_service.list_platform_alerts(
+        db=db,
+        status=AlertStatus.OPEN.value,
+        severity=AlertSeverity.ERROR.value,
+        org_id=test_org.id,
+        limit=2,
+        offset=0,
+    )
+
+    assert len(items) == 2
+    assert total == 3

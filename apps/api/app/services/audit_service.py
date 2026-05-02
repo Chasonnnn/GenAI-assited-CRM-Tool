@@ -22,6 +22,7 @@ from app.core.request_audit_context import mark_explicit_event_emitted
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog, User
 from app.types import JsonObject
+from app.utils.pagination import paginate_query_by_offset
 
 
 def hash_email(email: str) -> str:
@@ -245,9 +246,13 @@ def list_audit_logs(
     if end_date:
         query = query.filter(AuditLog.created_at <= end_date)
 
-    total = query.count()
     offset = (page - 1) * per_page
-    logs = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(per_page).all()
+    logs, total = paginate_query_by_offset(
+        query.order_by(AuditLog.created_at.desc()),
+        offset=offset,
+        limit=per_page,
+        count_query=query,
+    )
 
     actor_ids = {log.actor_user_id for log in logs if log.actor_user_id}
     actor_names = _get_actor_names(db, actor_ids)

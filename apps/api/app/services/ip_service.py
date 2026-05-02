@@ -24,6 +24,7 @@ from app.utils.normalization import (
     normalize_phone,
     normalize_search_text,
 )
+from app.utils.pagination import paginate_query_by_offset
 
 logger = logging.getLogger(__name__)
 
@@ -214,9 +215,6 @@ def list_intended_parents(
         created_before=created_before,
     )
 
-    # Get total count before pagination
-    total = query.count()
-
     # Dynamic sorting
     order_func = asc if sort_order == "asc" else desc
     sortable_columns = {
@@ -244,7 +242,7 @@ def list_intended_parents(
     # Pagination
     per_page = min(per_page, 100)  # Cap at 100
     offset = (page - 1) * per_page
-    items = query.offset(offset).limit(per_page).all()
+    items, total = paginate_query_by_offset(query, offset=offset, limit=per_page)
 
     return items, total
 

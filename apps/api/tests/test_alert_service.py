@@ -54,6 +54,37 @@ def test_create_or_update_alert_upserts_and_reopens_resolved(db, test_org, test_
     assert updated.resolved_by_user_id is None
 
 
+def test_list_alerts_returns_exact_total_on_full_page(db, test_org):
+    now = datetime.now(timezone.utc)
+    for index in range(3):
+        db.add(
+            SystemAlert(
+                organization_id=test_org.id,
+                dedupe_key=f"org-alert-{index}",
+                alert_type=AlertType.API_ERROR.value,
+                severity=AlertSeverity.ERROR.value,
+                status=AlertStatus.OPEN.value,
+                title=f"Org alert {index}",
+                message="Test alert",
+                first_seen_at=now + timedelta(seconds=index),
+                last_seen_at=now + timedelta(seconds=index),
+            )
+        )
+    db.flush()
+
+    items, total = alert_service.list_alerts(
+        db=db,
+        org_id=test_org.id,
+        status=AlertStatus.OPEN,
+        severity=AlertSeverity.ERROR,
+        limit=2,
+        offset=0,
+    )
+
+    assert len(items) == 2
+    assert total == 3
+
+
 def test_create_or_update_alert_snooze_reopen_semantics(db, test_org):
     """Snoozed alerts stay snoozed until expiration, then reopen."""
     alert = alert_service.create_or_update_alert(

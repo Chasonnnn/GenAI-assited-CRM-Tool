@@ -13,6 +13,7 @@ from app.db.enums import JobStatus
 from app.db.models import MetaCrmDatasetEvent
 from app.db.session import SessionLocal
 from app.services import job_service
+from app.utils.pagination import paginate_query_by_offset
 
 logger = logging.getLogger(__name__)
 
@@ -217,12 +218,13 @@ def list_events(
     query = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.organization_id == org_id)
     if status:
         query = query.filter(MetaCrmDatasetEvent.status == status)
-    total = query.count()
-    items = (
-        query.order_by(MetaCrmDatasetEvent.created_at.desc())
-        .offset(max(0, offset))
-        .limit(max(1, min(limit, 200)))
-        .all()
+    normalized_offset = max(0, offset)
+    normalized_limit = max(1, min(limit, 200))
+    items, total = paginate_query_by_offset(
+        query.order_by(MetaCrmDatasetEvent.created_at.desc()),
+        offset=normalized_offset,
+        limit=normalized_limit,
+        count_query=query,
     )
     return items, total
 

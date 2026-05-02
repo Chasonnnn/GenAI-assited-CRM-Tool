@@ -18,6 +18,7 @@ from app.db.models import Membership, MetaAd, MetaForm, MetaFormVersion, MetaLea
 from app.schemas.task import TaskCreate
 from app.services import import_detection_service, queue_service, task_service
 from app.utils.normalization import normalize_email
+from app.utils.pagination import paginate_query_by_offset
 
 
 META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
@@ -260,8 +261,12 @@ def list_unconverted_leads_for_form(
         MetaLead.meta_form_id == form_external_id,
         MetaLead.is_converted.is_(False),
     )
-    total = base_query.count()
-    items = base_query.order_by(MetaLead.received_at.desc()).offset(offset).limit(limit).all()
+    items, total = paginate_query_by_offset(
+        base_query.order_by(MetaLead.received_at.desc()),
+        offset=offset,
+        limit=limit,
+        count_query=base_query,
+    )
     return items, total
 
 
