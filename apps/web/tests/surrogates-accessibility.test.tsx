@@ -63,6 +63,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useRevealSurrogateSensitiveInfo: () => mockUseRevealSurrogateSensitiveInfo(),
     useSurrogateActivity: () => ({ data: { items: [] } }),
     useSurrogateHistory: () => ({ data: [] }),
+    useRevealSurrogateSensitiveInfo: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-queues', () => ({
