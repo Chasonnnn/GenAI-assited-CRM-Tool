@@ -126,7 +126,8 @@ def _resolve_stage_ref(
             matches = [
                 resolved
                 for pipeline_id in default_pipeline_ids
-                if (resolved := pipeline_service.resolve_stage(db, pipeline_id, str(value))) is not None
+                if (resolved := pipeline_service.resolve_stage(db, pipeline_id, str(value)))
+                is not None
             ]
             if len(matches) == 1:
                 stage = matches[0]
@@ -726,47 +727,38 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
 
-    # Total and enabled counts
-    total = (
-        db.query(func.count(AutomationWorkflow.id))
-        .filter(AutomationWorkflow.organization_id == org_id)
-        .scalar()
-        or 0
-    )
-
-    enabled = (
-        db.query(func.count(AutomationWorkflow.id))
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.is_enabled.is_(True),
+    # Total and enabled counts are efficiently calculated in single query
+    counts = (
+        db.query(
+            func.count(AutomationWorkflow.id).label("total"),
+            func.count(AutomationWorkflow.id)
+            .filter(AutomationWorkflow.is_enabled.is_(True))
+            .label("enabled"),
         )
-        .scalar()
-        or 0
+        .filter(AutomationWorkflow.organization_id == org_id)
+        .first()
     )
+    total = counts.total if counts else 0
+    enabled = counts.enabled if counts else 0
 
-    # Executions in last 24h
-    executions_24h = (
-        db.query(func.count(WorkflowExecution.id))
+    # Executions by status in last 24h (single grouped query)
+    execution_counts = (
+        db.query(WorkflowExecution.status, func.count(WorkflowExecution.id))
         .filter(
             WorkflowExecution.organization_id == org_id,
             WorkflowExecution.executed_at >= day_ago,
         )
-        .scalar()
-        or 0
+        .group_by(WorkflowExecution.status)
+        .all()
     )
+
+    execution_by_status = {status: count for status, count in execution_counts}
+    executions_24h = sum(execution_by_status.values())
+
+    successes = execution_by_status.get(WorkflowExecutionStatus.SUCCESS.value, 0)
 
     # Success rate
     if executions_24h > 0:
-        successes = (
-            db.query(func.count(WorkflowExecution.id))
-            .filter(
-                WorkflowExecution.organization_id == org_id,
-                WorkflowExecution.executed_at >= day_ago,
-                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
-            )
-            .scalar()
-            or 0
-        )
         success_rate = round(successes / executions_24h * 100, 1)
     else:
         success_rate = 0.0
@@ -1300,41 +1292,24 @@ def get_execution_stats(db: Session, org_id: UUID) -> dict:
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
 
-    # Total in last 24h
-    total_24h = (
-        db.query(func.count(WorkflowExecution.id))
+    # Get execution counts by status in last 24h (single grouped query)
+    execution_counts = (
+        db.query(WorkflowExecution.status, func.count(WorkflowExecution.id))
         .filter(
             WorkflowExecution.organization_id == org_id,
             WorkflowExecution.executed_at >= day_ago,
         )
-        .scalar()
-        or 0
+        .group_by(WorkflowExecution.status)
+        .all()
     )
 
-    # Failed in last 24h
-    failed_24h = (
-        db.query(func.count(WorkflowExecution.id))
-        .filter(
-            WorkflowExecution.organization_id == org_id,
-            WorkflowExecution.executed_at >= day_ago,
-            WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value,
-        )
-        .scalar()
-        or 0
-    )
+    execution_by_status = {status: count for status, count in execution_counts}
+    total_24h = sum(execution_by_status.values())
+    failed_24h = execution_by_status.get(WorkflowExecutionStatus.FAILED.value, 0)
+    successes = execution_by_status.get(WorkflowExecutionStatus.SUCCESS.value, 0)
 
     # Success rate
     if total_24h > 0:
-        successes = (
-            db.query(func.count(WorkflowExecution.id))
-            .filter(
-                WorkflowExecution.organization_id == org_id,
-                WorkflowExecution.executed_at >= day_ago,
-                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
-            )
-            .scalar()
-            or 0
-        )
         success_rate = round(successes / total_24h * 100, 1)
     else:
         success_rate = 0.0
