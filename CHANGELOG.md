@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.15](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.14...surrogacy-crm-platform-v0.91.15) (2026-05-03)
+
+
+### Features
+
+* Add surrogate gated address fields ([8cd56e7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8cd56e75082f0df33b5af910cb9fd2ca3e686ee7))
+* Redesign surrogate personal info layout ([2a24455](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2a244553881ca774f1ffec7b3f0d1d71b7b609e1))
+* Refine surrogate overview personal info ([016edda](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/016edda6c088c2b704edfa1c409189a62ad77ce8))
+* Schedule interviews on stage change ([f9f34a6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f9f34a6f9bc5cf64dae895c844a125782ce9d52f))
+* Ungate surrogate personal info ([78c667b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/78c667b97df8091aa083d017e18b126ef81484eb))
+
 ## [0.91.14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.13...surrogacy-crm-platform-v0.91.14) (2026-05-02)
 
 
