@@ -199,7 +199,7 @@ describe("ChangeStageModal", () => {
         expect(screen.queryByText("Admin Approval Required")).not.toBeInTheDocument()
     })
 
-    it("requires an interview date and time when moving to Interview Scheduled", async () => {
+    it("uses placeholder hints for interview time without defaulting the value", async () => {
         const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
 
         render(
@@ -216,6 +216,13 @@ describe("ChangeStageModal", () => {
         fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
 
         expect(screen.getByText("Interview appointment")).toBeInTheDocument()
+        expect(screen.getByRole("region", { name: /interview appointment/i })).not.toHaveClass("p-3")
+        expect(screen.queryByText("Hour")).not.toBeInTheDocument()
+        expect(screen.queryByText("Minute")).not.toBeInTheDocument()
+        expect(screen.queryByText("AM/PM")).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /switch interview time to am/i })).toHaveTextContent("PM")
+        expect(screen.getByLabelText(/interview hour/i)).toHaveValue("")
+        expect(screen.getByLabelText(/interview minute/i)).toHaveValue("")
         expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
 
         const interviewDate = addDays(new Date(), 7)
@@ -232,15 +239,63 @@ describe("ChangeStageModal", () => {
         fireEvent.change(screen.getByLabelText(/interview hour/i), {
             target: { value: "1" },
         })
+        const minuteInput = screen.getByLabelText(/interview minute/i)
+        fireEvent.change(minuteInput, { target: { value: "1" } })
+        expect(minuteInput).toHaveValue("1")
+        fireEvent.change(minuteInput, { target: { value: "15" } })
+        expect(minuteInput).toHaveValue("15")
+        fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
+
+        await waitFor(() => {
+            expect(onSubmit).toHaveBeenCalledWith({
+                stage_id: "stage_interview_scheduled",
+                interview_scheduled_at: `${format(interviewDate, "yyyy-MM-dd")}T13:15:00`,
+            })
+        })
+    })
+
+    it("toggles interview meridiem with one compact control", async () => {
+        const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
+
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={onSubmit}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
+
+        const meridiemToggle = screen.getByRole("button", { name: /switch interview time to am/i })
+        fireEvent.click(meridiemToggle)
+        expect(screen.getByRole("button", { name: /switch interview time to pm/i })).toHaveTextContent("AM")
+        expect(screen.queryByRole("button", { name: "PM" })).not.toBeInTheDocument()
+
+        const interviewDate = addDays(new Date(), 7)
+        fireEvent.click(screen.getByRole("button", { name: /select date/i }))
+        const dayButton = screen
+            .getAllByText(format(interviewDate, "d"))
+            .map((element) => element.closest("button"))
+            .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
+        expect(dayButton).toBeDefined()
+        fireEvent.click(dayButton!)
+
+        fireEvent.change(screen.getByLabelText(/interview hour/i), {
+            target: { value: "1" },
+        })
         fireEvent.change(screen.getByLabelText(/interview minute/i), {
-            target: { value: "35" },
+            target: { value: "15" },
         })
         fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
 
         await waitFor(() => {
             expect(onSubmit).toHaveBeenCalledWith({
                 stage_id: "stage_interview_scheduled",
-                interview_scheduled_at: `${format(interviewDate, "yyyy-MM-dd")}T13:35:00`,
+                interview_scheduled_at: `${format(interviewDate, "yyyy-MM-dd")}T01:15:00`,
             })
         })
     })

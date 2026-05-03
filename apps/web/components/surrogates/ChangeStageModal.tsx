@@ -27,7 +27,6 @@ import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
     stageHasCapability,
     stageMatchesKey,
@@ -164,6 +163,15 @@ export function ChangeStageModal({
         ? `${format(interviewDate, "yyyy-MM-dd")}T${interviewTime}:00`
         : null
 
+    useEffect(() => {
+        if (!isInterviewScheduledStage) return
+        setInterviewDate(undefined)
+        setInterviewHourInput("")
+        setInterviewMinuteInput("")
+        setInterviewMeridiem("PM")
+        setInterviewDatePickerOpen(false)
+    }, [isInterviewScheduledStage])
+
     const isResumeSelection = useMemo(() => {
         if (!selectedStage || !currentStage || !comparisonStage) return false
         return stageUsesPauseBehavior(currentStage) && selectedStage.id === comparisonStage.id
@@ -287,6 +295,9 @@ export function ChangeStageModal({
         if (interviewMinuteInput && minute >= 0 && minute <= 59) {
             setInterviewMinuteInput(minute.toString().padStart(2, "0"))
         }
+    }
+    const toggleInterviewMeridiem = () => {
+        setInterviewMeridiem((current) => current === "AM" ? "PM" : "AM")
     }
 
     // Button text based on context
@@ -489,8 +500,8 @@ export function ChangeStageModal({
                     )}
 
                     {isInterviewScheduledStage && (
-                        <div className="space-y-3 rounded-lg border border-muted/60 bg-muted/20 p-3">
-                            <div className="space-y-1">
+                        <section aria-label="Interview appointment" className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-1">
                                 <div className="text-sm font-medium text-foreground">
                                     Interview appointment
                                 </div>
@@ -531,64 +542,54 @@ export function ChangeStageModal({
                                     <Label>
                                         Interview time <span className="text-destructive">*</span>
                                     </Label>
-                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
-                                        <div className="space-y-1">
-                                            <Label htmlFor="interview-hour" className="text-xs text-muted-foreground">
-                                                Hour
-                                            </Label>
+                                    <div className="grid grid-cols-[4.5rem_4.5rem_3.5rem] items-end gap-2">
+                                        <div className="relative">
                                             <Input
                                                 id="interview-hour"
                                                 value={interviewHourInput}
                                                 onChange={(event) => updateInterviewHourInput(event.target.value)}
                                                 onBlur={normalizeInterviewHourInput}
-                                                placeholder="1"
                                                 inputMode="numeric"
                                                 pattern="[0-9]*"
-                                                maxLength={5}
-                                                className="text-center"
+                                                className="text-center text-base"
                                                 aria-label="Interview hour"
                                                 aria-invalid={interviewTimeInvalid}
                                             />
+                                            {!interviewHourInput && (
+                                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-base text-muted-foreground">
+                                                    1
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="space-y-1">
-                                            <Label htmlFor="interview-minute" className="text-xs text-muted-foreground">
-                                                Minute
-                                            </Label>
+                                        <div className="relative">
                                             <Input
                                                 id="interview-minute"
                                                 value={interviewMinuteInput}
                                                 onChange={(event) => updateInterviewMinuteInput(event.target.value)}
                                                 onBlur={normalizeInterviewMinuteInput}
-                                                placeholder="35"
                                                 inputMode="numeric"
                                                 pattern="[0-9]*"
-                                                maxLength={2}
-                                                className="text-center"
+                                                className="text-center text-base"
                                                 aria-label="Interview minute"
                                                 aria-invalid={interviewTimeInvalid}
                                             />
+                                            {!interviewMinuteInput && (
+                                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-base text-muted-foreground">
+                                                    15
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="space-y-1">
-                                            <Label id="interview-meridiem-label" className="text-xs text-muted-foreground">
-                                                AM/PM
-                                            </Label>
-                                            <ToggleGroup
-                                                value={[interviewMeridiem]}
-                                                onValueChange={(value) => {
-                                                    const nextValue = Array.isArray(value) ? value[0] : value
-                                                    if (nextValue === "AM" || nextValue === "PM") {
-                                                        setInterviewMeridiem(nextValue)
-                                                    }
-                                                }}
-                                                aria-labelledby="interview-meridiem-label"
+                                        <div>
+                                            <Button
+                                                type="button"
+                                                onClick={toggleInterviewMeridiem}
+                                                aria-label={`Switch interview time to ${interviewMeridiem === "AM" ? "PM" : "AM"}`}
                                                 variant="outline"
                                                 size="sm"
-                                                spacing={0}
-                                                className="h-9"
+                                                className="h-9 w-full px-0 text-sm font-medium"
                                             >
-                                                <ToggleGroupItem value="AM" className="h-9 px-3">AM</ToggleGroupItem>
-                                                <ToggleGroupItem value="PM" className="h-9 px-3">PM</ToggleGroupItem>
-                                            </ToggleGroup>
+                                                {interviewMeridiem}
+                                            </Button>
                                         </div>
                                     </div>
                                     {interviewTimeInvalid && (
@@ -598,7 +599,7 @@ export function ChangeStageModal({
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     )}
 
                     {/* Delivery details (only when moving to Delivered) */}
