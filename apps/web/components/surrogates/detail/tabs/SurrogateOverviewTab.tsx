@@ -5,9 +5,30 @@ import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { TabsContent } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { InlineEditField } from "@/components/inline-edit-field"
+import { InlineDateField } from "@/components/inline-date-field"
 import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
@@ -17,13 +38,21 @@ import { useRevealSurrogateSensitiveInfo, useSurrogateActivity, useUpdateSurroga
 import { useTasks } from "@/lib/hooks/use-tasks"
 import {
     AlertTriangleIcon,
+    CalendarDaysIcon,
+    ChevronDownIcon,
     ClipboardCheckIcon,
     CopyIcon,
     EyeIcon,
     InfoIcon,
     CheckIcon,
     PencilIcon,
+    PlusIcon,
+    RulerIcon,
+    ScaleIcon,
+    Trash2Icon,
     UserIcon,
+    UsersIcon,
+    WeightIcon,
     XIcon,
 } from "lucide-react"
 import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
@@ -32,6 +61,7 @@ import { formatRace } from "@/lib/formatters"
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
 import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
+import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
 
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
@@ -111,6 +141,116 @@ function PersonalInfoRow({
     )
 }
 
+function ProfileMetric({
+    icon: Icon,
+    label,
+    primary,
+    secondary,
+    warning,
+    badge,
+}: {
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    primary: React.ReactNode
+    secondary?: React.ReactNode
+    warning?: React.ReactNode
+    badge?: React.ReactNode
+}) {
+    return (
+        <div className="flex min-w-[13rem] flex-1 items-start gap-3 rounded-lg px-1 py-1">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-rose-100/65 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
+                <Icon className="size-5" />
+            </div>
+            <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-muted-foreground">{label}:</span>
+                    {warning}
+                </div>
+                <div className="text-base font-semibold text-foreground">{primary}</div>
+                {secondary && <div className="text-sm text-muted-foreground">{secondary}</div>}
+                {badge}
+            </div>
+        </div>
+    )
+}
+
+function PersonalInfoColumn({
+    title,
+    icon: Icon,
+    children,
+}: {
+    title: string
+    icon: React.ComponentType<{ className?: string }>
+    children: React.ReactNode
+}) {
+    return (
+        <section className="min-w-0 space-y-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <span className="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Icon className="size-4" />
+                </span>
+                {title}
+            </h3>
+            <div className="space-y-3">{children}</div>
+        </section>
+    )
+}
+
+function SectionActionIcon({
+    icon,
+    tone = "default",
+}: {
+    icon: React.ReactNode
+    tone?: "default" | "destructive"
+}) {
+    return (
+        <span
+            className={
+                tone === "destructive"
+                    ? "flex size-7 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+                    : "flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground"
+            }
+        >
+            {icon}
+        </span>
+    )
+}
+
+function getAgeLabel(dateOfBirth: string | null | undefined) {
+    if (!dateOfBirth) return null
+    const parsed = new Date(`${dateOfBirth}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return null
+    const today = new Date()
+    let age = today.getFullYear() - parsed.getFullYear()
+    const monthDelta = today.getMonth() - parsed.getMonth()
+    if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < parsed.getDate())) {
+        age -= 1
+    }
+    return `Age ${age}`
+}
+
+function getHeightCm(heightFt: number | string | null | undefined) {
+    if (heightFt == null) return null
+    const feet = Number(heightFt)
+    if (!Number.isFinite(feet) || feet <= 0) return null
+    return `${Math.round(feet * 30.48)} cm`
+}
+
+function getWeightKg(weightLb: number | null | undefined) {
+    if (weightLb == null || weightLb <= 0) return null
+    return `${Math.round(weightLb * 0.453592 * 10) / 10} kg`
+}
+
+function getBmiCategory(bmi: number | null) {
+    if (bmi == null) return null
+    if (bmi < 18.5) return "Underweight"
+    if (bmi < 25) return "Normal"
+    if (bmi < 30) return "Overweight"
+    if (bmi < 35) return "Obese (Class I)"
+    if (bmi < 40) return "Obese (Class II)"
+    return "Obese (Class III)"
+}
+
 function SsnField({
     label,
     maskedValue,
@@ -184,7 +324,9 @@ function SsnField({
 
     return (
         <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate">{displayValue}</span>
+            <span className="shrink-0 whitespace-nowrap font-mono text-[13px] tabular-nums">
+                {displayValue}
+            </span>
             {maskedValue && !revealedValue && (
                 <Button
                     type="button"
@@ -230,6 +372,10 @@ export function SurrogateOverviewTab() {
     const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [revealedSsn, setRevealedSsn] = React.useState<string | null>(null)
     const [revealedPartnerSsn, setRevealedPartnerSsn] = React.useState<string | null>(null)
+    const [partnerSectionAdded, setPartnerSectionAdded] = React.useState(false)
+    const [partnerSectionHidden, setPartnerSectionHidden] = React.useState(false)
+    const [isDeletingPartnerSection, setIsDeletingPartnerSection] = React.useState(false)
+    const [isPartnerDeletePending, setIsPartnerDeletePending] = React.useState(false)
 
     const bmiValue = React.useMemo(() => {
         if (!surrogateData) return null
@@ -265,12 +411,22 @@ export function SurrogateOverviewTab() {
     const stateLeadWarning = leadWarningMap.get("state")
     const heightLeadWarning = leadWarningMap.get("height_ft")
     const weightLeadWarning = leadWarningMap.get("weight_lb")
-    const hasMeasurementData =
-        surrogateData.height_ft != null || surrogateData.weight_lb != null || bmiValue !== null
-    const shouldShowHeightRow = hasMeasurementData || Boolean(heightLeadWarning)
-    const shouldShowWeightRow = hasMeasurementData || Boolean(weightLeadWarning)
     const showPersonalInfo = surrogateData.sensitive_info_available === true
     const maritalStatusOptions = getMaritalStatusOptions(surrogateData.marital_status)
+    const bmiCategory = getBmiCategory(bmiValue)
+    const hasPartnerInfo = Boolean(
+        surrogateData.partner_name ||
+        surrogateData.partner_date_of_birth ||
+        surrogateData.partner_email ||
+        surrogateData.partner_phone ||
+        surrogateData.partner_ssn_masked ||
+        surrogateData.partner_address_line1 ||
+        surrogateData.partner_address_line2 ||
+        surrogateData.partner_city ||
+        surrogateData.partner_state ||
+        surrogateData.partner_postal
+    )
+    const showPartnerInfo = showPersonalInfo && (hasPartnerInfo || partnerSectionAdded) && !partnerSectionHidden
 
     const copyEmail = () => {
         navigator.clipboard.writeText(surrogateData.email)
@@ -278,7 +434,7 @@ export function SurrogateOverviewTab() {
         setTimeout(() => setCopiedEmail(false), 2000)
     }
 
-    const updateSurrogate = async (data: Record<string, string | null>) => {
+    const updateSurrogate = async (data: Partial<SurrogateUpdatePayload>) => {
         await updateSurrogateMutation.mutateAsync({
             surrogateId: id,
             data,
@@ -289,6 +445,35 @@ export function SurrogateOverviewTab() {
         const payload = await revealSensitiveInfoMutation.mutateAsync(id)
         setRevealedSsn(payload.ssn)
         setRevealedPartnerSsn(payload.partner_ssn)
+    }
+
+    const addPartnerSection = () => {
+        setPartnerSectionHidden(false)
+        setPartnerSectionAdded(true)
+    }
+
+    const deletePartnerSection = async () => {
+        setIsDeletingPartnerSection(true)
+        try {
+            await updateSurrogate({
+                partner_name: null,
+                partner_date_of_birth: null,
+                partner_email: null,
+                partner_phone: null,
+                partner_ssn: null,
+                partner_address_line1: null,
+                partner_address_line2: null,
+                partner_city: null,
+                partner_state: null,
+                partner_postal: null,
+            })
+            setRevealedPartnerSsn(null)
+            setPartnerSectionAdded(false)
+            setPartnerSectionHidden(true)
+            setIsPartnerDeletePending(false)
+        } finally {
+            setIsDeletingPartnerSection(false)
+        }
     }
 
     return (
@@ -411,182 +596,339 @@ export function SurrogateOverviewTab() {
                     </SurrogateOverviewCard>
 
                     <SurrogateOverviewCard title="Demographics" icon={InfoIcon}>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Date of Birth:</span>
-                            <span className="text-sm">
-                                {surrogateData.date_of_birth
-                                    ? formatDate(surrogateData.date_of_birth)
-                                    : "-"}
-                            </span>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                            <ProfileMetric
+                                icon={CalendarDaysIcon}
+                                label="Date of Birth"
+                                primary={surrogateData.date_of_birth ? formatDate(surrogateData.date_of_birth) : "-"}
+                                secondary={getAgeLabel(surrogateData.date_of_birth)}
+                            />
+                            <ProfileMetric
+                                icon={UsersIcon}
+                                label="Race / Ethnicity"
+                                primary={formatRace(surrogateData.race) || "-"}
+                            />
+                            <ProfileMetric
+                                icon={RulerIcon}
+                                label="Height"
+                                primary={surrogateData.height_ft != null ? formatHeight(surrogateData.height_ft) : "-"}
+                                secondary={getHeightCm(surrogateData.height_ft)}
+                                warning={
+                                    heightLeadWarning ? (
+                                        <LeadWarningIndicator
+                                            warning={heightLeadWarning}
+                                            fieldLabel={LEAD_WARNING_FIELD_LABELS.height_ft}
+                                        />
+                                    ) : undefined
+                                }
+                            />
+                            <ProfileMetric
+                                icon={WeightIcon}
+                                label="Weight"
+                                primary={surrogateData.weight_lb != null ? `${surrogateData.weight_lb} lb` : "-"}
+                                secondary={getWeightKg(surrogateData.weight_lb)}
+                                warning={
+                                    weightLeadWarning ? (
+                                        <LeadWarningIndicator
+                                            warning={weightLeadWarning}
+                                            fieldLabel={LEAD_WARNING_FIELD_LABELS.weight_lb}
+                                        />
+                                    ) : undefined
+                                }
+                            />
+                            <ProfileMetric
+                                icon={ScaleIcon}
+                                label="BMI"
+                                primary={bmiValue ?? "-"}
+                                badge={
+                                    bmiCategory ? (
+                                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-100">
+                                            {bmiCategory}
+                                        </Badge>
+                                    ) : undefined
+                                }
+                            />
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Race:</span>
-                            <span className="text-sm">{formatRace(surrogateData.race) || "-"}</span>
-                        </div>
-                        {(shouldShowHeightRow ||
-                            shouldShowWeightRow ||
-                            bmiValue !== null) && (
-                            <>
-                                {shouldShowHeightRow && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground">Height:</span>
-                                        <span className="text-sm">
-                                            {surrogateData.height_ft != null
-                                                ? formatHeight(surrogateData.height_ft)
-                                                : "-"}
-                                        </span>
-                                        {heightLeadWarning && (
-                                            <LeadWarningIndicator
-                                                warning={heightLeadWarning}
-                                                fieldLabel={LEAD_WARNING_FIELD_LABELS.height_ft}
-                                            />
-                                        )}
-                                    </div>
-                                )}
-                                {shouldShowWeightRow && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-muted-foreground">Weight:</span>
-                                        <span className="text-sm">
-                                            {surrogateData.weight_lb != null
-                                                ? `${surrogateData.weight_lb} lb`
-                                                : "-"}
-                                        </span>
-                                        {weightLeadWarning && (
-                                            <LeadWarningIndicator
-                                                warning={weightLeadWarning}
-                                                fieldLabel={LEAD_WARNING_FIELD_LABELS.weight_lb}
-                                            />
-                                        )}
-                                    </div>
-                                )}
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">BMI:</span>
-                                    <span className="text-sm">{bmiValue ?? "-"}</span>
-                                </div>
-                            </>
-                        )}
                     </SurrogateOverviewCard>
 
                     {showPersonalInfo && (
-                        <SurrogateOverviewCard title="Personal Information" icon={InfoIcon}>
-                            <PersonalInfoRow label="Marital Status">
-                                <NativeSelect
-                                    aria-label="Marital status"
-                                    value={surrogateData.marital_status ?? ""}
-                                    onChange={(event) =>
-                                        void updateSurrogate({
-                                            marital_status: event.target.value || null,
-                                        })
+                        <>
+                            <SurrogateOverviewCard
+                                title="Personal Information"
+                                icon={UserIcon}
+                                action={
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                            render={
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    aria-label="Edit Personal Information"
+                                                    className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+                                                />
+                                            }
+                                        >
+                                            <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-[state=open]:text-current" />
+                                            Edit Info
+                                            <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-all group-data-[state=open]:translate-y-px group-data-[state=open]:text-current" />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            sideOffset={8}
+                                            className="w-56 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-lg supports-[backdrop-filter]:bg-background/90"
+                                        >
+                                            {!showPartnerInfo && (
+                                                <DropdownMenuGroup>
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger className="rounded-xl px-2.5 py-2 font-medium">
+                                                            <SectionActionIcon icon={<PlusIcon className="size-4" />} />
+                                                            Add Section
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent className="w-52 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-lg supports-[backdrop-filter]:bg-background/90">
+                                                            <DropdownMenuItem
+                                                                onClick={addPartnerSection}
+                                                                className="rounded-xl px-2.5 py-2"
+                                                            >
+                                                                <SectionActionIcon icon={<UsersIcon className="size-4" />} />
+                                                                <span className="font-medium">Partner</span>
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
+                                                </DropdownMenuGroup>
+                                            )}
+                                            {showPartnerInfo && (
+                                                <DropdownMenuGroup>
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger className="rounded-xl px-2.5 py-2 font-medium text-destructive data-open:bg-destructive/10 data-open:text-destructive focus:bg-destructive/10 focus:text-destructive">
+                                                            <SectionActionIcon icon={<Trash2Icon className="size-4" />} tone="destructive" />
+                                                            Delete Section
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent className="w-52 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-lg supports-[backdrop-filter]:bg-background/90">
+                                                            <DropdownMenuItem
+                                                                onClick={() => setIsPartnerDeletePending(true)}
+                                                                variant="destructive"
+                                                                className="rounded-xl px-2.5 py-2"
+                                                            >
+                                                                <SectionActionIcon icon={<UsersIcon className="size-4" />} tone="destructive" />
+                                                                <span className="font-medium">Delete Partner</span>
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
+                                                </DropdownMenuGroup>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                }
+                            >
+                                <div className={`grid gap-8 ${showPartnerInfo ? "lg:grid-cols-2" : ""}`}>
+                                    <PersonalInfoColumn title="Surrogate" icon={UserIcon}>
+                                        <PersonalInfoRow label="Marital Status">
+                                            <NativeSelect
+                                                aria-label="Marital status"
+                                                value={surrogateData.marital_status ?? ""}
+                                                onChange={(event) =>
+                                                    void updateSurrogate({
+                                                        marital_status: event.target.value || null,
+                                                    })
+                                                }
+                                                className="h-8 max-w-xs"
+                                            >
+                                                <NativeSelectOption value="">Not provided</NativeSelectOption>
+                                                {maritalStatusOptions.map((option) => (
+                                                    <NativeSelectOption key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </NativeSelectOption>
+                                                ))}
+                                            </NativeSelect>
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="SSN">
+                                            <SsnField
+                                                label="surrogate SSN"
+                                                maskedValue={surrogateData.ssn_masked}
+                                                revealedValue={revealedSsn}
+                                                isRevealPending={revealSensitiveInfoMutation.isPending}
+                                                onReveal={revealSensitiveInfo}
+                                                onSave={async (value) => {
+                                                    await updateSurrogate({ ssn: value })
+                                                    setRevealedSsn(null)
+                                                }}
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Address Line 1">
+                                            <InlineEditField
+                                                value={surrogateData.address_line1}
+                                                onSave={async (value) => updateSurrogate({ address_line1: value || null })}
+                                                placeholder="-"
+                                                label="Surrogate address line 1"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Address Line 2">
+                                            <InlineEditField
+                                                value={surrogateData.address_line2}
+                                                onSave={async (value) => updateSurrogate({ address_line2: value || null })}
+                                                placeholder="-"
+                                                label="Surrogate address line 2"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="City">
+                                            <InlineEditField
+                                                value={surrogateData.address_city}
+                                                onSave={async (value) => updateSurrogate({ address_city: value || null })}
+                                                placeholder="-"
+                                                label="Surrogate city"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="State">
+                                            <InlineEditField
+                                                value={surrogateData.address_state}
+                                                onSave={async (value) => updateSurrogate({ address_state: value || null })}
+                                                placeholder="-"
+                                                validate={(value) =>
+                                                    value && value.length !== 2
+                                                        ? "Use 2-letter code (e.g., CA, TX)"
+                                                        : null
+                                                }
+                                                label="Surrogate state"
+                                            />
+                                        </PersonalInfoRow>
+                                        <PersonalInfoRow label="Postal Code">
+                                            <InlineEditField
+                                                value={surrogateData.address_postal}
+                                                onSave={async (value) => updateSurrogate({ address_postal: value || null })}
+                                                placeholder="-"
+                                                label="Surrogate postal code"
+                                            />
+                                        </PersonalInfoRow>
+                                    </PersonalInfoColumn>
+
+                                    {showPartnerInfo && (
+                                        <PersonalInfoColumn title="Partner" icon={UsersIcon}>
+                                            <PersonalInfoRow label="Full Name">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_name}
+                                                    onSave={async (value) => updateSurrogate({ partner_name: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner full name"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="DOB">
+                                                <InlineDateField
+                                                    value={surrogateData.partner_date_of_birth}
+                                                    onSave={async (value) => updateSurrogate({ partner_date_of_birth: value })}
+                                                    placeholder="-"
+                                                    label="Partner date of birth"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Email">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_email}
+                                                    onSave={async (value) => updateSurrogate({ partner_email: value || null })}
+                                                    type="email"
+                                                    placeholder="-"
+                                                    validate={(value) => (value && !value.includes("@") ? "Invalid email" : null)}
+                                                    label="Partner email"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Phone">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_phone}
+                                                    onSave={async (value) => updateSurrogate({ partner_phone: value || null })}
+                                                    type="tel"
+                                                    placeholder="-"
+                                                    label="Partner phone"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="SSN">
+                                                <SsnField
+                                                    label="partner SSN"
+                                                    maskedValue={surrogateData.partner_ssn_masked}
+                                                    revealedValue={revealedPartnerSsn}
+                                                    isRevealPending={revealSensitiveInfoMutation.isPending}
+                                                    onReveal={revealSensitiveInfo}
+                                                    onSave={async (value) => {
+                                                        await updateSurrogate({ partner_ssn: value })
+                                                        setRevealedPartnerSsn(null)
+                                                    }}
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Address Line 1">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_address_line1}
+                                                    onSave={async (value) => updateSurrogate({ partner_address_line1: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner address line 1"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Address Line 2">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_address_line2}
+                                                    onSave={async (value) => updateSurrogate({ partner_address_line2: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner address line 2"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="City">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_city}
+                                                    onSave={async (value) => updateSurrogate({ partner_city: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner city"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="State">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_state}
+                                                    onSave={async (value) => updateSurrogate({ partner_state: value || null })}
+                                                    placeholder="-"
+                                                    validate={(value) =>
+                                                        value && value.length !== 2
+                                                            ? "Use 2-letter code (e.g., CA, TX)"
+                                                            : null
+                                                    }
+                                                    label="Partner state"
+                                                />
+                                            </PersonalInfoRow>
+                                            <PersonalInfoRow label="Postal Code">
+                                                <InlineEditField
+                                                    value={surrogateData.partner_postal}
+                                                    onSave={async (value) => updateSurrogate({ partner_postal: value || null })}
+                                                    placeholder="-"
+                                                    label="Partner postal code"
+                                                />
+                                            </PersonalInfoRow>
+                                        </PersonalInfoColumn>
+                                    )}
+                                </div>
+                            </SurrogateOverviewCard>
+
+                            <AlertDialog
+                                open={isPartnerDeletePending}
+                                onOpenChange={(open) => {
+                                    if (!open && !isDeletingPartnerSection) {
+                                        setIsPartnerDeletePending(false)
                                     }
-                                    className="h-8 max-w-xs"
-                                >
-                                    <NativeSelectOption value="">Not provided</NativeSelectOption>
-                                    {maritalStatusOptions.map((option) => (
-                                        <NativeSelectOption key={option.value} value={option.value}>
-                                            {option.label}
-                                        </NativeSelectOption>
-                                    ))}
-                                </NativeSelect>
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="SSN">
-                                <SsnField
-                                    label="surrogate SSN"
-                                    maskedValue={surrogateData.ssn_masked}
-                                    revealedValue={revealedSsn}
-                                    isRevealPending={revealSensitiveInfoMutation.isPending}
-                                    onReveal={revealSensitiveInfo}
-                                    onSave={async (value) => {
-                                        await updateSurrogate({ ssn: value })
-                                        setRevealedSsn(null)
-                                    }}
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Partner Name">
-                                <InlineEditField
-                                    value={surrogateData.partner_name}
-                                    onSave={async (value) => updateSurrogate({ partner_name: value || null })}
-                                    placeholder="-"
-                                    label="Partner name"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Partner Email">
-                                <InlineEditField
-                                    value={surrogateData.partner_email}
-                                    onSave={async (value) => updateSurrogate({ partner_email: value || null })}
-                                    type="email"
-                                    placeholder="-"
-                                    validate={(value) => (value && !value.includes("@") ? "Invalid email" : null)}
-                                    label="Partner email"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Partner Phone">
-                                <InlineEditField
-                                    value={surrogateData.partner_phone}
-                                    onSave={async (value) => updateSurrogate({ partner_phone: value || null })}
-                                    type="tel"
-                                    placeholder="-"
-                                    label="Partner phone"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Partner SSN">
-                                <SsnField
-                                    label="partner SSN"
-                                    maskedValue={surrogateData.partner_ssn_masked}
-                                    revealedValue={revealedPartnerSsn}
-                                    isRevealPending={revealSensitiveInfoMutation.isPending}
-                                    onReveal={revealSensitiveInfo}
-                                    onSave={async (value) => {
-                                        await updateSurrogate({ partner_ssn: value })
-                                        setRevealedPartnerSsn(null)
-                                    }}
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Address Line 1">
-                                <InlineEditField
-                                    value={surrogateData.partner_address_line1}
-                                    onSave={async (value) => updateSurrogate({ partner_address_line1: value || null })}
-                                    placeholder="-"
-                                    label="Partner address line 1"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Address Line 2">
-                                <InlineEditField
-                                    value={surrogateData.partner_address_line2}
-                                    onSave={async (value) => updateSurrogate({ partner_address_line2: value || null })}
-                                    placeholder="-"
-                                    label="Partner address line 2"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="City">
-                                <InlineEditField
-                                    value={surrogateData.partner_city}
-                                    onSave={async (value) => updateSurrogate({ partner_city: value || null })}
-                                    placeholder="-"
-                                    label="Partner city"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="State">
-                                <InlineEditField
-                                    value={surrogateData.partner_state}
-                                    onSave={async (value) => updateSurrogate({ partner_state: value || null })}
-                                    placeholder="-"
-                                    validate={(value) =>
-                                        value && value.length !== 2
-                                            ? "Use 2-letter code (e.g., CA, TX)"
-                                            : null
-                                    }
-                                    label="Partner state"
-                                />
-                            </PersonalInfoRow>
-                            <PersonalInfoRow label="Postal Code">
-                                <InlineEditField
-                                    value={surrogateData.partner_postal}
-                                    onSave={async (value) => updateSurrogate({ partner_postal: value || null })}
-                                    placeholder="-"
-                                    label="Partner postal code"
-                                />
-                            </PersonalInfoRow>
-                        </SurrogateOverviewCard>
+                                }}
+                            >
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Partner section?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This removes the partner column from Personal Information and clears any saved partner details. You can add it back later.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isDeletingPartnerSection}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            variant="destructive"
+                                            onClick={deletePartnerSection}
+                                            disabled={isDeletingPartnerSection}
+                                        >
+                                            Delete Section
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
                     )}
 
                     <CombinedMedicalInsuranceCard

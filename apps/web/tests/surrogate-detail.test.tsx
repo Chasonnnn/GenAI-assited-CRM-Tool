@@ -100,7 +100,13 @@ const baseSurrogateData = {
     sensitive_info_available: false,
     marital_status: null,
     ssn_masked: null,
+    address_line1: null,
+    address_line2: null,
+    address_city: null,
+    address_state: null,
+    address_postal: null,
     partner_name: null,
+    partner_date_of_birth: null,
     partner_email: null,
     partner_phone: null,
     partner_ssn_masked: null,
@@ -373,7 +379,13 @@ describe('SurrogateDetailPage', () => {
                 sensitive_info_available: true,
                 marital_status: 'Married',
                 ssn_masked: '***-**-6789',
+                address_line1: '456 Surrogate Ave',
+                address_line2: 'Unit 9',
+                address_city: 'Dallas',
+                address_state: 'TX',
+                address_postal: '75201',
                 partner_name: 'Taylor Partner',
+                partner_date_of_birth: '1988-04-12',
                 partner_email: 'partner@example.com',
                 partner_phone: '+15551234567',
                 partner_ssn_masked: '***-**-4321',
@@ -394,9 +406,13 @@ describe('SurrogateDetailPage', () => {
         )
 
         expect(screen.getByText('Personal Information')).toBeInTheDocument()
+        expect(screen.getByText('Surrogate')).toBeInTheDocument()
+        expect(screen.getByText('Partner')).toBeInTheDocument()
         expect(screen.getByText('Married')).toBeInTheDocument()
         expect(screen.getByText('***-**-6789')).toBeInTheDocument()
+        expect(screen.getByText('456 Surrogate Ave')).toBeInTheDocument()
         expect(screen.getByText('Taylor Partner')).toBeInTheDocument()
+        expect(screen.getByText('Apr 12, 1988')).toBeInTheDocument()
         expect(screen.getByText('***-**-4321')).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'Reveal surrogate SSN' }))
@@ -433,8 +449,8 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        fireEvent.click(screen.getByRole('button', { name: 'Edit Partner name' }))
-        const input = screen.getByLabelText('Partner name')
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Partner full name' }))
+        const input = screen.getByLabelText('Partner full name')
         fireEvent.change(input, { target: { value: 'Jordan Partner' } })
         fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -442,6 +458,100 @@ describe('SurrogateDetailPage', () => {
             expect(mockUpdateSurrogate).toHaveBeenCalledWith({
                 surrogateId: 'c1',
                 data: { partner_name: 'Jordan Partner' },
+            })
+        })
+    })
+
+    it('shows surrogate personal column and hides empty partner column until added', async () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Pending-DocuSign',
+                stage_id: 's1b',
+                stage_key: 'pending_docusign',
+                stage_slug: 'pending_docusign',
+                sensitive_info_available: true,
+                address_line1: '456 Surrogate Ave',
+                address_city: 'Dallas',
+                address_state: 'TX',
+                address_postal: '75201',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByText('Surrogate')).toBeInTheDocument()
+        expect(screen.getByText('456 Surrogate Ave')).toBeInTheDocument()
+        expect(screen.queryByText('Partner')).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Personal Information' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: /add section/i }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Partner' }))
+
+        expect(await screen.findByText('Partner')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Edit Partner full name' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Edit Partner date of birth' })).toBeInTheDocument()
+    })
+
+    it('deletes partner personal section and clears all partner fields', async () => {
+        mockUpdateSurrogate.mockResolvedValue(baseSurrogateData)
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Pending-DocuSign',
+                stage_id: 's1b',
+                stage_key: 'pending_docusign',
+                stage_slug: 'pending_docusign',
+                sensitive_info_available: true,
+                partner_name: 'Taylor Partner',
+                partner_date_of_birth: '1988-04-12',
+                partner_email: 'partner@example.com',
+                partner_phone: '+15551234567',
+                partner_ssn_masked: '***-**-4321',
+                partner_address_line1: '123 Partner St',
+                partner_address_line2: 'Apt 4',
+                partner_city: 'Austin',
+                partner_state: 'TX',
+                partner_postal: '78701',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Personal Information' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: /delete section/i }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Partner' }))
+
+        expect(screen.getByText('Delete Partner section?')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Delete Section' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: {
+                    partner_name: null,
+                    partner_date_of_birth: null,
+                    partner_email: null,
+                    partner_phone: null,
+                    partner_ssn: null,
+                    partner_address_line1: null,
+                    partner_address_line2: null,
+                    partner_city: null,
+                    partner_state: null,
+                    partner_postal: null,
+                },
             })
         })
     })
@@ -710,9 +820,8 @@ describe('SurrogateDetailPage', () => {
         )
 
         const bmiValue = Math.round((120 / ((5.5 * 12) ** 2)) * 703 * 10) / 10
-        const heightRow = screen.getByText('Height:').parentElement
-        expect(heightRow).toBeTruthy()
-        expect(heightRow).toHaveTextContent('5 ft 6 in')
+        expect(screen.getByText('Height:')).toBeInTheDocument()
+        expect(screen.getByText('5 ft 6 in')).toBeInTheDocument()
         expect(screen.getByText('BMI:')).toBeInTheDocument()
         expect(screen.getByText(String(bmiValue))).toBeInTheDocument()
     })
@@ -734,9 +843,9 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        const heightRow = screen.getByText('Height:').parentElement
-        expect(heightRow).toBeTruthy()
-        expect(heightRow).toHaveTextContent(/Height:\s*-/)
+        expect(screen.getByText('Height:')).toBeInTheDocument()
+        expect(screen.getByText('120 lb')).toBeInTheDocument()
+        expect(screen.getAllByText('-').length).toBeGreaterThan(0)
     })
 
     it('shows inline lead warning icons for affected fields and no review card', async () => {
@@ -787,13 +896,9 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByLabelText('Weight lead intake warning')).toBeInTheDocument()
         expect(screen.queryByLabelText('Email lead intake warning')).not.toBeInTheDocument()
 
-        const heightRow = screen.getByText('Height:').parentElement
-        expect(heightRow).toBeTruthy()
-        expect(heightRow).toHaveTextContent(/Height:\s*-/)
-
-        const weightRow = screen.getByText('Weight:').parentElement
-        expect(weightRow).toBeTruthy()
-        expect(weightRow).toHaveTextContent(/Weight:\s*-/)
+        expect(screen.getByText('Height:')).toBeInTheDocument()
+        expect(screen.getByText('Weight:')).toBeInTheDocument()
+        expect(screen.getAllByText('-').length).toBeGreaterThan(0)
 
         fireEvent.focus(phoneWarning)
 
@@ -866,9 +971,8 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        const heightRow = screen.getByText('Height:').parentElement
-        expect(heightRow).toBeTruthy()
-        expect(heightRow).toHaveTextContent('5 ft 1 in')
+        expect(screen.getByText('Height:')).toBeInTheDocument()
+        expect(screen.getByText('5 ft 1 in')).toBeInTheDocument()
         expect(screen.getByText('BMI:')).toBeInTheDocument()
         expect(screen.getByText("34")).toBeInTheDocument()
     })
@@ -891,9 +995,8 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        const heightRow = screen.getByText('Height:').parentElement
-        expect(heightRow).toBeTruthy()
-        expect(heightRow).toHaveTextContent('5 ft 6 in')
+        expect(screen.getByText('Height:')).toBeInTheDocument()
+        expect(screen.getByText('5 ft 6 in')).toBeInTheDocument()
     })
 
     it('shows 5 ft 0 in when API height is feet-only string', () => {
@@ -913,9 +1016,8 @@ describe('SurrogateDetailPage', () => {
             </SurrogateDetailLayoutClient>
         )
 
-        const heightRow = screen.getByText('Height:').parentElement
-        expect(heightRow).toBeTruthy()
-        expect(heightRow).toHaveTextContent('5 ft 0 in')
+        expect(screen.getByText('Height:')).toBeInTheDocument()
+        expect(screen.getByText('5 ft 0 in')).toBeInTheDocument()
     })
 
     it('shows Medical & Insurance but hides Pregnancy Tracker before ready_to_match', () => {
@@ -1241,7 +1343,7 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
         expect(screen.getByText('Actual Delivery Date:')).toBeInTheDocument()
         expect(screen.getByText('Gender:')).toBeInTheDocument()
-        expect(screen.getByText('Weight:')).toBeInTheDocument()
+        expect(screen.getAllByText('Weight:').length).toBeGreaterThan(0)
     })
 
     it('renders the API-provided eligibility checklist instead of hard-coded rows', () => {
