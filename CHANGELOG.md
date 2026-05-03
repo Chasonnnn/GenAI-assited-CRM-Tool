@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.14](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.13...surrogacy-crm-platform-v0.91.14) (2026-05-02)
+
+
+### Features
+
+* Add gated surrogate sensitive info API ([78990e1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/78990e19dae4f0b0c9b00adf42046294f7605ecb))
+* Add surrogate sensitive info detail UI ([f6ce215](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f6ce215b84b02c3bf49b2627bf27a70c2af560db))
+
+
+### Bug Fixes
+
+* Improve frontend accessibility controls ([c61419e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c61419e5b06d76d0b016aa3e3396ba24d8970c53))
+* Optimize exact-total pagination ([7bf4756](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7bf4756a135b24dd059d5ee85c5555f18fb3b69e))
+* Require remaps for dependent pipeline removals ([49316d3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/49316d3181986795e24bcc02626894881e380849))
+
 ## [0.91.13](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.12...surrogacy-crm-platform-v0.91.13) (2026-04-23)
 
 
