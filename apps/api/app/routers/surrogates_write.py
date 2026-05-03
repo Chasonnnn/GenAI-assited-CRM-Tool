@@ -219,13 +219,6 @@ def update_surrogate(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to update this surrogate")
 
-    sensitive_update_fields = sorted(set(update_data) & surrogate_service.SENSITIVE_INFO_FIELDS)
-    if sensitive_update_fields and not surrogate_service.is_sensitive_info_available(db, surrogate):
-        raise HTTPException(
-            status_code=403,
-            detail="Sensitive personal information is only available at Pending-DocuSign or later",
-        )
-
     was_delivery_date_empty = surrogate.actual_delivery_date is None
     is_setting_delivery_date = (
         "actual_delivery_date" in update_data
@@ -304,18 +297,12 @@ def reveal_sensitive_info(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
-    """Reveal full SSN values after the Pending-DocuSign gate."""
+    """Reveal full SSN values for staff with surrogate access."""
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
 
     check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
-
-    if not surrogate_service.is_sensitive_info_available(db, surrogate):
-        raise HTTPException(
-            status_code=403,
-            detail="Sensitive personal information is only available at Pending-DocuSign or later",
-        )
 
     revealed_fields = []
     if surrogate.ssn:

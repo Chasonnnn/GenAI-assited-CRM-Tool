@@ -98,25 +98,12 @@ def _ssn_last4(value: str | None) -> str | None:
 
 
 def is_sensitive_info_available(db: Session, surrogate: Surrogate) -> bool:
-    """Return whether Pending-DocuSign-gated personal info can be shown."""
-    from app.services import pipeline_service, surrogate_stage_context
+    """Return whether personal info can be shown.
 
-    stage_context = surrogate_stage_context.get_stage_context(
-        db,
-        surrogate,
-        current_stage=surrogate.stage,
-    )
-    effective_stage = stage_context.effective_stage
-    if not effective_stage:
-        return False
-    if pipeline_service.stage_matches_key(effective_stage, "pending_docusign"):
-        return True
-    pending_stage = pipeline_service.get_stage_by_key(
-        db,
-        effective_stage.pipeline_id,
-        "pending_docusign",
-    )
-    return bool(pending_stage and effective_stage.order >= pending_stage.order)
+    Personal information sections are staff-controlled optional sections on the detail
+    page, so availability is no longer tied to a pipeline stage.
+    """
+    return True
 
 
 def build_masked_ssn(last4: str | None) -> str | None:

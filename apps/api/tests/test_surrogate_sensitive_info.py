@@ -33,7 +33,9 @@ def _set_stage(db, test_org, surrogate_id: str, stage_key: str):
 
 
 @pytest.mark.asyncio
-async def test_sensitive_info_hidden_before_pending_docusign(authed_client):
+async def test_sensitive_info_masked_and_revealable_before_pending_docusign(
+    authed_client, db
+):
     created = await _create_surrogate(
         authed_client,
         marital_status="Married",
@@ -58,17 +60,41 @@ async def test_sensitive_info_hidden_before_pending_docusign(authed_client):
     assert detail_res.status_code == 200, detail_res.text
     payload = detail_res.json()
 
-    assert payload["sensitive_info_available"] is False
-    assert payload["marital_status"] is None
-    assert payload["address_line1"] is None
-    assert payload["partner_name"] is None
-    assert payload["partner_date_of_birth"] is None
-    assert payload["ssn_masked"] is None
+    assert payload["sensitive_info_available"] is True
+    assert payload["marital_status"] == "Married"
+    assert payload["address_line1"] == "456 Surrogate Ave"
+    assert payload["address_line2"] == "Unit 9"
+    assert payload["address_city"] == "Dallas"
+    assert payload["address_state"] == "TX"
+    assert payload["address_postal"] == "75201"
+    assert payload["partner_name"] == "Taylor Partner"
+    assert payload["partner_date_of_birth"] == "1988-04-12"
+    assert payload["partner_email"] == "partner@example.com"
+    assert payload["partner_phone"] == "+15551234567"
+    assert payload["partner_address_line1"] == "123 Partner St"
+    assert payload["partner_city"] == "Austin"
+    assert payload["partner_state"] == "TX"
+    assert payload["partner_postal"] == "78701"
+    assert payload["ssn_masked"] == "***-**-6789"
+    assert payload["partner_ssn_masked"] == "***-**-4321"
     assert "ssn" not in payload
     assert "partner_ssn" not in payload
 
     reveal_res = await authed_client.post(f"/surrogates/{created['id']}/sensitive-info/reveal")
-    assert reveal_res.status_code == 403
+    assert reveal_res.status_code == 200, reveal_res.text
+    revealed = reveal_res.json()
+    assert revealed["ssn"] == "123-45-6789"
+    assert revealed["partner_ssn"] == "987-65-4321"
+
+    activity = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.surrogate_id == uuid.UUID(created["id"]),
+            SurrogateActivityLog.activity_type == SurrogateActivityType.SENSITIVE_INFO_REVEALED.value,
+        )
+        .one()
+    )
+    assert activity.details == {"fields": ["ssn", "partner_ssn"]}
 
 
 @pytest.mark.asyncio
