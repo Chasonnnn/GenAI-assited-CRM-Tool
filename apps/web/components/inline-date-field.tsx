@@ -2,8 +2,9 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
-import { CheckIcon, XIcon, PencilIcon, Loader2Icon } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { CheckIcon, XIcon, PencilIcon, Loader2Icon, CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { format, parseISO, isValid } from "date-fns"
 
@@ -30,19 +31,12 @@ export function InlineDateField({
     const [editValue, setEditValue] = React.useState(value || "")
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const inputRef = React.useRef<HTMLInputElement>(null)
+    const [pickerOpen, setPickerOpen] = React.useState(false)
 
     // Reset edit value when prop value changes
     React.useEffect(() => {
         setEditValue(value || "")
     }, [value])
-
-    // Focus input when editing starts
-    React.useEffect(() => {
-        if (isEditing && inputRef.current) {
-            inputRef.current.focus()
-        }
-    }, [isEditing])
 
     const handleStartEdit = () => {
         if (disabled) return
@@ -54,6 +48,7 @@ export function InlineDateField({
         setEditValue(value || "")
         setIsEditing(false)
         setError(null)
+        setPickerOpen(false)
     }
 
     const handleSave = async () => {
@@ -77,6 +72,7 @@ export function InlineDateField({
             await onSave(editValue || null)
             setIsEditing(false)
             setError(null)
+            setPickerOpen(false)
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save")
         } finally {
@@ -115,6 +111,16 @@ export function InlineDateField({
         return null
     }, [value])
 
+    const selectedEditDate = React.useMemo(() => {
+        if (!editValue) return undefined
+        try {
+            const parsed = parseISO(editValue)
+            return isValid(parsed) ? parsed : undefined
+        } catch {
+            return undefined
+        }
+    }, [editValue])
+
     if (!isEditing) {
         return (
             <div
@@ -146,16 +152,55 @@ export function InlineDateField({
     return (
         <div className="flex items-center gap-1">
             <div className="flex-1">
-                <Input
-                    ref={inputRef}
-                    type="date"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className={cn("h-7 w-36 text-sm", error && "border-destructive")}
-                    disabled={isSaving}
-                    aria-label={label}
-                />
+                <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                    <PopoverTrigger
+                        className={cn(
+                            "inline-flex h-7 w-40 items-center justify-start gap-2 rounded-md border border-input bg-input/30 px-2.5 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            !selectedEditDate && "text-muted-foreground",
+                            error && "border-destructive"
+                        )}
+                        disabled={isSaving}
+                        aria-label={label}
+                        onKeyDown={handleKeyDown}
+                    >
+                        <CalendarIcon className="size-3.5" />
+                        {selectedEditDate ? format(selectedEditDate, "MMM d, yyyy") : "Select date"}
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                            mode="single"
+                            selected={selectedEditDate}
+                            onSelect={(date) => {
+                                setEditValue(date ? format(date, "yyyy-MM-dd") : "")
+                                setError(null)
+                                setPickerOpen(false)
+                            }}
+                            defaultMonth={selectedEditDate || new Date()}
+                        />
+                        <div className="flex items-center justify-between border-t px-3 py-2">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setEditValue("")
+                                    setError(null)
+                                    setPickerOpen(false)
+                                }}
+                            >
+                                Clear
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setPickerOpen(false)}
+                            >
+                                Done
+                            </Button>
+                        </div>
+                    </PopoverContent>
+                </Popover>
                 {error && (
                     <p className="text-xs text-destructive mt-1">{error}</p>
                 )}

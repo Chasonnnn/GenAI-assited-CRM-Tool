@@ -667,7 +667,7 @@ export function ActivityTimeline({
     }
 
     return (
-        <Card className="gap-4 py-4">
+        <Card className="gap-2 py-4">
             <CardHeader className="px-4 pb-2">
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayoutClient'
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
@@ -353,15 +353,25 @@ describe('SurrogateDetailPage', () => {
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith('jane@example.com')
     })
 
-    it('hides personal information before Pending-DocuSign', () => {
+    it('shows blank personal information card and can add the surrogate section', async () => {
         render(
             <SurrogateDetailLayoutClient>
                 <SurrogateOverviewTab />
             </SurrogateDetailLayoutClient>
         )
 
-        expect(screen.queryByText('Personal Information')).not.toBeInTheDocument()
+        expect(screen.getByText('Personal Information')).toBeInTheDocument()
+        expect(screen.getByText('No personal information added yet.')).toBeInTheDocument()
         expect(screen.queryByText('Marital Status:')).not.toBeInTheDocument()
+        expect(screen.queryByText('Surrogate')).not.toBeInTheDocument()
+        expect(screen.queryByText('Partner')).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Personal Information' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: /add section/i }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Surrogate' }))
+
+        expect(await screen.findByText('Surrogate')).toBeInTheDocument()
+        expect(screen.getByText('Marital Status:')).toBeInTheDocument()
     })
 
     it('shows masked personal information and reveals SSN at Pending-DocuSign', async () => {
@@ -1383,6 +1393,191 @@ describe('SurrogateDetailPage', () => {
         expect(screen.queryByText('Prior Surrogate Experience')).not.toBeInTheDocument()
     })
 
+    it('supports inline demographics edits from the overview card', async () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                date_of_birth: '1997-07-09',
+                race: 'Hispanic or Latino',
+                height_ft: 5.17,
+                weight_lb: 198,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Date of Birth' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Date of Birth' }))
+        const dateButton = screen
+            .getAllByText('10')
+            .map((element) => element.closest('button'))
+            .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
+        expect(dateButton).toBeDefined()
+        fireEvent.click(dateButton!)
+        fireEvent.click(screen.getByRole('button', { name: 'Save Date of Birth' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { date_of_birth: '1997-07-10' },
+            })
+        })
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Height' }))
+        fireEvent.change(screen.getByLabelText('Height feet'), { target: { value: '5' } })
+        fireEvent.change(screen.getByLabelText('Height inches'), { target: { value: '6' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save Height' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { height_ft: 5.5 },
+            })
+        })
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Weight' }))
+        fireEvent.change(screen.getByLabelText('Weight'), { target: { value: '205' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save Weight' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { weight_lb: 205 },
+            })
+        })
+    })
+
+    it('cycles boolean eligibility checklist icons inline', async () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                is_age_eligible: true,
+                eligibility_checklist: [
+                    {
+                        key: 'is_age_eligible',
+                        label: 'Age Eligible (21-36)',
+                        type: 'boolean',
+                        value: true,
+                        display_value: 'Yes',
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: /Age Eligible.*Yes/i }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { is_age_eligible: false },
+            })
+        })
+    })
+
+    it('edits non-boolean eligibility checklist rows inline from checklist fallback values', async () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                eligibility_checklist: [
+                    {
+                        key: 'journey_timing_preference',
+                        label: 'Journey Timing',
+                        type: 'text',
+                        value: 'months_0_3',
+                        display_value: '0–3 months',
+                    },
+                    {
+                        key: 'num_deliveries',
+                        label: 'Deliveries',
+                        type: 'number',
+                        value: 1,
+                        display_value: '1',
+                    },
+                    {
+                        key: 'num_csections',
+                        label: 'C-sections',
+                        type: 'number',
+                        value: 1,
+                        display_value: '1',
+                    },
+                ],
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        mockUpdateSurrogate.mockClear()
+
+        const journeyTimingSelect = screen.getByLabelText('Journey Timing')
+        expect(journeyTimingSelect).toHaveValue('months_0_3')
+        fireEvent.change(journeyTimingSelect, { target: { value: 'months_3_6' } })
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { journey_timing_preference: 'months_3_6' },
+            })
+        })
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Deliveries' }))
+        const deliveriesInput = screen.getByLabelText('Deliveries')
+        expect(deliveriesInput).toHaveValue('1')
+        fireEvent.change(deliveriesInput, { target: { value: '2' } })
+        fireEvent.keyDown(deliveriesInput, { key: 'Enter' })
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { num_deliveries: 2 },
+            })
+        })
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit C-sections' }))
+        const csectionsInput = screen.getByLabelText('C-sections')
+        expect(csectionsInput).toHaveValue('1')
+        fireEvent.change(csectionsInput, { target: { value: '0' } })
+        fireEvent.keyDown(csectionsInput, { key: 'Enter' })
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { num_csections: 0 },
+            })
+        })
+    })
+
     it('keeps visible checklist items editable from the surrogate detail edit dialog', async () => {
         mockUseSurrogate.mockReturnValue({
             data: {
@@ -1429,13 +1624,14 @@ describe('SurrogateDetailPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
         fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
 
-        const journeyTimingSelect = await screen.findByLabelText('Journey Timing')
+        const editDialog = await screen.findByRole('dialog')
+        const journeyTimingSelect = await within(editDialog).findByLabelText('Journey Timing')
         expect(journeyTimingSelect).toHaveValue('months_0_3')
-        expect(screen.getByLabelText('Number of Deliveries')).toHaveValue(1)
-        expect(screen.queryByLabelText('Surrogate Experience')).not.toBeInTheDocument()
+        expect(within(editDialog).getByLabelText('Number of Deliveries')).toHaveValue(1)
+        expect(within(editDialog).queryByLabelText('Surrogate Experience')).not.toBeInTheDocument()
 
         fireEvent.change(journeyTimingSelect, { target: { value: 'still_deciding' } })
-        fireEvent.change(screen.getByLabelText('Number of Deliveries'), { target: { value: '2' } })
+        fireEvent.change(within(editDialog).getByLabelText('Number of Deliveries'), { target: { value: '2' } })
         fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
         await waitFor(() => {
