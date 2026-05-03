@@ -104,7 +104,13 @@ export interface SurrogateCreatePayload {
     state?: string;
     marital_status?: string | null;
     ssn?: string | null;
+    address_line1?: string | null;
+    address_line2?: string | null;
+    address_city?: string | null;
+    address_state?: string | null;
+    address_postal?: string | null;
     partner_name?: string | null;
+    partner_date_of_birth?: string | null;
     partner_email?: string | null;
     partner_phone?: string | null;
     partner_ssn?: string | null;
@@ -140,7 +146,13 @@ export interface SurrogateUpdatePayload {
     state?: string | null;
     marital_status?: string | null;
     ssn?: string | null;
+    address_line1?: string | null;
+    address_line2?: string | null;
+    address_city?: string | null;
+    address_state?: string | null;
+    address_postal?: string | null;
     partner_name?: string | null;
+    partner_date_of_birth?: string | null;
     partner_email?: string | null;
     partner_phone?: string | null;
     partner_ssn?: string | null;

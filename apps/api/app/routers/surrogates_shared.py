@@ -75,7 +75,15 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
             if sensitive_info_available
             else None
         ),
+        address_line1=surrogate.address_line1 if sensitive_info_available else None,
+        address_line2=surrogate.address_line2 if sensitive_info_available else None,
+        address_city=surrogate.address_city if sensitive_info_available else None,
+        address_state=surrogate.address_state if sensitive_info_available else None,
+        address_postal=surrogate.address_postal if sensitive_info_available else None,
         partner_name=surrogate.partner_name if sensitive_info_available else None,
+        partner_date_of_birth=(
+            surrogate.partner_date_of_birth if sensitive_info_available else None
+        ),
         partner_email=surrogate.partner_email if sensitive_info_available else None,
         partner_phone=surrogate.partner_phone if sensitive_info_available else None,
         partner_ssn_masked=(

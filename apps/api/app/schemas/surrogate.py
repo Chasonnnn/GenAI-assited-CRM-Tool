@@ -58,7 +58,13 @@ class SurrogateCreate(BaseModel):
     # Pending DocuSign personal information
     marital_status: MaritalStatus | None = None
     ssn: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    address_city: str | None = Field(None, max_length=100)
+    address_state: str | None = None
+    address_postal: str | None = Field(None, max_length=20)
     partner_name: str | None = Field(None, max_length=255)
+    partner_date_of_birth: date | None = None
     partner_email: EmailStr | None = None
     partner_phone: str | None = None
     partner_ssn: str | None = None
@@ -245,6 +251,7 @@ class SurrogateCreate(BaseModel):
         "delivery_hospital_state",
         "pcp_state",
         "lab_clinic_state",
+        "address_state",
     )
     @classmethod
     def validate_optional_state(cls, v: str | None) -> str | None:
@@ -289,7 +296,13 @@ class SurrogateUpdate(BaseModel):
     state: str | None = None
     marital_status: MaritalStatus | None = None
     ssn: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    address_city: str | None = Field(None, max_length=100)
+    address_state: str | None = None
+    address_postal: str | None = Field(None, max_length=20)
     partner_name: str | None = Field(None, max_length=255)
+    partner_date_of_birth: date | None = None
     partner_email: EmailStr | None = None
     partner_phone: str | None = None
     partner_ssn: str | None = None
@@ -470,6 +483,7 @@ class SurrogateUpdate(BaseModel):
         "delivery_hospital_state",
         "pcp_state",
         "lab_clinic_state",
+        "address_state",
     )
     @classmethod
     def validate_optional_state(cls, v: str | None) -> str | None:
@@ -585,7 +599,13 @@ class SurrogateRead(BaseModel):
     sensitive_info_available: bool = False
     marital_status: str | None = None
     ssn_masked: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_postal: str | None = None
     partner_name: str | None = None
+    partner_date_of_birth: date | None = None
     partner_email: str | None = None
     partner_phone: str | None = None
     partner_ssn_masked: str | None = None
