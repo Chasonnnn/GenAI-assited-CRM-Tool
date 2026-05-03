@@ -149,6 +149,7 @@ export interface SurrogateDetailActionsContextValue {
         stage_id: string
         reason?: string
         effective_at?: string
+        interview_scheduled_at?: string
         on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
@@ -462,6 +463,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         stage_id: string
         reason?: string
         effective_at?: string
+        interview_scheduled_at?: string
         on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
@@ -476,12 +478,14 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
             stage_id: string
             reason?: string
             effective_at?: string
+            interview_scheduled_at?: string
             on_hold_follow_up_months?: 1 | 3 | 6 | null
             delivery_baby_gender?: string | null
             delivery_baby_weight?: string | null
         } = { stage_id: data.stage_id }
         if (data.reason) payload.reason = data.reason
         if (data.effective_at) payload.effective_at = data.effective_at
+        if (data.interview_scheduled_at) payload.interview_scheduled_at = data.interview_scheduled_at
         if (data.on_hold_follow_up_months !== undefined) {
             payload.on_hold_follow_up_months = data.on_hold_follow_up_months
         }

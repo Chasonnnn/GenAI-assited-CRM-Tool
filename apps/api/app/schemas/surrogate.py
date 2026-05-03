@@ -814,6 +814,10 @@ class SurrogateStatusChange(BaseModel):
     effective_at: datetime | None = Field(
         None, description="When the change actually occurred (optional, defaults to now)"
     )
+    interview_scheduled_at: datetime | None = Field(
+        None,
+        description="Required appointment date/time when moving to Interview Scheduled",
+    )
     on_hold_follow_up_months: Literal[1, 3, 6] | None = None
     delivery_baby_gender: str | None = Field(None, max_length=50)
     delivery_baby_weight: str | None = Field(None, max_length=50)

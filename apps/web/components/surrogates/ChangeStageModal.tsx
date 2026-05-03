@@ -27,13 +27,40 @@ import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
     stageHasCapability,
+    stageMatchesKey,
     stageRequiresReasonOnEnter,
     stageUsesPauseBehavior,
 } from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
 import type { PipelineStage } from "@/lib/api/pipelines"
+
+type InterviewMeridiem = "AM" | "PM"
+
+function normalizeInterviewTime(
+    hourInput: string,
+    minuteInput: string,
+    meridiem: InterviewMeridiem
+): string | null {
+    const hourText = hourInput.trim()
+    const minuteText = minuteInput.trim()
+    if (!/^\d{1,2}$/.test(hourText) || !/^\d{1,2}$/.test(minuteText)) return null
+
+    let hour = Number(hourText)
+    const minute = Number(minuteText)
+    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null
+
+    if (meridiem === "PM" && hour !== 12) hour += 12
+    if (meridiem === "AM" && hour === 12) hour = 0
+
+    return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+}
+
+function firstDigitGroup(value: string): string {
+    return value.match(/\d+/)?.[0] ?? ""
+}
 
 interface ChangeStageModalProps {
     open: boolean
@@ -47,6 +74,7 @@ interface ChangeStageModalProps {
         stage_id: string
         reason?: string
         effective_at?: string // ISO datetime
+        interview_scheduled_at?: string
         on_hold_follow_up_months?: 1 | 3 | 6 | null
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
@@ -82,9 +110,14 @@ export function ChangeStageModal({
     const [selectedTime, setSelectedTime] = useState("")
     const [reason, setReason] = useState("")
     const [datePickerOpen, setDatePickerOpen] = useState(false)
+    const [interviewDatePickerOpen, setInterviewDatePickerOpen] = useState(false)
     const [deliveryBabyGender, setDeliveryBabyGender] = useState("")
     const [deliveryBabyWeight, setDeliveryBabyWeight] = useState("")
     const [onHoldFollowUpMonths, setOnHoldFollowUpMonths] = useState<"none" | "1" | "3" | "6">("none")
+    const [interviewDate, setInterviewDate] = useState<Date | undefined>(undefined)
+    const [interviewHourInput, setInterviewHourInput] = useState("")
+    const [interviewMinuteInput, setInterviewMinuteInput] = useState("")
+    const [interviewMeridiem, setInterviewMeridiem] = useState<InterviewMeridiem>("PM")
 
     // Reset state when modal opens
     useEffect(() => {
@@ -97,6 +130,11 @@ export function ChangeStageModal({
             setDeliveryBabyGender(initialDeliveryBabyGender ?? "")
             setDeliveryBabyWeight(initialDeliveryBabyWeight ?? "")
             setOnHoldFollowUpMonths("none")
+            setInterviewDate(undefined)
+            setInterviewHourInput("")
+            setInterviewMinuteInput("")
+            setInterviewMeridiem("PM")
+            setInterviewDatePickerOpen(false)
         }
     }, [open, initialDeliveryBabyGender, initialDeliveryBabyWeight])
 
@@ -117,7 +155,14 @@ export function ChangeStageModal({
     )
     const isDeliveredStage = stageHasCapability(selectedStage, "requires_delivery_details")
     const isOnHoldStage = stageUsesPauseBehavior(selectedStage)
+    const isInterviewScheduledStage = stageMatchesKey(selectedStage, "interview_scheduled")
     const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
+    const interviewTime = normalizeInterviewTime(interviewHourInput, interviewMinuteInput, interviewMeridiem)
+    const interviewTimeStarted = interviewHourInput.trim().length > 0 || interviewMinuteInput.trim().length > 0
+    const interviewTimeInvalid = isInterviewScheduledStage && interviewTimeStarted && !interviewTime
+    const interviewDateTime = isInterviewScheduledStage && interviewDate && interviewTime
+        ? `${format(interviewDate, "yyyy-MM-dd")}T${interviewTime}:00`
+        : null
 
     const isResumeSelection = useMemo(() => {
         if (!selectedStage || !currentStage || !comparisonStage) return false
@@ -162,9 +207,10 @@ export function ChangeStageModal({
         if (!selectedStageId) return false
         if (selectedStageId === currentStageId) return false
         if (!effectiveNow && !selectedDate) return false
+        if (isInterviewScheduledStage && !interviewDateTime) return false
         if (reasonRequired && !reason.trim()) return false
         return true
-    }, [selectedStageId, currentStageId, effectiveNow, selectedDate, reasonRequired, reason])
+    }, [selectedStageId, currentStageId, effectiveNow, selectedDate, isInterviewScheduledStage, interviewDateTime, reasonRequired, reason])
 
     // Build effective_at ISO string
     const buildEffectiveAt = (): string | undefined => {
@@ -188,6 +234,7 @@ export function ChangeStageModal({
             stage_id: string
             reason?: string
             effective_at?: string
+            interview_scheduled_at?: string
             on_hold_follow_up_months?: 1 | 3 | 6 | null
             delivery_baby_gender?: string | null
             delivery_baby_weight?: string | null
@@ -197,6 +244,7 @@ export function ChangeStageModal({
         const trimmedReason = reason.trim()
         if (trimmedReason) payload.reason = trimmedReason
         if (effective_at) payload.effective_at = effective_at
+        if (interviewDateTime) payload.interview_scheduled_at = interviewDateTime
         if (isOnHoldStage && onHoldFollowUpMonths !== "none") {
             payload.on_hold_follow_up_months = Number(onHoldFollowUpMonths) as 1 | 3 | 6
         }
@@ -218,6 +266,28 @@ export function ChangeStageModal({
     }
 
     const label = entityLabel ?? "Stage"
+    const updateInterviewHourInput = (value: string) => {
+        const digitGroups = value.match(/\d+/g) ?? []
+        setInterviewHourInput((digitGroups[0] ?? "").slice(0, 2))
+        if (digitGroups.length > 1) {
+            setInterviewMinuteInput((digitGroups[1] ?? "").slice(0, 2))
+        }
+    }
+    const updateInterviewMinuteInput = (value: string) => {
+        setInterviewMinuteInput(firstDigitGroup(value).slice(0, 2))
+    }
+    const normalizeInterviewHourInput = () => {
+        const hour = Number(interviewHourInput)
+        if (interviewHourInput && hour >= 1 && hour <= 12) {
+            setInterviewHourInput(hour.toString())
+        }
+    }
+    const normalizeInterviewMinuteInput = () => {
+        const minute = Number(interviewMinuteInput)
+        if (interviewMinuteInput && minute >= 0 && minute <= 59) {
+            setInterviewMinuteInput(minute.toString().padStart(2, "0"))
+        }
+    }
 
     // Button text based on context
     const submitButtonText = isResumeSelection
@@ -414,6 +484,119 @@ export function ChangeStageModal({
                                         </button>
                                     )
                                 })}
+                            </div>
+                        </div>
+                    )}
+
+                    {isInterviewScheduledStage && (
+                        <div className="space-y-3 rounded-lg border border-muted/60 bg-muted/20 p-3">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium text-foreground">
+                                    Interview appointment
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Select the date and time for the interview appointment.
+                                </p>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>
+                                        Interview date <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Popover open={interviewDatePickerOpen} onOpenChange={setInterviewDatePickerOpen}>
+                                        <PopoverTrigger
+                                            className={cn(
+                                                "inline-flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-input/30 px-3 py-2 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                                !interviewDate && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="size-4" />
+                                            {interviewDate ? format(interviewDate, "PPP") : "Select date"}
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar
+                                                mode="single"
+                                                selected={interviewDate}
+                                                onSelect={(date) => {
+                                                    setInterviewDate(date)
+                                                    setInterviewDatePickerOpen(false)
+                                                }}
+                                                disabled={(date) => date < startOfDay(new Date())}
+                                                defaultMonth={interviewDate || new Date()}
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>
+                                        Interview time <span className="text-destructive">*</span>
+                                    </Label>
+                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+                                        <div className="space-y-1">
+                                            <Label htmlFor="interview-hour" className="text-xs text-muted-foreground">
+                                                Hour
+                                            </Label>
+                                            <Input
+                                                id="interview-hour"
+                                                value={interviewHourInput}
+                                                onChange={(event) => updateInterviewHourInput(event.target.value)}
+                                                onBlur={normalizeInterviewHourInput}
+                                                placeholder="1"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                maxLength={5}
+                                                className="text-center"
+                                                aria-label="Interview hour"
+                                                aria-invalid={interviewTimeInvalid}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label htmlFor="interview-minute" className="text-xs text-muted-foreground">
+                                                Minute
+                                            </Label>
+                                            <Input
+                                                id="interview-minute"
+                                                value={interviewMinuteInput}
+                                                onChange={(event) => updateInterviewMinuteInput(event.target.value)}
+                                                onBlur={normalizeInterviewMinuteInput}
+                                                placeholder="35"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                maxLength={2}
+                                                className="text-center"
+                                                aria-label="Interview minute"
+                                                aria-invalid={interviewTimeInvalid}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label id="interview-meridiem-label" className="text-xs text-muted-foreground">
+                                                AM/PM
+                                            </Label>
+                                            <ToggleGroup
+                                                value={[interviewMeridiem]}
+                                                onValueChange={(value) => {
+                                                    const nextValue = Array.isArray(value) ? value[0] : value
+                                                    if (nextValue === "AM" || nextValue === "PM") {
+                                                        setInterviewMeridiem(nextValue)
+                                                    }
+                                                }}
+                                                aria-labelledby="interview-meridiem-label"
+                                                variant="outline"
+                                                size="sm"
+                                                spacing={0}
+                                                className="h-9"
+                                            >
+                                                <ToggleGroupItem value="AM" className="h-9 px-3">AM</ToggleGroupItem>
+                                                <ToggleGroupItem value="PM" className="h-9 px-3">PM</ToggleGroupItem>
+                                            </ToggleGroup>
+                                        </div>
+                                    </div>
+                                    {interviewTimeInvalid && (
+                                        <p className="text-xs text-destructive">
+                                            Enter an hour from 1-12 and minutes from 00-59.
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}

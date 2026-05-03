@@ -2,6 +2,7 @@
 
 import calendar
 import logging
+import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -11,8 +12,18 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.enums import ContactStatus, OwnerType, Role, SurrogateStatus, TaskType
+from app.db.enums import (
+    AppointmentStatus,
+    ContactStatus,
+    MeetingMode,
+    OwnerType,
+    Role,
+    SurrogateStatus,
+    TaskType,
+)
 from app.db.models import (
+    Appointment,
+    AppointmentType,
     Organization,
     PipelineStage,
     StatusChangeRequest,
@@ -151,6 +162,155 @@ def _create_on_hold_follow_up_task(
     return task
 
 
+def _normalize_interview_scheduled_at(
+    scheduled_at: datetime | None,
+    org_timezone_str: str,
+) -> datetime | None:
+    if scheduled_at is None:
+        return None
+
+    org_tz = ZoneInfo(org_timezone_str)
+    if scheduled_at.tzinfo is None:
+        scheduled_at = scheduled_at.replace(tzinfo=org_tz)
+    else:
+        scheduled_at = scheduled_at.astimezone(org_tz)
+    return scheduled_at.astimezone(timezone.utc)
+
+
+def _get_or_create_interview_appointment_type(
+    db: Session,
+    *,
+    org_id: UUID,
+    user_id: UUID,
+) -> AppointmentType:
+    appointment_type = (
+        db.query(AppointmentType)
+        .filter(
+            AppointmentType.organization_id == org_id,
+            AppointmentType.user_id == user_id,
+            AppointmentType.slug == "initial-interview",
+        )
+        .one_or_none()
+    )
+    if appointment_type:
+        return appointment_type
+
+    appointment_type = AppointmentType(
+        organization_id=org_id,
+        user_id=user_id,
+        name="Initial Interview",
+        slug="initial-interview",
+        description="Interview scheduled from a surrogate stage change.",
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=5,
+        meeting_mode=MeetingMode.PHONE.value,
+        meeting_modes=[MeetingMode.PHONE.value],
+        auto_approve=True,
+        reminder_hours_before=24,
+        is_active=True,
+    )
+    db.add(appointment_type)
+    db.flush()
+    return appointment_type
+
+
+def _schedule_interview_appointment(
+    db: Session,
+    *,
+    surrogate: Surrogate,
+    actor_user_id: UUID | None,
+    interview_scheduled_at: datetime | None,
+    recorded_at: datetime,
+    org_timezone_str: str,
+) -> Appointment | None:
+    scheduled_start = _normalize_interview_scheduled_at(interview_scheduled_at, org_timezone_str)
+    if scheduled_start is None:
+        return None
+
+    appointment_owner_id = (
+        surrogate.owner_id if surrogate.owner_type == OwnerType.USER.value else actor_user_id
+    )
+    if appointment_owner_id is None:
+        raise ValueError("A user owner is required to schedule an interview appointment")
+
+    appointment_type = _get_or_create_interview_appointment_type(
+        db,
+        org_id=surrogate.organization_id,
+        user_id=appointment_owner_id,
+    )
+    scheduled_end = scheduled_start + timedelta(minutes=appointment_type.duration_minutes)
+    token_expires = scheduled_end + timedelta(days=7)
+
+    appointment = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == surrogate.organization_id,
+            Appointment.surrogate_id == surrogate.id,
+            Appointment.appointment_type_id == appointment_type.id,
+            Appointment.scheduled_start >= recorded_at,
+            Appointment.status.in_(
+                [AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value]
+            ),
+        )
+        .order_by(Appointment.scheduled_start.desc())
+        .first()
+    )
+
+    if appointment is None:
+        appointment = Appointment(
+            organization_id=surrogate.organization_id,
+            user_id=appointment_owner_id,
+            appointment_type_id=appointment_type.id,
+            surrogate_id=surrogate.id,
+            client_name=surrogate.full_name,
+            client_email=surrogate.email,
+            client_phone=surrogate.phone or "Not provided",
+            client_timezone=org_timezone_str,
+            scheduled_start=scheduled_start,
+            scheduled_end=scheduled_end,
+            duration_minutes=appointment_type.duration_minutes,
+            buffer_before_minutes=appointment_type.buffer_before_minutes,
+            buffer_after_minutes=appointment_type.buffer_after_minutes,
+            meeting_mode=appointment_type.meeting_mode,
+            meeting_location=appointment_type.meeting_location,
+            dial_in_number=appointment_type.dial_in_number,
+            status=AppointmentStatus.CONFIRMED.value,
+            approved_at=recorded_at,
+            approved_by_user_id=actor_user_id,
+            reschedule_token=secrets.token_urlsafe(32)[:64],
+            cancel_token=secrets.token_urlsafe(32)[:64],
+            reschedule_token_expires_at=token_expires,
+            cancel_token_expires_at=token_expires,
+        )
+        db.add(appointment)
+    else:
+        appointment.user_id = appointment_owner_id
+        appointment.client_name = surrogate.full_name
+        appointment.client_email = surrogate.email
+        appointment.client_phone = surrogate.phone or "Not provided"
+        appointment.client_timezone = org_timezone_str
+        appointment.scheduled_start = scheduled_start
+        appointment.scheduled_end = scheduled_end
+        appointment.duration_minutes = appointment_type.duration_minutes
+        appointment.buffer_before_minutes = appointment_type.buffer_before_minutes
+        appointment.buffer_after_minutes = appointment_type.buffer_after_minutes
+        appointment.meeting_mode = appointment_type.meeting_mode
+        appointment.meeting_location = appointment_type.meeting_location
+        appointment.dial_in_number = appointment_type.dial_in_number
+        appointment.status = AppointmentStatus.CONFIRMED.value
+        appointment.approved_at = recorded_at
+        appointment.approved_by_user_id = actor_user_id
+        appointment.cancelled_at = None
+        appointment.cancellation_reason = None
+        appointment.cancelled_by_client = False
+        appointment.reschedule_token_expires_at = token_expires
+        appointment.cancel_token_expires_at = token_expires
+
+    db.flush()
+    return appointment
+
+
 def _cleanup_on_hold_follow_up_task(
     db: Session,
     *,
@@ -184,6 +344,7 @@ def change_status(
     user_role: Role | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
+    interview_scheduled_at: datetime | None = None,
     on_hold_follow_up_months: int | None = None,
     trigger_workflows: bool = True,
     *,
@@ -243,6 +404,20 @@ def change_status(
 
     if pipeline_service.stage_matches_key(new_stage, "on_hold") and not reason:
         raise ValueError("Reason required when moving to On-Hold")
+
+    normalized_interview_scheduled_at = _normalize_interview_scheduled_at(
+        interview_scheduled_at,
+        org_tz_str,
+    )
+    if pipeline_service.stage_matches_key(new_stage, "interview_scheduled"):
+        if normalized_interview_scheduled_at is None:
+            raise ValueError("Interview date and time required when moving to Interview Scheduled")
+        if (normalized_interview_scheduled_at - now).total_seconds() <= 0:
+            raise ValueError("Interview date and time must be in the future")
+    elif normalized_interview_scheduled_at is not None:
+        raise ValueError(
+            "Interview date and time is only allowed when moving to Interview Scheduled"
+        )
 
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_resume_from_on_hold = bool(
@@ -339,6 +514,7 @@ def change_status(
                 if pipeline_service.stage_matches_key(new_stage, "on_hold")
                 else paused_from_stage,
                 on_hold_follow_up_months=on_hold_follow_up_months,
+                interview_scheduled_at=normalized_interview_scheduled_at,
                 trigger_workflows=trigger_workflows,
             )
             if emit_events:
@@ -374,6 +550,7 @@ def change_status(
                     else paused_from_stage
                 ),
                 on_hold_follow_up_months=on_hold_follow_up_months,
+                interview_scheduled_at=normalized_interview_scheduled_at,
                 trigger_workflows=trigger_workflows,
             )
             if emit_events:
@@ -468,6 +645,7 @@ def change_status(
             else paused_from_stage
         ),
         on_hold_follow_up_months=on_hold_follow_up_months,
+        interview_scheduled_at=normalized_interview_scheduled_at,
         trigger_workflows=trigger_workflows,
     )
     if emit_events:
@@ -497,6 +675,7 @@ def apply_status_change(
     requested_at: datetime | None = None,
     paused_from_stage: PipelineStage | None = None,
     on_hold_follow_up_months: int | None = None,
+    interview_scheduled_at: datetime | None = None,
     trigger_workflows: bool = True,
 ) -> StatusChangeResult:
     """
@@ -534,6 +713,16 @@ def apply_status_change(
         )
         surrogate.on_hold_follow_up_task_id = (
             created_follow_up_task.id if created_follow_up_task else None
+        )
+
+    if pipeline_service.stage_matches_key(new_stage, "interview_scheduled"):
+        _schedule_interview_appointment(
+            db,
+            surrogate=surrogate,
+            actor_user_id=user_id,
+            interview_scheduled_at=interview_scheduled_at,
+            recorded_at=recorded_at,
+            org_timezone_str=resolved_org_timezone,
         )
 
     # Update contact status if reached or leaving intake stage

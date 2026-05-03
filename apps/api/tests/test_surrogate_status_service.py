@@ -5,7 +5,13 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.db.enums import OwnerType, Role, TaskType
-from app.db.models import StatusChangeRequest, SurrogateStatusHistory, Task
+from app.db.models import (
+    Appointment,
+    AppointmentType,
+    StatusChangeRequest,
+    SurrogateStatusHistory,
+    Task,
+)
 from app.schemas.surrogate import SurrogateCreate
 from app.services import pipeline_service, surrogate_service, surrogate_status_service
 
@@ -225,6 +231,60 @@ def test_on_hold_requires_reason(db, test_org, test_user):
             user_id=test_user.id,
             user_role=Role.DEVELOPER,
         )
+
+
+def test_interview_scheduled_requires_interview_datetime(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    interview_stage = _get_stage(db, test_org.id, "interview_scheduled")
+
+    with pytest.raises(ValueError, match="Interview date and time required"):
+        surrogate_status_service.change_status(
+            db=db,
+            surrogate=surrogate,
+            new_stage_id=interview_stage.id,
+            user_id=test_user.id,
+            user_role=Role.DEVELOPER,
+        )
+
+
+def test_interview_scheduled_creates_confirmed_interview_appointment(db, test_org, test_user):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    surrogate.phone = "5551234567"
+    interview_stage = _get_stage(db, test_org.id, "interview_scheduled")
+    scheduled_at = datetime.now(timezone.utc) + timedelta(days=3)
+
+    result = surrogate_status_service.change_status(
+        db=db,
+        surrogate=surrogate,
+        new_stage_id=interview_stage.id,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+        interview_scheduled_at=scheduled_at,
+    )
+
+    assert result["status"] == "applied"
+    appointment = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == test_org.id,
+            Appointment.surrogate_id == surrogate.id,
+        )
+        .one()
+    )
+    assert appointment.status == "confirmed"
+    assert appointment.client_name == surrogate.full_name
+    assert appointment.client_email == surrogate.email
+    assert appointment.client_phone == surrogate.phone
+    assert appointment.scheduled_start == scheduled_at
+    assert appointment.scheduled_end == scheduled_at + timedelta(minutes=30)
+    assert appointment.approved_by_user_id == test_user.id
+
+    appointment_type = (
+        db.query(AppointmentType)
+        .filter(AppointmentType.id == appointment.appointment_type_id)
+        .one()
+    )
+    assert appointment_type.name == "Initial Interview"
 
 
 def test_on_hold_creates_follow_up_and_resume_cleans_up(db, test_org, test_user):

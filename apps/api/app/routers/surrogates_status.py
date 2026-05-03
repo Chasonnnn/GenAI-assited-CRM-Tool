@@ -72,6 +72,7 @@ def change_status(
             user_role=session.role,
             reason=data.reason,
             effective_at=data.effective_at,
+            interview_scheduled_at=data.interview_scheduled_at,
             on_hold_follow_up_months=data.on_hold_follow_up_months,
             emit_events=True,
         )

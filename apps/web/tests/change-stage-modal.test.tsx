@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { addDays, format } from "date-fns"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 
 const stages = [
@@ -21,6 +22,16 @@ const stages = [
         color: "#b4536a",
         order: 18,
         stage_type: "paused" as const,
+        is_active: true,
+    },
+    {
+        id: "stage_interview_scheduled",
+        stage_key: "interview_scheduled",
+        slug: "interview_scheduled",
+        label: "Interview Scheduled",
+        color: "#0f766e",
+        order: 4,
+        stage_type: "intake" as const,
         is_active: true,
     },
     {
@@ -186,5 +197,77 @@ describe("ChangeStageModal", () => {
         ).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Save Change" })).toBeInTheDocument()
         expect(screen.queryByText("Admin Approval Required")).not.toBeInTheDocument()
+    })
+
+    it("requires an interview date and time when moving to Interview Scheduled", async () => {
+        const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
+
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={onSubmit}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
+
+        expect(screen.getByText("Interview appointment")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
+
+        const interviewDate = addDays(new Date(), 7)
+        fireEvent.click(screen.getByRole("button", { name: /select date/i }))
+        const dayButton = screen
+            .getAllByText(format(interviewDate, "d"))
+            .map((element) => element.closest("button"))
+            .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
+        expect(dayButton).toBeDefined()
+        fireEvent.click(dayButton!)
+
+        expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
+
+        fireEvent.change(screen.getByLabelText(/interview hour/i), {
+            target: { value: "1" },
+        })
+        fireEvent.change(screen.getByLabelText(/interview minute/i), {
+            target: { value: "35" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Save Change" }))
+
+        await waitFor(() => {
+            expect(onSubmit).toHaveBeenCalledWith({
+                stage_id: "stage_interview_scheduled",
+                interview_scheduled_at: `${format(interviewDate, "yyyy-MM-dd")}T13:35:00`,
+            })
+        })
+    })
+
+    it("keeps interview time entry constrained to hour and minute fields", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /interview scheduled/i }))
+
+        const hourInput = screen.getByLabelText(/interview hour/i)
+        const minuteInput = screen.getByLabelText(/interview minute/i)
+
+        fireEvent.change(hourInput, { target: { value: "1-45" } })
+        expect(hourInput).toHaveValue("1")
+        expect(minuteInput).toHaveValue("45")
+
+        fireEvent.change(minuteInput, { target: { value: "75" } })
+        expect(screen.getByText(/enter an hour from 1-12 and minutes from 00-59/i)).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
     })
 })
