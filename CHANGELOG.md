@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.18](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.17...surrogacy-crm-platform-v0.91.18) (2026-05-06)
+
+
+### Bug Fixes
+
+* Bump backend security pins ([a8f1b4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a8f1b4a9f1e9507feb559908756198c49f738311))
+* Evenly space demographics metrics ([5fc527e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5fc527e8ba319e80b4bea9929791e40d707f6347))
+* Show interview scheduled time in activity feed ([4d67d29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d67d29babf4773a06d2763fc1097c2b4a31de3f))
+
 ## [0.91.17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.16...surrogacy-crm-platform-v0.91.17) (2026-05-06)
 
 
