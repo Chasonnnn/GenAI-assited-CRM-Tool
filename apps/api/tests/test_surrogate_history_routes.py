@@ -11,7 +11,7 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, Surrogate, User
+from app.db.models import Appointment, Membership, Surrogate, SurrogateActivityLog, User
 from app.main import app
 from app.services import pipeline_service, session_service
 
@@ -200,3 +200,64 @@ async def test_surrogate_activity_route_includes_stage_changes_in_chronological_
     assert _parse_iso_datetime(status_entries[0]["created_at"]) == qualified_at
     assert _parse_iso_datetime(status_entries[0]["details"]["effective_at"]) == qualified_at
     assert status_entries[0]["details"]["recorded_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_surrogate_activity_route_derives_missing_interview_scheduled_activity(
+    authed_client, db, test_auth
+):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Derived Interview Activity Test",
+            "email": f"derived-interview-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = create_res.json()["id"]
+
+    interview_stage = _get_stage(db, test_auth.org.id, "interview_scheduled")
+    scheduled_at = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=3)
+
+    update_res = await authed_client.patch(
+        f"/surrogates/{surrogate_id}/status",
+        json={
+            "stage_id": str(interview_stage.id),
+            "interview_scheduled_at": scheduled_at.isoformat(),
+        },
+    )
+    assert update_res.status_code == 200, update_res.text
+
+    appointment = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == test_auth.org.id,
+            Appointment.surrogate_id == uuid.UUID(surrogate_id),
+        )
+        .one()
+    )
+
+    db.query(SurrogateActivityLog).filter(
+        SurrogateActivityLog.organization_id == test_auth.org.id,
+        SurrogateActivityLog.surrogate_id == uuid.UUID(surrogate_id),
+        SurrogateActivityLog.activity_type == "interview_scheduled",
+    ).delete(synchronize_session=False)
+    db.commit()
+
+    activity_res = await authed_client.get(f"/surrogates/{surrogate_id}/activity")
+    assert activity_res.status_code == 200, activity_res.text
+    items = activity_res.json()["items"]
+
+    interview_entries = [
+        item for item in items if item["activity_type"] == "interview_scheduled"
+    ]
+    assert len(interview_entries) == 1
+    assert interview_entries[0]["id"] == str(appointment.id)
+    assert interview_entries[0]["actor_user_id"] == str(test_auth.user.id)
+    assert interview_entries[0]["actor_name"] == test_auth.user.display_name
+    assert interview_entries[0]["details"] == {
+        "source": "appointment",
+        "appointment_id": str(appointment.id),
+        "scheduled_start": scheduled_at.isoformat(),
+        "scheduled_end": appointment.scheduled_end.isoformat(),
+    }

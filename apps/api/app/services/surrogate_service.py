@@ -14,6 +14,7 @@ from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
     AlertSeverity,
     AlertType,
+    AppointmentStatus,
     SurrogateActivityType,
     SurrogateSource,
     OwnerType,
@@ -2167,7 +2168,15 @@ def list_surrogate_activity(
     per_page: int,
 ) -> tuple[list[dict], int]:
     """List activity log items for a case."""
-    from app.db.models import EmailTemplate, Membership, Queue, SurrogateActivityLog, User
+    from app.db.models import (
+        Appointment,
+        AppointmentType,
+        EmailTemplate,
+        Membership,
+        Queue,
+        SurrogateActivityLog,
+        User,
+    )
 
     activity_filters = [
         SurrogateActivityLog.surrogate_id == surrogate_id,
@@ -2198,6 +2207,43 @@ def list_surrogate_activity(
         .order_by(SurrogateStatusHistory.changed_at.desc())
         .all()
     )
+
+    existing_interview_appointment_ids: set[UUID] = set()
+    for row in activity_rows:
+        activity = row.SurrogateActivityLog
+        if activity.activity_type != SurrogateActivityType.INTERVIEW_SCHEDULED.value:
+            continue
+        details = activity.details
+        if not isinstance(details, dict):
+            continue
+        appointment_id = details.get("appointment_id")
+        if not appointment_id:
+            continue
+        try:
+            existing_interview_appointment_ids.add(UUID(str(appointment_id)))
+        except (TypeError, ValueError):
+            continue
+
+    missing_interview_appointment_query = (
+        db.query(Appointment)
+        .join(AppointmentType, Appointment.appointment_type_id == AppointmentType.id)
+        .filter(
+            Appointment.organization_id == org_id,
+            Appointment.surrogate_id == surrogate_id,
+            Appointment.status.in_(
+                [AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value]
+            ),
+            AppointmentType.organization_id == org_id,
+            AppointmentType.slug == "initial-interview",
+        )
+    )
+    if existing_interview_appointment_ids:
+        missing_interview_appointment_query = missing_interview_appointment_query.filter(
+            Appointment.id.notin_(existing_interview_appointment_ids)
+        )
+    missing_interview_appointments = missing_interview_appointment_query.order_by(
+        Appointment.scheduled_start.desc()
+    ).all()
 
     queue_ids: set[UUID] = set()
     user_ids: set[UUID] = set()
@@ -2244,6 +2290,11 @@ def list_surrogate_activity(
         history = history_row.SurrogateStatusHistory
         if history.approved_by_user_id:
             user_ids.add(history.approved_by_user_id)
+
+    for appointment in missing_interview_appointments:
+        actor_user_id = appointment.approved_by_user_id or appointment.user_id
+        if actor_user_id:
+            user_ids.add(actor_user_id)
 
     queue_name_by_id: dict[str, str] = {}
     if queue_ids:
@@ -2330,6 +2381,30 @@ def list_surrogate_activity(
                 "actor_name": row.actor_name,
                 "details": details,
                 "created_at": activity.created_at,
+            }
+        )
+
+    for appointment in missing_interview_appointments:
+        actor_user_id = appointment.approved_by_user_id or appointment.user_id
+        items.append(
+            {
+                "id": appointment.id,
+                "activity_type": SurrogateActivityType.INTERVIEW_SCHEDULED.value,
+                "actor_user_id": actor_user_id,
+                "actor_name": user_name_by_id.get(str(actor_user_id)) if actor_user_id else None,
+                "details": {
+                    "source": "appointment",
+                    "appointment_id": str(appointment.id),
+                    "scheduled_start": appointment.scheduled_start.isoformat()
+                    if appointment.scheduled_start
+                    else None,
+                    "scheduled_end": appointment.scheduled_end.isoformat()
+                    if appointment.scheduled_end
+                    else None,
+                },
+                "created_at": appointment.approved_at
+                or appointment.created_at
+                or appointment.scheduled_start,
             }
         )
 
