@@ -595,6 +595,89 @@ describe('ActivityTimeline', () => {
         expect(screen.queryByText(/stage_change/i)).not.toBeInTheDocument()
     })
 
+    it('keeps the stage-change appointment under Interview Scheduled when timestamps are close', () => {
+        const stages = [
+            makeStage({ id: 's1', label: 'Contacted', order: 1, slug: 'contacted', stage_key: 'contacted' }),
+            makeStage({
+                id: 's2',
+                label: 'Interview Scheduled',
+                order: 2,
+                slug: 'interview_scheduled',
+                stage_key: 'interview_scheduled',
+            }),
+        ]
+        const scheduledStart = '2026-05-06T20:00:00.000Z'
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [
+                makeHistory({
+                    id: 'h-contacted',
+                    to_stage_id: 's1',
+                    to_label_snapshot: 'Contacted',
+                    changed_at: '2026-05-06T17:25:00.000Z',
+                    effective_at: '2026-05-06T17:25:00.000Z',
+                    recorded_at: '2026-05-06T17:25:00.000Z',
+                }),
+                makeHistory({
+                    id: 'h-interview',
+                    from_stage_id: 's1',
+                    to_stage_id: 's2',
+                    from_label_snapshot: 'Contacted',
+                    to_label_snapshot: 'Interview Scheduled',
+                    changed_at: '2026-05-06T17:25:00.200Z',
+                    effective_at: '2026-05-06T17:25:00.200Z',
+                    recorded_at: '2026-05-06T17:25:00.200Z',
+                }),
+            ],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a-interview-scheduled',
+                activity_type: 'interview_scheduled',
+                details: {
+                    source: 'stage_change',
+                    appointment_id: 'appt-1',
+                    scheduled_start: scheduledStart,
+                },
+                created_at: '2026-05-06T17:25:00.000Z',
+            }),
+            makeActivity({
+                id: 'a-interview-outcome',
+                activity_type: 'interview_outcome_logged',
+                details: {
+                    outcome: 'completed',
+                    occurred_at: '2026-05-06T20:53:00.000Z',
+                },
+                created_at: '2026-05-06T20:53:00.000Z',
+            }),
+        ]
+
+        const { container } = render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s2"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getByText(/appointment:/i)).toBeInTheDocument()
+        expect(
+            screen.getByText(new RegExp(escapeRegExp(formatActivityTimestampForTest(scheduledStart)), 'i'))
+        ).toBeInTheDocument()
+
+        const content = container.textContent ?? ''
+        const enteredStageIndex = content.indexOf('Entered stage')
+        const appointmentIndex = content.indexOf('Appointment:')
+        const outcomeIndex = content.indexOf('Interview outcome')
+
+        expect(enteredStageIndex).toBeGreaterThanOrEqual(0)
+        expect(appointmentIndex).toBeGreaterThan(enteredStageIndex)
+        expect(outcomeIndex).toBeGreaterThan(appointmentIndex)
+    })
+
     it('separates overdue tasks from upcoming tasks', () => {
         const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
 

@@ -336,6 +336,34 @@ function assignActivityToStage(
     return null
 }
 
+function getStageKey(stage: PipelineStage): string | null {
+    return stage.stage_key || stage.slug || null
+}
+
+function findStageIdByKey(stages: PipelineStage[], key: string): string | null {
+    return stages.find((stage) => getStageKey(stage) === key)?.id ?? null
+}
+
+function resolveActivityStageId(
+    activity: SurrogateActivity,
+    stageHistory: SurrogateStatusHistory[],
+    allPipelineStages: PipelineStage[]
+): string | null {
+    if (activity.activity_type === "interview_scheduled") {
+        return (
+            findStageIdByKey(allPipelineStages, "interview_scheduled") ||
+            assignActivityToStage(activity, stageHistory)
+        )
+    }
+
+    return assignActivityToStage(activity, stageHistory)
+}
+
+function getActivitySortRank(item: ActivityItem): number {
+    if (item.type === "interview_scheduled") return 0
+    return 1
+}
+
 // ============================================================================
 // Windowing Logic
 // ============================================================================
@@ -412,7 +440,7 @@ function buildTimelineData(
     // 4. Assign activities to stages
     const activitiesByStage = new Map<string, ActivityItem[]>()
     for (const activity of filteredActivities) {
-        const stageId = assignActivityToStage(activity, stageHistory)
+        const stageId = resolveActivityStageId(activity, stageHistory, allPipelineStages)
         const item = {
             id: activity.id,
             type: activity.activity_type,
@@ -431,6 +459,8 @@ function buildTimelineData(
     // 5. Sort activities within each stage by timestamp DESC
     for (const [, items] of activitiesByStage.entries()) {
         items.sort((a, b) => {
+            const rankDiff = getActivitySortRank(a) - getActivitySortRank(b)
+            if (rankDiff !== 0) return rankDiff
             const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             return diff !== 0 ? diff : a.id.localeCompare(b.id)
         })
