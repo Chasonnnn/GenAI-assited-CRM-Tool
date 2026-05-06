@@ -45,6 +45,8 @@ function formatActivityType(type: string): string {
         task_created: "Task Created",
         task_deleted: "Task Deleted",
         contact_attempt: "Contact Attempt",
+        interview_scheduled: "Interview Scheduled",
+        interview_outcome_logged: "Interview Outcome Logged",
     }
 
     return labels[type] || type.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
@@ -130,7 +132,11 @@ function getActivityOutcomeMeta(
     type: string,
     details: Record<string, unknown> | null | undefined
 ): { kind: SurrogateOutcomeKind; value: string } | null {
-    if (!details || typeof details.outcome !== "string") return null
+    if (!details) return null
+    if (type === "interview_scheduled") {
+        return { kind: "interview", value: "upcoming" }
+    }
+    if (typeof details.outcome !== "string") return null
     if (type === "contact_attempt") {
         return { kind: "contact", value: details.outcome }
     }
@@ -300,6 +306,12 @@ function formatActivityDetails(
                 )
             }
             if (details.notes) lines.push(String(details.notes))
+            return lines
+        }
+        case "interview_scheduled": {
+            const lines = addAiPrefix(["Interview appointment scheduled"], details)
+            const scheduledStart = formatDateDetail(details.scheduled_start, formatDateTime)
+            if (scheduledStart) lines.push(`Appointment: ${scheduledStart}`)
             return lines
         }
         default:

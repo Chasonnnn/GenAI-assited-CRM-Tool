@@ -538,6 +538,46 @@ describe('ActivityTimeline', () => {
         expect(screen.getByText(/asked to reschedule next week/i)).toBeInTheDocument()
     })
 
+    it('shows upcoming interview appointment details from stage changes', () => {
+        const stages = [makeStage({ id: 's1', label: 'Interview Scheduled', order: 1, slug: 'interview_scheduled' })]
+
+        mockUseSurrogateHistory.mockReturnValue({
+            data: [makeHistory({ id: 'h1', to_stage_id: 's1', to_label_snapshot: 'Interview Scheduled' })],
+        })
+
+        const activities = [
+            makeActivity({
+                id: 'a-interview-scheduled',
+                activity_type: 'interview_scheduled',
+                details: {
+                    source: 'stage_change',
+                    appointment_id: 'appt-1',
+                    scheduled_start: '2026-06-01T17:15:00.000Z',
+                },
+                created_at: '2026-05-30T12:00:00.000Z',
+            }),
+        ]
+
+        render(
+            <ActivityTimeline
+                surrogateId="surr1"
+                currentStageId="s1"
+                stages={stages}
+                activities={activities}
+                tasks={[]}
+            />
+        )
+
+        expect(screen.getAllByText(/interview scheduled/i).length).toBeGreaterThanOrEqual(2)
+        expect(screen.getByText('Upcoming')).toBeInTheDocument()
+        expect(screen.getByText(/appointment:/i)).toBeInTheDocument()
+        expect(screen.getByText(/jun 1, 2026, 1:15 pm/i)).toBeInTheDocument()
+        expect(screen.queryByText(/initial interview/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/^phone$/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/1:45 pm/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/stage_change/i)).not.toBeInTheDocument()
+    })
+
     it('separates overdue tasks from upcoming tasks', () => {
         const stages = [makeStage({ id: 's1', label: 'New Unread', order: 1 })]
 

@@ -96,6 +96,12 @@ const ACTIVITY_TYPE_CONFIG: Record<string, ActivityTypeConfig> = {
         bgColor: "bg-sky-100 dark:bg-sky-900/30",
         label: "Interview outcome",
     },
+    interview_scheduled: {
+        icon: CalendarIcon,
+        color: "bg-sky-500",
+        bgColor: "bg-sky-100 dark:bg-sky-900/30",
+        label: "Interview scheduled",
+    },
     note_added: { icon: FileTextIcon, color: "bg-blue-500", bgColor: "bg-blue-100 dark:bg-blue-900/30", label: "Note" },
     note_deleted: { icon: FileTextIcon, color: "bg-blue-400", bgColor: "bg-blue-100 dark:bg-blue-900/30", label: "Note deleted" },
     task_created: { icon: PlusCircleIcon, color: "bg-green-500", bgColor: "bg-green-100 dark:bg-green-900/30", label: "Task created" },
@@ -120,6 +126,19 @@ function getActivityConfig(type: string): ActivityTypeConfig {
 // ============================================================================
 // Preview Content Strategy (Safe fields only - avoid PII)
 // ============================================================================
+
+function formatActivityTimestamp(value: unknown): string | null {
+    if (typeof value !== "string") return null
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    }).format(date)
+}
 
 function getActivityPreview(activity: SurrogateActivity): string {
     const details = activity.details as Record<string, unknown> | null
@@ -177,22 +196,9 @@ function getActivityPreview(activity: SurrogateActivity): string {
                 .join(" • ")
         case "interview_outcome_logged":
             {
-                const formatTimestamp = (value: unknown): string | null => {
-                    if (typeof value !== "string") return null
-                    const date = new Date(value)
-                    if (Number.isNaN(date.getTime())) return null
-                    return new Intl.DateTimeFormat(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                    }).format(date)
-                }
-
-                const occurredAt = formatTimestamp(details.occurred_at)
-                const scheduledStart = formatTimestamp(details.scheduled_start)
-                const scheduledEnd = formatTimestamp(details.scheduled_end)
+                const occurredAt = formatActivityTimestamp(details.occurred_at)
+                const scheduledStart = formatActivityTimestamp(details.scheduled_start)
+                const scheduledEnd = formatActivityTimestamp(details.scheduled_end)
                 const appointmentContext =
                     scheduledStart && scheduledEnd
                         ? `Appointment: ${scheduledStart} - ${scheduledEnd}`
@@ -209,6 +215,11 @@ function getActivityPreview(activity: SurrogateActivity): string {
                 ]
                     .filter(Boolean)
                     .join(" • ")
+            }
+        case "interview_scheduled":
+            {
+                const scheduledStart = formatActivityTimestamp(details.scheduled_start)
+                return scheduledStart ? `Appointment: ${scheduledStart}` : ""
             }
         case "attachment_added":
             return (details.filename as string) || "File uploaded"
@@ -235,7 +246,13 @@ function getActivityOutcomeMeta(activity: SurrogateActivity): {
     outcomeValue?: string
 } {
     const details = activity.details as Record<string, unknown> | null
-    if (!details || typeof details.outcome !== "string") {
+    if (!details) {
+        return {}
+    }
+    if (activity.activity_type === "interview_scheduled") {
+        return { outcomeKind: "interview", outcomeValue: "upcoming" }
+    }
+    if (typeof details.outcome !== "string") {
         return {}
     }
     if (activity.activity_type === "contact_attempt") {

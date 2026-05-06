@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react"
-import { AlertTriangleIcon, CheckCircleIcon, ClockIcon, MinusIcon } from "lucide-react"
+import { AlertTriangleIcon, CalendarClockIcon, CheckCircleIcon, ClockIcon, MinusIcon } from "lucide-react"
 
 import type { ContactOutcome, InterviewOutcome } from "@/lib/api/surrogates"
 
-export type OutcomeTone = "success" | "follow_up" | "failed" | "neutral"
+export type OutcomeTone = "success" | "follow_up" | "failed" | "neutral" | "upcoming"
 export type SurrogateOutcomeKind = "contact" | "interview"
+type InterviewPresentationOutcome = InterviewOutcome | "upcoming"
 
 type OutcomeDefinition<T extends string> = {
     label: string
@@ -48,6 +49,12 @@ const TONE_STYLES: Record<
         iconContainerClassName: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300",
         dotClassName: "bg-slate-500",
     },
+    upcoming: {
+        badgeClassName: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:border-sky-400/20 dark:bg-sky-900/30 dark:text-sky-300",
+        accentClassName: "bg-sky-500",
+        iconContainerClassName: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300",
+        dotClassName: "bg-sky-500",
+    },
 }
 
 const CONTACT_OUTCOMES = {
@@ -59,11 +66,12 @@ const CONTACT_OUTCOMES = {
 } satisfies Record<ContactOutcome, OutcomeDefinition<ContactOutcome>>
 
 const INTERVIEW_OUTCOMES = {
+    upcoming: { value: "upcoming", label: "Upcoming", tone: "upcoming", icon: CalendarClockIcon },
     completed: { value: "completed", label: "Completed", tone: "success", icon: CheckCircleIcon },
     rescheduled: { value: "rescheduled", label: "Rescheduled", tone: "follow_up", icon: ClockIcon },
     no_show: { value: "no_show", label: "No Show", tone: "failed", icon: AlertTriangleIcon },
     cancelled: { value: "cancelled", label: "Cancelled", tone: "neutral", icon: MinusIcon },
-} satisfies Record<InterviewOutcome, OutcomeDefinition<InterviewOutcome>>
+} satisfies Record<InterviewPresentationOutcome, OutcomeDefinition<InterviewPresentationOutcome>>
 
 function withToneStyles<T extends string>(definition: OutcomeDefinition<T>): OutcomePresentation<T> {
     return {
@@ -83,11 +91,11 @@ export function getContactOutcomePresentation(
 
 export function getInterviewOutcomePresentation(
     outcome: InterviewOutcome | string | null | undefined,
-): OutcomePresentation<InterviewOutcome> | null {
+): OutcomePresentation<InterviewPresentationOutcome> | null {
     if (!outcome || !(outcome in INTERVIEW_OUTCOMES)) {
         return null
     }
-    return withToneStyles(INTERVIEW_OUTCOMES[outcome as InterviewOutcome])
+    return withToneStyles(INTERVIEW_OUTCOMES[outcome as InterviewPresentationOutcome])
 }
 
 export function getSurrogateOutcomePresentation(

@@ -18,6 +18,7 @@ from app.db.enums import (
     MeetingMode,
     OwnerType,
     Role,
+    SurrogateActivityType,
     SurrogateStatus,
     TaskType,
 )
@@ -715,8 +716,9 @@ def apply_status_change(
             created_follow_up_task.id if created_follow_up_task else None
         )
 
+    scheduled_interview: Appointment | None = None
     if pipeline_service.stage_matches_key(new_stage, "interview_scheduled"):
-        _schedule_interview_appointment(
+        scheduled_interview = _schedule_interview_appointment(
             db,
             surrogate=surrogate,
             actor_user_id=user_id,
@@ -755,6 +757,25 @@ def apply_status_change(
         approved_at=approved_at,
     )
     db.add(history)
+    if scheduled_interview:
+        from app.services import activity_service
+
+        appointment = scheduled_interview
+        scheduled_activity = activity_service.log_activity(
+            db=db,
+            surrogate_id=surrogate.id,
+            organization_id=surrogate.organization_id,
+            activity_type=SurrogateActivityType.INTERVIEW_SCHEDULED,
+            actor_user_id=user_id,
+            details={
+                "source": "stage_change",
+                "appointment_id": str(appointment.id),
+                "scheduled_start": appointment.scheduled_start.isoformat()
+                if appointment.scheduled_start
+                else None,
+            },
+        )
+        scheduled_activity.created_at = max(datetime.now(timezone.utc), effective_at)
     db.commit()
     db.refresh(surrogate)
 

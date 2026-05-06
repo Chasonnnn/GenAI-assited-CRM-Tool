@@ -42,8 +42,10 @@ export function SurrogateDetailHeader({
     )
     const showContactOutcome =
         latestContactOutcome && stageMatchesKey(currentStage, "contacted")
+    const isInterviewScheduledStage = stageMatchesKey(currentStage, "interview_scheduled")
     const showInterviewOutcome =
-        latestInterviewOutcome && stageMatchesKey(currentStage, "interview_scheduled")
+        latestInterviewOutcome && isInterviewScheduledStage
+    const showUpcomingInterview = !latestInterviewOutcome && isInterviewScheduledStage
 
     return (
         <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
@@ -66,6 +68,12 @@ export function SurrogateDetailHeader({
                         kind="interview"
                         outcome={latestInterviewOutcome.outcome}
                         prefix="Interview"
+                    />
+                )}
+                {showUpcomingInterview && (
+                    <OutcomeBadge
+                        kind="interview"
+                        outcome="upcoming"
                     />
                 )}
                 {pausedFromLabel && (

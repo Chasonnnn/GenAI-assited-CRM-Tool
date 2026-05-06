@@ -9,6 +9,7 @@ from app.db.models import (
     Appointment,
     AppointmentType,
     StatusChangeRequest,
+    SurrogateActivityLog,
     SurrogateStatusHistory,
     Task,
 )
@@ -285,6 +286,31 @@ def test_interview_scheduled_creates_confirmed_interview_appointment(db, test_or
         .one()
     )
     assert appointment_type.name == "Initial Interview"
+
+    scheduled_activity = (
+        db.query(SurrogateActivityLog)
+        .filter(
+            SurrogateActivityLog.organization_id == test_org.id,
+            SurrogateActivityLog.surrogate_id == surrogate.id,
+            SurrogateActivityLog.activity_type == "interview_scheduled",
+        )
+        .one()
+    )
+    assert scheduled_activity.actor_user_id == test_user.id
+    assert scheduled_activity.details == {
+        "source": "stage_change",
+        "appointment_id": str(appointment.id),
+        "scheduled_start": scheduled_at.isoformat(),
+    }
+    history = (
+        db.query(SurrogateStatusHistory)
+        .filter(
+            SurrogateStatusHistory.surrogate_id == surrogate.id,
+            SurrogateStatusHistory.to_stage_id == interview_stage.id,
+        )
+        .one()
+    )
+    assert scheduled_activity.created_at >= history.effective_at
 
 
 def test_on_hold_creates_follow_up_and_resume_cleans_up(db, test_org, test_user):

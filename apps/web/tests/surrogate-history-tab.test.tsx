@@ -92,6 +92,37 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText(/did not join the call/i)).toBeInTheDocument()
     })
 
+    it("renders upcoming interview appointment details from stage changes", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-interview-scheduled",
+                        activity_type: "interview_scheduled",
+                        actor_name: "Alex",
+                        created_at: "2026-05-30T12:00:00Z",
+                        details: {
+                            source: "stage_change",
+                            appointment_id: "appt-1",
+                            scheduled_start: "2026-06-01T17:15:00Z",
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText("Interview Scheduled")).toBeInTheDocument()
+        expect(screen.getByText("Upcoming")).toBeInTheDocument()
+        expect(screen.getByText(/appointment:/i)).toBeInTheDocument()
+        expect(screen.getByText("Appointment: formatted 2026-06-01T17:15:00Z")).toBeInTheDocument()
+        expect(screen.queryByText(/initial interview/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/^type:/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/^mode:/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/1:45 pm/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/stage_change/i)).not.toBeInTheDocument()
+    })
+
     it("renders backdated stage change timing details", () => {
         render(
             <SurrogateHistoryTab
