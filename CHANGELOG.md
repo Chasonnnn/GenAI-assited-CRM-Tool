@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.16...surrogacy-crm-platform-v0.91.17) (2026-05-06)
+
+
+### Features
+
+* Add embryo stage tracking ([484598d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/484598daf9056ac989065b6f255f208efed407be))
+* Log scheduled interview activity ([4bedae9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4bedae9f34dfa38ab2e02d4f251e7872f4749b60))
+
+
+### Bug Fixes
+
+* Standardize surrogate detail pickers ([aace184](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aace1844cb3f998a53857362adedd72135899e9d))
+
 ## [0.91.16](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.15...surrogacy-crm-platform-v0.91.16) (2026-05-03)
 
 
