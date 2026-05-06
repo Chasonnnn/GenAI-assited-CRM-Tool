@@ -189,6 +189,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         lab_clinic_fax=surrogate.lab_clinic_fax,
         lab_clinic_email=surrogate.lab_clinic_email,
         # Pregnancy tracking
+        embryo_stage=surrogate.embryo_stage,
         pregnancy_start_date=surrogate.pregnancy_start_date,
         pregnancy_due_date=surrogate.pregnancy_due_date,
         actual_delivery_date=surrogate.actual_delivery_date,

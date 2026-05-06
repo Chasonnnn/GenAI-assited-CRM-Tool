@@ -15,6 +15,7 @@ import type {
 } from './surrogate.generated';
 
 export type SurrogateSource = GeneratedSurrogateSource;
+export type EmbryoStage = 'day_3' | 'day_5' | 'day_6' | 'unknown';
 export type SurrogateStatusChange = GeneratedSurrogateStatusChange;
 export type SurrogateStatusChangePayload = GeneratedSurrogateStatusChangePayload;
 export type SurrogateStatusHistoryRead = GeneratedSurrogateStatusHistoryRead;
@@ -56,6 +57,7 @@ export type SurrogateRead = Omit<
     age: number | null;
     bmi: number | null;
     last_activity_at: string | null;
+    embryo_stage: EmbryoStage | null;
     height_ft: number | string | null;
     delivery_baby_gender: string | null;
     delivery_baby_weight: string | null;

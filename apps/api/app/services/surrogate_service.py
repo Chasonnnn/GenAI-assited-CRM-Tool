@@ -626,6 +626,7 @@ def create_surrogate(
             delivery_hospital_fax=data.delivery_hospital_fax,
             delivery_hospital_email=data.delivery_hospital_email,
             # Pregnancy tracking
+            embryo_stage=data.embryo_stage,
             pregnancy_start_date=data.pregnancy_start_date,
             pregnancy_due_date=data.pregnancy_due_date,
             actual_delivery_date=data.actual_delivery_date,
@@ -793,6 +794,7 @@ def update_surrogate(
         "delivery_hospital_phone",
         "delivery_hospital_email",
         # Pregnancy fields
+        "embryo_stage",
         "pregnancy_start_date",
         "pregnancy_due_date",
         "actual_delivery_date",
@@ -944,6 +946,7 @@ def update_surrogate(
 
             # Pregnancy fields
             pregnancy_fields = {
+                "embryo_stage",
                 "pregnancy_start_date",
                 "pregnancy_due_date",
                 "actual_delivery_date",

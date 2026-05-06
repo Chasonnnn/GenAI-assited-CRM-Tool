@@ -352,6 +352,7 @@ class Surrogate(Base):
     # ============================================
     # PREGNANCY TRACKING
     # ============================================
+    embryo_stage: Mapped[str | None] = mapped_column(String(20), nullable=True)
     pregnancy_start_date: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     pregnancy_due_date: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
     actual_delivery_date: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)

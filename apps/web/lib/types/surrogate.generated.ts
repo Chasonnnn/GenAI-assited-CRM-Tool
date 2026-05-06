@@ -174,6 +174,7 @@ export interface SurrogateRead {
     lab_clinic_phone?: string | null;
     lab_clinic_fax?: string | null;
     lab_clinic_email?: string | null;
+    embryo_stage?: "day_3" | "day_5" | "day_6" | "unknown" | null;
     pregnancy_start_date?: string | null;
     pregnancy_due_date?: string | null;
     actual_delivery_date?: string | null;

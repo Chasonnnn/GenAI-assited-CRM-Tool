@@ -23,6 +23,8 @@ MaritalStatus = Literal[
     "Widowed",
 ]
 
+EmbryoStage = Literal["day_3", "day_5", "day_6", "unknown"]
+
 _SSN_DIGITS_RE = re.compile(r"^\d{9}$")
 _SSN_DASHED_RE = re.compile(r"^\d{3}-\d{2}-\d{4}$")
 
@@ -191,6 +193,7 @@ class SurrogateCreate(BaseModel):
     # =========================================================================
     # PREGNANCY TRACKING
     # =========================================================================
+    embryo_stage: EmbryoStage | None = None
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
     actual_delivery_date: date | None = None
@@ -421,6 +424,7 @@ class SurrogateUpdate(BaseModel):
     # =========================================================================
     # PREGNANCY TRACKING
     # =========================================================================
+    embryo_stage: EmbryoStage | None = None
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
     actual_delivery_date: date | None = None
@@ -731,6 +735,7 @@ class SurrogateRead(BaseModel):
     # =========================================================================
     # PREGNANCY TRACKING
     # =========================================================================
+    embryo_stage: EmbryoStage | None = None
     pregnancy_start_date: date | None = None
     pregnancy_due_date: date | None = None
     actual_delivery_date: date | None = None

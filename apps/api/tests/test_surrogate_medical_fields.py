@@ -65,6 +65,7 @@ async def test_create_surrogate_with_medical_fields_roundtrip(authed_client):
         "delivery_hospital_name": "St. Luke's",
         "delivery_hospital_fax": "+15125550133",
         "delivery_hospital_email": "labor@stlukes.com",
+        "embryo_stage": "day_5",
         "pregnancy_start_date": "2025-01-10",
         "pregnancy_due_date": "2025-10-17",
     }
@@ -95,6 +96,7 @@ async def test_create_surrogate_with_medical_fields_roundtrip(authed_client):
     assert created["delivery_hospital_name"] == payload["delivery_hospital_name"]
     assert created["delivery_hospital_fax"] == payload["delivery_hospital_fax"]
     assert created["delivery_hospital_email"] == payload["delivery_hospital_email"]
+    assert created["embryo_stage"] == payload["embryo_stage"]
     assert created["pregnancy_start_date"] == payload["pregnancy_start_date"]
     assert created["pregnancy_due_date"] == payload["pregnancy_due_date"]
 
@@ -116,8 +118,35 @@ async def test_create_surrogate_with_medical_fields_roundtrip(authed_client):
     assert fetched["ob_fax"] == payload["ob_fax"]
     assert fetched["delivery_hospital_fax"] == payload["delivery_hospital_fax"]
     assert fetched["delivery_hospital_email"] == payload["delivery_hospital_email"]
+    assert fetched["embryo_stage"] == payload["embryo_stage"]
     assert fetched["pregnancy_start_date"] == payload["pregnancy_start_date"]
     assert fetched["pregnancy_due_date"] == payload["pregnancy_due_date"]
+
+
+@pytest.mark.asyncio
+async def test_update_surrogate_accepts_only_canonical_embryo_stage_options(authed_client):
+    create_res = await authed_client.post(
+        "/surrogates",
+        json={
+            "full_name": "Embryo Stage",
+            "email": f"embryo-stage-{uuid.uuid4().hex[:8]}@example.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    surrogate_id = create_res.json()["id"]
+
+    patch_res = await authed_client.patch(
+        f"/surrogates/{surrogate_id}",
+        json={"embryo_stage": "day_6"},
+    )
+    assert patch_res.status_code == 200, patch_res.text
+    assert patch_res.json()["embryo_stage"] == "day_6"
+
+    invalid_res = await authed_client.patch(
+        f"/surrogates/{surrogate_id}",
+        json={"embryo_stage": "blastocyst"},
+    )
+    assert invalid_res.status_code == 422, invalid_res.text
 
 
 @pytest.mark.asyncio

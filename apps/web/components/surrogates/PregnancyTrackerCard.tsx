@@ -1,20 +1,38 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { HeartPulseIcon } from "lucide-react"
+import { useState, useMemo, type KeyboardEvent } from "react"
+import { HeartPulseIcon, Loader2Icon, PencilIcon, XIcon } from "lucide-react"
 import { parseISO, differenceInDays, addDays, format, isValid } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { InlineDateField } from "@/components/inline-date-field"
 import { InlineEditField } from "@/components/inline-edit-field"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SurrogateRead } from "@/lib/types/surrogate"
-import { SurrogateUpdatePayload } from "@/lib/api/surrogates"
+import { EmbryoStage, SurrogateUpdatePayload } from "@/lib/api/surrogates"
+
+const EMBRYO_STAGE_OPTIONS: { value: EmbryoStage; label: string; embryoAgeDays: number | null }[] = [
+    { value: "day_3", label: "Day 3 embryo", embryoAgeDays: 3 },
+    { value: "day_5", label: "Day 5 blastocyst", embryoAgeDays: 5 },
+    { value: "day_6", label: "Day 6 blastocyst", embryoAgeDays: 6 },
+    { value: "unknown", label: "Unknown / not provided", embryoAgeDays: null },
+]
+
+function getEmbryoAgeDays(stage: EmbryoStage | null | undefined) {
+    return EMBRYO_STAGE_OPTIONS.find((option) => option.value === stage)?.embryoAgeDays ?? null
+}
+
+function formatEmbryoStage(stage: EmbryoStage | null | undefined) {
+    return EMBRYO_STAGE_OPTIONS.find((option) => option.value === stage)?.label ?? "Unknown / not provided"
+}
 
 interface PregnancyData {
-    gestationalDays: number           // Can be negative if start date is in future
+    daysSinceTransfer: number         // Can be negative if transfer date is in future
+    gestationalDays: number           // IVF gestational age estimate
     gestationalWeeks: number          // Clamped to 0 minimum
     dueDate: Date                     // The effective due date (manual or calculated)
-    calculatedDueDate: Date           // Always the calculated date (280 days from start)
+    calculatedDueDate: Date           // Calculated from transfer date and embryo stage when known
     trimester: 'First' | 'Second' | 'Third'
     daysRemaining: number
     progress: number                  // Clamped to 0-100
@@ -22,7 +40,8 @@ interface PregnancyData {
 
 function usePregnancyTracker(
     startDate: string | null | undefined,
-    dueDateOverride: string | null | undefined
+    dueDateOverride: string | null | undefined,
+    embryoStage: EmbryoStage | null | undefined
 ): PregnancyData | null {
     return useMemo(() => {
         if (!startDate) return null
@@ -31,16 +50,20 @@ function usePregnancyTracker(
         if (!isValid(start)) return null
 
         const today = new Date()
+        const embryoAgeDays = getEmbryoAgeDays(embryoStage)
+        const daysSinceTransfer = differenceInDays(today, start)
+        const gestationalDaysAtTransfer = embryoAgeDays == null ? 0 : 14 + embryoAgeDays
+        const calculatedDueDateOffset = embryoAgeDays == null ? 280 : 266 - embryoAgeDays
 
-        // Transferred date = LMP-equivalent = gestational day 0
-        // Allow negative values so UI can show "future date" warning
-        const gestationalDays = differenceInDays(today, start)
+        // For known IVF embryo stages, transfer date already includes embryo age.
+        // Unknown preserves legacy LMP-style tracking until the clinic provides the stage.
+        const gestationalDays = daysSinceTransfer + gestationalDaysAtTransfer
 
         // Clamp weeks to 0 minimum (don't show negative weeks)
         const gestationalWeeks = Math.max(0, Math.floor(gestationalDays / 7))
 
         // Always calculate what due date would be (for "Reset to calculated")
-        const calculatedDueDate = addDays(start, 280)
+        const calculatedDueDate = addDays(start, calculatedDueDateOffset)
 
         // Due date: use override if provided and valid, else use calculated
         let dueDate = calculatedDueDate
@@ -63,6 +86,7 @@ function usePregnancyTracker(
         const progress = Math.max(0, Math.min(100, (gestationalDays / 280) * 100))
 
         return {
+            daysSinceTransfer,
             gestationalDays,
             gestationalWeeks,
             dueDate,
@@ -71,7 +95,7 @@ function usePregnancyTracker(
             daysRemaining,
             progress,
         }
-    }, [startDate, dueDateOverride])
+    }, [startDate, dueDateOverride, embryoStage])
 }
 
 interface PregnancyTrackerCardProps {
@@ -85,15 +109,53 @@ export function PregnancyTrackerCard({
 }: PregnancyTrackerCardProps) {
     const pregnancy = usePregnancyTracker(
         surrogateData.pregnancy_start_date,
-        surrogateData.pregnancy_due_date
+        surrogateData.pregnancy_due_date,
+        surrogateData.embryo_stage
     )
 
     const hasManualDueDate = !!surrogateData.pregnancy_due_date
     const [isEditingDueDate, setIsEditingDueDate] = useState(false)
+    const [isEditingEmbryoStage, setIsEditingEmbryoStage] = useState(false)
+    const [isSavingEmbryoStage, setIsSavingEmbryoStage] = useState(false)
+    const [embryoStageError, setEmbryoStageError] = useState<string | null>(null)
 
     const handleEditDueDate = () => {
         setIsEditingDueDate(true)
     }
+
+    const handleEditEmbryoStage = () => {
+        setEmbryoStageError(null)
+        setIsEditingEmbryoStage(true)
+    }
+
+    const handleEmbryoStageDisplayKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+            e.preventDefault()
+            handleEditEmbryoStage()
+        }
+    }
+
+    const handleEmbryoStageChange = async (value: string | null) => {
+        const nextValue = (value || "unknown") as EmbryoStage
+        if (nextValue === (surrogateData.embryo_stage ?? "unknown")) {
+            setIsEditingEmbryoStage(false)
+            return
+        }
+
+        setIsSavingEmbryoStage(true)
+        setEmbryoStageError(null)
+        try {
+            await onUpdate({ embryo_stage: nextValue })
+            setIsEditingEmbryoStage(false)
+        } catch (err) {
+            setEmbryoStageError(err instanceof Error ? err.message : "Failed to save embryo stage")
+        } finally {
+            setIsSavingEmbryoStage(false)
+        }
+    }
+
+    const embryoStageLabel = formatEmbryoStage(surrogateData.embryo_stage)
+    const embryoStageIsPlaceholder = !surrogateData.embryo_stage || surrogateData.embryo_stage === "unknown"
 
     return (
         <Card className="gap-4 py-4">
@@ -105,7 +167,7 @@ export function PregnancyTrackerCard({
             </CardHeader>
             <CardContent className="px-4 space-y-3">
                 {/* Week/Day Display - only show if start date is set and not future */}
-                {pregnancy && pregnancy.gestationalDays >= 0 && (
+                {pregnancy && pregnancy.daysSinceTransfer >= 0 && (
                     <div className="flex items-center gap-4">
                         <div className="text-center">
                             <div className="text-3xl font-bold text-primary">
@@ -135,23 +197,97 @@ export function PregnancyTrackerCard({
                 )}
 
                 {/* Future date warning */}
-                {pregnancy && pregnancy.gestationalDays < 0 && (
+                {pregnancy && pregnancy.daysSinceTransfer < 0 && (
                     <div className="text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 p-2 rounded">
-                        Transferred date is in the future ({Math.abs(pregnancy.gestationalDays)} days from now)
+                        Transferred date is in the future ({Math.abs(pregnancy.daysSinceTransfer)} days from now)
                     </div>
                 )}
 
                 {/* Date inputs */}
                 <div className="space-y-3 pt-2 border-t">
-                    {/* Transferred Date (LMP-equivalent = day 0) */}
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground w-24 shrink-0">Transferred Date:</span>
+                        <span className="text-sm text-muted-foreground w-28 shrink-0">Embryo Stage:</span>
+                        {isEditingEmbryoStage ? (
+                            <div className="flex min-w-0 flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                    <Select
+                                        value={surrogateData.embryo_stage ?? "unknown"}
+                                        onValueChange={(value) => void handleEmbryoStageChange(value)}
+                                        disabled={isSavingEmbryoStage}
+                                    >
+                                        <SelectTrigger
+                                            aria-label="Embryo Stage"
+                                            size="sm"
+                                            className="h-8 w-48 rounded-md px-2.5 text-sm"
+                                        >
+                                            <SelectValue>
+                                                {(value: string | null) =>
+                                                    formatEmbryoStage(value as EmbryoStage | null)
+                                                }
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent className="w-48 min-w-48 rounded-md border border-border shadow-lg">
+                                            <SelectGroup>
+                                                {EMBRYO_STAGE_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => {
+                                            setEmbryoStageError(null)
+                                            setIsEditingEmbryoStage(false)
+                                        }}
+                                        disabled={isSavingEmbryoStage}
+                                        aria-label="Cancel Embryo Stage"
+                                    >
+                                        {isSavingEmbryoStage ? (
+                                            <Loader2Icon className="size-3 animate-spin" />
+                                        ) : (
+                                            <XIcon className="size-3 text-destructive" />
+                                        )}
+                                    </Button>
+                                </div>
+                                {embryoStageError && (
+                                    <p className="text-xs text-destructive">{embryoStageError}</p>
+                                )}
+                            </div>
+                        ) : (
+                            <div
+                                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                onClick={handleEditEmbryoStage}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={handleEmbryoStageDisplayKeyDown}
+                                aria-label="Edit Embryo Stage"
+                            >
+                                <span className={embryoStageIsPlaceholder ? "text-sm text-muted-foreground" : "text-sm font-medium"}>
+                                    {embryoStageLabel}
+                                </span>
+                                <PencilIcon
+                                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                                    aria-hidden="true"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Transferred Date */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground w-28 shrink-0">Transferred Date:</span>
                         <InlineDateField
                             value={surrogateData.pregnancy_start_date}
                             onSave={async (v) => {
                                 await onUpdate({ pregnancy_start_date: v })
                             }}
-                            label="Transferred date (LMP-equivalent)"
+                            label="Transferred date"
                             placeholder="Set transferred date"
                         />
                     </div>
@@ -159,7 +295,7 @@ export function PregnancyTrackerCard({
                     {/* Due Date with inline editor (only show if start date is set) */}
                     {surrogateData.pregnancy_start_date && (
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground w-24 shrink-0">Due Date:</span>
+                            <span className="text-sm text-muted-foreground w-28 shrink-0">Due Date:</span>
 
                             {isEditingDueDate ? (
                                 <InlineDateField
@@ -199,7 +335,7 @@ export function PregnancyTrackerCard({
                     {/* Actual Delivery Date - shown once pregnancy tracking has started */}
                     {surrogateData.pregnancy_start_date && (
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground w-24 shrink-0">Actual Delivery Date:</span>
+                            <span className="text-sm text-muted-foreground w-28 shrink-0">Actual Delivery Date:</span>
                             <InlineDateField
                                 value={surrogateData.actual_delivery_date}
                                 onSave={async (v) => {
@@ -219,7 +355,7 @@ export function PregnancyTrackerCard({
                     {surrogateData.actual_delivery_date && (
                         <>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground w-24 shrink-0">Gender:</span>
+                                <span className="text-sm text-muted-foreground w-28 shrink-0">Gender:</span>
                                 <InlineEditField
                                     value={surrogateData.delivery_baby_gender ?? undefined}
                                     onSave={async (v) => {
@@ -230,7 +366,7 @@ export function PregnancyTrackerCard({
                                 />
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground w-24 shrink-0">Weight:</span>
+                                <span className="text-sm text-muted-foreground w-28 shrink-0">Weight:</span>
                                 <InlineEditField
                                     value={surrogateData.delivery_baby_weight ?? undefined}
                                     onSave={async (v) => {
@@ -245,7 +381,7 @@ export function PregnancyTrackerCard({
                 </div>
 
                 {/* Trimester Badge */}
-                {pregnancy && pregnancy.gestationalDays >= 0 && (
+                {pregnancy && pregnancy.daysSinceTransfer >= 0 && (
                     <Badge variant="secondary" className="mt-2">
                         {pregnancy.trimester} Trimester
                     </Badge>
