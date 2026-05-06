@@ -24,6 +24,7 @@ def test_dependency_pins_match_security_fixes():
 
     expected_minimum_pins = {
         "cryptography": "46.0.6",
+        "mako": "1.3.12",
         "pyjwt": "2.12.0",
         "python-dotenv": "1.2.2",
         "requests": "2.33.0",
@@ -31,7 +32,7 @@ def test_dependency_pins_match_security_fixes():
     expected_exact_pins = {
         "pillow": "12.2.0",
         "pypdf": "6.10.2",
-        "python-multipart": "0.0.26",
+        "python-multipart": "0.0.27",
     }
     expected_test_exact_pins = {"pytest": "9.0.3"}
 
