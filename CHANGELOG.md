@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.19](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.18...surrogacy-crm-platform-v0.91.19) (2026-05-06)
+
+
+### Bug Fixes
+
+* Show scheduled interview activity in timeline ([b8bd9ae](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b8bd9ae779067bba200b2f9036ab75f0881662ca))
+
 ## [0.91.18](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.17...surrogacy-crm-platform-v0.91.18) (2026-05-06)
 
 
