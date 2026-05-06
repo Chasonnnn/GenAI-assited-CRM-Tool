@@ -5,12 +5,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { VideoIcon } from "lucide-react"
 import {
     useSurrogateDetailData,
     useSurrogateDetailDialogs,
     useSurrogateDetailZoom,
 } from "../context"
+
+const DURATION_OPTIONS = [
+    { value: "15", label: "15 minutes" },
+    { value: "30", label: "30 minutes" },
+    { value: "45", label: "45 minutes" },
+    { value: "60", label: "1 hour" },
+    { value: "90", label: "1.5 hours" },
+] as const
+
+function formatDurationLabel(value: string | null) {
+    if (!value) return "Select duration"
+    return DURATION_OPTIONS.find((option) => option.value === value)?.label ?? `${value} minutes`
+}
 
 export function ZoomMeetingDialog() {
     const {
@@ -69,19 +83,26 @@ export function ZoomMeetingDialog() {
                     </div>
                     <div>
                         <Label htmlFor="zoom-duration">Duration (minutes)</Label>
-                        <select
-                            id="zoom-duration"
-                            value={zoomForm.duration}
-                            onChange={(event) => setZoomDuration(Number(event.target.value))}
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-2"
+                        <Select
+                            value={String(zoomForm.duration)}
+                            onValueChange={(value) => setZoomDuration(Number(value))}
                             disabled={!!zoomForm.lastMeetingResult}
                         >
-                            <option value={15}>15 minutes</option>
-                            <option value={30}>30 minutes</option>
-                            <option value={45}>45 minutes</option>
-                            <option value={60}>1 hour</option>
-                            <option value={90}>1.5 hours</option>
-                        </select>
+                            <SelectTrigger id="zoom-duration" className="mt-2">
+                                <SelectValue>
+                                    {(value: string | null) => formatDurationLabel(value)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {DURATION_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="text-xs text-muted-foreground">
                         An appointment task is created automatically.

@@ -3,12 +3,18 @@
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
     useSurrogateDetailDialogs,
     useSurrogateDetailQueue,
 } from "../context"
+
+function formatQueueLabel(value: string | null, queues: { id: string; name: string }[]) {
+    if (!value) return "Select a queue..."
+    return queues.find((queue) => queue.id === value)?.name ?? value
+}
 
 export function ReleaseQueueDialog() {
     const { queues } = useSurrogateDetailData()
@@ -35,19 +41,26 @@ export function ReleaseQueueDialog() {
                 </DialogHeader>
                 <div className="py-4">
                     <Label htmlFor="queue-select">Select Queue</Label>
-                    <select
-                        id="queue-select"
+                    <Select
                         value={selectedQueueId}
-                        onChange={(event) => setSelectedQueueId(event.target.value)}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-2"
+                        onValueChange={(value) => setSelectedQueueId(value ?? "")}
                     >
-                        <option value="">Select a queue...</option>
-                        {queues.map((queue) => (
-                            <option key={queue.id} value={queue.id}>
-                                {queue.name}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger id="queue-select" className="mt-2">
+                            <SelectValue>
+                                {(value: string | null) => formatQueueLabel(value, queues)}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value="">Select a queue...</SelectItem>
+                                {queues.map((queue) => (
+                                    <SelectItem key={queue.id} value={queue.id}>
+                                        {queue.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={closeDialog}>Cancel</Button>

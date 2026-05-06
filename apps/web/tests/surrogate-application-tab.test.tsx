@@ -116,6 +116,34 @@ describe("SurrogateApplicationTab", () => {
         )
     })
 
+    it("uses shadcn selects for shared intake link and email template pickers", async () => {
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId="form-1"
+                publishedForms={[
+                    {
+                        id: "form-1",
+                        name: "Application Form",
+                        status: "published",
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    },
+                ]}
+            />,
+        )
+
+        expect(
+            screen.getByRole("combobox", { name: /shared intake link/i }),
+        ).toHaveAttribute("data-slot", "select-trigger")
+
+        fireEvent.click(screen.getByRole("button", { name: /send form link/i }))
+
+        expect(
+            await screen.findByRole("combobox", { name: /email template/i }),
+        ).toHaveAttribute("data-slot", "select-trigger")
+    })
+
     it("shows a persistent field-selection hint before file upload when multiple file fields exist", async () => {
         mockUseSurrogateFormSubmission.mockReturnValue({
             isLoading: false,
@@ -314,5 +342,67 @@ describe("SurrogateApplicationTab", () => {
 
         expect(screen.getByText("0–3 months")).toBeInTheDocument()
         expect(screen.queryByText("months_0_3")).not.toBeInTheDocument()
+    })
+
+    it("uses shadcn selects when editing single-choice application answers", async () => {
+        mockUseSurrogateFormSubmission.mockReturnValue({
+            isLoading: false,
+            error: null,
+            data: {
+                id: "submission-4",
+                form_id: "form-1",
+                surrogate_id: "surrogate-1",
+                status: "pending_review",
+                submitted_at: new Date().toISOString(),
+                reviewed_at: null,
+                reviewed_by_user_id: null,
+                review_notes: null,
+                source_mode: "dedicated",
+                intake_link_id: null,
+                intake_lead_id: null,
+                match_status: "linked",
+                match_reason: "dedicated_token",
+                matched_at: new Date().toISOString(),
+                answers: {
+                    journey_timing_preference: "months_0_3",
+                },
+                schema_snapshot: {
+                    pages: [
+                        {
+                            title: "Timing",
+                            fields: [
+                                {
+                                    key: "journey_timing_preference",
+                                    label: "Journey Timing",
+                                    type: "radio",
+                                    required: false,
+                                    options: [
+                                        { label: "0–3 months", value: "months_0_3" },
+                                        { label: "3–6 months", value: "months_3_6" },
+                                        { label: "Still deciding", value: "still_deciding" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                files: [],
+            },
+        })
+
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId="form-1"
+                publishedForms={[]}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /^edit$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Edit Journey Timing" }))
+
+        expect(
+            await screen.findByRole("combobox", { name: "Journey Timing" }),
+        ).toHaveAttribute("data-slot", "select-trigger")
     })
 })

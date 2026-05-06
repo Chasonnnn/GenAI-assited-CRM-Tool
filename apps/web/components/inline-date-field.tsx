@@ -150,12 +150,12 @@ export function InlineDateField({
     }
 
     return (
-        <div className="flex items-center gap-1">
-            <div className="flex-1">
+        <div className="flex max-w-full flex-col items-start gap-1">
+            <div className="min-w-0 max-w-full">
                 <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
                     <PopoverTrigger
                         className={cn(
-                            "inline-flex h-7 w-40 items-center justify-start gap-2 rounded-md border border-input bg-input/30 px-2.5 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            "inline-flex h-7 w-40 max-w-full items-center justify-start gap-2 rounded-md border border-input bg-input/30 px-2.5 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             !selectedEditDate && "text-muted-foreground",
                             error && "border-destructive"
                         )}
@@ -205,32 +205,34 @@ export function InlineDateField({
                     <p className="text-xs text-destructive mt-1">{error}</p>
                 )}
             </div>
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleSave}
-                disabled={isSaving}
-                aria-label={`Save ${label}`}
-            >
-                {isSaving ? (
-                    <Loader2Icon className="size-3 animate-spin" />
-                ) : (
-                    <CheckIcon className="size-3 text-green-600" />
-                )}
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleCancel}
-                disabled={isSaving}
-                aria-label={`Cancel ${label}`}
-            >
-                <XIcon className="size-3 text-destructive" />
-            </Button>
+            <div className="flex items-center gap-2">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    aria-label={`Save ${label}`}
+                >
+                    {isSaving ? (
+                        <Loader2Icon className="size-3 animate-spin" />
+                    ) : (
+                        <CheckIcon className="size-3 text-green-600" />
+                    )}
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label={`Cancel ${label}`}
+                >
+                    <XIcon className="size-3 text-destructive" />
+                </Button>
+            </div>
         </div>
     )
 }

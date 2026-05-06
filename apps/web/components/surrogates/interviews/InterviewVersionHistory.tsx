@@ -16,7 +16,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import {
     HistoryIcon,
@@ -61,6 +61,12 @@ function formatSource(source: string): string {
         restore: "Restored",
     }
     return labels[source] || source
+}
+
+function formatVersionLabel(value: string | null, versions: InterviewVersionListItem[]) {
+    if (!value) return "Select version"
+    const version = versions.find((item) => item.version.toString() === value)
+    return version ? `Version ${version.version}` : value
 }
 
 export function InterviewVersionHistory({
@@ -327,33 +333,57 @@ function VersionDiffDialog({
                 <div className="flex items-center gap-4 py-2">
                     <div className="flex items-center gap-2">
                         <Label htmlFor="v1-select" className="text-sm">From:</Label>
-                        <NativeSelect
-                            id="v1-select"
+                        <Select
                             value={v1.toString()}
-                            onChange={(e) => onVersionChange({ v1: parseInt(e.target.value), v2 })}
-                            className="w-32"
+                            onValueChange={(value) => {
+                                const nextVersion = parseInt(value ?? "", 10)
+                                if (!Number.isNaN(nextVersion)) {
+                                    onVersionChange({ v1: nextVersion, v2 })
+                                }
+                            }}
                         >
-                            {versions.map((v) => (
-                                <NativeSelectOption key={v.version} value={v.version.toString()}>
-                                    Version {v.version}
-                                </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
+                            <SelectTrigger id="v1-select" className="w-32">
+                                <SelectValue>
+                                    {(value: string | null) => formatVersionLabel(value, versions)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className="w-32">
+                                <SelectGroup>
+                                    {versions.map((version) => (
+                                        <SelectItem key={version.version} value={version.version.toString()}>
+                                            Version {version.version}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="flex items-center gap-2">
                         <Label htmlFor="v2-select" className="text-sm">To:</Label>
-                        <NativeSelect
-                            id="v2-select"
+                        <Select
                             value={v2.toString()}
-                            onChange={(e) => onVersionChange({ v1, v2: parseInt(e.target.value) })}
-                            className="w-32"
+                            onValueChange={(value) => {
+                                const nextVersion = parseInt(value ?? "", 10)
+                                if (!Number.isNaN(nextVersion)) {
+                                    onVersionChange({ v1, v2: nextVersion })
+                                }
+                            }}
                         >
-                            {versions.map((v) => (
-                                <NativeSelectOption key={v.version} value={v.version.toString()}>
-                                    Version {v.version}
-                                </NativeSelectOption>
-                            ))}
-                        </NativeSelect>
+                            <SelectTrigger id="v2-select" className="w-32">
+                                <SelectValue>
+                                    {(value: string | null) => formatVersionLabel(value, versions)}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className="w-32">
+                                <SelectGroup>
+                                    {versions.map((version) => (
+                                        <SelectItem key={version.version} value={version.version.toString()}>
+                                            Version {version.version}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
                     </div>
                     {diff && (
                         <div className="flex items-center gap-3 ml-auto text-sm">

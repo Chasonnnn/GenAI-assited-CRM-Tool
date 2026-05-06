@@ -4,7 +4,7 @@ import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Loader2Icon } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,6 +14,24 @@ const TranscriptEditor = dynamic(
     () => import("../TranscriptEditor").then((mod) => mod.TranscriptEditor),
     { ssr: false, loading: () => <Skeleton className="h-96 w-full rounded-lg" /> }
 )
+
+const INTERVIEW_TYPE_OPTIONS = [
+    { value: "phone", label: "Phone Call" },
+    { value: "video", label: "Video Call" },
+    { value: "in_person", label: "In-Person" },
+] as const
+
+const INTERVIEW_STATUS_OPTIONS = [
+    { value: "completed", label: "Completed" },
+    { value: "draft", label: "Draft" },
+] as const
+
+function formatSelectValue(
+    value: string | null,
+    options: readonly { value: string; label: string }[],
+) {
+    return options.find((option) => option.value === value)?.label ?? value ?? ""
+}
 
 export function EditorDialog() {
     const {
@@ -44,26 +62,51 @@ export function EditorDialog() {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="interview-type">Interview Type</Label>
-                            <NativeSelect
-                                id="interview-type"
+                            <Select
                                 value={form.type}
-                                onChange={(e) => setFormType(e.target.value as typeof form.type)}
+                                onValueChange={(value) => setFormType(value as typeof form.type)}
                             >
-                                <NativeSelectOption value="phone">Phone Call</NativeSelectOption>
-                                <NativeSelectOption value="video">Video Call</NativeSelectOption>
-                                <NativeSelectOption value="in_person">In-Person</NativeSelectOption>
-                            </NativeSelect>
+                                <SelectTrigger id="interview-type">
+                                    <SelectValue>
+                                        {(value: string | null) =>
+                                            formatSelectValue(value, INTERVIEW_TYPE_OPTIONS)
+                                        }
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {INTERVIEW_TYPE_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="interview-status">Status</Label>
-                            <NativeSelect
-                                id="interview-status"
+                            <Select
                                 value={form.status}
-                                onChange={(e) => setFormStatus(e.target.value as typeof form.status)}
+                                onValueChange={(value) => setFormStatus(value as typeof form.status)}
                             >
-                                <NativeSelectOption value="completed">Completed</NativeSelectOption>
-                                <NativeSelectOption value="draft">Draft</NativeSelectOption>
-                            </NativeSelect>
+                                <SelectTrigger id="interview-status">
+                                    <SelectValue>
+                                        {(value: string | null) =>
+                                            formatSelectValue(value, INTERVIEW_STATUS_OPTIONS)
+                                        }
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {INTERVIEW_STATUS_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">

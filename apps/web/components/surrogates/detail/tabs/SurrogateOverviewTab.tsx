@@ -4,8 +4,8 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -63,6 +63,7 @@ import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import { getSurrogateStageContext, stageHasCapability } from "@/lib/surrogate-stage-context"
 import type { SurrogateLeadIntakeWarning } from "@/lib/types/surrogate"
 import type { SurrogateUpdatePayload } from "@/lib/api/surrogates"
+import { formatRace } from "@/lib/formatters"
 
 const LEAD_WARNING_FIELD_LABELS = {
     email: "Email",
@@ -82,6 +83,32 @@ const LEAD_WARNING_REASON_COPY = {
     missing_value: "This value could not be structured, so the field needs review.",
 } as const
 
+const RACE_OPTIONS = [
+    "american_indian_or_alaska_native",
+    "asian",
+    "black_or_african_american",
+    "hispanic_or_latino",
+    "native_hawaiian_or_other_pacific_islander",
+    "white",
+    "other_please_specify",
+] as const
+
+const RACE_OPTION_ALIASES: Record<string, (typeof RACE_OPTIONS)[number]> = {
+    american_indian_alaska_native: "american_indian_or_alaska_native",
+    black_african_american: "black_or_african_american",
+    native_hawaiian_or_pacific_islander: "native_hawaiian_or_other_pacific_islander",
+    native_hawaiian_or_other_pacific_islanders: "native_hawaiian_or_other_pacific_islander",
+    other: "other_please_specify",
+    other_please_specified: "other_please_specify",
+}
+
+function normalizeRaceOptionKey(value: string | null | undefined): string {
+    const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") ?? ""
+    if (!normalized) return ""
+    const aliased = RACE_OPTION_ALIASES[normalized] ?? normalized
+    return RACE_OPTIONS.includes(aliased as (typeof RACE_OPTIONS)[number]) ? aliased : ""
+}
+
 const CHECKLIST_BOOLEAN_FIELD_KEYS = [
     "is_age_eligible",
     "is_citizen_or_pr",
@@ -95,6 +122,20 @@ const JOURNEY_TIMING_OPTIONS = [
     { label: "3–6 months", value: "months_3_6" },
     { label: "Still deciding", value: "still_deciding" },
 ] as const
+
+type SelectOption = {
+    value: string
+    label: string
+}
+
+function formatSelectValue(
+    value: string | null | undefined,
+    options: readonly SelectOption[],
+    placeholder: string
+) {
+    if (!value) return placeholder
+    return options.find((option) => option.value === value)?.label ?? value
+}
 
 type ChecklistBooleanFieldKey = (typeof CHECKLIST_BOOLEAN_FIELD_KEYS)[number]
 
@@ -164,6 +205,160 @@ function PersonalInfoRow({
         <div className="grid gap-1 sm:grid-cols-[8.25rem_minmax(0,1fr)] sm:items-center">
             <span className="text-sm text-muted-foreground">{label}:</span>
             <div className="min-w-0 text-sm">{children}</div>
+        </div>
+    )
+}
+
+function InlineSelectField({
+    value,
+    options,
+    onSave,
+    label,
+    placeholder = "Not provided",
+    saveOnSelect = true,
+    triggerClassName = "w-48",
+}: {
+    value: string | null | undefined
+    options: readonly SelectOption[]
+    onSave: (value: string | null) => Promise<void>
+    label: string
+    placeholder?: string
+    saveOnSelect?: boolean
+    triggerClassName?: string
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState(value ?? "")
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    React.useEffect(() => {
+        if (!isEditing) {
+            setEditValue(value ?? "")
+        }
+    }, [isEditing, value])
+
+    const displayValue = formatSelectValue(value, options, placeholder)
+    const isPlaceholder = !value
+
+    const handleStartEdit = () => {
+        setEditValue(value ?? "")
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const handleCancel = () => {
+        setEditValue(value ?? "")
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const handleSave = async (nextValue = editValue) => {
+        const normalizedValue = nextValue || null
+        if ((value ?? "") === (nextValue ?? "")) {
+            setIsEditing(false)
+            return
+        }
+
+        setIsSaving(true)
+        try {
+            await onSave(normalizedValue)
+            setIsEditing(false)
+            setError(null)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to save ${label}`)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    if (!isEditing) {
+        return (
+            <div
+                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={handleStartEdit}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+                        event.preventDefault()
+                        handleStartEdit()
+                    }
+                }}
+                aria-label={`Edit ${label}`}
+            >
+                <span className={isPlaceholder ? "text-muted-foreground" : undefined}>
+                    {displayValue}
+                </span>
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex max-w-full flex-wrap items-center gap-1">
+                <Select
+                    value={editValue}
+                    onValueChange={(nextValue) => {
+                        const normalizedValue = nextValue ?? ""
+                        setEditValue(normalizedValue)
+                        if (saveOnSelect) {
+                            void handleSave(normalizedValue)
+                        }
+                    }}
+                    disabled={isSaving}
+                >
+                    <SelectTrigger
+                        aria-label={label}
+                        size="sm"
+                        className={triggerClassName}
+                    >
+                        <SelectValue>
+                            {(selectedValue: string | null) =>
+                                formatSelectValue(selectedValue, options, placeholder)
+                            }
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className={triggerClassName}>
+                        <SelectGroup>
+                            <SelectItem value="">{placeholder}</SelectItem>
+                            {options.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                {!saveOnSelect && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => void handleSave()}
+                        disabled={isSaving}
+                        aria-label={`Save ${label}`}
+                    >
+                        <CheckIcon className="size-3 text-green-600" />
+                    </Button>
+                )}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label={`Cancel ${label}`}
+                >
+                    <XIcon className="size-3 text-destructive" />
+                </Button>
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
     )
 }
@@ -286,36 +481,40 @@ function InlineHeightField({
     return (
         <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1">
-                <NativeSelect
-                    value={feet}
-                    onChange={(event) => setFeet(event.target.value)}
-                    size="sm"
-                    className="w-20"
-                    aria-label="Height feet"
-                    disabled={isSaving}
-                >
-                    <NativeSelectOption value="">ft</NativeSelectOption>
-                    {Array.from({ length: 9 }, (_, option) => option).map((option) => (
-                        <NativeSelectOption key={`inline-height-feet-${option}`} value={String(option)}>
-                            {option} ft
-                        </NativeSelectOption>
-                    ))}
-                </NativeSelect>
-                <NativeSelect
-                    value={inches}
-                    onChange={(event) => setInches(event.target.value)}
-                    size="sm"
-                    className="w-20"
-                    aria-label="Height inches"
-                    disabled={isSaving}
-                >
-                    <NativeSelectOption value="">in</NativeSelectOption>
-                    {Array.from({ length: 12 }, (_, option) => option).map((option) => (
-                        <NativeSelectOption key={`inline-height-inches-${option}`} value={String(option)}>
-                            {option} in
-                        </NativeSelectOption>
-                    ))}
-                </NativeSelect>
+                <Select value={feet} onValueChange={(value) => setFeet(value ?? "")} disabled={isSaving}>
+                    <SelectTrigger aria-label="Height feet" size="sm" className="w-20">
+                        <SelectValue>
+                            {(value: string | null) => (value ? `${value} ft` : "ft")}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-24">
+                        <SelectGroup>
+                            <SelectItem value="">ft</SelectItem>
+                            {Array.from({ length: 9 }, (_, option) => option).map((option) => (
+                                <SelectItem key={`inline-height-feet-${option}`} value={String(option)}>
+                                    {option} ft
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                <Select value={inches} onValueChange={(value) => setInches(value ?? "")} disabled={isSaving}>
+                    <SelectTrigger aria-label="Height inches" size="sm" className="w-20">
+                        <SelectValue>
+                            {(value: string | null) => (value ? `${value} in` : "in")}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-24">
+                        <SelectGroup>
+                            <SelectItem value="">in</SelectItem>
+                            {Array.from({ length: 12 }, (_, option) => option).map((option) => (
+                                <SelectItem key={`inline-height-inches-${option}`} value={String(option)}>
+                                    {option} in
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
                 <Button
                     type="button"
                     variant="ghost"
@@ -344,6 +543,140 @@ function InlineHeightField({
     )
 }
 
+function InlineRaceField({
+    value,
+    onSave,
+}: {
+    value: string | null | undefined
+    onSave: (value: string | null) => Promise<void>
+}) {
+    const [isEditing, setIsEditing] = React.useState(false)
+    const [editValue, setEditValue] = React.useState(normalizeRaceOptionKey(value))
+    const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
+
+    React.useEffect(() => {
+        if (!isEditing) {
+            setEditValue(normalizeRaceOptionKey(value))
+        }
+    }, [isEditing, value])
+
+    const displayValue = formatRace(value)
+    const fieldLabel = "Race / Ethnicity"
+
+    const handleStartEdit = () => {
+        setEditValue(normalizeRaceOptionKey(value))
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const handleCancel = () => {
+        setEditValue(normalizeRaceOptionKey(value))
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const handleSave = async () => {
+        const currentValue = normalizeRaceOptionKey(value)
+        if (editValue === currentValue) {
+            setIsEditing(false)
+            return
+        }
+
+        setIsSaving(true)
+        try {
+            await onSave(editValue || null)
+            setIsEditing(false)
+            setError(null)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save")
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    if (!isEditing) {
+        return (
+            <div
+                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={handleStartEdit}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+                        event.preventDefault()
+                        handleStartEdit()
+                    }
+                }}
+                aria-label={`Edit ${fieldLabel}`}
+            >
+                <span className={displayValue ? undefined : "text-muted-foreground"}>
+                    {displayValue || "-"}
+                </span>
+                <PencilIcon
+                    className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                    aria-hidden="true"
+                />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-1">
+            <div className="flex max-w-full flex-wrap items-center gap-1">
+                <Select
+                    value={editValue}
+                    onValueChange={(value) => setEditValue(value ?? "")}
+                    disabled={isSaving}
+                >
+                    <SelectTrigger
+                        aria-label={fieldLabel}
+                        size="sm"
+                        className="w-64 max-w-full"
+                    >
+                        <SelectValue>
+                            {(value: string | null) => (value ? formatRace(value) : "No race selected")}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="w-64 max-w-full">
+                        <SelectGroup>
+                            <SelectItem value="">No race selected</SelectItem>
+                            {RACE_OPTIONS.map((raceKey) => (
+                                <SelectItem key={raceKey} value={raceKey}>
+                                    {formatRace(raceKey)}
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    aria-label={`Save ${fieldLabel}`}
+                >
+                    <CheckIcon className="size-3 text-green-600" />
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    aria-label={`Cancel ${fieldLabel}`}
+                >
+                    <XIcon className="size-3 text-destructive" />
+                </Button>
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+    )
+}
+
 function InlineWeightField({
     value,
     onSave,
@@ -352,31 +685,43 @@ function InlineWeightField({
     onSave: (value: number | null) => Promise<void>
 }) {
     const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState(value != null ? String(value) : "")
+    const [editValue, setEditValue] = React.useState("")
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
     React.useEffect(() => {
-        setEditValue(value != null ? String(value) : "")
-    }, [value])
+        if (!isEditing) {
+            setEditValue("")
+        }
+    }, [isEditing, value])
 
     const handleStartEdit = () => {
-        setEditValue(value != null ? String(value) : "")
+        setEditValue("")
         setError(null)
         setIsEditing(true)
     }
 
     const handleCancel = () => {
-        setEditValue(value != null ? String(value) : "")
+        setEditValue("")
         setError(null)
         setIsEditing(false)
     }
 
     const handleSave = async () => {
         const trimmed = editValue.trim()
+        if (!trimmed) {
+            setIsEditing(false)
+            setError(null)
+            return
+        }
         const parsed = trimmed ? Number(trimmed) : null
         if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
             setError("Enter a valid weight")
+            return
+        }
+        if (parsed === value) {
+            setIsEditing(false)
+            setError(null)
             return
         }
 
@@ -437,6 +782,7 @@ function InlineWeightField({
                     className="h-7 w-24 text-sm"
                     disabled={isSaving}
                     aria-label="Weight"
+                    placeholder={value != null ? String(value) : undefined}
                 />
                 <span className="text-sm text-muted-foreground">lb</span>
                 <Button
@@ -557,16 +903,6 @@ function getAgeLabel(dateOfBirth: string | null | undefined) {
         age -= 1
     }
     return `Age ${age}`
-}
-
-function getBmiCategory(bmi: number | null) {
-    if (bmi == null) return null
-    if (bmi < 18.5) return "Underweight"
-    if (bmi < 25) return "Normal"
-    if (bmi < 30) return "Overweight"
-    if (bmi < 35) return "Obese (Class I)"
-    if (bmi < 40) return "Obese (Class II)"
-    return "Obese (Class III)"
 }
 
 function SsnField({
@@ -732,7 +1068,6 @@ export function SurrogateOverviewTab() {
     const heightLeadWarning = leadWarningMap.get("height_ft")
     const weightLeadWarning = leadWarningMap.get("weight_lb")
     const maritalStatusOptions = getMaritalStatusOptions(surrogateData.marital_status)
-    const bmiCategory = getBmiCategory(bmiValue)
     const hasSurrogatePersonalInfo = Boolean(
         surrogateData.marital_status ||
         surrogateData.ssn_masked ||
@@ -949,7 +1284,7 @@ export function SurrogateOverviewTab() {
                     </SurrogateOverviewCard>
 
                     <SurrogateOverviewCard title="Demographics" icon={InfoIcon}>
-                        <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-5">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(15rem,1.2fr)_minmax(14rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)]">
                             <ProfileMetric
                                 icon={CalendarDaysIcon}
                                 label="Date of Birth"
@@ -972,7 +1307,7 @@ export function SurrogateOverviewTab() {
                                 icon={UsersIcon}
                                 label="Race / Ethnicity"
                                 primary={
-                                    <InlineEditField
+                                    <InlineRaceField
                                         value={surrogateData.race ?? undefined}
                                         onSave={async (value) => {
                                             await updateSurrogateMutation.mutateAsync({
@@ -980,9 +1315,6 @@ export function SurrogateOverviewTab() {
                                                 data: { race: value || null },
                                             })
                                         }}
-                                        placeholder="-"
-                                        label="Race / Ethnicity"
-                                        displayClassName="w-fit"
                                     />
                                 }
                             />
@@ -1036,13 +1368,6 @@ export function SurrogateOverviewTab() {
                                 icon={ScaleIcon}
                                 label="BMI"
                                 primary={bmiValue ?? "-"}
-                                badge={
-                                    bmiCategory ? (
-                                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-100">
-                                            {bmiCategory}
-                                        </Badge>
-                                    ) : undefined
-                                }
                             />
                         </div>
                     </SurrogateOverviewCard>
@@ -1147,23 +1472,15 @@ export function SurrogateOverviewTab() {
                                     {showSurrogatePersonalInfo && (
                                         <PersonalInfoColumn title="Surrogate" icon={UserIcon}>
                                         <PersonalInfoRow label="Marital Status">
-                                            <NativeSelect
-                                                aria-label="Marital status"
-                                                value={surrogateData.marital_status ?? ""}
-                                                onChange={(event) =>
-                                                    void updateSurrogate({
-                                                        marital_status: event.target.value || null,
-                                                    })
-                                                }
-                                                className="h-8 w-full max-w-[15rem]"
-                                            >
-                                                <NativeSelectOption value="">Not provided</NativeSelectOption>
-                                                {maritalStatusOptions.map((option) => (
-                                                    <NativeSelectOption key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </NativeSelectOption>
-                                                ))}
-                                            </NativeSelect>
+                                            <InlineSelectField
+                                                label="Marital Status"
+                                                value={surrogateData.marital_status}
+                                                options={maritalStatusOptions}
+                                                onSave={async (value) => {
+                                                    await updateSurrogate({ marital_status: value })
+                                                }}
+                                                triggerClassName="w-full max-w-[15rem]"
+                                            />
                                         </PersonalInfoRow>
                                         <PersonalInfoRow label="SSN">
                                             <SsnField
@@ -1432,27 +1749,20 @@ export function SurrogateOverviewTab() {
                                 return (
                                     <div key={item.key} className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
                                         <span className="text-sm text-muted-foreground">{item.label}:</span>
-                                        <NativeSelect
+                                        <InlineSelectField
+                                            label={item.label}
                                             value={currentValue}
-                                            onChange={async (event) => {
+                                            options={JOURNEY_TIMING_OPTIONS}
+                                            onSave={async (value) => {
                                                 await updateSurrogateMutation.mutateAsync({
                                                     surrogateId: id,
                                                     data: {
-                                                        journey_timing_preference: event.target.value || null,
+                                                        journey_timing_preference: value,
                                                     },
                                                 })
                                             }}
-                                            size="sm"
-                                            className="w-full max-w-44"
-                                            aria-label={item.label}
-                                        >
-                                            <NativeSelectOption value="">Not provided</NativeSelectOption>
-                                            {JOURNEY_TIMING_OPTIONS.map((option) => (
-                                                <NativeSelectOption key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </NativeSelectOption>
-                                            ))}
-                                        </NativeSelect>
+                                            triggerClassName="w-full max-w-44"
+                                        />
                                     </div>
                                 )
                             }

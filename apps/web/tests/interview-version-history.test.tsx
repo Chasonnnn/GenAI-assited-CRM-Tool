@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 
 import { InterviewVersionHistory } from "../components/surrogates/interviews/InterviewVersionHistory"
 
@@ -17,7 +17,25 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
         </button>
     ),
     DropdownMenuContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-    DropdownMenuItem: ({ children }: { children?: ReactNode }) => <button type="button">{children}</button>,
+    DropdownMenuItem: ({
+        children,
+        onClick,
+        onSelect,
+    }: {
+        children?: ReactNode
+        onClick?: () => void
+        onSelect?: () => void
+    }) => (
+        <button
+            type="button"
+            onClick={() => {
+                onClick?.()
+                onSelect?.()
+            }}
+        >
+            {children}
+        </button>
+    ),
 }))
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -62,5 +80,46 @@ describe("InterviewVersionHistory", () => {
         expect(
             screen.getByRole("button", { name: "Version history actions for version 3" }),
         ).toBeInTheDocument()
+    })
+
+    it("uses shadcn selects in the version compare dialog", async () => {
+        mockUseInterviewVersions.mockReturnValue({
+            data: [
+                {
+                    version: 3,
+                    source: "manual",
+                    author_name: "Case Manager",
+                    created_at: "2026-02-10T12:00:00Z",
+                    content_size_bytes: 512,
+                },
+                {
+                    version: 2,
+                    source: "manual",
+                    author_name: "Case Manager",
+                    created_at: "2026-02-09T12:00:00Z",
+                    content_size_bytes: 400,
+                },
+            ],
+            isLoading: false,
+        })
+
+        render(
+            <InterviewVersionHistory
+                interviewId="int-1"
+                currentVersion={3}
+                open
+                onOpenChange={() => undefined}
+                canRestore={false}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: /compare with v2/i }))
+
+        expect(
+            await screen.findByRole("combobox", { name: /from/i }),
+        ).toHaveAttribute("data-slot", "select-trigger")
+        expect(
+            screen.getByRole("combobox", { name: /to/i }),
+        ).toHaveAttribute("data-slot", "select-trigger")
     })
 })

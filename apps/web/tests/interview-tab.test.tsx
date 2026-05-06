@@ -175,6 +175,21 @@ describe('SurrogateInterviewTab', () => {
         expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
     })
 
+    it('uses shadcn selects in the interview editor', async () => {
+        mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        fireEvent.click(screen.getByRole('button', { name: /add interview/i }))
+
+        expect(
+            await screen.findByRole('combobox', { name: /interview type/i }),
+        ).toHaveAttribute('data-slot', 'select-trigger')
+        expect(
+            screen.getByRole('combobox', { name: /status/i }),
+        ).toHaveAttribute('data-slot', 'select-trigger')
+    })
+
     it('requests transcription for audio attachments', async () => {
         render(<SurrogateInterviewTab surrogateId="c1" />)
 

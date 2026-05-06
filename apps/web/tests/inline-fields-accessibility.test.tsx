@@ -49,6 +49,30 @@ describe("Inline field accessibility", () => {
         expect(screen.getByRole("button", { name: "Edit Start Date" })).toBeInTheDocument()
     })
 
+    it("keeps InlineDateField save and cancel controls together under the calendar picker", () => {
+        render(
+            <InlineDateField
+                value="1990-05-27"
+                label="Date of Birth"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Edit Date of Birth" }))
+
+        const saveButton = screen.getByRole("button", { name: "Save Date of Birth" })
+        const cancelButton = screen.getByRole("button", { name: "Cancel Date of Birth" })
+        const datePicker = screen.getByRole("button", { name: "Date of Birth" })
+        const actionRow = saveButton.parentElement
+
+        expect(saveButton).toBeVisible()
+        expect(cancelButton).toBeVisible()
+        expect(actionRow).toBe(cancelButton.parentElement)
+        expect(actionRow).toHaveClass("flex", "items-center")
+        expect(actionRow?.previousElementSibling).toContainElement(datePicker)
+        expect(actionRow?.parentElement).toHaveClass("flex-col")
+    })
+
     it("adds focus-visible styles to inline display triggers", () => {
         render(
             <div>

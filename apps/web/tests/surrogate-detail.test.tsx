@@ -210,6 +210,7 @@ const baseSurrogateData = {
     delivery_hospital_fax: null,
     delivery_hospital_email: null,
     // Pregnancy tracking
+    embryo_stage: null,
     pregnancy_start_date: null,
     pregnancy_due_date: null,
     actual_delivery_date: null,
@@ -372,6 +373,8 @@ describe('SurrogateDetailPage', () => {
 
         expect(await screen.findByText('Surrogate')).toBeInTheDocument()
         expect(screen.getByText('Marital Status:')).toBeInTheDocument()
+        expect(screen.queryByRole('combobox', { name: 'Marital Status' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Edit Marital Status' })).toHaveTextContent('Not provided')
     })
 
     it('shows masked personal information and reveals SSN at Pending-DocuSign', async () => {
@@ -718,6 +721,24 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText("Interview: No Show")).toBeInTheDocument()
     })
 
+    it("shows the upcoming interview pill at the interview scheduled stage before an outcome is logged", () => {
+        render(
+            <SurrogateDetailHeader
+                surrogateNumber="S12345"
+                currentStageKey="interview_scheduled"
+                statusLabel="Interview Scheduled"
+                statusColor="#222222"
+                latestContactOutcome={{ outcome: "reached", at: "2024-02-01T10:00:00Z" }}
+                latestInterviewOutcome={null}
+                isArchived={false}
+                onBack={vi.fn()}
+            />
+        )
+
+        expect(screen.queryByText("Contact: Reached")).not.toBeInTheDocument()
+        expect(screen.getByText("Upcoming")).toBeInTheDocument()
+    })
+
     it("hides outcome pills after the surrogate moves past the corresponding stages", () => {
         render(
             <SurrogateDetailHeader
@@ -834,6 +855,29 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('5 ft 6 in')).toBeInTheDocument()
         expect(screen.getByText('BMI:')).toBeInTheDocument()
         expect(screen.getByText(String(bmiValue))).toBeInTheDocument()
+    })
+
+    it('shows only the numeric BMI without a category badge', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                height_ft: 5.17,
+                weight_lb: 170,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const bmiValue = Math.round((170 / ((Math.round(5.17 * 12)) ** 2)) * 703 * 10) / 10
+        expect(screen.getByText('BMI:')).toBeInTheDocument()
+        expect(screen.getByText(String(bmiValue))).toBeInTheDocument()
+        expect(screen.queryByText(/Underweight|Normal|Overweight|Obese/i)).not.toBeInTheDocument()
     })
 
     it('shows "-" for height when missing but demographics section is visible', () => {
@@ -1089,6 +1133,57 @@ describe('SurrogateDetailPage', () => {
         )
 
         expect(screen.getByText('Pregnancy Tracker')).toBeInTheDocument()
+    })
+
+    it('shows embryo stage above transferred date and saves the selected canonical option', async () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Heartbeat Confirmed',
+                stage_id: 's3',
+                stage_slug: 'heartbeat_confirmed',
+                stage_type: 'post_approval',
+                embryo_stage: 'unknown',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        const stageLabel = screen.getByText('Embryo Stage:')
+        const transferredDateLabel = screen.getByText('Transferred Date:')
+        expect(
+            stageLabel.compareDocumentPosition(transferredDateLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy()
+
+        expect(screen.queryByRole('combobox', { name: 'Embryo Stage' })).not.toBeInTheDocument()
+        const stageDisplay = screen.getByRole('button', { name: 'Edit Embryo Stage' })
+        expect(stageDisplay).toHaveTextContent('Unknown / not provided')
+
+        fireEvent.click(stageDisplay)
+        const stageSelect = screen.getByRole('combobox', { name: 'Embryo Stage' })
+        expect(stageSelect).toHaveTextContent('Unknown / not provided')
+        fireEvent.click(stageSelect)
+        expect(screen.getByRole('option', { name: 'Day 3 embryo' })).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'Day 5 blastocyst' })).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'Day 6 blastocyst' })).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'Unknown / not provided' })).toBeInTheDocument()
+
+        const day5Option = screen.getByRole('option', { name: 'Day 5 blastocyst' })
+        fireEvent.mouseMove(day5Option)
+        fireEvent.click(day5Option)
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { embryo_stage: 'day_5' },
+            })
+        })
     })
 
     it('shows Resume action for surrogates currently on hold and resumes to paused-from stage', async () => {
@@ -1434,8 +1529,19 @@ describe('SurrogateDetailPage', () => {
         mockUpdateSurrogate.mockClear()
 
         fireEvent.click(screen.getByRole('button', { name: 'Edit Height' }))
-        fireEvent.change(screen.getByLabelText('Height feet'), { target: { value: '5' } })
-        fireEvent.change(screen.getByLabelText('Height inches'), { target: { value: '6' } })
+        const heightFeetTrigger = screen.getByRole('combobox', { name: 'Height feet' })
+        const heightInchesTrigger = screen.getByRole('combobox', { name: 'Height inches' })
+        expect(heightFeetTrigger).toHaveAttribute('data-slot', 'select-trigger')
+        expect(heightInchesTrigger).toHaveAttribute('data-slot', 'select-trigger')
+
+        fireEvent.click(heightFeetTrigger)
+        const fiveFeetOption = screen.getByRole('option', { name: '5 ft' })
+        fireEvent.mouseMove(fiveFeetOption)
+        fireEvent.click(fiveFeetOption)
+        fireEvent.click(heightInchesTrigger)
+        const sixInchesOption = screen.getByRole('option', { name: '6 in' })
+        fireEvent.mouseMove(sixInchesOption)
+        fireEvent.click(sixInchesOption)
         fireEvent.click(screen.getByRole('button', { name: 'Save Height' }))
 
         await waitFor(() => {
@@ -1455,6 +1561,67 @@ describe('SurrogateDetailPage', () => {
             expect(mockUpdateSurrogate).toHaveBeenCalledWith({
                 surrogateId: 'c1',
                 data: { weight_lb: 205 },
+            })
+        })
+    })
+
+    it('uses canonical race options and keeps current weight as the edit placeholder', async () => {
+        mockUseSurrogate.mockReturnValue({
+            data: {
+                ...baseSurrogateData,
+                race: 'Hispanic or Latino',
+                weight_lb: 170,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        expect(screen.getByRole('button', { name: 'Edit Race / Ethnicity' })).toHaveTextContent('Hispanic or Latino')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Race / Ethnicity' }))
+        const raceSelect = screen.getByRole('combobox', { name: 'Race / Ethnicity' })
+        expect(raceSelect).toHaveAttribute('data-slot', 'select-trigger')
+        expect(raceSelect).toHaveTextContent('Hispanic or Latino')
+
+        fireEvent.click(raceSelect)
+        expect(screen.getByRole('option', { name: 'Other' })).toBeInTheDocument()
+        expect(screen.queryByRole('option', { name: 'Other (please specify)' })).not.toBeInTheDocument()
+        const blackRaceOption = screen.getByRole('option', { name: 'Black or African American' })
+        fireEvent.mouseMove(blackRaceOption)
+        fireEvent.click(blackRaceOption)
+        fireEvent.click(screen.getByRole('button', { name: 'Save Race / Ethnicity' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { race: 'black_or_african_american' },
+            })
+        })
+
+        mockUpdateSurrogate.mockClear()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Weight' }))
+        const weightInput = screen.getByLabelText('Weight')
+        expect(weightInput).toHaveAttribute('placeholder', '170')
+        expect(weightInput).toHaveValue(null)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save Weight' }))
+        expect(mockUpdateSurrogate).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Weight' }))
+        fireEvent.change(screen.getByLabelText('Weight'), { target: { value: '175' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Save Weight' }))
+
+        await waitFor(() => {
+            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
+                surrogateId: 'c1',
+                data: { weight_lb: 175 },
             })
         })
     })
@@ -1536,9 +1703,17 @@ describe('SurrogateDetailPage', () => {
 
         mockUpdateSurrogate.mockClear()
 
-        const journeyTimingSelect = screen.getByLabelText('Journey Timing')
-        expect(journeyTimingSelect).toHaveValue('months_0_3')
-        fireEvent.change(journeyTimingSelect, { target: { value: 'months_3_6' } })
+        expect(screen.queryByRole('combobox', { name: 'Journey Timing' })).not.toBeInTheDocument()
+        const journeyTimingDisplay = screen.getByRole('button', { name: 'Edit Journey Timing' })
+        expect(journeyTimingDisplay).toHaveTextContent('0–3 months')
+
+        fireEvent.click(journeyTimingDisplay)
+        const journeyTimingSelect = screen.getByRole('combobox', { name: 'Journey Timing' })
+        expect(journeyTimingSelect).toHaveAttribute('data-slot', 'select-trigger')
+        fireEvent.click(journeyTimingSelect)
+        const threeToSixMonthsOption = screen.getByRole('option', { name: '3–6 months' })
+        fireEvent.mouseMove(threeToSixMonthsOption)
+        fireEvent.click(threeToSixMonthsOption)
 
         await waitFor(() => {
             expect(mockUpdateSurrogate).toHaveBeenCalledWith({
@@ -1625,12 +1800,16 @@ describe('SurrogateDetailPage', () => {
         fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
 
         const editDialog = await screen.findByRole('dialog')
-        const journeyTimingSelect = await within(editDialog).findByLabelText('Journey Timing')
-        expect(journeyTimingSelect).toHaveValue('months_0_3')
+        const journeyTimingSelect = await within(editDialog).findByRole('combobox', { name: 'Journey Timing' })
+        expect(journeyTimingSelect).toHaveAttribute('data-slot', 'select-trigger')
+        expect(journeyTimingSelect).toHaveTextContent('0–3 months')
         expect(within(editDialog).getByLabelText('Number of Deliveries')).toHaveValue(1)
         expect(within(editDialog).queryByLabelText('Surrogate Experience')).not.toBeInTheDocument()
 
-        fireEvent.change(journeyTimingSelect, { target: { value: 'still_deciding' } })
+        fireEvent.click(journeyTimingSelect)
+        const stillDecidingOption = screen.getByRole('option', { name: 'Still deciding' })
+        fireEvent.mouseMove(stillDecidingOption)
+        fireEvent.click(stillDecidingOption)
         fireEvent.change(within(editDialog).getByLabelText('Number of Deliveries'), { target: { value: '2' } })
         fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
@@ -1666,14 +1845,22 @@ describe('SurrogateDetailPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
         fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
 
-        const feetSelect = await screen.findByLabelText('Height Feet')
-        const inchesSelect = screen.getByLabelText('Height Inches')
+        const feetSelect = await screen.findByRole('combobox', { name: 'Height Feet' })
+        const inchesSelect = screen.getByRole('combobox', { name: 'Height Inches' })
 
-        expect(feetSelect).toHaveValue('4')
-        expect(inchesSelect).toHaveValue('11')
+        expect(feetSelect).toHaveAttribute('data-slot', 'select-trigger')
+        expect(inchesSelect).toHaveAttribute('data-slot', 'select-trigger')
+        expect(feetSelect).toHaveTextContent('4 ft')
+        expect(inchesSelect).toHaveTextContent('11 in')
 
-        fireEvent.change(feetSelect, { target: { value: '4' } })
-        fireEvent.change(inchesSelect, { target: { value: '11' } })
+        fireEvent.click(feetSelect)
+        const fourFeetOption = screen.getByRole('option', { name: '4 ft' })
+        fireEvent.mouseMove(fourFeetOption)
+        fireEvent.click(fourFeetOption)
+        fireEvent.click(inchesSelect)
+        const elevenInchesOption = screen.getByRole('option', { name: '11 in' })
+        fireEvent.mouseMove(elevenInchesOption)
+        fireEvent.click(elevenInchesOption)
         fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
         await waitFor(() => {

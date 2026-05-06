@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
     Dialog,
@@ -160,6 +160,75 @@ function formatTableCellValue(
         return value.length ? getFormOptionLabels(options, value).join(", ") : "—"
     }
     return getFormOptionLabel(options, value) ?? String(value)
+}
+
+type SelectControlOption = {
+    value: string
+    label: string
+}
+
+function formatSelectControlValue(
+    value: string | null | undefined,
+    options: readonly SelectControlOption[],
+    placeholder: string,
+) {
+    if (!value) return placeholder
+    return options.find((option) => option.value === value)?.label ?? value
+}
+
+function SelectControl({
+    id,
+    value,
+    onValueChange,
+    options,
+    placeholder,
+    ariaLabel,
+    size = "default",
+    triggerClassName,
+    contentClassName,
+    disabled,
+}: {
+    id?: string
+    value: string
+    onValueChange: (value: string) => void
+    options: readonly SelectControlOption[]
+    placeholder: string
+    ariaLabel?: string
+    size?: "sm" | "default"
+    triggerClassName?: string
+    contentClassName?: string
+    disabled?: boolean
+}) {
+    return (
+        <Select
+            value={value}
+            onValueChange={(nextValue) => onValueChange(nextValue ?? "")}
+            {...(disabled === undefined ? {} : { disabled })}
+        >
+            <SelectTrigger
+                {...(id ? { id } : {})}
+                {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+                size={size}
+                {...(triggerClassName ? { className: triggerClassName } : {})}
+            >
+                <SelectValue>
+                    {(selectedValue: string | null) =>
+                        formatSelectControlValue(selectedValue, options, placeholder)
+                    }
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent {...(contentClassName ? { className: contentClassName } : {})}>
+                <SelectGroup>
+                    <SelectItem value="">{placeholder}</SelectItem>
+                    {options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                        </SelectItem>
+                    ))}
+                </SelectGroup>
+            </SelectContent>
+        </Select>
+    )
 }
 
 export function SurrogateApplicationTab({
@@ -596,26 +665,20 @@ export function SurrogateApplicationTab({
                                                         {column.label}
                                                     </Label>
                                                     {column.type === "select" || column.type === "radio" ? (
-                                                        <NativeSelect
+                                                        <SelectControl
                                                             value={valueText}
-                                                            onChange={(e) =>
-                                                                updateRow(rowIndex, column.key, e.target.value)
+                                                            onValueChange={(nextValue) =>
+                                                                updateRow(rowIndex, column.key, nextValue)
                                                             }
+                                                            options={(column.options || []).map((option) => ({
+                                                                value: option.value,
+                                                                label: option.label,
+                                                            }))}
+                                                            placeholder="Select"
+                                                            ariaLabel={column.label}
                                                             size="sm"
-                                                            className="w-full"
-                                                        >
-                                                            <NativeSelectOption value="">
-                                                                Select
-                                                            </NativeSelectOption>
-                                                            {(column.options || []).map((option) => (
-                                                                <NativeSelectOption
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </NativeSelectOption>
-                                                            ))}
-                                                        </NativeSelect>
+                                                            triggerClassName="w-full"
+                                                        />
                                                     ) : column.type === "textarea" ? (
                                                         <Textarea
                                                             value={valueText}
@@ -703,19 +766,18 @@ export function SurrogateApplicationTab({
 
         if (field.type === "select" || field.type === "radio") {
             return (
-                <NativeSelect
+                <SelectControl
                     value={typeof value === "string" ? value : ""}
-                    onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                    onValueChange={(nextValue) => handleFieldChange(field.key, nextValue)}
+                    options={(field.options || []).map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                    }))}
+                    placeholder="Select"
+                    ariaLabel={field.label}
                     size="sm"
-                    className="w-48"
-                >
-                    <NativeSelectOption value="">Select</NativeSelectOption>
-                    {(field.options || []).map((option) => (
-                        <NativeSelectOption key={option.value} value={option.value}>
-                            {option.label}
-                        </NativeSelectOption>
-                    ))}
-                </NativeSelect>
+                    triggerClassName="w-48"
+                />
             )
         }
 
@@ -871,21 +933,20 @@ export function SurrogateApplicationTab({
                             </div>
                             {useAdvancedOverride && (
                                 <div className="space-y-3">
-                                    <NativeSelect
+                                    <SelectControl
                                         value={selectedFormId}
-                                        onChange={(e) => {
-                                            setSelectedFormId(e.target.value)
+                                        onValueChange={(nextValue) => {
+                                            setSelectedFormId(nextValue)
                                             setConfirmOverride(false)
                                         }}
-                                        className="w-full"
-                                    >
-                                        <NativeSelectOption value="">Choose a form</NativeSelectOption>
-                                        {availableForms.map((form) => (
-                                            <NativeSelectOption key={form.id} value={form.id}>
-                                                {form.name}
-                                            </NativeSelectOption>
-                                        ))}
-                                    </NativeSelect>
+                                        options={availableForms.map((form) => ({
+                                            value: form.id,
+                                            label: form.name,
+                                        }))}
+                                        placeholder="Choose a form"
+                                        ariaLabel="Application form"
+                                        triggerClassName="w-full"
+                                    />
                                     {selectedForm && (
                                         <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
                                             You are overriding the default form.
@@ -930,24 +991,22 @@ export function SurrogateApplicationTab({
                             <Label htmlFor="intake-link-select" className="mb-2 block text-xs font-medium text-muted-foreground">
                                 Shared intake link
                             </Label>
-                            <NativeSelect
+                            <SelectControl
                                 id="intake-link-select"
                                 value={selectedIntakeLinkId}
-                                onChange={(e) => setSelectedIntakeLinkId(e.target.value)}
-                                className="w-full"
-                            >
-                                {sendableIntakeLinks.length === 0 ? (
-                                    <NativeSelectOption value="">
-                                        No shared links available
-                                    </NativeSelectOption>
-                                ) : (
-                                    sendableIntakeLinks.map((link) => (
-                                        <NativeSelectOption key={link.id} value={link.id}>
-                                            {link.campaign_name || link.event_name || link.slug}
-                                        </NativeSelectOption>
-                                    ))
-                                )}
-                            </NativeSelect>
+                                onValueChange={setSelectedIntakeLinkId}
+                                options={sendableIntakeLinks.map((link) => ({
+                                    value: link.id,
+                                    label: link.campaign_name || link.event_name || link.slug,
+                                }))}
+                                placeholder={
+                                    sendableIntakeLinks.length === 0
+                                        ? "No shared links available"
+                                        : "Select shared link"
+                                }
+                                triggerClassName="w-full"
+                                disabled={sendableIntakeLinks.length === 0}
+                            />
                             <p className="mt-2 text-xs text-muted-foreground">
                                 Shared links can be reused by any applicant. Resume and autosave happen on the intake page.
                             </p>
@@ -989,18 +1048,16 @@ export function SurrogateApplicationTab({
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="application-template">Email template</Label>
-                                    <NativeSelect
+                                    <SelectControl
                                         id="application-template"
                                         value={selectedTemplateId}
-                                        onChange={(e) => setSelectedTemplateId(e.target.value)}
-                                    >
-                                        <NativeSelectOption value="">Select template</NativeSelectOption>
-                                        {emailTemplates.map((template) => (
-                                            <NativeSelectOption key={template.id} value={template.id}>
-                                                {template.name}
-                                            </NativeSelectOption>
-                                        ))}
-                                    </NativeSelect>
+                                        onValueChange={setSelectedTemplateId}
+                                        options={emailTemplates.map((template) => ({
+                                            value: template.id,
+                                            label: template.name,
+                                        }))}
+                                        placeholder="Select template"
+                                    />
                                     <p className="text-xs text-muted-foreground">
                                         Uses template variable <code>{"{{form_link}}"}</code> with the selected shared intake URL.
                                     </p>
@@ -1365,19 +1422,18 @@ export function SurrogateApplicationTab({
                                     <div className="flex flex-col items-end gap-1.5">
                                         <div className="flex items-center gap-2">
                                             {fileFields.length > 1 && (
-                                                <NativeSelect
+                                                <SelectControl
                                                     value={uploadFieldKey}
-                                                    onChange={(e) => setUploadFieldKey(e.target.value)}
+                                                    onValueChange={setUploadFieldKey}
+                                                    options={fileFields.map((field) => ({
+                                                        value: field.key,
+                                                        label: field.label,
+                                                    }))}
+                                                    placeholder="Select field"
+                                                    ariaLabel="Upload field"
                                                     size="sm"
-                                                    className="h-8 text-xs"
-                                                >
-                                                    <NativeSelectOption value="">Select field</NativeSelectOption>
-                                                    {fileFields.map((field) => (
-                                                        <NativeSelectOption key={field.key} value={field.key}>
-                                                            {field.label}
-                                                        </NativeSelectOption>
-                                                    ))}
-                                                </NativeSelect>
+                                                    triggerClassName="h-8 text-xs"
+                                                />
                                             )}
                                             <input
                                                 id={fileInputId}

@@ -1,13 +1,15 @@
 "use client"
 
+import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAuth } from "@/lib/auth-context"
 import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
+import { formatRace } from "@/lib/formatters"
 import {
     useSurrogateDetailActions,
     useSurrogateDetailData,
@@ -19,6 +21,93 @@ const JOURNEY_TIMING_OPTIONS = [
     { label: "3–6 months", value: "months_3_6" },
     { label: "Still deciding", value: "still_deciding" },
 ] as const
+
+const RACE_OPTIONS = [
+    "american_indian_or_alaska_native",
+    "asian",
+    "black_or_african_american",
+    "hispanic_or_latino",
+    "native_hawaiian_or_other_pacific_islander",
+    "white",
+    "other_please_specify",
+] as const
+
+const RACE_OPTION_ALIASES: Record<string, (typeof RACE_OPTIONS)[number]> = {
+    american_indian_alaska_native: "american_indian_or_alaska_native",
+    black_african_american: "black_or_african_american",
+    native_hawaiian_or_pacific_islander: "native_hawaiian_or_other_pacific_islander",
+    native_hawaiian_or_other_pacific_islanders: "native_hawaiian_or_other_pacific_islander",
+    other: "other_please_specify",
+    other_please_specified: "other_please_specify",
+}
+
+function normalizeRaceOptionKey(value: string | null | undefined): string {
+    const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") ?? ""
+    if (!normalized) return ""
+    const aliased = RACE_OPTION_ALIASES[normalized] ?? normalized
+    return RACE_OPTIONS.includes(aliased as (typeof RACE_OPTIONS)[number]) ? aliased : ""
+}
+
+type FormSelectOption = {
+    value: string
+    label: string
+}
+
+function formatFormSelectValue(
+    value: string | null | undefined,
+    options: readonly FormSelectOption[],
+    placeholder: string,
+) {
+    if (!value) return placeholder
+    return options.find((option) => option.value === value)?.label ?? value
+}
+
+function FormSelect({
+    id,
+    name,
+    defaultValue,
+    options,
+    placeholder,
+    className = "w-full",
+}: {
+    id: string
+    name: string
+    defaultValue: string | null | undefined
+    options: readonly FormSelectOption[]
+    placeholder: string
+    className?: string
+}) {
+    const [value, setValue] = React.useState(defaultValue ?? "")
+
+    React.useEffect(() => {
+        setValue(defaultValue ?? "")
+    }, [defaultValue])
+
+    return (
+        <>
+            <input type="hidden" name={name} value={value} />
+            <Select value={value} onValueChange={(nextValue) => setValue(nextValue ?? "")}>
+                <SelectTrigger id={id} className={className}>
+                    <SelectValue>
+                        {(selectedValue: string | null) =>
+                            formatFormSelectValue(selectedValue, options, placeholder)
+                        }
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent className={className}>
+                    <SelectGroup>
+                        <SelectItem value="">{placeholder}</SelectItem>
+                        {options.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectGroup>
+                </SelectContent>
+            </Select>
+        </>
+    )
+}
 
 const FALLBACK_CHECKLIST_ITEMS = [
     { key: "is_age_eligible", label: "Age Eligible", type: "boolean" },
@@ -148,42 +237,47 @@ export function EditDialog() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="race">Race</Label>
-                                <Input id="race" name="race" defaultValue={surrogate.race ?? ""} />
+                                <FormSelect
+                                    id="race"
+                                    name="race"
+                                    defaultValue={normalizeRaceOptionKey(surrogate.race)}
+                                    placeholder="Not provided"
+                                    options={RACE_OPTIONS.map((raceKey) => ({
+                                        value: raceKey,
+                                        label: formatRace(raceKey),
+                                    }))}
+                                />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="height_feet">Height Feet</Label>
-                                    <NativeSelect
+                                    <FormSelect
                                         id="height_feet"
                                         name="height_feet"
                                         defaultValue={heightSelection.feet}
+                                        placeholder="ft"
+                                        options={Array.from({ length: 9 }, (_, value) => ({
+                                            value: String(value),
+                                            label: `${value} ft`,
+                                        }))}
                                         className="w-full"
-                                    >
-                                        <NativeSelectOption value="">ft</NativeSelectOption>
-                                        {Array.from({ length: 9 }, (_, value) => value).map((value) => (
-                                            <NativeSelectOption key={`height-feet-${value}`} value={String(value)}>
-                                                {value} ft
-                                            </NativeSelectOption>
-                                        ))}
-                                    </NativeSelect>
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="height_inches">Height Inches</Label>
-                                    <NativeSelect
+                                    <FormSelect
                                         id="height_inches"
                                         name="height_inches"
                                         defaultValue={heightSelection.inches}
+                                        placeholder="in"
+                                        options={Array.from({ length: 12 }, (_, value) => ({
+                                            value: String(value),
+                                            label: `${value} in`,
+                                        }))}
                                         className="w-full"
-                                    >
-                                        <NativeSelectOption value="">in</NativeSelectOption>
-                                        {Array.from({ length: 12 }, (_, value) => value).map((value) => (
-                                            <NativeSelectOption key={`height-inches-${value}`} value={String(value)}>
-                                                {value} in
-                                            </NativeSelectOption>
-                                        ))}
-                                    </NativeSelect>
+                                    />
                                 </div>
                             </div>
                             <div className="space-y-2">
@@ -205,19 +299,14 @@ export function EditDialog() {
                                         return (
                                             <div key={item.key} className="space-y-2">
                                                 <Label htmlFor={item.key}>{item.label}</Label>
-                                                <NativeSelect
+                                                <FormSelect
                                                     id={item.key}
                                                     name={item.key}
                                                     defaultValue={surrogate.journey_timing_preference ?? ""}
+                                                    placeholder="Not provided"
+                                                    options={JOURNEY_TIMING_OPTIONS}
                                                     className="w-full"
-                                                >
-                                                    <NativeSelectOption value="">Not provided</NativeSelectOption>
-                                                    {JOURNEY_TIMING_OPTIONS.map((option) => (
-                                                        <NativeSelectOption key={option.value} value={option.value}>
-                                                            {option.label}
-                                                        </NativeSelectOption>
-                                                    ))}
-                                                </NativeSelect>
+                                                />
                                             </div>
                                         )
                                     }

@@ -66,7 +66,7 @@ const RACE_LABEL_OVERRIDES: Record<string, string> = {
   hispanic_or_latino: "Hispanic or Latino",
   native_hawaiian_or_other_pacific_islander: "Native Hawaiian or Other Pacific Islander",
   white: "White",
-  other_please_specify: "Other (please specify)",
+  other_please_specify: "Other",
   not_hispanic_or_latino: "Not Hispanic or Latino",
 }
 
