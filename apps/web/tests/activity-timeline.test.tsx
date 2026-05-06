@@ -7,6 +7,20 @@ import type { TaskListItem } from '@/lib/types/task'
 
 const mockUseSurrogateHistory = vi.fn()
 
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function formatActivityTimestampForTest(value: string): string {
+    return new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(new Date(value))
+}
+
 vi.mock('@/lib/hooks/use-surrogates', () => ({
     useSurrogateHistory: () => mockUseSurrogateHistory(),
 }))
@@ -540,6 +554,7 @@ describe('ActivityTimeline', () => {
 
     it('shows upcoming interview appointment details from stage changes', () => {
         const stages = [makeStage({ id: 's1', label: 'Interview Scheduled', order: 1, slug: 'interview_scheduled' })]
+        const scheduledStart = '2026-06-01T17:15:00.000Z'
 
         mockUseSurrogateHistory.mockReturnValue({
             data: [makeHistory({ id: 'h1', to_stage_id: 's1', to_label_snapshot: 'Interview Scheduled' })],
@@ -552,7 +567,7 @@ describe('ActivityTimeline', () => {
                 details: {
                     source: 'stage_change',
                     appointment_id: 'appt-1',
-                    scheduled_start: '2026-06-01T17:15:00.000Z',
+                    scheduled_start: scheduledStart,
                 },
                 created_at: '2026-05-30T12:00:00.000Z',
             }),
@@ -571,7 +586,9 @@ describe('ActivityTimeline', () => {
         expect(screen.getAllByText(/interview scheduled/i).length).toBeGreaterThanOrEqual(2)
         expect(screen.getByText('Upcoming')).toBeInTheDocument()
         expect(screen.getByText(/appointment:/i)).toBeInTheDocument()
-        expect(screen.getByText(/jun 1, 2026, 1:15 pm/i)).toBeInTheDocument()
+        expect(
+            screen.getByText(new RegExp(escapeRegExp(formatActivityTimestampForTest(scheduledStart)), 'i'))
+        ).toBeInTheDocument()
         expect(screen.queryByText(/initial interview/i)).not.toBeInTheDocument()
         expect(screen.queryByText(/^phone$/i)).not.toBeInTheDocument()
         expect(screen.queryByText(/1:45 pm/i)).not.toBeInTheDocument()
