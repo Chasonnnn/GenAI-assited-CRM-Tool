@@ -1284,7 +1284,7 @@ export function SurrogateOverviewTab() {
                     </SurrogateOverviewCard>
 
                     <SurrogateOverviewCard title="Demographics" icon={InfoIcon}>
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(15rem,1.2fr)_minmax(14rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_minmax(8rem,1fr)]">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                             <ProfileMetric
                                 icon={CalendarDaysIcon}
                                 label="Date of Birth"
