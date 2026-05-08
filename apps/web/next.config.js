@@ -8,8 +8,7 @@ const withBundleAnalyzer =
 
 module.exports = withBundleAnalyzer({
   async headers() {
-    const baseHeaders = [
-      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+    const sharedHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       {
@@ -17,23 +16,30 @@ module.exports = withBundleAnalyzer({
         value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
       },
     ];
+    const frameProtectionHeaders = [
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+    ];
 
     // Only enable HSTS for production deploys (avoid affecting preview/dev).
     const isProd = process.env.VERCEL_ENV === "production";
     const headers = isProd
       ? [
-          ...baseHeaders,
+          ...sharedHeaders,
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
           },
         ]
-      : baseHeaders;
+      : sharedHeaders;
 
     return [
       {
         source: "/:path*",
         headers,
+      },
+      {
+        source: "/((?!embed/forms).*)",
+        headers: frameProtectionHeaders,
       },
     ];
   },

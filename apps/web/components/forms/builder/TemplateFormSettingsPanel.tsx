@@ -178,7 +178,7 @@ export function TemplateFormSettingsPanel({
                                 placeholder="image/*,application/pdf"
                             />
                             <p className="text-xs text-stone-500">
-                                Leave blank to allow any file types. Per-field uploads are still capped at 5 files.
+                                Leave blank to use the platform safe file allowlist. Per-field uploads are still capped at 5 files.
                             </p>
                         </div>
                     </div>

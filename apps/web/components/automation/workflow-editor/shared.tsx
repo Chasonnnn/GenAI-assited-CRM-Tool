@@ -60,7 +60,6 @@ export const SOURCE_OPTIONS: SelectOption[] = [
 ]
 
 export const FORM_SOURCE_MODE_OPTIONS: SelectOption[] = [
-    { value: "dedicated", label: "Dedicated Link" },
     { value: "shared", label: "Shared Link" },
 ]
 

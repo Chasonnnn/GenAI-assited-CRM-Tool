@@ -27,7 +27,6 @@ import type { JsonObject } from "@/lib/types/json"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
 import {
-    deleteSharedPublicFormDraft,
     getSharedPublicForm,
     getSharedPublicFormDraft,
     lookupSharedPublicFormDraft,
@@ -494,11 +493,13 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [draftSaveState, setDraftSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
     const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
     const [draftSessionId, setDraftSessionId] = React.useState<string | null>(null)
+    const [draftSessionExists, setDraftSessionExists] = React.useState(false)
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const autosaveTimerRef = React.useRef<number | null>(null)
     const resumeLookupTimerRef = React.useRef<number | null>(null)
     const skipNextAutosaveRef = React.useRef(true)
+    const createdDraftSessionRef = React.useRef<string | null>(null)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string>>(new Set())
     const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found">>(new Map())
     const lookupSeqRef = React.useRef(0)
@@ -508,6 +509,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         const storageKey = `intake-draft-session:${slug}`
         const existing = window.localStorage.getItem(storageKey)
         if (existing) {
+            setDraftSessionExists(createdDraftSessionRef.current !== existing)
             setDraftSessionId(existing)
             return
         }
@@ -515,7 +517,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             typeof window.crypto?.randomUUID === "function"
                 ? window.crypto.randomUUID()
                 : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+        createdDraftSessionRef.current = nextSessionId
         window.localStorage.setItem(storageKey, nextSessionId)
+        setDraftSessionExists(false)
         setDraftSessionId(nextSessionId)
     }, [slug])
 
@@ -538,32 +542,35 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 }
                 setFormConfig(form)
                 setLogoError(false)
-                try {
-                    const draft = await getSharedPublicFormDraft(token, draftSessionId)
-                    const restored = filterDraftAnswersForSchema(form.form_schema, draft?.answers)
-                    if (Object.keys(restored).length > 0) {
-                        skipNextAutosaveRef.current = true
-                        setAnswers(restored)
-                        setDraftRestored(true)
+                if (draftSessionExists) {
+                    try {
+                        const draft = await getSharedPublicFormDraft(token, draftSessionId)
+                        const restored = filterDraftAnswersForSchema(form.form_schema, draft?.answers)
+                        if (Object.keys(restored).length > 0) {
+                            skipNextAutosaveRef.current = true
+                            setAnswers(restored)
+                            setDraftRestored(true)
+                        }
+                        if (draft?.updated_at) {
+                            setDraftUpdatedAt(draft.updated_at)
+                            setDraftSaveState("saved")
+                        }
+                    } catch (error) {
+                        if (error instanceof ApiError && error.status === 404) {
+                            window.localStorage.removeItem(`intake-draft-session:${token}`)
+                        } else {
+                            setDraftSaveState("error")
+                        }
                     }
-                    if (draft?.updated_at) {
-                        setDraftUpdatedAt(draft.updated_at)
-                        setDraftSaveState("saved")
-                    }
-                } catch (error) {
-                    if (!(error instanceof ApiError && error.status === 404)) {
-                        setDraftSaveState("error")
-                    }
-                } finally {
-                    setIsLoading(false)
                 }
+                setIsLoading(false)
             } catch {
                 setFormError("This form link is invalid or has expired.")
                 setIsLoading(false)
             }
         }
         loadForm()
-    }, [draftSessionId, token, isPreview])
+    }, [draftSessionExists, draftSessionId, token, isPreview])
 
     React.useEffect(() => {
         if (!token || !formConfig || !draftSessionId || isPreview || isSubmitted || isRestoringResume) return
@@ -1097,12 +1104,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 ? fileEntries.map((entry) => entry.fieldKey)
                 : undefined
             const response = await submitSharedPublicForm(token, answers, files, fileFieldKeys)
-            try {
-                if (draftSessionId) {
-                    await deleteSharedPublicFormDraft(token, draftSessionId)
-                }
-            } catch {
-                // Ignore: backend blocks draft ops once a submission exists.
+            if (draftSessionId) {
+                window.localStorage.removeItem(`intake-draft-session:${token}`)
             }
             setSubmissionOutcome(response.outcome)
             setIsSubmitted(true)

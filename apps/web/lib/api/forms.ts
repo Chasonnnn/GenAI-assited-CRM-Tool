@@ -7,10 +7,22 @@ import { getCsrfHeaders } from '@/lib/csrf'
 import type { JsonObject } from '../types/json'
 
 export type FormStatus = 'draft' | 'published' | 'archived'
-export type FormPurpose = 'surrogate_application' | 'event_intake' | 'other'
+export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_intake' | 'other'
 export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
-export type FormLinkMode = 'dedicated' | 'shared'
+export type FormLinkMode = 'shared'
 export type SharedSubmissionOutcome = 'linked' | 'ambiguous_review' | 'lead_created'
+export type FieldSensitivity =
+    | 'identity'
+    | 'contact'
+    | 'campaign_safe'
+    | 'operational'
+    | 'sensitive_health'
+    | 'sensitive_reproductive'
+    | 'sensitive_financial'
+    | 'sensitive_legal'
+    | 'free_text_unclassified'
+    | 'file'
+export type TrackingMode = 'internal_only' | 'privacy_safe_lead' | 'disabled' | 'advanced'
 
 export type FieldType =
     | 'text'
@@ -86,6 +98,7 @@ export interface FormField {
     rows?: FormFieldRow[] | null
     min_rows?: number | null
     max_rows?: number | null
+    sensitivity?: FieldSensitivity | null
 }
 
 export interface FormPage {
@@ -161,10 +174,10 @@ export interface FormSurrogateFieldOption {
 
 export const DEFAULT_FORM_SURROGATE_FIELD_OPTIONS: FormSurrogateFieldOption[] = [
     { value: "full_name", label: "Full Name", is_critical: true },
+    { value: "date_of_birth", label: "Date of Birth", is_critical: true },
+    { value: "phone", label: "Phone", is_critical: true },
     { value: "email", label: "Email", is_critical: true },
-    { value: "phone", label: "Phone" },
     { value: "state", label: "State" },
-    { value: "date_of_birth", label: "Date of Birth" },
     { value: "race", label: "Race" },
     { value: "height_ft", label: "Height (ft)" },
     { value: "weight_lb", label: "Weight (lb)" },
@@ -178,22 +191,6 @@ export const DEFAULT_FORM_SURROGATE_FIELD_OPTIONS: FormSurrogateFieldOption[] = 
     { value: "num_csections", label: "Number of C-Sections" },
     { value: "is_priority", label: "Priority" },
 ]
-
-export interface FormTokenRead {
-    token_id: string
-    token: string
-    expires_at: string
-    application_url?: string | null
-}
-
-export interface FormTokenSendResponse {
-    token_id: string
-    token: string
-    template_id: string
-    email_log_id: string
-    sent_at: string
-    application_url?: string | null
-}
 
 export interface FormSubmissionFileRead {
     id: string
@@ -225,21 +222,6 @@ export interface FormSubmissionRead {
     files: FormSubmissionFileRead[]
 }
 
-export interface FormSubmissionPublicResponse {
-    id: string
-    status: FormSubmissionStatus
-}
-
-export interface FormPublicRead {
-    form_id: string
-    name: string
-    description?: string | null
-    form_schema: FormSchema
-    max_file_size_bytes: number
-    max_file_count: number
-    allowed_mime_types?: string[] | null
-}
-
 export interface FormDraftPublicRead {
     answers: JsonObject
     started_at: string | null
@@ -262,6 +244,14 @@ export interface FormIntakeLinkRead {
     expires_at?: string | null
     max_submissions?: number | null
     submissions_count: number
+    embed_enabled: boolean
+    allowed_embed_origins: string[]
+    tracking_mode: TrackingMode
+    consent_text?: string | null
+    privacy_policy_url?: string | null
+    thank_you_config: Record<string, unknown>
+    embed_theme_json: Record<string, unknown>
+    published_version_id?: string | null
     intake_url?: string | null
     created_at: string
     updated_at: string
@@ -297,6 +287,13 @@ export interface FormIntakeLinkCreatePayload {
     expires_at?: string | null
     max_submissions?: number | null
     utm_defaults?: Record<string, string> | null
+    embed_enabled?: boolean | null
+    allowed_embed_origins?: string[] | null
+    tracking_mode?: TrackingMode | null
+    consent_text?: string | null
+    privacy_policy_url?: string | null
+    thank_you_config?: Record<string, unknown> | null
+    embed_theme_json?: Record<string, unknown> | null
 }
 
 export interface FormIntakeLinkUpdatePayload extends FormIntakeLinkCreatePayload {
@@ -326,6 +323,33 @@ export interface FormIntakePublicRead {
     allowed_mime_types?: string[] | null
     campaign_name?: string | null
     event_name?: string | null
+}
+
+export interface FormEmbedConsentRead {
+    text?: string | null
+    privacy_policy_url?: string | null
+}
+
+export interface FormEmbedPublicRead extends FormIntakePublicRead {
+    published_version_id: string
+    tracking_mode: TrackingMode
+    consent: FormEmbedConsentRead
+    thank_you_config: Record<string, unknown>
+    embed_theme_json: Record<string, unknown>
+}
+
+export interface FormEmbedSessionRead {
+    session_token: string
+    expires_at: string
+}
+
+export interface FormEmbedSubmitPayload {
+    embed_session_token: string
+    idempotency_key: string
+    published_version_id: string
+    answers: JsonObject
+    consent: { accepted: boolean }
+    attribution?: Record<string, unknown>
 }
 
 export interface MatchCandidateRead {
@@ -543,31 +567,6 @@ export function deleteFormTemplate(templateId: string): Promise<void> {
     return api.delete<void>(`/forms/templates/${templateId}`)
 }
 
-export function createFormToken(
-    formId: string,
-    surrogateId: string,
-    expiresInDays?: number,
-    allowPurposeOverride?: boolean,
-): Promise<FormTokenRead> {
-    return api.post<FormTokenRead>(`/forms/${formId}/tokens`, {
-        surrogate_id: surrogateId,
-        expires_in_days: expiresInDays,
-        allow_purpose_override: allowPurposeOverride ?? false,
-    })
-}
-
-export function sendFormToken(
-    formId: string,
-    tokenId: string,
-    templateId?: string | null,
-    allowPurposeOverride?: boolean,
-): Promise<FormTokenSendResponse> {
-    return api.post<FormTokenSendResponse>(`/forms/${formId}/tokens/${tokenId}/send`, {
-        template_id: templateId ?? null,
-        allow_purpose_override: allowPurposeOverride ?? false,
-    })
-}
-
 export function setDefaultSurrogateApplicationForm(formId: string): Promise<FormRead> {
     return api.post<FormRead>(`/forms/${formId}/set-default-surrogate-application`, {})
 }
@@ -646,16 +645,36 @@ export function rejectSubmission(submissionId: string, reviewNotes?: string | nu
     })
 }
 
-export function getPublicForm(token: string): Promise<FormPublicRead> {
-    return api.get<FormPublicRead>(`/forms/public/${token}`)
-}
-
 export function getSharedPublicForm(slug: string): Promise<FormIntakePublicRead> {
     return api.get<FormIntakePublicRead>(`/forms/public/intake/${slug}`)
 }
 
-export function getPublicFormDraft(token: string): Promise<FormDraftPublicRead> {
-    return api.get<FormDraftPublicRead>(`/forms/public/${token}/draft`)
+export function getEmbedPublicForm(
+    slug: string,
+    parentOrigin?: string | null,
+): Promise<FormEmbedPublicRead> {
+    const query = parentOrigin
+        ? `?parent_origin=${encodeURIComponent(parentOrigin)}`
+        : ""
+    return api.get<FormEmbedPublicRead>(`/forms/public/embed/${slug}${query}`)
+}
+
+export function createEmbedFormSession(
+    slug: string,
+    parentOrigin: string,
+    attribution: Record<string, unknown> = {},
+): Promise<FormEmbedSessionRead> {
+    return api.post<FormEmbedSessionRead>(`/forms/public/embed/${slug}/session`, {
+        parent_origin: parentOrigin,
+        attribution,
+    })
+}
+
+export function submitEmbedPublicForm(
+    slug: string,
+    payload: FormEmbedSubmitPayload,
+): Promise<FormSubmissionSharedResponse> {
+    return api.post<FormSubmissionSharedResponse>(`/forms/public/embed/${slug}/submit`, payload)
 }
 
 export function getSharedPublicFormDraft(
@@ -676,13 +695,6 @@ export function lookupSharedPublicFormDraft(
     })
 }
 
-export function savePublicFormDraft(
-    token: string,
-    answers: JsonObject,
-): Promise<FormDraftWriteResponse> {
-    return api.put<FormDraftWriteResponse>(`/forms/public/${token}/draft`, { answers })
-}
-
 export function saveSharedPublicFormDraft(
     slug: string,
     draftSessionId: string,
@@ -691,10 +703,6 @@ export function saveSharedPublicFormDraft(
     return api.put<FormDraftWriteResponse>(`/forms/public/intake/${slug}/draft/${draftSessionId}`, {
         answers,
     })
-}
-
-export function deletePublicFormDraft(token: string): Promise<void> {
-    return api.delete<void>(`/forms/public/${token}/draft`)
 }
 
 export function deleteSharedPublicFormDraft(
@@ -722,21 +730,6 @@ export function getSurrogateDraftStatus(
     surrogateId: string,
 ): Promise<FormDraftStatusRead | null> {
     return api.get<FormDraftStatusRead>(`/forms/${formId}/surrogates/${surrogateId}/draft`)
-}
-
-export function submitPublicForm(
-    token: string,
-    answers: JsonObject,
-    files: File[] = [],
-    fileFieldKeys?: string[]
-): Promise<FormSubmissionPublicResponse> {
-    const formData = new FormData()
-    formData.append('answers', JSON.stringify(answers))
-    files.forEach((file) => formData.append('files', file))
-    if (fileFieldKeys) {
-        formData.append('file_field_keys', JSON.stringify(fileFieldKeys))
-    }
-    return api.upload<FormSubmissionPublicResponse>(`/forms/public/${token}/submit`, formData)
 }
 
 export function submitSharedPublicForm(

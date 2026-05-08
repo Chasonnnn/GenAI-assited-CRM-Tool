@@ -1,5 +1,6 @@
 import type {
     FieldType,
+    FieldSensitivity,
     FormFieldColumn,
     FormFieldOption,
     FormFieldRow,
@@ -87,6 +88,29 @@ const toFieldOptions = (options?: BuilderOption[]): FormFieldOption[] | null => 
     }))
 }
 
+function inferFieldSensitivity(field: BuilderFormField): FieldSensitivity {
+    const mapping = field.surrogateFieldMapping
+    if (mapping === "full_name") return "identity"
+    if (mapping === "email" || mapping === "phone") return "contact"
+    if (mapping === "state") return "campaign_safe"
+    if (field.type === "file") return "file"
+    if (field.type === "textarea") return "free_text_unclassified"
+    if (
+        [
+            "num_deliveries",
+            "num_csections",
+            "has_child",
+            "has_surrogate_experience",
+        ].includes(mapping)
+    ) {
+        return "sensitive_reproductive"
+    }
+    if (["height_ft", "weight_lb", "weight_kg", "weight_lbs"].includes(mapping)) {
+        return "sensitive_health"
+    }
+    return "operational"
+}
+
 const toFieldRows = (
     rows?: BuilderFormField["rows"],
 ): FormFieldRow[] | null => {
@@ -134,6 +158,7 @@ export function buildFormSchema(pages: BuilderFormPage[], metadata: BuilderSchem
                 rows: toFieldRows(field.rows),
                 min_rows: field.minRows ?? null,
                 max_rows: field.maxRows ?? null,
+                sensitivity: inferFieldSensitivity(field),
             })),
         })),
         public_title: publicTitle || null,

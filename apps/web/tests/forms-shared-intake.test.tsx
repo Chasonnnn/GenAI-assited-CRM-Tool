@@ -68,6 +68,7 @@ const baseForm = {
 describe('Shared Intake Public Page', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        window.localStorage.clear()
         document.documentElement.classList.remove('dark')
         getSharedPublicForm.mockResolvedValue(baseForm)
         getSharedPublicFormDraft.mockResolvedValue({
@@ -97,11 +98,20 @@ describe('Shared Intake Public Page', () => {
         deleteSharedPublicFormDraft.mockResolvedValue(undefined)
     })
 
-    it('loads shared intake schema and renders title', async () => {
+    it('loads shared intake schema without probing a brand-new draft session', async () => {
         render(<PublicIntakeFormClient slug="event-abc" />)
 
         expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
         expect(getSharedPublicForm).toHaveBeenCalledWith('event-abc')
+        expect(getSharedPublicFormDraft).not.toHaveBeenCalled()
+    })
+
+    it('restores a saved draft when a draft session already exists', async () => {
+        window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
         expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', expect.any(String))
     })
 
@@ -153,7 +163,27 @@ describe('Shared Intake Public Page', () => {
         expect(
             await screen.findByText(/added to intake review/i),
         ).toBeInTheDocument()
-        expect(deleteSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', expect.any(String))
+        expect(deleteSharedPublicFormDraft).not.toHaveBeenCalled()
+    })
+
+    it('clears the local draft session after successful submit', async () => {
+        window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        await waitFor(() =>
+            expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', 'saved-session-1'),
+        )
+
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        await waitFor(() => {
+            expect(submitSharedPublicForm).toHaveBeenCalled()
+        })
+        expect(window.localStorage.getItem('intake-draft-session:event-abc')).toBeNull()
+        expect(deleteSharedPublicFormDraft).not.toHaveBeenCalled()
     })
 
     it('shows resume prompt and restores previous draft when continuing', async () => {

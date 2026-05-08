@@ -309,9 +309,7 @@ export function AutomationFormSubmissionsPanel({
                                         className="space-y-3 rounded-lg border border-stone-200 p-3 text-sm"
                                     >
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <Badge variant="outline">
-                                                {submission.source_mode === "shared" ? "Shared" : "Dedicated"}
-                                            </Badge>
+                                            <Badge variant="outline">Shared</Badge>
                                             <Badge
                                                 variant="outline"
                                                 className={submissionOutcomeBadgeClass(submission)}

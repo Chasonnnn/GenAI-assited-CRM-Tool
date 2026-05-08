@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 
 const FORM_PURPOSE_LABELS: Record<FormPurpose, string> = {
     surrogate_application: "Surrogate Application",
+    lead_capture: "Lead Capture",
     event_intake: "Event Intake",
     other: "Other",
 }
@@ -155,13 +156,13 @@ export function AutomationFormSettingsPanel({
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="surrogate_application">Surrogate Application</SelectItem>
+                                <SelectItem value="lead_capture">Lead Capture</SelectItem>
                                 <SelectItem value="event_intake">Event Intake</SelectItem>
                                 <SelectItem value="other">Other</SelectItem>
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-stone-500">
-                            Dedicated case sends default to forms with purpose
-                            <code className="ml-1">surrogate_application</code>.
+                            Use lead capture for embeddable contact forms and surrogate application for full intake.
                         </p>
                     </div>
 
@@ -257,10 +258,10 @@ export function AutomationFormSettingsPanel({
 
                     <div className="space-y-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-semibold">Dedicated Delivery</h4>
+                            <h4 className="text-sm font-semibold">Shared Delivery</h4>
                             <div className="flex items-center gap-2">
                                 {isDefaultSurrogateApplication && <Badge variant="secondary">Default</Badge>}
-                                <Badge variant="outline">Per-surrogate</Badge>
+                                <Badge variant="outline">Reusable Link</Badge>
                             </div>
                         </div>
                         <div className="space-y-2">
@@ -288,13 +289,13 @@ export function AutomationFormSettingsPanel({
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-stone-500">
-                                One-click surrogate sends use this template by default.
+                                Shared intake email sends use this template by default.
                             </p>
                         </div>
                         <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    <p className="text-sm font-medium">Default case-send form</p>
+                                    <p className="text-sm font-medium">Default shared-send form</p>
                                     {isDefaultSurrogateApplication && (
                                         <Badge variant="secondary" className="text-[11px]">
                                             Active
@@ -302,7 +303,7 @@ export function AutomationFormSettingsPanel({
                                     )}
                                 </div>
                                 <p className="text-xs text-stone-500">
-                                    Exactly one published surrogate application form can be the default for case sends.
+                                    Exactly one published surrogate application form can be the default for shared intake sends.
                                 </p>
                             </div>
                             <Button
@@ -427,7 +428,7 @@ export function AutomationFormSettingsPanel({
                                 placeholder="image/*,application/pdf"
                             />
                             <p className="text-xs text-stone-500">
-                                Leave blank to allow any file types. Per-field uploads are still capped at 5 files.
+                                Leave blank to use the platform safe file allowlist. Per-field uploads are still capped at 5 files.
                             </p>
                         </div>
                     </div>

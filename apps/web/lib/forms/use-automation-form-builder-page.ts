@@ -8,13 +8,13 @@ import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
 import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
 import type {
-    FieldType,
     FormCreatePayload,
     FormIntakeLinkRead,
     FormPurpose,
     FormRead,
     FormSubmissionRead,
     FormSurrogateFieldOption,
+    TrackingMode,
 } from "@/lib/api/forms"
 import {
     FALLBACK_FORM_PAGE,
@@ -43,6 +43,7 @@ import {
     useSubmissionMatchCandidates,
     useUpdateForm,
     useUpdateFormDeliverySettings,
+    useUpdateFormIntakeLink,
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
 import { useOrgSignature } from "@/lib/hooks/use-signature"
@@ -51,22 +52,8 @@ function getMissingCriticalMappings(
     pages: BuilderFormPage[],
     mappingOptions: FormSurrogateFieldOption[],
 ): FormSurrogateFieldOption[] {
-    const criticalFieldTypeHints: Record<string, FieldType[]> = {
-        full_name: ["text", "textarea"],
-        email: ["email"],
-        phone: ["phone"],
-    }
-    const hasCandidateField = (target: string) => {
-        const hintedTypes = criticalFieldTypeHints[target]
-        if (!hintedTypes || hintedTypes.length === 0) {
-            return true
-        }
-        return pages.some((page) =>
-            page.fields.some((field) => hintedTypes.includes(field.type)),
-        )
-    }
-
     const mappedFields = new Set(buildMappings(pages).map((mapping) => mapping.surrogate_field))
+    const fieldKeys = new Set(pages.flatMap((page) => page.fields.map((field) => field.id)))
     const criticalMappings = mappingOptions.filter((option) => option.is_critical)
     const criticalValues =
         criticalMappings.length > 0
@@ -76,14 +63,37 @@ function getMissingCriticalMappings(
     const fallbackByValue = new Map(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.map((option) => [option.value, option]))
 
     return criticalValues
-        .filter((value) => !mappedFields.has(value))
-        .filter((value) => hasCandidateField(value))
+        .filter((value) => !mappedFields.has(value) && !fieldKeys.has(value))
         .map(
             (value) =>
                 optionByValue.get(value) ??
                 fallbackByValue.get(value) ??
                 ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
         )
+}
+
+function getMissingLeadCaptureMappings(
+    pages: BuilderFormPage[],
+    mappingOptions: FormSurrogateFieldOption[],
+): FormSurrogateFieldOption[] {
+    const mappedFields = new Set(buildMappings(pages).map((mapping) => mapping.surrogate_field))
+    const fieldKeys = new Set(pages.flatMap((page) => page.fields.map((field) => field.id)))
+    const hasFullName = mappedFields.has("full_name") || fieldKeys.has("full_name")
+    const hasEmail = mappedFields.has("email") || fieldKeys.has("email")
+    const hasPhone = mappedFields.has("phone") || fieldKeys.has("phone")
+    const optionByValue = new Map(mappingOptions.map((option) => [option.value, option]))
+    const fallbackByValue = new Map(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.map((option) => [option.value, option]))
+    const missingValues = [
+        ...(hasFullName ? [] : ["full_name"]),
+        ...(hasEmail || hasPhone ? [] : ["email"]),
+    ]
+
+    return missingValues.map(
+        (value) =>
+            optionByValue.get(value) ??
+            fallbackByValue.get(value) ??
+            ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
+    )
 }
 
 export function useAutomationFormBuilderPage() {
@@ -106,6 +116,7 @@ export function useAutomationFormBuilderPage() {
     const { data: orgSignature } = useOrgSignature()
     const createFormMutation = useCreateForm()
     const updateFormMutation = useUpdateForm()
+    const updateIntakeLinkMutation = useUpdateFormIntakeLink()
     const publishFormMutation = usePublishForm()
     const setMappingsMutation = useSetFormMappings()
     const setDefaultSurrogateApplicationMutation = useSetDefaultSurrogateApplicationForm()
@@ -519,15 +530,18 @@ export function useAutomationFormBuilderPage() {
     }, [formId, setDefaultSurrogateApplicationMutation, state.formPurpose, state.isPublished])
 
     const hasMissingCriticalMappings = useCallback(() => {
-        const missingCriticalMappings = getMissingCriticalMappings(pages, surrogateFieldMappings)
+        const missingCriticalMappings =
+            state.formPurpose === "lead_capture"
+                ? getMissingLeadCaptureMappings(pages, surrogateFieldMappings)
+                : getMissingCriticalMappings(pages, surrogateFieldMappings)
         if (missingCriticalMappings.length === 0) {
             return false
         }
 
         const missingLabels = missingCriticalMappings.map((mapping) => mapping.label).join(", ")
-        toast.error(`Map required surrogate fields before publishing: ${missingLabels}.`)
+        toast.error(`Add or map required identity fields before publishing: ${missingLabels}.`)
         return true
-    }, [pages, surrogateFieldMappings])
+    }, [pages, state.formPurpose, surrogateFieldMappings])
 
     const handlePublish = useCallback(() => {
         if (!state.formName.trim()) {
@@ -643,6 +657,42 @@ export function useAutomationFormBuilderPage() {
             toast.error("Failed to copy link")
         }
     }, [])
+
+    const handleUpdateEmbedSettings = useCallback(async ({
+        link,
+        embedEnabled,
+        allowedOrigins,
+        trackingMode,
+        consentText,
+    }: {
+        link: FormIntakeLinkRead
+        embedEnabled: boolean
+        allowedOrigins: string[]
+        trackingMode: TrackingMode
+        consentText: string | null
+    }) => {
+        if (!formId) {
+            toast.error("Save the form first")
+            return
+        }
+        try {
+            await updateIntakeLinkMutation.mutateAsync({
+                formId,
+                linkId: link.id,
+                payload: {
+                    embed_enabled: embedEnabled,
+                    allowed_embed_origins: allowedOrigins,
+                    tracking_mode: trackingMode,
+                    consent_text: consentText,
+                },
+            })
+            await refetchIntakeLinks()
+            toast.success("Embed settings updated")
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to update embed settings"
+            toast.error(message)
+        }
+    }, [formId, refetchIntakeLinks, updateIntakeLinkMutation])
 
     const getQrSvgMarkup = useCallback(() => {
         const svg = document.querySelector("#shared-intake-qr svg")
@@ -1121,6 +1171,8 @@ export function useAutomationFormBuilderPage() {
         handleCopySharedLink,
         handleDownloadQrSvg,
         handleDownloadQrPng,
+        handleUpdateEmbedSettings,
+        updateIntakeLinkPending: updateIntakeLinkMutation.isPending,
     }
 }
 

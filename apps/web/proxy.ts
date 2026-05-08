@@ -264,6 +264,50 @@ async function enforceRouteResourceHardFail(
     return null;
 }
 
+async function applyEmbedFramePolicy(request: NextRequest): Promise<NextResponse | null> {
+    const match = request.nextUrl.pathname.match(/^\/embed\/forms\/([^/]+)$/);
+    if (!match) {
+        return null;
+    }
+    const slug = match[1] ?? '';
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+            () => controller.abort(),
+            ROUTE_LOOKUP_TIMEOUT_MS
+        );
+        const res = await fetch(
+            `${API_BASE_URL}/forms/public/embed/${encodeURIComponent(slug)}/frame-policy`,
+            {
+                headers: buildServerApiHeaders(request.headers, {
+                    'Content-Type': 'application/json',
+                }),
+                cache: 'no-store',
+                signal: controller.signal,
+            }
+        ).finally(() => clearTimeout(timeoutId));
+
+        if (res.status === 404 || res.status === 403) {
+            return createNotFoundRewrite(request);
+        }
+        if (!res.ok) {
+            console.error(`[middleware] API error resolving embed frame policy ${slug}: ${res.status}`);
+            return createHardFailureResponse(500, 'Embed policy resolution failed');
+        }
+
+        const payload = (await res.json()) as { content_security_policy?: string };
+        const response = NextResponse.next();
+        if (payload.content_security_policy) {
+            response.headers.set('Content-Security-Policy', payload.content_security_policy);
+        }
+        response.headers.set('Cache-Control', 'no-store');
+        return response;
+    } catch (error) {
+        console.error(`[middleware] Network error resolving embed frame policy ${slug}:`, error);
+        return createHardFailureResponse(500, 'Embed policy resolution failed');
+    }
+}
+
 export async function proxy(request: NextRequest) {
     const hostname = getHostname(request);
     const pathname = request.nextUrl.pathname;
@@ -277,6 +321,11 @@ export async function proxy(request: NextRequest) {
         pathname.includes('.') // Static files with extensions
     ) {
         return NextResponse.next();
+    }
+
+    const embedFramePolicyResponse = await applyEmbedFramePolicy(request);
+    if (embedFramePolicyResponse) {
+        return embedFramePolicyResponse;
     }
 
     const routeResourceResponse = await enforceRouteResourceHardFail(request);

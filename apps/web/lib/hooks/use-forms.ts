@@ -12,12 +12,10 @@ import {
     publishForm,
     listFormMappings,
     setFormMappings,
-    createFormToken,
     createFormIntakeLink,
     listFormIntakeLinks,
     rotateFormIntakeLink,
     sendFormIntakeLink,
-    sendFormToken,
     setDefaultSurrogateApplicationForm,
     updateFormDeliverySettings,
     updateFormIntakeLink,
@@ -182,39 +180,6 @@ export function useFormSubmissions(formId: string | null, params: ListFormSubmis
         queryKey: formId ? formKeys.submissions(formId, params) : ['forms', 'submissions', 'missing'],
         queryFn: () => listFormSubmissions(formId!, params),
         enabled: !!formId,
-    })
-}
-
-export function useCreateFormToken() {
-    return useMutation({
-        mutationFn: ({
-            formId,
-            surrogateId,
-            expiresInDays,
-            allowPurposeOverride,
-        }: {
-            formId: string
-            surrogateId: string
-            expiresInDays?: number
-            allowPurposeOverride?: boolean
-        }) =>
-            createFormToken(formId, surrogateId, expiresInDays, allowPurposeOverride),
-    })
-}
-
-export function useSendFormToken() {
-    return useMutation({
-        mutationFn: ({
-            formId,
-            tokenId,
-            templateId,
-            allowPurposeOverride,
-        }: {
-            formId: string
-            tokenId: string
-            templateId?: string | null
-            allowPurposeOverride?: boolean
-        }) => sendFormToken(formId, tokenId, templateId, allowPurposeOverride),
     })
 }
 

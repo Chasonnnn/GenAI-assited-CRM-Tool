@@ -107,6 +107,8 @@ export function AutomationFormBuilderScreen({
                 onCopyLink={controller.handleCopySharedLink}
                 onDownloadQrSvg={controller.handleDownloadQrSvg}
                 onDownloadQrPng={controller.handleDownloadQrPng}
+                onUpdateEmbedSettings={controller.handleUpdateEmbedSettings}
+                isEmbedSettingsPending={controller.updateIntakeLinkPending}
             />
 
             <AlertDialog

@@ -5,6 +5,9 @@ import type { ImgHTMLAttributes } from "react"
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
 
 const mockPush = vi.fn()
+const { toastError } = vi.hoisted(() => ({
+    toastError: vi.fn(),
+}))
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: "new" }),
@@ -23,6 +26,13 @@ vi.mock("next/image", () => ({
 
 vi.mock("qrcode.react", () => ({
     QRCodeSVG: () => <div data-testid="qr-code" />,
+}))
+
+vi.mock("sonner", () => ({
+    toast: {
+        success: vi.fn(),
+        error: toastError,
+    },
 }))
 
 vi.mock("@/lib/auth-context", () => ({
@@ -59,6 +69,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useSubmissionMatchCandidates: () => ({ data: [], isLoading: false }),
     usePromoteIntakeLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateFormDeliverySettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateFormIntakeLink: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUploadFormLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -66,6 +77,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 describe("FormBuilderPage", () => {
     beforeEach(() => {
         mockPush.mockReset()
+        toastError.mockReset()
     })
 
     it("uses design-system tab controls for workspace sections and a dedicated settings tab", () => {
@@ -102,6 +114,21 @@ describe("FormBuilderPage", () => {
         const templateSelect = screen.getByRole("combobox", { name: "Default application email template" })
         expect(templateSelect).toHaveTextContent("No default template")
         expect(templateSelect).not.toHaveTextContent("none")
+    })
+
+    it("blocks publishing shared intake forms without all identity mappings", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.change(screen.getByLabelText("Form name"), {
+            target: { value: "Incomplete Intake" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
+        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
+
+        expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Date of Birth"))
+        expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Phone"))
+        expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
     })
 
     it("renders human-readable labels for inspector dropdown triggers", async () => {
