@@ -24,7 +24,20 @@ FieldType = Literal[
     "table",
     "height",
 ]
-FormPurpose = Literal["surrogate_application", "event_intake", "other"]
+FormPurpose = Literal["surrogate_application", "lead_capture", "event_intake", "other"]
+FieldSensitivity = Literal[
+    "identity",
+    "contact",
+    "campaign_safe",
+    "operational",
+    "sensitive_health",
+    "sensitive_reproductive",
+    "sensitive_financial",
+    "sensitive_legal",
+    "free_text_unclassified",
+    "file",
+]
+TrackingMode = Literal["internal_only", "privacy_safe_lead", "disabled", "advanced"]
 
 
 class FormFieldOption(BaseModel):
@@ -87,6 +100,7 @@ class FormField(BaseModel):
     rows: list[FormFieldRow] | None = None
     min_rows: int | None = Field(None, ge=0)
     max_rows: int | None = Field(None, ge=0)
+    sensitivity: FieldSensitivity | None = None
 
 
 class FormPage(BaseModel):
@@ -149,34 +163,6 @@ class FormPublishResponse(BaseModel):
     published_at: datetime
 
 
-class FormTokenCreate(BaseModel):
-    form_id: UUID
-    expires_in_days: int = Field(14, ge=1, le=60)
-
-
-class FormTokenRequest(BaseModel):
-    surrogate_id: UUID
-    expires_in_days: int = Field(14, ge=1, le=60)
-    allow_purpose_override: bool = False
-
-
-class FormTokenRead(BaseModel):
-    token_id: UUID
-    token: str
-    expires_at: datetime
-    application_url: str | None = None
-
-
-class FormPublicRead(BaseModel):
-    form_id: UUID
-    name: str
-    description: str | None
-    form_schema: FormSchema
-    max_file_size_bytes: int
-    max_file_count: int
-    allowed_mime_types: list[str] | None
-
-
 class FormLogoRead(BaseModel):
     id: UUID
     logo_url: str
@@ -223,11 +209,6 @@ class FormSubmissionRead(BaseModel):
     match_reason: str | None
     matched_at: datetime | None
     files: list[FormSubmissionFileRead]
-
-
-class FormSubmissionPublicResponse(BaseModel):
-    id: UUID
-    status: str
 
 
 class FormDeliverySettings(BaseModel):
@@ -286,23 +267,12 @@ class FormDraftUpsertRequest(BaseModel):
     answers: dict[str, object] = Field(default_factory=dict)
 
 
-class FormDraftWriteResponse(BaseModel):
-    started_at: datetime | None
-    updated_at: datetime
-
-
-class FormDraftPublicRead(BaseModel):
-    answers: dict[str, object]
-    started_at: datetime | None
-    updated_at: datetime
-
-
 class FormDraftStatusRead(BaseModel):
     started_at: datetime | None
     updated_at: datetime
 
 
-FormLinkMode = Literal["dedicated", "shared"]
+FormLinkMode = Literal["shared"]
 SharedSubmissionOutcome = Literal["linked", "ambiguous_review", "lead_created"]
 
 
@@ -312,6 +282,13 @@ class FormIntakeLinkCreate(BaseModel):
     expires_at: datetime | None = None
     max_submissions: int | None = Field(None, ge=1, le=100000)
     utm_defaults: dict[str, str] | None = None
+    embed_enabled: bool | None = None
+    allowed_embed_origins: list[str] | None = None
+    tracking_mode: TrackingMode | None = None
+    consent_text: str | None = None
+    privacy_policy_url: str | None = None
+    thank_you_config: dict[str, object] | None = None
+    embed_theme_json: dict[str, object] | None = None
 
 
 class FormIntakeLinkUpdate(BaseModel):
@@ -321,6 +298,13 @@ class FormIntakeLinkUpdate(BaseModel):
     max_submissions: int | None = Field(None, ge=1, le=100000)
     utm_defaults: dict[str, str] | None = None
     is_active: bool | None = None
+    embed_enabled: bool | None = None
+    allowed_embed_origins: list[str] | None = None
+    tracking_mode: TrackingMode | None = None
+    consent_text: str | None = None
+    privacy_policy_url: str | None = None
+    thank_you_config: dict[str, object] | None = None
+    embed_theme_json: dict[str, object] | None = None
 
 
 class FormIntakeLinkRead(BaseModel):
@@ -334,6 +318,14 @@ class FormIntakeLinkRead(BaseModel):
     expires_at: datetime | None
     max_submissions: int | None
     submissions_count: int
+    embed_enabled: bool
+    allowed_embed_origins: list[str]
+    tracking_mode: TrackingMode
+    consent_text: str | None
+    privacy_policy_url: str | None
+    thank_you_config: dict[str, object]
+    embed_theme_json: dict[str, object]
+    published_version_id: UUID | None
     intake_url: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -350,6 +342,57 @@ class FormIntakePublicRead(BaseModel):
     allowed_mime_types: list[str] | None
     campaign_name: str | None
     event_name: str | None
+
+
+class FormEmbedConsentRead(BaseModel):
+    text: str | None = None
+    privacy_policy_url: str | None = None
+
+
+class FormEmbedPublicRead(BaseModel):
+    form_id: UUID
+    intake_link_id: UUID
+    published_version_id: UUID
+    name: str
+    description: str | None
+    form_schema: FormSchema
+    max_file_size_bytes: int
+    max_file_count: int
+    allowed_mime_types: list[str] | None
+    campaign_name: str | None
+    event_name: str | None
+    tracking_mode: TrackingMode
+    consent: FormEmbedConsentRead
+    thank_you_config: dict[str, object]
+    embed_theme_json: dict[str, object]
+
+
+class FormEmbedFramePolicyRead(BaseModel):
+    frame_ancestors: list[str]
+    content_security_policy: str
+
+
+class FormEmbedSessionCreate(BaseModel):
+    parent_origin: str
+    attribution: dict[str, object] = Field(default_factory=dict)
+
+
+class FormEmbedSessionRead(BaseModel):
+    session_token: str
+    expires_at: datetime
+
+
+class FormEmbedConsentSubmit(BaseModel):
+    accepted: bool
+
+
+class FormEmbedSubmitRequest(BaseModel):
+    embed_session_token: str = Field(min_length=16)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    published_version_id: UUID
+    answers: dict[str, object]
+    consent: FormEmbedConsentSubmit
+    attribution: dict[str, object] = Field(default_factory=dict)
 
 
 class FormIntakeDraftPublicRead(BaseModel):
@@ -450,20 +493,6 @@ class IntakeLeadPromoteResponse(BaseModel):
     intake_lead_id: UUID
     surrogate_id: UUID
     linked_submission_count: int
-
-
-class FormTokenSendRequest(BaseModel):
-    template_id: UUID | None = None
-    allow_purpose_override: bool = False
-
-
-class FormTokenSendResponse(BaseModel):
-    token_id: UUID
-    token: str
-    template_id: UUID
-    email_log_id: UUID
-    sent_at: datetime
-    application_url: str | None = None
 
 
 class FormIntakeLinkSendRequest(BaseModel):

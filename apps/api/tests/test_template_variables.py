@@ -16,13 +16,31 @@ from app.db.enums import SurrogateSource
 
 
 def _create_published_form(db, org_id, user_id):
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
+                    {"key": "phone", "label": "Phone", "type": "phone", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
+                ],
+            }
+        ]
+    }
     form = form_service.create_form(
         db=db,
         org_id=org_id,
         user_id=user_id,
         name="Application Form",
         description="Candidate application",
-        schema={"pages": [{"title": "Basics", "fields": []}]},
+        schema=schema,
         max_file_size_bytes=None,
         max_file_count=None,
         allowed_mime_types=None,

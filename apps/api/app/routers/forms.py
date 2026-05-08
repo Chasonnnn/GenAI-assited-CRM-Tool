@@ -50,13 +50,9 @@ from app.schemas.forms import (
     FormPublishResponse,
     FormRead,
     FormMappingOption,
-    FormTokenSendRequest,
-    FormTokenSendResponse,
     FormSubmissionRead,
     FormSubmissionStatusUpdate,
     FormSummary,
-    FormTokenRead,
-    FormTokenRequest,
     IntakeLeadPromoteRequest,
     IntakeLeadPromoteResponse,
     IntakeLeadRead,
@@ -86,9 +82,6 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/forms", tags=["forms"])
-DEDICATED_LINK_RETIRED_DETAIL = (
-    "Dedicated application links have been retired. Please use shared intake links."
-)
 
 
 def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
@@ -185,6 +178,14 @@ def _intake_link_read(link, intake_url: str | None = None) -> FormIntakeLinkRead
         expires_at=link.expires_at,
         max_submissions=link.max_submissions,
         submissions_count=link.submissions_count,
+        embed_enabled=link.embed_enabled,
+        allowed_embed_origins=link.allowed_embed_origins or [],
+        tracking_mode=link.tracking_mode,
+        consent_text=link.consent_text,
+        privacy_policy_url=link.privacy_policy_url,
+        thank_you_config=link.thank_you_config or {},
+        embed_theme_json=link.embed_theme_json or {},
+        published_version_id=link.published_version_id,
         intake_url=intake_url,
         created_at=link.created_at,
         updated_at=link.updated_at,
@@ -685,25 +686,8 @@ def set_mappings(
 
 
 # =============================================================================
-# Token + Submission Review (Surrogate-level)
+# Shared Link + Submission Review
 # =============================================================================
-
-
-@router.post(
-    "/{form_id}/tokens",
-    response_model=FormTokenRead,
-    dependencies=[
-        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
-        Depends(require_csrf_header),
-    ],
-)
-def create_submission_token(
-    form_id: UUID,
-    body: FormTokenRequest,
-    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-):
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.get(
@@ -783,6 +767,13 @@ def create_form_intake_link(
             expires_at=body.expires_at,
             max_submissions=body.max_submissions,
             utm_defaults=body.utm_defaults,
+            embed_enabled=body.embed_enabled,
+            allowed_embed_origins=body.allowed_embed_origins,
+            tracking_mode=body.tracking_mode,
+            consent_text=body.consent_text,
+            privacy_policy_url=body.privacy_policy_url,
+            thank_you_config=body.thank_you_config,
+            embed_theme_json=body.embed_theme_json,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -816,17 +807,29 @@ def update_form_intake_link(
     if not link:
         raise HTTPException(status_code=404, detail="Intake link not found")
 
-    link = form_intake_service.update_intake_link(
-        db=db,
-        link=link,
-        campaign_name=body.campaign_name,
-        event_name=body.event_name,
-        expires_at=body.expires_at,
-        max_submissions=body.max_submissions,
-        utm_defaults=body.utm_defaults,
-        is_active=body.is_active,
-        fields_set=body.model_fields_set,
-    )
+    try:
+        link = form_intake_service.update_intake_link(
+            db=db,
+            link=link,
+            campaign_name=body.campaign_name,
+            event_name=body.event_name,
+            expires_at=body.expires_at,
+            max_submissions=body.max_submissions,
+            utm_defaults=body.utm_defaults,
+            is_active=body.is_active,
+            embed_enabled=body.embed_enabled,
+            allowed_embed_origins=body.allowed_embed_origins,
+            tracking_mode=body.tracking_mode,
+            consent_text=body.consent_text,
+            privacy_policy_url=body.privacy_policy_url,
+            thank_you_config=body.thank_you_config,
+            embed_theme_json=body.embed_theme_json,
+            fields_set=body.model_fields_set,
+            user_id=session.user_id,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     org = org_service.get_org_by_id(db, session.org_id)
     base_url = org_service.get_org_portal_base_url(org)
     return _intake_link_read(
@@ -932,24 +935,6 @@ def send_form_intake_link(
         sent_at=datetime.now(timezone.utc),
         intake_url=intake_url,
     )
-
-
-@router.post(
-    "/{form_id}/tokens/{token_id}/send",
-    response_model=FormTokenSendResponse,
-    dependencies=[
-        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
-        Depends(require_csrf_header),
-    ],
-)
-def send_submission_token(
-    form_id: UUID,
-    token_id: UUID,
-    body: FormTokenSendRequest,
-    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-):
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
 
 
 @router.get(

@@ -17,9 +17,13 @@ from app.core.deps import get_db
 from app.core.rate_limit import limiter
 from app.db.enums import FormStatus
 from app.schemas.forms import (
-    FormDraftPublicRead,
+    FormEmbedFramePolicyRead,
+    FormEmbedPublicRead,
+    FormEmbedSessionCreate,
+    FormEmbedSessionRead,
+    FormEmbedSubmitRequest,
     FormDraftUpsertRequest,
-    FormDraftWriteResponse,
+    FormEmbedConsentRead,
     FormIntakeDraftLookupRequest,
     FormIntakeDraftLookupResponse,
     FormIntakeDraftPublicRead,
@@ -27,12 +31,11 @@ from app.schemas.forms import (
     FormIntakeDraftRestoreResponse,
     FormIntakeDraftWriteResponse,
     FormIntakePublicRead,
-    FormPublicRead,
     FormSchema,
     FormSubmissionSharedResponse,
-    FormSubmissionPublicResponse,
 )
 from app.services import (
+    embed_policy_service,
     form_intake_service,
     form_service,
     form_submission_service,
@@ -41,9 +44,6 @@ from app.services import (
 )
 
 router = APIRouter(prefix="/forms/public", tags=["forms-public"])
-DEDICATED_LINK_RETIRED_DETAIL = (
-    "Dedicated application links have been retired. Please use a shared intake link."
-)
 
 
 def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
@@ -94,6 +94,41 @@ def _get_active_intake_link_or_404(
     return intake_link
 
 
+def _get_embed_origin(request: Request) -> str | None:
+    origin = request.headers.get("origin")
+    if origin:
+        return origin
+    parent_origin = request.query_params.get("parent_origin")
+    if parent_origin:
+        return parent_origin
+    referer = request.headers.get("referer")
+    if not referer:
+        return None
+    parsed = urlparse(referer)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.scheme}://{parsed.hostname}{port}"
+
+
+def _get_active_embed_link_or_404(
+    *,
+    db: Session,
+    request: Request,
+    slug: str,
+    detail: str = "Form not found",
+):
+    intake_link = _get_active_intake_link_or_404(
+        db=db,
+        request=request,
+        slug=slug,
+        detail=detail,
+    )
+    if not intake_link.embed_enabled:
+        raise HTTPException(status_code=404, detail=detail)
+    return intake_link
+
+
 @router.get("/{org_id}/logos/{logo_id}")
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_form_logo(
@@ -137,56 +172,6 @@ def get_org_signature_logo(
     return RedirectResponse(signed_url, status_code=307)
 
 
-@router.get("/{token}", response_model=FormPublicRead)
-@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
-def get_public_form(
-    request: Request, token: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
-):
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
-
-
-@router.get("/{token}/draft", response_model=FormDraftPublicRead)
-@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
-def get_public_form_draft(
-    request: Request, token: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
-):
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
-
-
-@router.put("/{token}/draft", response_model=FormDraftWriteResponse)
-@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
-def upsert_public_form_draft(
-    token: str,
-    body: FormDraftUpsertRequest,
-    request: Request,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-):
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
-
-
-@router.delete("/{token}/draft")
-@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
-def delete_public_form_draft(
-    token: str,
-    request: Request,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-) -> object:
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
-
-
-@router.post("/{token}/submit", response_model=FormSubmissionPublicResponse)
-@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute")
-def submit_public_form(
-    token: str,
-    request: Request,
-    answers: Annotated[str, "fastapi_param"] = Form(),
-    files: Annotated[list[UploadFile] | None, "fastapi_param"] = File(default=None),
-    file_field_keys: Annotated[str | None, "fastapi_param"] = Form(default=None),
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-):
-    raise HTTPException(status_code=410, detail=DEDICATED_LINK_RETIRED_DETAIL)
-
-
 @router.get("/intake/{slug}", response_model=FormIntakePublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_shared_public_form(
@@ -223,6 +208,136 @@ def get_shared_public_form(
         or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
         campaign_name=intake_link.campaign_name,
         event_name=intake_link.event_name,
+    )
+
+
+@router.get("/embed/{slug}", response_model=FormEmbedPublicRead)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_embed_public_form(
+    request: Request, slug: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    intake_link = _get_active_embed_link_or_404(db=db, request=request, slug=slug)
+    request_origin = _get_embed_origin(request)
+    if request_origin and not embed_policy_service.is_origin_allowed(intake_link, request_origin):
+        raise HTTPException(status_code=403, detail="Embed origin is not allowed")
+
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    version = form_intake_service.ensure_link_published_version(
+        db=db,
+        form=form,
+        link=intake_link,
+    )
+    schema = _schema_or_none(form.published_schema_json)
+    if not schema:
+        raise HTTPException(status_code=404, detail="Form not found")
+    schema = form_service.normalize_form_schema_logo_url(schema, intake_link.organization_id)
+
+    return FormEmbedPublicRead(
+        form_id=form.id,
+        intake_link_id=intake_link.id,
+        published_version_id=version.id,
+        name=form.name,
+        description=form.description,
+        form_schema=schema,
+        max_file_size_bytes=form.max_file_size_bytes,
+        max_file_count=form.max_file_count,
+        allowed_mime_types=form.allowed_mime_types
+        or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
+        campaign_name=intake_link.campaign_name,
+        event_name=intake_link.event_name,
+        tracking_mode=intake_link.tracking_mode,
+        consent=FormEmbedConsentRead(
+            text=intake_link.consent_text,
+            privacy_policy_url=intake_link.privacy_policy_url,
+        ),
+        thank_you_config=intake_link.thank_you_config or {},
+        embed_theme_json=intake_link.embed_theme_json or {},
+    )
+
+
+@router.get("/embed/{slug}/frame-policy", response_model=FormEmbedFramePolicyRead)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
+def get_embed_frame_policy(
+    request: Request, slug: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+):
+    intake_link = _get_active_embed_link_or_404(db=db, request=request, slug=slug)
+    csp = embed_policy_service.build_frame_ancestors_header(intake_link)
+    return FormEmbedFramePolicyRead(
+        frame_ancestors=["'self'", *(intake_link.allowed_embed_origins or [])],
+        content_security_policy=csp,
+    )
+
+
+@router.post("/embed/{slug}/session", response_model=FormEmbedSessionRead)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_DRAFTS}/minute")
+def create_embed_session(
+    request: Request,
+    slug: str,
+    body: FormEmbedSessionCreate,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    intake_link = _get_active_embed_link_or_404(db=db, request=request, slug=slug)
+    try:
+        session_token = form_intake_service.create_embed_session(
+            db=db,
+            link=intake_link,
+            parent_origin=body.parent_origin,
+            attribution=body.attribution,
+            client_ip=get_client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FormEmbedSessionRead(
+        session_token=session_token.token,
+        expires_at=session_token.session.expires_at,
+    )
+
+
+@router.post("/embed/{slug}/submit", response_model=FormSubmissionSharedResponse)
+@limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_FORMS}/minute")
+def submit_embed_public_form(
+    request: Request,
+    slug: str,
+    body: FormEmbedSubmitRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    intake_link = _get_active_embed_link_or_404(db=db, request=request, slug=slug)
+    form = form_service.get_form(db, intake_link.organization_id, intake_link.form_id)
+    if not form or form.status != FormStatus.PUBLISHED.value:
+        raise HTTPException(status_code=404, detail="Form not found")
+    try:
+        submission, outcome = form_intake_service.submit_lead_capture_embed(
+            db=db,
+            link=intake_link,
+            form=form,
+            embed_session_token=body.embed_session_token,
+            idempotency_key=body.idempotency_key,
+            published_version_id=body.published_version_id,
+            answers=body.answers,
+            consent_accepted=body.consent.accepted,
+            attribution=body.attribution,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FormSubmissionSharedResponse(
+        id=submission.id,
+        status=submission.status,
+        outcome=outcome,
+        surrogate_id=submission.surrogate_id,
+        intake_lead_id=submission.intake_lead_id,
     )
 
 

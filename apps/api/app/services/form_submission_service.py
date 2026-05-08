@@ -1,9 +1,8 @@
-"""Form submission service for tokens, submissions, and review flows."""
+"""Form submission service for submissions and review flows."""
 
 import logging
 import mimetypes
 import re
-import secrets
 import uuid
 import zipfile
 from datetime import date, datetime, timedelta, timezone
@@ -18,14 +17,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.enums import (
     AuditEventType,
-    FormLinkMode,
-    FormPurpose,
-    FormStatus,
-    FormSubmissionMatchStatus,
     FormSubmissionStatus,
     JobStatus,
     JobType,
-    OwnerType,
     SurrogateActivityType,
 )
 from app.db.models import (
@@ -33,7 +27,6 @@ from app.db.models import (
     FormFieldMapping,
     FormSubmission,
     FormSubmissionFile,
-    FormSubmissionToken,
     Job,
     Surrogate,
 )
@@ -179,7 +172,8 @@ def _build_surrogate_field_types() -> dict[str, str]:
 
 
 SURROGATE_FIELD_TYPES: dict[str, str] = _build_surrogate_field_types()
-CRITICAL_SURROGATE_FIELDS = frozenset({"full_name", "email"})
+REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
+CRITICAL_SURROGATE_FIELDS = frozenset(REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS)
 _SURROGATE_FIELD_LABEL_OVERRIDES: dict[str, str] = {
     "full_name": "Full Name",
     "date_of_birth": "Date of Birth",
@@ -227,7 +221,7 @@ def _humanize_surrogate_field_name(field_name: str) -> str:
 
 
 def list_surrogate_mapping_options() -> list[dict[str, Any]]:
-    preferred_order = ("full_name", "email", "phone")
+    preferred_order = REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS
     ordered_fields: list[str] = []
     seen: set[str] = set()
     for field in preferred_order:
@@ -247,426 +241,6 @@ def list_surrogate_mapping_options() -> list[dict[str, Any]]:
         }
         for field_name in ordered_fields
     ]
-
-
-def build_application_link(base_url: str | None, token: str) -> str:
-    cleaned_base = (base_url or "").strip().rstrip("/")
-    if not cleaned_base:
-        return f"/apply/{token}"
-    return f"{cleaned_base}/apply/{token}"
-
-
-def assert_dedicated_form_purpose(
-    form: Form,
-    *,
-    allow_purpose_override: bool = False,
-) -> None:
-    if form.purpose == FormPurpose.SURROGATE_APPLICATION.value:
-        return
-    if allow_purpose_override:
-        return
-    raise ValueError(
-        "Dedicated surrogate sends require purpose=surrogate_application. "
-        "Set allow_purpose_override=true to intentionally send a different form."
-    )
-
-
-def create_submission_token(
-    db: Session,
-    org_id: uuid.UUID,
-    form: Form,
-    surrogate: Surrogate,
-    user_id: uuid.UUID | None,
-    expires_in_days: int,
-    *,
-    allow_purpose_override: bool = False,
-) -> FormSubmissionToken:
-    assert_dedicated_form_purpose(form, allow_purpose_override=allow_purpose_override)
-    if form.status != FormStatus.PUBLISHED.value:
-        raise ValueError("Form must be published before sending")
-
-    token = _generate_token(db)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
-
-    record = FormSubmissionToken(
-        organization_id=org_id,
-        form_id=form.id,
-        surrogate_id=surrogate.id,
-        token=token,
-        expires_at=expires_at,
-        max_submissions=1,
-        used_submissions=0,
-        created_by_user_id=user_id,
-    )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
-
-
-def get_latest_active_token_for_surrogate(
-    db: Session,
-    org_id: uuid.UUID,
-    surrogate_id: uuid.UUID,
-    *,
-    form_id: uuid.UUID | None = None,
-) -> FormSubmissionToken | None:
-    now = datetime.now(timezone.utc)
-
-    query = (
-        db.query(FormSubmissionToken)
-        .join(Form, Form.id == FormSubmissionToken.form_id)
-        .filter(
-            FormSubmissionToken.organization_id == org_id,
-            FormSubmissionToken.surrogate_id == surrogate_id,
-            FormSubmissionToken.revoked_at.is_(None),
-            FormSubmissionToken.used_submissions < FormSubmissionToken.max_submissions,
-            FormSubmissionToken.expires_at >= now,
-            Form.status == FormStatus.PUBLISHED.value,
-        )
-    )
-    if form_id:
-        query = query.filter(FormSubmissionToken.form_id == form_id)
-
-    return query.order_by(
-        FormSubmissionToken.created_at.desc(), FormSubmissionToken.id.desc()
-    ).first()
-
-
-def get_or_create_submission_token(
-    db: Session,
-    org_id: uuid.UUID,
-    form: Form,
-    surrogate: Surrogate,
-    user_id: uuid.UUID | None,
-    expires_in_days: int,
-    *,
-    allow_purpose_override: bool = False,
-    commit: bool = True,
-) -> FormSubmissionToken:
-    assert_dedicated_form_purpose(form, allow_purpose_override=allow_purpose_override)
-    if form.status != FormStatus.PUBLISHED.value:
-        raise ValueError("Form must be published before sending")
-
-    existing_token = get_latest_active_token_for_surrogate(
-        db,
-        org_id=org_id,
-        surrogate_id=surrogate.id,
-        form_id=form.id,
-    )
-    if existing_token:
-        return existing_token
-
-    token = _generate_token(db)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
-
-    record = FormSubmissionToken(
-        organization_id=org_id,
-        form_id=form.id,
-        surrogate_id=surrogate.id,
-        token=token,
-        expires_at=expires_at,
-        max_submissions=1,
-        used_submissions=0,
-        created_by_user_id=user_id,
-    )
-    db.add(record)
-    if commit:
-        db.commit()
-        db.refresh(record)
-    else:
-        db.flush()
-    return record
-
-
-def get_valid_token(db: Session, token: str) -> FormSubmissionToken | None:
-    record = db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
-    if not record:
-        return None
-    if record.revoked_at is not None:
-        return None
-    if record.used_submissions >= record.max_submissions:
-        return None
-    expires_at = record.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
-        return None
-    return record
-
-
-def get_token_row(db: Session, token: str) -> FormSubmissionToken | None:
-    """Fetch a token row without applying validity rules (revoked/expired/used)."""
-    return db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first()
-
-
-def get_token_by_id(
-    db: Session, *, org_id: uuid.UUID, form_id: uuid.UUID, token_id: uuid.UUID
-) -> FormSubmissionToken | None:
-    return (
-        db.query(FormSubmissionToken)
-        .filter(
-            FormSubmissionToken.organization_id == org_id,
-            FormSubmissionToken.form_id == form_id,
-            FormSubmissionToken.id == token_id,
-        )
-        .first()
-    )
-
-
-def create_submission(
-    db: Session,
-    token: FormSubmissionToken,
-    form: Form,
-    answers: dict[str, Any],
-    files: list[UploadFile] | None = None,
-    file_field_keys: list[str] | None = None,
-) -> FormSubmission:
-    if form.status != FormStatus.PUBLISHED.value:
-        raise ValueError("Form is not published")
-    if not form.published_schema_json:
-        raise ValueError("Published form schema missing")
-
-    schema = parse_schema(form.published_schema_json)
-    _validate_answers(schema, answers)
-
-    file_fields = _get_file_fields(schema, answers)
-    resolved_file_field_keys = _resolve_file_field_keys(
-        file_fields=file_fields,
-        files=files or [],
-        file_field_keys=file_field_keys,
-    )
-    _validate_required_file_fields(file_fields, resolved_file_field_keys)
-    _validate_file_field_limits(file_fields, resolved_file_field_keys)
-
-    existing = (
-        db.query(FormSubmission)
-        .filter(
-            FormSubmission.form_id == form.id, FormSubmission.surrogate_id == token.surrogate_id
-        )
-        .first()
-    )
-    upload_files = files or []
-    validated_content_types = _validate_files(form, upload_files)
-
-    mapping_snapshot = _snapshot_mappings(db, form.id)
-    now = datetime.now(timezone.utc)
-
-    if existing:
-        submission = existing
-        submission.token_id = token.id
-        submission.status = FormSubmissionStatus.PENDING_REVIEW.value
-        submission.source_mode = FormLinkMode.DEDICATED.value
-        submission.match_status = FormSubmissionMatchStatus.LINKED.value
-        submission.match_reason = "dedicated_token"
-        submission.matched_at = now
-        submission.answers_json = answers
-        submission.schema_snapshot = form.published_schema_json
-        submission.mapping_snapshot = mapping_snapshot
-        submission.submitted_at = now
-        submission.reviewed_at = None
-        submission.reviewed_by_user_id = None
-        submission.review_notes = None
-        submission.applied_at = None
-        db.query(FormSubmissionFile).filter(
-            FormSubmissionFile.submission_id == submission.id,
-            FormSubmissionFile.deleted_at.is_(None),
-        ).update(
-            {
-                FormSubmissionFile.deleted_at: now,
-                FormSubmissionFile.deleted_by_user_id: None,
-            },
-            synchronize_session=False,
-        )
-    else:
-        submission = FormSubmission(
-            organization_id=form.organization_id,
-            form_id=form.id,
-            surrogate_id=token.surrogate_id,
-            token_id=token.id,
-            source_mode=FormLinkMode.DEDICATED.value,
-            status=FormSubmissionStatus.PENDING_REVIEW.value,
-            match_status=FormSubmissionMatchStatus.LINKED.value,
-            match_reason="dedicated_token",
-            matched_at=now,
-            answers_json=answers,
-            schema_snapshot=form.published_schema_json,
-            mapping_snapshot=mapping_snapshot,
-            submitted_at=now,
-        )
-        db.add(submission)
-        db.flush()
-
-    created_submission_file_ids: list[uuid.UUID] = []
-    for idx, file in enumerate(upload_files):
-        field_key = resolved_file_field_keys[idx] if resolved_file_field_keys else None
-        file_record = _store_submission_file(
-            db,
-            submission,
-            file,
-            form,
-            field_key=field_key,
-            content_type=validated_content_types[idx],
-        )
-        created_submission_file_ids.append(file_record.id)
-
-    token.used_submissions += 1
-    if token.used_submissions >= token.max_submissions:
-        token.revoked_at = datetime.now(timezone.utc)
-
-    from app.services import audit_service
-
-    audit_service.log_event(
-        db=db,
-        org_id=form.organization_id,
-        event_type=AuditEventType.FORM_SUBMISSION_RECEIVED,
-        actor_user_id=None,
-        target_type="form_submission",
-        target_id=submission.id,
-        details={
-            "form_id": str(form.id),
-            "surrogate_id": str(token.surrogate_id),
-        },
-    )
-
-    db.commit()
-    db.refresh(submission)
-    if getattr(settings, "ATTACHMENT_SCAN_ENABLED", False):
-        for submission_file_id in created_submission_file_ids:
-            dispatch_submission_file_scan_if_needed(
-                db=db,
-                org_id=form.organization_id,
-                submission_file_id=submission_file_id,
-            )
-
-    surrogate = db.query(Surrogate).filter(Surrogate.id == token.surrogate_id).first()
-    if surrogate:
-        # Notify assignee + admins (in-app)
-        try:
-            from app.services import notification_facade
-
-            notification_facade.notify_form_submission_received(
-                db=db,
-                surrogate=surrogate,
-                submission_id=submission.id,
-            )
-        except Exception:
-            logger.debug(
-                "notify_form_submission_received_failed",
-                exc_info=True,
-            )
-
-        # Trigger workflows for submission (so org workflows can email admins/owner, etc.)
-        try:
-            from app.services import workflow_triggers
-
-            workflow_triggers.trigger_form_submitted(
-                db=db,
-                org_id=surrogate.organization_id,
-                form_id=form.id,
-                submission_id=submission.id,
-                submitted_at=submission.submitted_at,
-                surrogate_id=surrogate.id,
-                source_mode=FormLinkMode.DEDICATED.value,
-                entity_owner_id=(
-                    surrogate.owner_id
-                    if surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id
-                    else None
-                ),
-            )
-        except Exception:
-            logger.debug(
-                "trigger_form_submitted_failed",
-                exc_info=True,
-            )
-
-        # Best-effort: advance stage to the configured conversion stage (never regress)
-        try:
-            from app.db.models import Pipeline
-            from app.services import analytics_shared, pipeline_service, surrogate_status_service
-
-            current_stage = (
-                pipeline_service.get_stage_by_id(db, surrogate.stage_id)
-                if surrogate.stage_id
-                else None
-            )
-            pipeline_id = (
-                current_stage.pipeline_id
-                if current_stage
-                else pipeline_service.get_or_create_default_pipeline(
-                    db, surrogate.organization_id
-                ).id
-            )
-
-            analytics_config = analytics_shared.get_analytics_stage_configuration(
-                db,
-                surrogate.organization_id,
-                pipeline_id=pipeline_id,
-            )
-            conversion_stage_key = analytics_config["conversion_stage_key"]
-            target_stage = (
-                pipeline_service.get_stage_by_key(
-                    db=db,
-                    pipeline_id=pipeline_id,
-                    stage_key=conversion_stage_key,
-                )
-                if conversion_stage_key
-                else None
-            )
-            if not target_stage:
-                pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
-                if pipeline:
-                    pipeline_service.sync_missing_stages(db, pipeline, user_id=None)
-                if conversion_stage_key:
-                    target_stage = pipeline_service.get_stage_by_key(
-                        db=db,
-                        pipeline_id=pipeline_id,
-                        stage_key=conversion_stage_key,
-                    )
-
-            if target_stage and surrogate.stage_id != target_stage.id:
-                current_order = current_stage.order if current_stage else 0
-                if current_order < target_stage.order:
-                    old_stage_id = surrogate.stage_id
-                    old_label = surrogate.status_label
-                    old_slug = current_stage.slug if current_stage else None
-                    now = datetime.now(timezone.utc)
-                    surrogate_status_service.apply_status_change(
-                        db=db,
-                        surrogate=surrogate,
-                        new_stage=target_stage,
-                        current_stage=current_stage,
-                        old_stage_id=old_stage_id,
-                        old_label=old_label,
-                        old_slug=old_slug,
-                        user_id=None,
-                        reason=f"{conversion_stage_key or 'conversion'} via public form",
-                        effective_at=now,
-                        recorded_at=now,
-                    )
-        except Exception:
-            logger.debug(
-                "advance_stage_conversion_failed",
-                exc_info=True,
-            )
-
-        # Best-effort: clear server-side draft (if any)
-        try:
-            from app.services import form_draft_service
-
-            form_draft_service.delete_draft(
-                db=db,
-                org_id=form.organization_id,
-                form_id=form.id,
-                surrogate_id=token.surrogate_id,
-            )
-        except Exception:
-            logger.debug(
-                "delete_form_draft_failed",
-                exc_info=True,
-            )
-
-    return submission
 
 
 def list_form_submissions(
@@ -1275,15 +849,6 @@ def update_submission_answers(
     db.commit()
     db.refresh(submission)
     return old_values, updated_surrogate_fields
-
-
-def _generate_token(db: Session) -> str:
-    token = secrets.token_urlsafe(32)
-    while (
-        db.query(FormSubmissionToken).filter(FormSubmissionToken.token == token).first() is not None
-    ):
-        token = secrets.token_urlsafe(32)
-    return token
 
 
 def _validate_answers(schema: FormSchema, answers: dict[str, Any]) -> None:

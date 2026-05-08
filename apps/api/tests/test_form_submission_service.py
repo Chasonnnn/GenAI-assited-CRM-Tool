@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 
@@ -6,8 +7,9 @@ import pytest
 from starlette.datastructures import UploadFile, Headers
 
 from app.core.encryption import hash_email
+from app.db.enums import FormSubmissionMatchStatus
 from app.db.models import Surrogate
-from app.services import form_service, form_submission_service
+from app.services import form_intake_service, form_service, form_submission_service
 from app.utils.normalization import normalize_email
 
 
@@ -32,28 +34,40 @@ def _create_surrogate(db, org_id, user_id, stage):
     return surrogate
 
 
-def _create_published_form(db, org_id, user_id):
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [
-                    {
-                        "key": "full_name",
-                        "label": "Full Name",
-                        "type": "text",
-                        "required": True,
-                    },
-                    {
-                        "key": "date_of_birth",
-                        "label": "Date of Birth",
-                        "type": "date",
-                        "required": False,
-                    },
-                ],
-            }
-        ]
+def _identity_fields() -> list[dict[str, object]]:
+    return [
+        {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+        {
+            "key": "date_of_birth",
+            "label": "Date of Birth",
+            "type": "date",
+            "required": True,
+        },
+        {"key": "phone", "label": "Phone", "type": "text", "required": True},
+        {"key": "email", "label": "Email", "type": "email", "required": True},
+    ]
+
+
+def _schema_with_identity(
+    title: str, fields: list[dict[str, object]] | None = None
+) -> dict[str, object]:
+    return {"pages": [{"title": title, "fields": [*_identity_fields(), *(fields or [])]}]}
+
+
+def _answers(extra: dict[str, object] | None = None) -> dict[str, object]:
+    answers: dict[str, object] = {
+        "full_name": "Jane Doe",
+        "date_of_birth": "1990-01-01",
+        "phone": "+1 (555) 111-2222",
+        "email": "jane.doe@example.com",
     }
+    if extra:
+        answers.update(extra)
+    return answers
+
+
+def _create_published_form(db, org_id, user_id):
+    schema = _schema_with_identity("Basics")
 
     form = form_service.create_form(
         db=db,
@@ -79,26 +93,22 @@ def _create_published_form(db, org_id, user_id):
 
 
 def _create_published_form_with_journey_timing(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "Timing",
+        [
             {
-                "title": "Timing",
-                "fields": [
-                    {
-                        "key": "journey_timing",
-                        "label": "When would you like to start your surrogacy journey?",
-                        "type": "radio",
-                        "required": False,
-                        "options": [
-                            {"label": "0–3 months", "value": "0-3 months"},
-                            {"label": "3–6 months", "value": "3-6 months"},
-                            {"label": "Still deciding", "value": "Still deciding"},
-                        ],
-                    }
+                "key": "journey_timing",
+                "label": "When would you like to start your surrogacy journey?",
+                "type": "radio",
+                "required": False,
+                "options": [
+                    {"label": "0-3 months", "value": "0-3 months"},
+                    {"label": "3-6 months", "value": "3-6 months"},
+                    {"label": "Still deciding", "value": "Still deciding"},
                 ],
             }
-        ]
-    }
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -126,33 +136,29 @@ def _create_published_form_with_journey_timing(db, org_id, user_id):
 
 
 def _create_published_form_with_validation(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "Basics",
+        [
             {
-                "title": "Basics",
-                "fields": [
-                    {
-                        "key": "bio",
-                        "label": "Short Bio",
-                        "type": "text",
-                        "required": True,
-                        "validation": {
-                            "min_length": 5,
-                            "max_length": 10,
-                            "pattern": "^[A-Z].+",
-                        },
-                    },
-                    {
-                        "key": "age",
-                        "label": "Age",
-                        "type": "number",
-                        "required": False,
-                        "validation": {"min_value": 18, "max_value": 40},
-                    },
-                ],
-            }
-        ]
-    }
+                "key": "bio",
+                "label": "Short Bio",
+                "type": "text",
+                "required": True,
+                "validation": {
+                    "min_length": 5,
+                    "max_length": 10,
+                    "pattern": "^[A-Z].+",
+                },
+            },
+            {
+                "key": "age",
+                "label": "Age",
+                "type": "number",
+                "required": False,
+                "validation": {"min_value": 18, "max_value": 40},
+            },
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -170,27 +176,23 @@ def _create_published_form_with_validation(db, org_id, user_id):
 
 
 def _create_published_form_with_height_weight(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "Vitals",
+        [
             {
-                "title": "Vitals",
-                "fields": [
-                    {
-                        "key": "height",
-                        "label": "Height (ft)",
-                        "type": "number",
-                        "required": False,
-                    },
-                    {
-                        "key": "weight",
-                        "label": "Weight (lb)",
-                        "type": "number",
-                        "required": False,
-                    },
-                ],
-            }
-        ]
-    }
+                "key": "height",
+                "label": "Height (ft)",
+                "type": "number",
+                "required": False,
+            },
+            {
+                "key": "weight",
+                "label": "Weight (lb)",
+                "type": "number",
+                "required": False,
+            },
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -216,21 +218,17 @@ def _create_published_form_with_height_weight(db, org_id, user_id):
 
 
 def _create_published_form_with_height_field(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "Vitals",
+        [
             {
-                "title": "Vitals",
-                "fields": [
-                    {
-                        "key": "height",
-                        "label": "Height",
-                        "type": "height",
-                        "required": False,
-                    },
-                ],
-            }
-        ]
-    }
+                "key": "height",
+                "label": "Height",
+                "type": "height",
+                "required": False,
+            },
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -248,47 +246,43 @@ def _create_published_form_with_height_field(db, org_id, user_id):
 
 
 def _create_published_form_with_conditions(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "Logic",
+        [
             {
-                "title": "Logic",
-                "fields": [
-                    {
-                        "key": "willing",
-                        "label": "Are you willing?",
-                        "type": "radio",
-                        "required": True,
-                        "options": [
-                            {"label": "Yes", "value": "Yes"},
-                            {"label": "No", "value": "No"},
-                        ],
-                    },
-                    {
-                        "key": "reason",
-                        "label": "If yes, please explain",
-                        "type": "text",
-                        "required": True,
-                        "show_if": {
-                            "field_key": "willing",
-                            "operator": "equals",
-                            "value": "Yes",
-                        },
-                    },
-                    {
-                        "key": "support_docs",
-                        "label": "Upload supporting documents",
-                        "type": "file",
-                        "required": True,
-                        "show_if": {
-                            "field_key": "willing",
-                            "operator": "equals",
-                            "value": "Yes",
-                        },
-                    },
+                "key": "willing",
+                "label": "Are you willing?",
+                "type": "radio",
+                "required": True,
+                "options": [
+                    {"label": "Yes", "value": "Yes"},
+                    {"label": "No", "value": "No"},
                 ],
-            }
-        ]
-    }
+            },
+            {
+                "key": "reason",
+                "label": "If yes, please explain",
+                "type": "text",
+                "required": True,
+                "show_if": {
+                    "field_key": "willing",
+                    "operator": "equals",
+                    "value": "Yes",
+                },
+            },
+            {
+                "key": "support_docs",
+                "label": "Upload supporting documents",
+                "type": "file",
+                "required": True,
+                "show_if": {
+                    "field_key": "willing",
+                    "operator": "equals",
+                    "value": "Yes",
+                },
+            },
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -309,46 +303,42 @@ def test_validate_answers_accepts_height_field_values(db, test_org, test_user):
     form = _create_published_form_with_height_field(db, test_org.id, test_user.id)
     schema = form_submission_service.parse_schema(form.published_schema_json)
 
-    form_submission_service._validate_answers(schema, {"height": "5.50"})
+    form_submission_service._validate_answers(schema, _answers({"height": "5.50"}))
 
 
 def _create_published_form_with_repeatable_table(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "History",
+        [
             {
-                "title": "History",
-                "fields": [
+                "key": "pregnancies",
+                "label": "List of pregnancies",
+                "type": "repeatable_table",
+                "required": True,
+                "min_rows": 1,
+                "columns": [
                     {
-                        "key": "pregnancies",
-                        "label": "List of pregnancies",
-                        "type": "repeatable_table",
+                        "key": "preg_type",
+                        "label": "Type",
+                        "type": "text",
                         "required": True,
-                        "min_rows": 1,
-                        "columns": [
-                            {
-                                "key": "preg_type",
-                                "label": "Type",
-                                "type": "text",
-                                "required": True,
-                            },
-                            {
-                                "key": "delivery_date",
-                                "label": "Delivery Date",
-                                "type": "date",
-                                "required": False,
-                            },
-                            {
-                                "key": "babies",
-                                "label": "Babies",
-                                "type": "number",
-                                "required": True,
-                            },
-                        ],
-                    }
+                    },
+                    {
+                        "key": "delivery_date",
+                        "label": "Delivery Date",
+                        "type": "date",
+                        "required": False,
+                    },
+                    {
+                        "key": "babies",
+                        "label": "Babies",
+                        "type": "number",
+                        "required": True,
+                    },
                 ],
             }
-        ]
-    }
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -366,43 +356,39 @@ def _create_published_form_with_repeatable_table(db, org_id, user_id):
 
 
 def _create_published_form_with_fixed_table(db, org_id, user_id):
-    schema = {
-        "pages": [
+    schema = _schema_with_identity(
+        "History",
+        [
             {
-                "title": "History",
-                "fields": [
+                "key": "pregnancy_conditions",
+                "label": "Pregnancy conditions",
+                "type": "table",
+                "required": True,
+                "rows": [
+                    {"key": "gestational_diabetes", "label": "Gestational Diabetes"},
+                    {"key": "preeclampsia", "label": "Preeclampsia"},
+                ],
+                "columns": [
                     {
-                        "key": "pregnancy_conditions",
-                        "label": "Pregnancy conditions",
-                        "type": "table",
+                        "key": "status",
+                        "label": "Response",
+                        "type": "radio",
                         "required": True,
-                        "rows": [
-                            {"key": "gestational_diabetes", "label": "Gestational Diabetes"},
-                            {"key": "preeclampsia", "label": "Preeclampsia"},
+                        "options": [
+                            {"label": "No", "value": "no"},
+                            {"label": "Yes", "value": "yes"},
                         ],
-                        "columns": [
-                            {
-                                "key": "status",
-                                "label": "Response",
-                                "type": "radio",
-                                "required": True,
-                                "options": [
-                                    {"label": "No", "value": "no"},
-                                    {"label": "Yes", "value": "yes"},
-                                ],
-                            },
-                            {
-                                "key": "details",
-                                "label": "If yes, explain",
-                                "type": "textarea",
-                                "required": False,
-                            },
-                        ],
-                    }
+                    },
+                    {
+                        "key": "details",
+                        "label": "If yes, explain",
+                        "type": "textarea",
+                        "required": False,
+                    },
                 ],
             }
-        ]
-    }
+        ],
+    )
 
     form = form_service.create_form(
         db=db,
@@ -438,14 +424,7 @@ def _create_published_form_with_files(db, org_id, user_id, multiple: bool = Fals
             }
         )
 
-    schema = {
-        "pages": [
-            {
-                "title": "Docs",
-                "fields": file_fields,
-            }
-        ]
-    }
+    schema = _schema_with_identity("Docs", file_fields)
 
     form = form_service.create_form(
         db=db,
@@ -462,54 +441,75 @@ def _create_published_form_with_files(db, org_id, user_id, multiple: bool = Fals
     return form
 
 
-def test_submission_service_single_use_token(db, test_org, test_user, default_stage):
+def _create_shared_submission(
+    db,
+    *,
+    form,
+    surrogate,
+    user_id,
+    answers: dict[str, object],
+    files: list[UploadFile] | None = None,
+    file_field_keys: list[str] | None = None,
+):
+    link = form_intake_service.create_intake_link(
+        db=db,
+        org_id=form.organization_id,
+        form=form,
+        user_id=user_id,
+        campaign_name="Service test shared link",
+        event_name=None,
+        expires_at=None,
+        max_submissions=None,
+        utm_defaults=None,
+    )
+    submission = form_intake_service._create_shared_submission(
+        db=db,
+        form=form,
+        link=link,
+        answers=answers,
+        files=files or [],
+        file_field_keys=file_field_keys,
+        surrogate_id=surrogate.id,
+        intake_lead_id=None,
+        match_status=FormSubmissionMatchStatus.LINKED.value,
+        match_reason="manual_match",
+        matched_at=datetime.now(timezone.utc),
+    )
+    db.commit()
+    db.refresh(submission)
+    return submission
+
+
+def test_submission_service_shared_submission_records_linked_source(
+    db, test_org, test_user, default_stage
+):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
+    submission = _create_shared_submission(
+        db,
         form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-    assert token_record.token
-
-    token = form_submission_service.get_valid_token(db, token_record.token)
-    assert token is not None
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token,
-        form=form,
-        answers={"full_name": "Jane Doe", "date_of_birth": "1990-01-01"},
+        answers=_answers(),
         files=[],
     )
     assert submission.surrogate_id == surrogate.id
-
-    refreshed = form_submission_service.get_valid_token(db, token_record.token)
-    assert refreshed is None
+    assert submission.source_mode == "shared"
+    assert submission.intake_link_id is not None
+    assert submission.match_status == "linked"
 
 
 def test_submission_service_approval_updates_surrogate(db, test_org, test_user, default_stage):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"full_name": "Jane Doe", "date_of_birth": "1990-01-01"},
+        answers=_answers(),
         files=[],
     )
 
@@ -530,20 +530,12 @@ def test_submission_service_update_answers_syncs_surrogate(db, test_org, test_us
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"full_name": "Jane Doe", "date_of_birth": "1990-01-01"},
+        answers=_answers(),
         files=[],
     )
 
@@ -569,20 +561,12 @@ def test_submission_service_normalizes_decimal_height_notation_for_bmi(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_height_weight(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"height": "5.6", "weight": 220},
+        answers=_answers({"height": "5.6", "weight": 220}),
         files=[],
     )
 
@@ -616,70 +600,42 @@ def test_submission_validates_field_constraints(db, test_org, test_user, default
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_validation(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={"bio": "abc", "age": 25},
+            answers=_answers({"bio": "abc", "age": 25}),
             files=[],
         )
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={"bio": "lowercase", "age": 25},
+            answers=_answers({"bio": "lowercase", "age": 25}),
             files=[],
         )
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={"bio": "Valid", "age": 17},
+            answers=_answers({"bio": "Valid", "age": 17}),
             files=[],
         )
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"bio": "Valid", "age": 25},
+        answers=_answers({"bio": "Valid", "age": 25}),
         files=[],
     )
     assert submission.id is not None
@@ -691,20 +647,12 @@ def test_submission_skips_required_fields_when_condition_not_met(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_conditions(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"willing": "No"},
+        answers=_answers({"willing": "No"}),
         files=[],
     )
     assert submission.id is not None
@@ -716,21 +664,13 @@ def test_submission_enforces_required_fields_when_condition_met(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_conditions(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
-
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={"willing": "Yes"},
+            answers=_answers({"willing": "Yes"}),
             files=[],
         )
 
@@ -739,62 +679,42 @@ def test_submission_validates_repeatable_table_rows(db, test_org, test_user, def
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_repeatable_table(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
-
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={"pregnancies": []},
+            answers=_answers({"pregnancies": []}),
             files=[],
         )
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={"pregnancies": [{"delivery_date": "2020-01-01"}]},
+            answers=_answers({"pregnancies": [{"delivery_date": "2020-01-01"}]}),
             files=[],
         )
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={
-            "pregnancies": [
-                {
-                    "preg_type": "Own",
-                    "delivery_date": "2020-01-01",
-                    "babies": 1,
-                }
-            ]
-        },
+        answers=_answers(
+            {
+                "pregnancies": [
+                    {
+                        "preg_type": "Own",
+                        "delivery_date": "2020-01-01",
+                        "babies": 1,
+                    }
+                ]
+            }
+        ),
         files=[],
     )
     assert submission.id is not None
@@ -804,47 +724,35 @@ def test_submission_validates_fixed_table_rows(db, test_org, test_user, default_
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_fixed_table(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
-
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={
-                "pregnancy_conditions": [
-                    {"row_key": "gestational_diabetes", "status": "no", "details": ""},
-                ]
-            },
+            answers=_answers(
+                {
+                    "pregnancy_conditions": [
+                        {"row_key": "gestational_diabetes", "status": "no", "details": ""},
+                    ]
+                }
+            ),
             files=[],
         )
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={
-            "pregnancy_conditions": [
-                {"row_key": "gestational_diabetes", "status": "no", "details": ""},
-                {"row_key": "preeclampsia", "status": "yes", "details": "Managed in 2018"},
-            ]
-        },
+        answers=_answers(
+            {
+                "pregnancy_conditions": [
+                    {"row_key": "gestational_diabetes", "status": "no", "details": ""},
+                    {"row_key": "preeclampsia", "status": "yes", "details": "Managed in 2018"},
+                ]
+            }
+        ),
         files=[],
     )
     assert submission.id is not None
@@ -854,21 +762,13 @@ def test_submission_requires_required_file_fields(db, test_org, test_user, defau
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_files(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
-
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={},
+            answers=_answers(),
             files=[],
         )
 
@@ -878,15 +778,6 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_files(db, test_org.id, test_user.id, multiple=True)
-
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
 
     upload_a = UploadFile(
         filename="doc-a.csv",
@@ -900,11 +791,12 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
     )
 
     with pytest.raises(ValueError):
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={},
+            answers=_answers(),
             files=[upload_a, upload_b],
         )
 
@@ -912,15 +804,6 @@ def test_submission_requires_file_field_keys_when_multiple_file_fields(
 def test_submission_stores_file_field_keys(db, test_org, test_user, default_stage):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_files(db, test_org.id, test_user.id, multiple=True)
-
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
 
     upload_a = UploadFile(
         filename="doc-a.csv",
@@ -933,11 +816,12 @@ def test_submission_stores_file_field_keys(db, test_org, test_user, default_stag
         headers=Headers({"content-type": "text/csv"}),
     )
 
-    submission = form_submission_service.create_submission(
+    submission = _create_shared_submission(
         db=db,
-        token=token_record,
+        surrogate=surrogate,
+        user_id=test_user.id,
         form=form,
-        answers={},
+        answers=_answers(),
         files=[upload_a, upload_b],
         file_field_keys=["supporting_docs", "insurance_docs"],
     )
@@ -950,15 +834,6 @@ def test_submission_enforces_per_file_field_limit(db, test_org, test_user, defau
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_files(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
-
     uploads = [
         UploadFile(
             filename=f"doc-{idx}.csv",
@@ -969,11 +844,12 @@ def test_submission_enforces_per_file_field_limit(db, test_org, test_user, defau
     ]
 
     with pytest.raises(ValueError) as exc:
-        form_submission_service.create_submission(
+        _create_shared_submission(
             db=db,
-            token=token_record,
+            surrogate=surrogate,
+            user_id=test_user.id,
             form=form,
-            answers={},
+            answers=_answers(),
             files=uploads,
         )
 
@@ -984,15 +860,6 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_files(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
-        db=db,
-        org_id=test_org.id,
-        form=form,
-        surrogate=surrogate,
-        user_id=test_user.id,
-        expires_in_days=7,
-    )
-
     uploads = [
         UploadFile(
             filename=f"doc-{idx}.csv",
@@ -1002,11 +869,12 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
         for idx in range(5)
     ]
 
-    submission = form_submission_service.create_submission(
+    submission = _create_shared_submission(
         db=db,
-        token=token_record,
+        surrogate=surrogate,
+        user_id=test_user.id,
         form=form,
-        answers={},
+        answers=_answers(),
         files=uploads,
     )
 
@@ -1033,20 +901,12 @@ def test_submission_approval_uses_mapping_snapshot(db, test_org, test_user, defa
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"full_name": "Jane Doe", "date_of_birth": "1990-01-01"},
+        answers=_answers(),
         files=[],
     )
 
@@ -1078,20 +938,12 @@ def test_submission_approval_normalizes_journey_timing_labels(
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     form = _create_published_form_with_journey_timing(db, test_org.id, test_user.id)
 
-    token_record = form_submission_service.create_submission_token(
+    submission = _create_shared_submission(
         db=db,
-        org_id=test_org.id,
-        form=form,
         surrogate=surrogate,
         user_id=test_user.id,
-        expires_in_days=7,
-    )
-
-    submission = form_submission_service.create_submission(
-        db=db,
-        token=token_record,
         form=form,
-        answers={"journey_timing": "0-3 months"},
+        answers=_answers({"journey_timing": "0-3 months"}),
         files=[],
     )
 

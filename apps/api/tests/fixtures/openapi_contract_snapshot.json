@@ -1125,6 +1125,30 @@
       "200"
     ]
   },
+  "/forms/public/embed/{slug}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/embed/{slug}/frame-policy": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/embed/{slug}/session": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/public/embed/{slug}/submit": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/public/intake/{slug}": {
     "GET": [
       "200",
@@ -1171,32 +1195,6 @@
   },
   "/forms/public/{org_id}/signature-logo": {
     "GET": [
-      "200",
-      "422"
-    ]
-  },
-  "/forms/public/{token}": {
-    "GET": [
-      "200",
-      "422"
-    ]
-  },
-  "/forms/public/{token}/draft": {
-    "DELETE": [
-      "200",
-      "422"
-    ],
-    "GET": [
-      "200",
-      "422"
-    ],
-    "PUT": [
-      "200",
-      "422"
-    ]
-  },
-  "/forms/public/{token}/submit": {
-    "POST": [
       "200",
       "422"
     ]
@@ -1354,18 +1352,6 @@
   },
   "/forms/{form_id}/surrogates/{surrogate_id}/submission": {
     "GET": [
-      "200",
-      "422"
-    ]
-  },
-  "/forms/{form_id}/tokens": {
-    "POST": [
-      "200",
-      "422"
-    ]
-  },
-  "/forms/{form_id}/tokens/{token_id}/send": {
-    "POST": [
       "200",
       "422"
     ]
@@ -3361,13 +3347,13 @@
       "422"
     ]
   },
-  "/surrogates/{surrogate_id}/sensitive-info/reveal": {
+  "/surrogates/{surrogate_id}/send-email": {
     "POST": [
       "200",
       "422"
     ]
   },
-  "/surrogates/{surrogate_id}/send-email": {
+  "/surrogates/{surrogate_id}/sensitive-info/reveal": {
     "POST": [
       "200",
       "422"

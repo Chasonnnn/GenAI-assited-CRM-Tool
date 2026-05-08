@@ -59,6 +59,29 @@ def _create_surrogate(
     return surrogate
 
 
+def _shared_identity_fields() -> list[dict[str, object]]:
+    return [
+        {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+        {
+            "key": "date_of_birth",
+            "label": "Date of Birth",
+            "type": "date",
+            "required": True,
+        },
+        {"key": "phone", "label": "Phone", "type": "text", "required": True},
+        {"key": "email", "label": "Email", "type": "email", "required": True},
+    ]
+
+
+def _shared_identity_schema(
+    *, title: str = "Basics", extra_fields: list[dict[str, object]] | None = None
+) -> dict[str, object]:
+    fields = _shared_identity_fields()
+    if extra_fields:
+        fields.extend(extra_fields)
+    return {"pages": [{"title": title, "fields": fields}]}
+
+
 async def _create_published_form_and_shared_link(*, authed_client, name: str, schema: dict):
     create_res = await authed_client.post(
         "/forms",
@@ -199,21 +222,7 @@ async def test_surrogate_submission_and_draft_endpoints_return_null_when_empty(
     form_id, _link_id, _slug = await _create_published_form_and_shared_link(
         authed_client=authed_client,
         name="Empty Application Form",
-        schema={
-            "pages": [
-                {
-                    "title": "Basics",
-                    "fields": [
-                        {
-                            "key": "full_name",
-                            "label": "Full Name",
-                            "type": "text",
-                            "required": True,
-                        }
-                    ],
-                }
-            ]
-        },
+        schema=_shared_identity_schema(),
     )
 
     submission_res = await authed_client.get(
@@ -229,21 +238,7 @@ async def test_surrogate_submission_and_draft_endpoints_return_null_when_empty(
 
 @pytest.mark.asyncio
 async def test_publish_form_auto_generates_default_shared_intake_link(authed_client, db, test_org):
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [
-                    {
-                        "key": "full_name",
-                        "label": "Full Name",
-                        "type": "text",
-                        "required": True,
-                    }
-                ],
-            }
-        ]
-    }
+    schema = _shared_identity_schema()
 
     create_res = await authed_client.post(
         "/forms",
@@ -284,16 +279,7 @@ async def test_publish_form_auto_generates_default_shared_intake_link(authed_cli
 async def test_publish_form_auto_provisions_default_intake_routing_workflow(
     authed_client, db, test_org, test_user
 ):
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [
-                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True}
-                ],
-            }
-        ]
-    }
+    schema = _shared_identity_schema()
 
     create_res = await authed_client.post(
         "/forms",
@@ -327,16 +313,7 @@ async def test_publish_form_auto_provisions_default_intake_routing_workflow(
 async def test_publish_form_skips_default_routing_workflow_when_enabled_form_workflow_exists(
     authed_client, db, test_org, test_user
 ):
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [
-                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True}
-                ],
-            }
-        ]
-    }
+    schema = _shared_identity_schema()
 
     create_res = await authed_client.post(
         "/forms",
@@ -496,16 +473,7 @@ async def test_send_shared_intake_link_uses_template_and_returns_intake_url(
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
 
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [
-                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True}
-                ],
-            }
-        ]
-    }
+    schema = _shared_identity_schema()
 
     form_id, link_id, slug = await _create_published_form_and_shared_link(
         authed_client=authed_client,
@@ -630,27 +598,7 @@ async def test_update_submission_answers_syncs_surrogate_fields(
 async def test_form_mappings_reject_duplicate_surrogate_fields(
     authed_client,
 ):
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [
-                    {
-                        "key": "full_name",
-                        "label": "Full Name",
-                        "type": "text",
-                        "required": True,
-                    },
-                    {
-                        "key": "email",
-                        "label": "Email",
-                        "type": "email",
-                        "required": True,
-                    },
-                ],
-            }
-        ]
-    }
+    schema = _shared_identity_schema()
 
     create_res = await authed_client.post(
         "/forms",
@@ -831,107 +779,115 @@ async def test_form_mapping_options_include_extended_fields(authed_client):
 
     full_name_option = next((option for option in payload if option["value"] == "full_name"), None)
     email_option = next((option for option in payload if option["value"] == "email"), None)
+    phone_option = next((option for option in payload if option["value"] == "phone"), None)
+    dob_option = next((option for option in payload if option["value"] == "date_of_birth"), None)
     assert full_name_option is not None
     assert full_name_option["is_critical"] is True
     assert email_option is not None
     assert email_option["is_critical"] is True
+    assert phone_option is not None
+    assert phone_option["is_critical"] is True
+    assert dob_option is not None
+    assert dob_option["is_critical"] is True
 
 
 @pytest.mark.asyncio
-async def test_dedicated_token_creation_endpoint_returns_gone_after_retirement(
-    authed_client, db, test_org, test_user, default_stage
-):
-    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+async def test_publish_rejects_shared_intake_without_identity_targets(authed_client):
     schema = {
         "pages": [
             {
                 "title": "Basics",
-                "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
+                ],
             }
         ]
     }
 
     create_res = await authed_client.post(
         "/forms",
-        json={
-            "name": "Event Intake Form",
-            "purpose": "event_intake",
-            "form_schema": schema,
-        },
+        json={"name": "Incomplete Shared Intake", "form_schema": schema},
     )
     assert create_res.status_code == 200
     form_id = create_res.json()["id"]
 
     publish_res = await authed_client.post(f"/forms/{form_id}/publish")
-    assert publish_res.status_code == 200
-
-    denied_res = await authed_client.post(
-        f"/forms/{form_id}/tokens",
-        json={"surrogate_id": str(surrogate.id), "expires_in_days": 7},
-    )
-    assert denied_res.status_code == 410
-    assert "retired" in denied_res.json()["detail"].lower()
+    assert publish_res.status_code == 400
+    assert "Date of Birth" in publish_res.json()["detail"]
+    assert "Phone" in publish_res.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_dedicated_token_send_endpoint_returns_gone_after_retirement(
-    authed_client, db, test_org, test_user
-):
+async def test_shared_submit_accepts_custom_identity_fields_when_mapped(authed_client):
     schema = {
         "pages": [
             {
                 "title": "Basics",
-                "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
+                "fields": [
+                    {"key": "legal_name", "label": "Legal Name", "type": "text", "required": True},
+                    {"key": "dob", "label": "DOB", "type": "date", "required": True},
+                    {"key": "mobile", "label": "Mobile", "type": "phone", "required": True},
+                    {
+                        "key": "email_address",
+                        "label": "Email Address",
+                        "type": "email",
+                        "required": True,
+                    },
+                ],
             }
         ]
     }
 
     create_res = await authed_client.post(
         "/forms",
-        json={
-            "name": "Event Send Form",
-            "purpose": "event_intake",
-            "form_schema": schema,
-        },
+        json={"name": "Mapped Shared Intake", "form_schema": schema},
     )
     assert create_res.status_code == 200
     form_id = create_res.json()["id"]
 
+    mapping_res = await authed_client.put(
+        f"/forms/{form_id}/mappings",
+        json={
+            "mappings": [
+                {"field_key": "legal_name", "surrogate_field": "full_name"},
+                {"field_key": "dob", "surrogate_field": "date_of_birth"},
+                {"field_key": "mobile", "surrogate_field": "phone"},
+                {"field_key": "email_address", "surrogate_field": "email"},
+            ]
+        },
+    )
+    assert mapping_res.status_code == 200
+
     publish_res = await authed_client.post(f"/forms/{form_id}/publish")
     assert publish_res.status_code == 200
 
-    template = EmailTemplate(
-        organization_id=test_org.id,
-        created_by_user_id=test_user.id,
-        name=f"Event Template {uuid.uuid4().hex[:6]}",
-        subject="Complete your application",
-        body="Click {{form_link}}",
-        scope="org",
-        is_active=True,
-    )
-    db.add(template)
-    db.commit()
+    links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert links_res.status_code == 200
+    slug = links_res.json()[0]["slug"]
 
-    send_denied_res = await authed_client.post(
-        f"/forms/{form_id}/tokens/{uuid.uuid4()}/send",
-        json={"template_id": str(template.id)},
+    submission_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "legal_name": "Mapped Candidate",
+                    "dob": "1990-01-01",
+                    "mobile": "+1 (555) 777-1212",
+                    "email_address": "mapped-candidate@example.com",
+                }
+            )
+        },
     )
-    assert send_denied_res.status_code == 410
-    assert "retired" in send_denied_res.json()["detail"].lower()
+    assert submission_res.status_code == 200
+    assert submission_res.json()["outcome"] == "ambiguous_review"
 
 
 @pytest.mark.asyncio
 async def test_default_surrogate_application_form_reconciles_on_purpose_change(
     authed_client,
 ):
-    schema = {
-        "pages": [
-            {
-                "title": "Basics",
-                "fields": [{"key": "full_name", "label": "Full Name", "type": "text"}],
-            }
-        ]
-    }
+    schema = _shared_identity_schema()
 
     form_a_res = await authed_client.post(
         "/forms",

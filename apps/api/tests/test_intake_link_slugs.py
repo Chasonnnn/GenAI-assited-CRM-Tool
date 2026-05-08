@@ -32,13 +32,31 @@ def _create_user_in_org(db, org: Organization, display_name: str, email_prefix: 
 
 
 def _create_published_form(db, org_id, user_id, name: str):
+    schema = {
+        "pages": [
+            {
+                "title": "Basics",
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "Date of Birth",
+                        "type": "date",
+                        "required": True,
+                    },
+                    {"key": "phone", "label": "Phone", "type": "phone", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
+                ],
+            }
+        ]
+    }
     form = form_service.create_form(
         db=db,
         org_id=org_id,
         user_id=user_id,
         name=name,
         description="Candidate application",
-        schema={"pages": [{"title": "Basics", "fields": []}]},
+        schema=schema,
         max_file_size_bytes=None,
         max_file_count=None,
         allowed_mime_types=None,

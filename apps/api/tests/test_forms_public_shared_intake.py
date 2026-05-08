@@ -16,6 +16,7 @@ from app.db.models import (
     FormIntakeDraft,
     FormIntakeLink,
     FormSubmission,
+    FormSubmissionFile,
     IntakeLead,
     Surrogate,
     Task,
@@ -106,6 +107,147 @@ async def _create_published_form_and_shared_link(authed_client):
     assert link_res.status_code == 200
     link_payload = link_res.json()
     return form_id, link_payload["id"], link_payload["slug"]
+
+
+@pytest.mark.asyncio
+async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_item(
+    authed_client, db
+):
+    form_id, link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    answers = {
+        "full_name": "Functional Route Candidate",
+        "date_of_birth": "1994-02-03",
+        "phone": "+1 (555) 301-9090",
+        "email": "functional-route@example.com",
+    }
+    draft_session_id = f"route-full-{uuid.uuid4().hex[:8]}"
+
+    read_res = await authed_client.get(f"/forms/public/intake/{slug}")
+    assert read_res.status_code == 200
+    public_form = read_res.json()
+    assert public_form["form_id"] == form_id
+    assert public_form["intake_link_id"] == link_id
+    assert public_form["campaign_name"] == "Spring Event"
+    assert {field["key"] for field in public_form["form_schema"]["pages"][0]["fields"]} == {
+        "full_name",
+        "date_of_birth",
+        "phone",
+        "email",
+    }
+
+    draft_res = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/{draft_session_id}",
+        json={"answers": answers},
+    )
+    assert draft_res.status_code == 200
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit?utm_source=qa&utm_campaign=route-test",
+        data={"answers": json.dumps(answers)},
+        headers={"user-agent": "forms-route-test"},
+    )
+    assert submit_res.status_code == 200
+    submission_payload = submit_res.json()
+    assert submission_payload["outcome"] == "ambiguous_review"
+    assert submission_payload["surrogate_id"] is None
+    assert submission_payload["intake_lead_id"] is None
+
+    submission = (
+        db.query(FormSubmission)
+        .filter(FormSubmission.id == uuid.UUID(submission_payload["id"]))
+        .first()
+    )
+    assert submission is not None
+    assert submission.source_mode == "shared"
+    assert submission.intake_link_id == uuid.UUID(link_id)
+    assert submission.answers_json["email"] == answers["email"]
+
+    link = db.query(FormIntakeLink).filter(FormIntakeLink.id == uuid.UUID(link_id)).first()
+    assert link is not None
+    assert link.submissions_count == 1
+
+    list_res = await authed_client.get(
+        f"/forms/{form_id}/submissions",
+        params={"source_mode": "shared", "match_status": "ambiguous_review"},
+    )
+    assert list_res.status_code == 200
+    listed = list_res.json()
+    assert [row["id"] for row in listed] == [submission_payload["id"]]
+    assert listed[0]["source_mode"] == "shared"
+    assert listed[0]["answers"]["full_name"] == answers["full_name"]
+
+    cleared_draft_res = await authed_client.get(
+        f"/forms/public/intake/{slug}/draft/{draft_session_id}"
+    )
+    assert cleared_draft_res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_shared_public_intake_route_accepts_required_file_uploads(authed_client, db):
+    schema = {
+        "pages": [
+            {
+                "title": "Identity",
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {
+                        "key": "date_of_birth",
+                        "label": "DOB",
+                        "type": "date",
+                        "required": True,
+                    },
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
+                    {
+                        "key": "supporting_docs",
+                        "label": "Supporting Documents",
+                        "type": "file",
+                        "required": True,
+                    },
+                ],
+            }
+        ]
+    }
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Shared Intake File Form",
+            "description": "Campaign intake with uploads",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+    link_res = await authed_client.post(f"/forms/{form_id}/intake-links", json={})
+    assert link_res.status_code == 200
+    slug = link_res.json()["slug"]
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "File Route Candidate",
+                    "date_of_birth": "1991-03-04",
+                    "phone": "+1 (555) 620-0101",
+                    "email": "file-route@example.com",
+                }
+            ),
+            "file_field_keys": json.dumps(["supporting_docs"]),
+        },
+        files=[("files", ("supporting-docs.csv", b"uploaded,through,route\n", "text/csv"))],
+    )
+    assert submit_res.status_code == 200
+    submission_id = uuid.UUID(submit_res.json()["id"])
+
+    files = (
+        db.query(FormSubmissionFile).filter(FormSubmissionFile.submission_id == submission_id).all()
+    )
+    assert len(files) == 1
+    assert files[0].field_key == "supporting_docs"
+    assert files[0].filename == "supporting-docs.csv"
 
 
 @pytest.mark.asyncio

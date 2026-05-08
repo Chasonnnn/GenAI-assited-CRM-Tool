@@ -20,6 +20,7 @@ from app.services.attachment_service import (
 from app.services.form_submission_service import (
     DEFAULT_MAX_FILE_COUNT,
     DEFAULT_MAX_FILE_SIZE_BYTES,
+    REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS,
     SURROGATE_FIELD_TYPES,
     flatten_fields,
     parse_schema,
@@ -31,6 +32,28 @@ FORM_LOGO_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 FORM_LOGO_ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 LEGACY_PUBLIC_LOGO_PREFIX = "/forms/public/logos/"
 _UNSET = object()
+SHARED_INTAKE_FIELD_LABELS = {
+    "full_name": "Full Name",
+    "date_of_birth": "Date of Birth",
+    "phone": "Phone",
+    "email": "Email",
+}
+SHARED_INTAKE_FIELD_TYPES = {
+    "full_name": {"text", "textarea"},
+    "date_of_birth": {"date"},
+    "phone": {"phone", "text"},
+    "email": {"email", "text"},
+}
+LEAD_CAPTURE_REQUIRED_IDENTITY_FIELDS = ("full_name",)
+LEAD_CAPTURE_CONTACT_FIELDS = ("email", "phone")
+LEAD_CAPTURE_BLOCKED_PRIVACY_SAFE_SENSITIVITIES = {
+    "sensitive_health",
+    "sensitive_reproductive",
+    "sensitive_financial",
+    "sensitive_legal",
+    "free_text_unclassified",
+    "file",
+}
 
 
 def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
@@ -196,9 +219,153 @@ def get_form_logo_local_path(logo: FormLogo) -> str:
     return os.path.join(_get_local_storage_path(), logo.storage_key)
 
 
+def _field_for_target(
+    *,
+    fields: dict,
+    mappings: dict[str, str],
+    target: str,
+):
+    field_key = mappings.get(target) or (target if target in fields else None)
+    if not field_key:
+        return None
+    return fields.get(field_key)
+
+
+def validate_lead_capture_schema(db: Session, form: Form) -> None:
+    """Ensure lead-capture forms have contact identity and classified fields."""
+    if not form.schema_json:
+        raise ValueError("Form schema is required before publishing")
+
+    schema = parse_schema(form.schema_json)
+    fields = flatten_fields(schema)
+    mappings = {
+        mapping.surrogate_field: mapping.field_key
+        for mapping in db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).all()
+    }
+
+    unclassified = [
+        field.label
+        for field in fields.values()
+        if not field.sensitivity or (field.type == "file" and field.sensitivity != "file")
+    ]
+    if unclassified:
+        raise ValueError(
+            "Lead capture fields require a sensitivity classification: " + ", ".join(unclassified)
+        )
+
+    missing: list[str] = []
+    optional: list[str] = []
+    incompatible: list[str] = []
+
+    full_name = _field_for_target(fields=fields, mappings=mappings, target="full_name")
+    if not full_name:
+        missing.append("Full Name")
+    elif full_name.type not in SHARED_INTAKE_FIELD_TYPES["full_name"]:
+        incompatible.append("Full Name")
+    elif not full_name.required:
+        optional.append("Full Name")
+
+    contact_fields = [
+        _field_for_target(fields=fields, mappings=mappings, target=target)
+        for target in LEAD_CAPTURE_CONTACT_FIELDS
+    ]
+    required_contact = [field for field in contact_fields if field and field.required]
+    if not required_contact:
+        missing.append("Email or Phone")
+    for target, field in zip(LEAD_CAPTURE_CONTACT_FIELDS, contact_fields, strict=False):
+        if not field:
+            continue
+        allowed_types = SHARED_INTAKE_FIELD_TYPES[target]
+        if field.type not in allowed_types:
+            incompatible.append(
+                f"{SHARED_INTAKE_FIELD_LABELS[target]} ({', '.join(sorted(allowed_types))})"
+            )
+
+    if missing or optional or incompatible:
+        parts: list[str] = []
+        if missing:
+            parts.append(f"missing required mappings or fields: {', '.join(missing)}")
+        if optional:
+            parts.append(f"must be marked required: {', '.join(optional)}")
+        if incompatible:
+            parts.append(f"use compatible field types for: {', '.join(incompatible)}")
+        raise ValueError("Lead capture identity is incomplete; " + "; ".join(parts))
+
+
+def validate_privacy_safe_lead_schema(db: Session, form: Form) -> None:
+    """Block sensitive fields from privacy-safe advertising event surfaces."""
+    schema_json = form.schema_json or form.published_schema_json
+    if not schema_json:
+        raise ValueError("Form schema is required")
+    schema = parse_schema(schema_json)
+    fields = flatten_fields(schema)
+    blocked = [
+        field.label
+        for field in fields.values()
+        if (
+            field.type == "file"
+            or not field.sensitivity
+            or field.sensitivity in LEAD_CAPTURE_BLOCKED_PRIVACY_SAFE_SENSITIVITIES
+        )
+    ]
+    if blocked:
+        raise ValueError(
+            "Privacy-safe lead tracking cannot be enabled while the form contains "
+            "sensitive, file, or unclassified fields: " + ", ".join(blocked)
+        )
+    validate_lead_capture_schema(db, form)
+
+
+def validate_shared_intake_identity_targets(db: Session, form: Form) -> None:
+    """Ensure published public intake forms can satisfy their identity contract."""
+    if not form.schema_json:
+        raise ValueError("Form schema is required before publishing")
+    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+        validate_lead_capture_schema(db, form)
+        return
+
+    schema = parse_schema(form.schema_json)
+    fields = flatten_fields(schema)
+    mappings = {
+        mapping.surrogate_field: mapping.field_key
+        for mapping in db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).all()
+    }
+
+    missing: list[str] = []
+    incompatible: list[str] = []
+    optional: list[str] = []
+
+    for target in REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS:
+        field_key = mappings.get(target) or (target if target in fields else None)
+        label = SHARED_INTAKE_FIELD_LABELS.get(target, target.replace("_", " ").title())
+        if not field_key or field_key not in fields:
+            missing.append(label)
+            continue
+
+        field = fields[field_key]
+        allowed_types = SHARED_INTAKE_FIELD_TYPES.get(target)
+        if allowed_types and field.type not in allowed_types:
+            incompatible.append(f"{label} ({', '.join(sorted(allowed_types))})")
+            continue
+        if not field.required:
+            optional.append(label)
+
+    if missing or incompatible or optional:
+        parts: list[str] = []
+        if missing:
+            parts.append(f"missing required mappings or fields: {', '.join(missing)}")
+        if optional:
+            parts.append(f"must be marked required: {', '.join(optional)}")
+        if incompatible:
+            parts.append(f"use compatible field types for: {', '.join(incompatible)}")
+        raise ValueError("Shared intake identity is incomplete; " + "; ".join(parts))
+
+
 def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:
     if not form.schema_json:
         raise ValueError("Form schema is required before publishing")
+    if settings.FORMS_SHARED_INTAKE:
+        validate_shared_intake_identity_targets(db, form)
 
     form.published_schema_json = json.loads(json.dumps(form.schema_json))
     form.status = FormStatus.PUBLISHED.value

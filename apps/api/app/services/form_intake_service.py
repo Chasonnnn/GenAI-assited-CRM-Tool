@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import uuid
@@ -15,25 +16,32 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import (
+    FormPurpose,
     FormLinkMode,
     FormStatus,
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
     IntakeLeadStatus,
+    TrackingMode,
 )
 from app.db.enums.workflows import WorkflowTriggerType
 from app.db.models import (
     AutomationWorkflow,
+    ConsentRecord,
+    EmbedSession,
     Form,
     FormIntakeDraft,
     FormIntakeLink,
     FormSubmission,
     FormSubmissionMatchCandidate,
     IntakeLead,
+    LeadAttribution,
+    PublishedIntakeVersion,
     Surrogate,
+    TrackingEventLog,
 )
 from app.schemas.surrogate import SurrogateCreate
-from app.services import form_submission_service
+from app.services import embed_policy_service, form_service, form_submission_service
 from app.utils.normalization import (
     normalize_email,
     normalize_name,
@@ -43,6 +51,21 @@ from app.utils.normalization import (
 
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
 INTAKE_SLUG_MAX_LENGTH = 100
+EMBED_ALLOWED_ATTRIBUTION_KEYS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "ad_id",
+    "adset_id",
+    "campaign_id",
+    "fbclid",
+    "fbc",
+    "fbp",
+    "referrer",
+    "landing_url",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -126,6 +149,13 @@ def create_intake_link(
     expires_at: datetime | None,
     max_submissions: int | None,
     utm_defaults: dict[str, str] | None,
+    embed_enabled: bool | None = None,
+    allowed_embed_origins: list[str] | None = None,
+    tracking_mode: str | None = None,
+    consent_text: str | None = None,
+    privacy_policy_url: str | None = None,
+    thank_you_config: dict[str, Any] | None = None,
+    embed_theme_json: dict[str, Any] | None = None,
 ) -> FormIntakeLink:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form must be published before creating shared links")
@@ -147,9 +177,20 @@ def create_intake_link(
         expires_at=expires_at,
         max_submissions=max_submissions,
         utm_defaults=utm_defaults or None,
+        embed_enabled=bool(embed_enabled),
+        allowed_embed_origins=embed_policy_service.normalize_allowed_origins(allowed_embed_origins),
+        tracking_mode=tracking_mode or TrackingMode.INTERNAL_ONLY.value,
+        consent_text=(consent_text or "").strip() or None,
+        privacy_policy_url=(privacy_policy_url or "").strip() or None,
+        thank_you_config=thank_you_config or {},
+        embed_theme_json=embed_theme_json or {},
         created_by_user_id=user_id,
     )
+    _validate_link_embed_policy(db=db, form=form, link=record)
     db.add(record)
+    db.flush()
+    version = create_published_intake_version(db=db, form=form, link=record, user_id=user_id)
+    record.published_version_id = version.id
     db.commit()
     db.refresh(record)
     return record
@@ -174,6 +215,8 @@ def ensure_default_intake_link(
         .first()
     )
     if existing:
+        if not existing.published_version_id:
+            ensure_link_published_version(db=db, form=form, link=existing, user_id=user_id)
         return existing
 
     default_campaign_name = (form.name or "").strip() or "Shared Intake"
@@ -188,6 +231,98 @@ def ensure_default_intake_link(
         max_submissions=None,
         utm_defaults=None,
     )
+
+
+def _validate_link_embed_policy(*, db: Session, form: Form, link: FormIntakeLink) -> None:
+    if link.embed_enabled and not link.allowed_embed_origins:
+        raise ValueError("Allowed embed origins are required when embed is enabled")
+    if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+        if form.purpose != FormPurpose.LEAD_CAPTURE.value:
+            raise ValueError("Privacy-safe lead tracking requires a lead_capture form")
+        form_service.validate_privacy_safe_lead_schema(db, form)
+    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+        form_service.validate_lead_capture_schema(db, form)
+
+
+def _snapshot_field_policy(form: Form) -> dict[str, Any]:
+    schema_json = form.published_schema_json or form.schema_json or {}
+    schema = form_submission_service.parse_schema(schema_json)
+    fields = form_submission_service.flatten_fields(schema)
+    return {
+        key: {
+            "type": field.type,
+            "required": field.required,
+            "sensitivity": field.sensitivity,
+        }
+        for key, field in fields.items()
+    }
+
+
+def create_published_intake_version(
+    db: Session,
+    *,
+    form: Form,
+    link: FormIntakeLink,
+    user_id: uuid.UUID | None,
+) -> PublishedIntakeVersion:
+    schema_snapshot = json.loads(json.dumps(form.published_schema_json or form.schema_json or {}))
+    mapping_snapshot = form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    version_number = (
+        db.query(PublishedIntakeVersion)
+        .filter(PublishedIntakeVersion.intake_link_id == link.id)
+        .count()
+        + 1
+    )
+    tracking_policy_snapshot = {
+        "tracking_mode": link.tracking_mode,
+        "allowed_embed_origins": link.allowed_embed_origins or [],
+        "embed_enabled": link.embed_enabled,
+    }
+    version = PublishedIntakeVersion(
+        organization_id=link.organization_id,
+        intake_link_id=link.id,
+        form_id=form.id,
+        version=version_number,
+        form_version_hash=embed_policy_service.stable_json_hash(schema_snapshot),
+        form_schema_snapshot_json=schema_snapshot,
+        field_policy_snapshot_json=_snapshot_field_policy(form),
+        mapping_snapshot_json=mapping_snapshot,
+        consent_text_snapshot=link.consent_text,
+        consent_text_hash=embed_policy_service.stable_hash(link.consent_text),
+        thank_you_config_snapshot_json=link.thank_you_config or {},
+        tracking_mode_snapshot=link.tracking_mode,
+        tracking_policy_hash=embed_policy_service.stable_json_hash(tracking_policy_snapshot),
+        embed_theme_snapshot_json=link.embed_theme_json or {},
+        published_by_user_id=user_id,
+    )
+    db.add(version)
+    db.flush()
+    return version
+
+
+def ensure_link_published_version(
+    db: Session,
+    *,
+    form: Form,
+    link: FormIntakeLink,
+    user_id: uuid.UUID | None = None,
+) -> PublishedIntakeVersion:
+    if link.published_version_id:
+        existing = (
+            db.query(PublishedIntakeVersion)
+            .filter(
+                PublishedIntakeVersion.organization_id == link.organization_id,
+                PublishedIntakeVersion.id == link.published_version_id,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+    version = create_published_intake_version(db=db, form=form, link=link, user_id=user_id)
+    link.published_version_id = version.id
+    db.commit()
+    db.refresh(link)
+    return version
 
 
 def _trigger_config_form_id(trigger_config: dict[str, Any] | None) -> str | None:
@@ -410,7 +545,15 @@ def update_intake_link(
     max_submissions: int | None = None,
     utm_defaults: dict[str, str] | None = None,
     is_active: bool | None = None,
+    embed_enabled: bool | None = None,
+    allowed_embed_origins: list[str] | None = None,
+    tracking_mode: str | None = None,
+    consent_text: str | None = None,
+    privacy_policy_url: str | None = None,
+    thank_you_config: dict[str, Any] | None = None,
+    embed_theme_json: dict[str, Any] | None = None,
     fields_set: set[str] | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> FormIntakeLink:
     fields_set = fields_set or set()
     if "campaign_name" in fields_set:
@@ -425,6 +568,41 @@ def update_intake_link(
         link.utm_defaults = utm_defaults or None
     if "is_active" in fields_set:
         link.is_active = bool(is_active)
+    if "embed_enabled" in fields_set:
+        link.embed_enabled = bool(embed_enabled)
+    if "allowed_embed_origins" in fields_set:
+        link.allowed_embed_origins = embed_policy_service.normalize_allowed_origins(
+            allowed_embed_origins
+        )
+    if "tracking_mode" in fields_set:
+        link.tracking_mode = tracking_mode or TrackingMode.INTERNAL_ONLY.value
+    if "consent_text" in fields_set:
+        link.consent_text = (consent_text or "").strip() or None
+    if "privacy_policy_url" in fields_set:
+        link.privacy_policy_url = (privacy_policy_url or "").strip() or None
+    if "thank_you_config" in fields_set:
+        link.thank_you_config = thank_you_config or {}
+    if "embed_theme_json" in fields_set:
+        link.embed_theme_json = embed_theme_json or {}
+    if fields_set & {
+        "embed_enabled",
+        "allowed_embed_origins",
+        "tracking_mode",
+        "consent_text",
+        "privacy_policy_url",
+        "thank_you_config",
+        "embed_theme_json",
+    }:
+        form = form_service.get_form(db, link.organization_id, link.form_id)
+        if form:
+            _validate_link_embed_policy(db=db, form=form, link=link)
+            version = create_published_intake_version(
+                db=db,
+                form=form,
+                link=link,
+                user_id=user_id,
+            )
+            link.published_version_id = version.id
     db.commit()
     db.refresh(link)
     return link
@@ -665,11 +843,17 @@ def _create_intake_lead(
     identity: dict[str, Any],
     source_metadata: dict[str, Any] | None,
     user_id: uuid.UUID | None = None,
+    form_submission_id: uuid.UUID | None = None,
+    source: str = "shared_intake",
+    lead_type: str = "surrogate",
 ) -> IntakeLead:
     lead = IntakeLead(
         organization_id=org_id,
         form_id=form.id,
         intake_link_id=link.id if link else None,
+        form_submission_id=form_submission_id,
+        source=source,
+        lead_type=lead_type,
         full_name=identity["full_name"],
         full_name_normalized=identity["full_name_normalized"],
         email=identity["email"],
@@ -784,6 +968,11 @@ def _create_shared_submission(
     match_status: str,
     match_reason: str | None,
     matched_at: datetime | None,
+    published_version_id: uuid.UUID | None = None,
+    idempotency_key: str | None = None,
+    form_schema_hash: str | None = None,
+    consent_text_hash: str | None = None,
+    tracking_policy_hash: str | None = None,
 ) -> FormSubmission:
     schema = form_submission_service.parse_schema(form.published_schema_json or {})
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
@@ -809,6 +998,11 @@ def _create_shared_submission(
         surrogate_id=surrogate_id,
         intake_link_id=link.id,
         intake_lead_id=intake_lead_id,
+        published_version_id=published_version_id,
+        idempotency_key=idempotency_key,
+        form_schema_hash=form_schema_hash,
+        consent_text_hash=consent_text_hash,
+        tracking_policy_hash=tracking_policy_hash,
         source_mode=FormLinkMode.SHARED.value,
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         match_status=match_status,
@@ -893,6 +1087,295 @@ def create_shared_submission(
     _trigger_form_submitted_workflow(db, submission=submission)
     db.refresh(submission)
     return submission, _normalize_shared_outcome(submission.match_status)
+
+
+def sanitize_embed_attribution(payload: dict[str, Any] | None) -> dict[str, str]:
+    sanitized: dict[str, str] = {}
+    for key, value in (payload or {}).items():
+        if key not in EMBED_ALLOWED_ATTRIBUTION_KEYS:
+            continue
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        sanitized[key] = text[:1000]
+    return sanitized
+
+
+def _lead_capture_identity(
+    *,
+    answers: dict[str, Any],
+    mapping_lookup: dict[str, str],
+) -> dict[str, Any]:
+    identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    if not identity.get("full_name"):
+        raise ValueError("Missing required field: full_name")
+    if not identity.get("email") and not identity.get("phone"):
+        raise ValueError("Missing required field: email or phone")
+    return identity
+
+
+def _get_idempotent_embed_submission(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    idempotency_key: str,
+) -> FormSubmission | None:
+    return (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == link.organization_id,
+            FormSubmission.intake_link_id == link.id,
+            FormSubmission.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+
+
+def _create_lead_attribution(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    submission: FormSubmission,
+    session: EmbedSession,
+    attribution: dict[str, str],
+) -> LeadAttribution:
+    source = attribution.get("utm_source")
+    medium = attribution.get("utm_medium")
+    campaign = attribution.get("utm_campaign")
+    record = LeadAttribution(
+        organization_id=link.organization_id,
+        form_submission_id=submission.id,
+        intake_link_id=link.id,
+        source_surface="form_embed",
+        source=source,
+        medium=medium,
+        campaign=campaign,
+        ad_id=attribution.get("ad_id"),
+        adset_id=attribution.get("adset_id"),
+        campaign_id=attribution.get("campaign_id"),
+        fbclid=attribution.get("fbclid"),
+        fbc=attribution.get("fbc"),
+        fbp=attribution.get("fbp"),
+        referrer=attribution.get("referrer"),
+        parent_origin=session.parent_origin,
+        landing_url=attribution.get("landing_url"),
+        first_touch_json=attribution or None,
+        last_touch_json=attribution or None,
+    )
+    db.add(record)
+    db.flush()
+    return record
+
+
+def _create_consent_record(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    submission: FormSubmission,
+    accepted: bool,
+    session: EmbedSession,
+) -> ConsentRecord:
+    consent = ConsentRecord(
+        organization_id=link.organization_id,
+        intake_link_id=link.id,
+        form_submission_id=submission.id,
+        consent_type="contact",
+        consent_text_snapshot=link.consent_text,
+        consent_text_hash=embed_policy_service.stable_hash(link.consent_text),
+        accepted=accepted,
+        ip_hash=session.ip_hash,
+        user_agent_hash=session.user_agent_hash,
+        parent_origin=session.parent_origin,
+        privacy_policy_url_snapshot=link.privacy_policy_url,
+    )
+    db.add(consent)
+    db.flush()
+    return consent
+
+
+def _enqueue_privacy_safe_tracking_event(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    submission: FormSubmission,
+    attribution: dict[str, str],
+) -> TrackingEventLog:
+    event_payload = {
+        "event_name": "Lead",
+        "event_time": int(datetime.now(timezone.utc).timestamp()),
+        "event_id": f"sf_evt_{submission.id}",
+        "action_source": "website",
+        "event_source_url": f"/embed/forms/{link.slug}",
+        "custom_data": {
+            "content_name": "lead_capture",
+            "content_category": "intake",
+        },
+    }
+    if attribution.get("utm_source"):
+        event_payload["custom_data"]["source"] = attribution["utm_source"]
+    if attribution.get("utm_campaign"):
+        event_payload["custom_data"]["campaign"] = attribution["utm_campaign"]
+    record = TrackingEventLog(
+        organization_id=link.organization_id,
+        intake_link_id=link.id,
+        form_submission_id=submission.id,
+        event_name="Lead",
+        destination="meta",
+        status="queued",
+        payload_json=event_payload,
+        payload_hash=embed_policy_service.stable_json_hash(event_payload),
+    )
+    db.add(record)
+    db.flush()
+    return record
+
+
+def create_embed_session(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    parent_origin: str,
+    attribution: dict[str, Any] | None,
+    client_ip: str | None,
+    user_agent: str | None,
+):
+    if not link.embed_enabled:
+        raise PermissionError("Embed is not enabled")
+    sanitized_attribution = sanitize_embed_attribution(attribution)
+    return embed_policy_service.create_embed_session(
+        db,
+        link=link,
+        parent_origin=parent_origin,
+        attribution_snapshot=sanitized_attribution,
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
+
+
+def submit_lead_capture_embed(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    form: Form,
+    embed_session_token: str,
+    idempotency_key: str,
+    published_version_id: uuid.UUID,
+    answers: dict[str, Any],
+    consent_accepted: bool,
+    attribution: dict[str, Any] | None,
+) -> tuple[FormSubmission, str]:
+    if not link.embed_enabled:
+        raise PermissionError("Embed is not enabled")
+    if form.status != FormStatus.PUBLISHED.value:
+        raise ValueError("Form is not published")
+    if form.purpose != FormPurpose.LEAD_CAPTURE.value:
+        raise ValueError("Embed lead capture requires a lead_capture form")
+
+    existing = _get_idempotent_embed_submission(
+        db,
+        link=link,
+        idempotency_key=idempotency_key,
+    )
+    if existing:
+        return existing, FormSubmissionMatchStatus.LEAD_CREATED.value
+
+    session = embed_policy_service.validate_embed_session(
+        db,
+        link=link,
+        token=embed_session_token,
+    )
+    if not link.published_version_id:
+        ensure_link_published_version(db=db, form=form, link=link)
+    if str(link.published_version_id) != str(published_version_id):
+        raise LookupError("Published version is no longer current")
+    version = (
+        db.query(PublishedIntakeVersion)
+        .filter(
+            PublishedIntakeVersion.organization_id == link.organization_id,
+            PublishedIntakeVersion.id == link.published_version_id,
+        )
+        .first()
+    )
+    if not version:
+        raise LookupError("Published version not found")
+    if link.consent_text and not consent_accepted:
+        raise ValueError("Consent is required")
+    if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+        form_service.validate_privacy_safe_lead_schema(db, form)
+    else:
+        form_service.validate_lead_capture_schema(db, form)
+
+    mapping_lookup = _build_form_mapping_lookup(db, form.id)
+    identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
+    sanitized_attribution = sanitize_embed_attribution(
+        {**(session.attribution_snapshot_json or {}), **(attribution or {})}
+    )
+
+    submission = _create_shared_submission(
+        db,
+        form=form,
+        link=link,
+        answers=answers,
+        files=[],
+        file_field_keys=None,
+        surrogate_id=None,
+        intake_lead_id=None,
+        match_status=FormSubmissionMatchStatus.LEAD_CREATED.value,
+        match_reason="lead_capture_embed",
+        matched_at=datetime.now(timezone.utc),
+        published_version_id=version.id,
+        idempotency_key=idempotency_key,
+        form_schema_hash=version.form_version_hash,
+        consent_text_hash=version.consent_text_hash,
+        tracking_policy_hash=version.tracking_policy_hash,
+    )
+    attribution_record = _create_lead_attribution(
+        db,
+        link=link,
+        submission=submission,
+        session=session,
+        attribution=sanitized_attribution,
+    )
+    _create_consent_record(
+        db,
+        link=link,
+        submission=submission,
+        accepted=consent_accepted,
+        session=session,
+    )
+    lead = _create_intake_lead(
+        db,
+        org_id=link.organization_id,
+        form=form,
+        link=link,
+        identity=identity,
+        source_metadata={"attribution_id": str(attribution_record.id)},
+        form_submission_id=submission.id,
+        source="form_embed",
+        lead_type="surrogate",
+    )
+    submission.intake_lead_id = lead.id
+    session.consumed_at = datetime.now(timezone.utc)
+    if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+        _enqueue_privacy_safe_tracking_event(
+            db,
+            link=link,
+            submission=submission,
+            attribution=sanitized_attribution,
+        )
+    db.commit()
+    db.refresh(submission)
+    _trigger_form_submitted_workflow(db, submission=submission)
+    _trigger_intake_lead_created_workflow(
+        db,
+        lead=lead,
+        form_id=form.id,
+        submission_id=submission.id,
+    )
+    db.refresh(submission)
+    return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
 
 
 def auto_match_submission(

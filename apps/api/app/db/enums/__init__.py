@@ -20,12 +20,14 @@ from app.db.enums.defaults import (
 from app.db.enums.email import EmailStatus, SuppressionReason
 from app.db.enums.entities import EntityType
 from app.db.enums.forms import (
+    FieldSensitivity,
     FormPurpose,
     FormStatus,
     FormSubmissionStatus,
     FormLinkMode,
     FormSubmissionMatchStatus,
     IntakeLeadStatus,
+    TrackingMode,
 )
 from app.db.enums.integration_health import (
     AlertSeverity,
@@ -105,12 +107,14 @@ __all__ = [
     "EntityType",
     "EmailDirection",
     "EmailOccurrenceState",
+    "FieldSensitivity",
     "FormPurpose",
     "FormStatus",
     "FormSubmissionStatus",
     "FormLinkMode",
     "FormSubmissionMatchStatus",
     "IntakeLeadStatus",
+    "TrackingMode",
     "IntegrationStatus",
     "IntegrationType",
     "IntendedParentStatus",

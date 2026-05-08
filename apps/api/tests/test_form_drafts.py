@@ -1,4 +1,3 @@
-import json
 import uuid
 
 import pytest
@@ -28,41 +27,6 @@ def _create_surrogate(db, org_id, owner_type, owner_id, stage):
     db.add(surrogate)
     db.flush()
     return surrogate
-
-
-@pytest.mark.asyncio
-async def test_dedicated_public_form_endpoint_returns_410(client):
-    res = await client.get("/forms/public/legacy-token")
-    assert res.status_code == 410
-    assert "retired" in res.json()["detail"].lower()
-
-
-@pytest.mark.asyncio
-async def test_dedicated_public_draft_endpoints_return_410(client):
-    token = "legacy-token"
-
-    get_res = await client.get(f"/forms/public/{token}/draft")
-    assert get_res.status_code == 410
-
-    put_res = await client.put(
-        f"/forms/public/{token}/draft",
-        json={"answers": {"full_name": "Test"}},
-    )
-    assert put_res.status_code == 410
-
-    delete_res = await client.delete(f"/forms/public/{token}/draft")
-    assert delete_res.status_code == 410
-
-
-@pytest.mark.asyncio
-async def test_dedicated_public_submit_endpoint_returns_410(client):
-    token = "legacy-token"
-    submit_res = await client.post(
-        f"/forms/public/{token}/submit",
-        data={"answers": json.dumps({"full_name": "Legacy"})},
-    )
-    assert submit_res.status_code == 410
-    assert "retired" in submit_res.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

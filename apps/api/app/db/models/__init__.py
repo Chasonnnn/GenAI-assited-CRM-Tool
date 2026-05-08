@@ -45,13 +45,17 @@ from app.db.models.forms import (
     FormSubmissionDraft,
     FormSubmission,
     FormSubmissionFile,
-    FormSubmissionToken,
 )
 from app.db.models.form_intake import (
+    ConsentRecord,
+    EmbedSession,
     FormIntakeDraft,
     FormIntakeLink,
     FormSubmissionMatchCandidate,
     IntakeLead,
+    LeadAttribution,
+    PublishedIntakeVersion,
+    TrackingEventLog,
 )
 from app.db.models.integration_health import IntegrationErrorRollup, IntegrationHealth, SystemAlert
 from app.db.models.integrations import (
@@ -186,7 +190,8 @@ __all__ = [
     "FormSubmissionDraft",
     "FormSubmission",
     "FormSubmissionFile",
-    "FormSubmissionToken",
+    "ConsentRecord",
+    "EmbedSession",
     "ImportTemplate",
     "IntegrationErrorRollup",
     "IntegrationHealth",
@@ -198,6 +203,7 @@ __all__ = [
     "InterviewNote",
     "InterviewTranscriptVersion",
     "IntakeLead",
+    "LeadAttribution",
     "Job",
     "JourneyFeaturedImage",
     "Mailbox",
@@ -220,6 +226,7 @@ __all__ = [
     "MetaOAuthConnection",
     "MetaPageMapping",
     "Notification",
+    "PublishedIntakeVersion",
     "OrgCounter",
     "OrgInvite",
     "Organization",
@@ -261,6 +268,7 @@ __all__ = [
     "TicketNote",
     "TicketSavedView",
     "TicketSurrogateLinkCandidate",
+    "TrackingEventLog",
     "EmailRawBlob",
     "EmailMessage",
     "EmailMessageContent",
