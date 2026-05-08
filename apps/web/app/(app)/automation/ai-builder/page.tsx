@@ -426,7 +426,7 @@ export default function AIWorkflowBuilderPage() {
                                     <button
                                         key={i}
                                         onClick={() => handleSuggestionClick(suggestion)}
-                                        className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                                        className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                     >
                                         {suggestion.length > 50 ? suggestion.slice(0, 50) + "..." : suggestion}
                                     </button>

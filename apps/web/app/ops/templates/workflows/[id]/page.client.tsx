@@ -802,7 +802,7 @@ function WorkflowTemplateSurrogateUpdatedTriggerFields({
                             {getConditionFieldLabel(field)}
                             <button
                                 type="button"
-                                className="ml-1 text-xs"
+                                className="ml-1 text-xs rounded-sm hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 aria-label="Remove field"
                                 onClick={() =>
                                     setTriggerConfig({

@@ -1789,7 +1789,7 @@ export default function AutomationPageClient({
                                                         {getConditionFieldLabel(field)}
                                                         <button
                                                             type="button"
-                                                            className="ml-1 text-xs"
+                                                            className="ml-1 text-xs rounded-sm hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                             aria-label="Remove field"
                                                             onClick={() =>
                                                                 setTriggerConfig({
@@ -2612,7 +2612,7 @@ export default function AutomationPageClient({
                                         <button
                                             key={item.id}
                                             type="button"
-                                            className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
+                                            className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                             onClick={() => {
                                                 setTestEntityId(item.id)
                                                 setTestEntityQuery(item.id)

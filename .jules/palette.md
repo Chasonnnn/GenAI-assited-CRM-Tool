@@ -1,0 +1,3 @@
+## 2024-05-18 - Keyboard visibility for custom interactive elements
+**Learning:** Custom `<button>` elements used for pills, list items, or embedded overlay actions often lack focus indicators because standard browser outlines might be suppressed by utility classes like `bg-muted` or `rounded-full` being clicked. Without explicit utilities, keyboard navigation becomes invisible on these elements.
+**Action:** When adding or reviewing custom interactive elements (e.g. pills, close icons inside badges, or custom select options acting as buttons), always append `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2` to ensure consistent and accessible keyboard navigation, alongside standard hover states.
