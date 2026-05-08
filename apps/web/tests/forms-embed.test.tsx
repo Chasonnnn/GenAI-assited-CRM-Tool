@@ -142,4 +142,30 @@ describe("EmbedFormPageClient", () => {
         })
         expect(await screen.findByRole("heading", { name: "Request received" })).toBeInTheDocument()
     })
+
+    it("does not create duplicate embed sessions when the parent sends init more than once", async () => {
+        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+
+        const initMessage = new MessageEvent("message", {
+            origin: "https://www.ewisurrogacy.com",
+            data: {
+                type: "sf:form:init",
+                attribution: {
+                    utm_source: "meta",
+                },
+            },
+        })
+
+        window.dispatchEvent(initMessage)
+        await waitFor(() => {
+            expect(createEmbedFormSession).toHaveBeenCalledTimes(1)
+        })
+
+        window.dispatchEvent(initMessage)
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+
+        expect(createEmbedFormSession).toHaveBeenCalledTimes(1)
+    })
 })

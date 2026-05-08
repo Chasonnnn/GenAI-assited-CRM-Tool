@@ -1,7 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { Code2Icon, CopyIcon, DownloadIcon, LinkIcon, QrCodeIcon } from "lucide-react"
+import {
+    AlertTriangleIcon,
+    CheckCircle2Icon,
+    Code2Icon,
+    CopyIcon,
+    DownloadIcon,
+    LinkIcon,
+    QrCodeIcon,
+    RefreshCwIcon,
+    XCircleIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -13,13 +23,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import type { FormIntakeLinkRead, TrackingMode } from "@/lib/api/forms"
+import type { FormEmbedHealthRead, FormIntakeLinkRead, TrackingMode } from "@/lib/api/forms"
 
 type ShareApplicationDialogProps = {
     open: boolean
@@ -36,6 +47,9 @@ type ShareApplicationDialogProps = {
         consentText: string | null
     }) => Promise<void>
     isEmbedSettingsPending?: boolean
+    embedHealth?: FormEmbedHealthRead | null | undefined
+    isEmbedHealthFetching?: boolean
+    onRefreshEmbedHealth?: () => void
 }
 
 export function ShareApplicationDialog({
@@ -47,6 +61,9 @@ export function ShareApplicationDialog({
     onDownloadQrPng,
     onUpdateEmbedSettings,
     isEmbedSettingsPending = false,
+    embedHealth,
+    isEmbedHealthFetching = false,
+    onRefreshEmbedHealth,
 }: ShareApplicationDialogProps) {
     const [embedEnabled, setEmbedEnabled] = React.useState(false)
     const [originText, setOriginText] = React.useState("")
@@ -126,6 +143,43 @@ export function ShareApplicationDialog({
                         {selectedQrLink ? (
                             <>
                                 <div className="space-y-4 rounded-md border border-stone-200 p-3 dark:border-stone-800">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <EmbedHealthStatusBadge health={embedHealth} />
+                                            {embedHealth?.updated_at ? (
+                                                <span className="text-xs text-stone-500">
+                                                    Checked {new Date(embedHealth.updated_at).toLocaleTimeString()}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={onRefreshEmbedHealth}
+                                            disabled={!selectedQrLink || isEmbedHealthFetching}
+                                        >
+                                            <RefreshCwIcon
+                                                className={`mr-2 size-4 ${isEmbedHealthFetching ? "animate-spin" : ""}`}
+                                            />
+                                            Check setup
+                                        </Button>
+                                    </div>
+                                    {embedHealth ? (
+                                        <div className="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-900/40">
+                                            {embedHealth.checks.map((check) => (
+                                                <div key={check.key} className="flex gap-2 text-xs">
+                                                    <EmbedHealthCheckIcon status={check.status} />
+                                                    <div>
+                                                        <div className="font-medium text-stone-900 dark:text-stone-100">
+                                                            {check.label}
+                                                        </div>
+                                                        <div className="text-stone-500">{check.message}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                     <div className="flex items-center justify-between gap-3">
                                         <Label htmlFor="sf-embed-enabled" className="text-sm font-medium">
                                             Enable iframe embed
@@ -271,6 +325,29 @@ function getTrackingModeLabel(value: TrackingMode): string {
         advanced: "Advanced",
     }
     return labels[value]
+}
+
+function EmbedHealthStatusBadge({ health }: { health?: FormEmbedHealthRead | null | undefined }) {
+    if (!health) {
+        return <Badge variant="outline">Setup not checked</Badge>
+    }
+    if (health.status === "ready") {
+        return <Badge className="bg-emerald-600 hover:bg-emerald-600">Ready to embed</Badge>
+    }
+    if (health.status === "needs_attention") {
+        return <Badge variant="secondary">Needs attention</Badge>
+    }
+    return <Badge variant="destructive">Blocked</Badge>
+}
+
+function EmbedHealthCheckIcon({ status }: { status: "pass" | "warning" | "block" }) {
+    if (status === "pass") {
+        return <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+    }
+    if (status === "warning") {
+        return <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600" />
+    }
+    return <XCircleIcon className="mt-0.5 size-4 shrink-0 text-red-600" />
 }
 
 function buildEmbedSnippet(link: FormIntakeLinkRead): string {

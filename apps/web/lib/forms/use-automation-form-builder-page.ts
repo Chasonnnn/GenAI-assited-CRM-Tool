@@ -31,6 +31,7 @@ import { useFormMappingOptions } from "@/lib/hooks/use-form-mapping-options"
 import {
     useCreateForm,
     useForm,
+    useFormEmbedHealth,
     useFormIntakeLinks,
     useFormMappings,
     useFormSubmissions,
@@ -607,6 +608,11 @@ export function useAutomationFormBuilderPage() {
         [intakeLinks],
     )
     const selectedQrLink = sortedIntakeLinks.find((link) => link.is_active) || sortedIntakeLinks[0] || null
+    const {
+        data: selectedEmbedHealth,
+        isFetching: isEmbedHealthFetching,
+        refetch: refetchEmbedHealth,
+    } = useFormEmbedHealth(selectedQrLink?.id ?? null)
 
     const processedSubmissionHistory = useMemo(
         () =>
@@ -1093,6 +1099,8 @@ export function useAutomationFormBuilderPage() {
             setDefaultSurrogateApplicationPending: setDefaultSurrogateApplicationMutation.isPending,
             isPublished: state.isPublished,
             selectedQrLink,
+            selectedEmbedHealth,
+            isEmbedHealthFetching,
             onFormNameChange: (value: string) => patchState({ formName: value }),
             onFormDescriptionChange: (value: string) => patchState({ formDescription: value }),
             onFormPurposeChange: (value: FormPurpose) => patchState({ formPurpose: value }),
@@ -1108,6 +1116,9 @@ export function useAutomationFormBuilderPage() {
             onCopySharedLink: handleCopySharedLink,
             onDownloadQrSvg: handleDownloadQrSvg,
             onDownloadQrPng: handleDownloadQrPng,
+            onRefreshEmbedHealth: () => {
+                void refetchEmbedHealth()
+            },
             onMaxFileSizeMbChange: (value: number) => patchState({ maxFileSizeMb: value }),
             onMaxFileCountChange: (value: number) => patchState({ maxFileCount: value }),
             onAllowedMimeTypesTextChange: (value: string) => patchState({ allowedMimeTypesText: value }),

@@ -13,6 +13,7 @@ import {
     listFormMappings,
     setFormMappings,
     createFormIntakeLink,
+    getFormEmbedHealth,
     listFormIntakeLinks,
     rotateFormIntakeLink,
     sendFormIntakeLink,
@@ -59,6 +60,7 @@ export const formKeys = {
     detail: (id: string) => [...formKeys.details(), id] as const,
     mappings: (formId: string) => [...formKeys.detail(formId), 'mappings'] as const,
     intakeLinks: (formId: string) => [...formKeys.detail(formId), 'intake-links'] as const,
+    embedHealth: (linkId: string) => [...formKeys.all, 'embed-health', linkId] as const,
     intakeLead: (leadId: string) => [...formKeys.all, 'intake-lead', leadId] as const,
     submissionMatchCandidates: (submissionId: string) =>
         [...formKeys.all, 'submission-match-candidates', submissionId] as const,
@@ -220,6 +222,14 @@ export function useFormIntakeLinks(formId: string | null, includeInactive = true
     })
 }
 
+export function useFormEmbedHealth(linkId: string | null) {
+    return useQuery({
+        queryKey: linkId ? formKeys.embedHealth(linkId) : ['forms', 'embed-health', 'missing'],
+        queryFn: () => getFormEmbedHealth(linkId!),
+        enabled: !!linkId,
+    })
+}
+
 export function useCreateFormIntakeLink() {
     const queryClient = useQueryClient()
 
@@ -249,8 +259,9 @@ export function useUpdateFormIntakeLink() {
             linkId: string
             payload: FormIntakeLinkUpdatePayload
         }) => updateFormIntakeLink(linkId, payload),
-        onSuccess: (_result, { formId }) => {
+        onSuccess: (_result, { formId, linkId }) => {
             queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+            queryClient.invalidateQueries({ queryKey: formKeys.embedHealth(linkId) })
         },
     })
 }

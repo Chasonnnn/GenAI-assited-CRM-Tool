@@ -41,6 +41,10 @@ module.exports = withBundleAnalyzer({
         source: "/((?!embed/forms).*)",
         headers: frameProtectionHeaders,
       },
+      {
+        source: "/embed/forms/:slug",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
+      },
     ];
   },
   async rewrites() {

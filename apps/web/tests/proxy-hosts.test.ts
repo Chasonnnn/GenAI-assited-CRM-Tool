@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 
-import { isPlatformRootHost, proxy } from '../proxy'
+import { getServerApiBaseUrl, isPlatformRootHost, proxy } from '../proxy'
 
 function createRequest(url: string, headersInit?: HeadersInit) {
     const nextUrl = new URL(url) as URL & { clone: () => URL }
@@ -27,6 +27,18 @@ describe('isPlatformRootHost', () => {
     it('does not treat org or ops subdomains as root hosts', () => {
         expect(isPlatformRootHost('ewi.surrogacyforce.com', 'surrogacyforce.com')).toBe(false)
         expect(isPlatformRootHost('ops.surrogacyforce.com', 'surrogacyforce.com')).toBe(false)
+    })
+})
+
+describe('getServerApiBaseUrl', () => {
+    afterEach(() => {
+        delete process.env.API_BASE_URL
+    })
+
+    it('prefers the private API base URL for server-side proxy lookups', () => {
+        process.env.API_BASE_URL = 'http://127.0.0.1:8001'
+
+        expect(getServerApiBaseUrl()).toBe('http://127.0.0.1:8001')
     })
 })
 
@@ -118,5 +130,26 @@ describe('proxy hard-fail behavior', () => {
 
         expect(response.status).toBe(200)
         expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    })
+
+    it('sets dynamic no-store frame policy headers for embed form documents', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+            Response.json({
+                frame_ancestors: ["'self'", 'https://www.ewisurrogacy.com'],
+                content_security_policy: "frame-ancestors 'self' https://www.ewisurrogacy.com",
+            }),
+        )
+
+        const response = await proxy(
+            createRequest('http://localhost:3000/embed/forms/lead-form', {
+                host: 'localhost:3000',
+            }) as never,
+        )
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get('Content-Security-Policy')).toBe(
+            "frame-ancestors 'self' https://www.ewisurrogacy.com",
+        )
+        expect(response.headers.get('Cache-Control')).toBe('no-store')
     })
 })

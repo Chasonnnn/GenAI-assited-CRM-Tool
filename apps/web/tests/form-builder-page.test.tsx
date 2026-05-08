@@ -58,6 +58,7 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 vi.mock("@/lib/hooks/use-forms", () => ({
     useCreateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useForm: () => ({ data: undefined, isLoading: false }),
+    useFormEmbedHealth: () => ({ data: null, isFetching: false, refetch: vi.fn() }),
     useFormIntakeLinks: () => ({ data: [], refetch: vi.fn() }),
     useFormSubmissions: () => ({ data: [], refetch: vi.fn(), isLoading: false }),
     useFormMappings: () => ({ data: [], isLoading: false }),

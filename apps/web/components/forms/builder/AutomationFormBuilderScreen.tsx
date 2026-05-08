@@ -109,6 +109,9 @@ export function AutomationFormBuilderScreen({
                 onDownloadQrPng={controller.handleDownloadQrPng}
                 onUpdateEmbedSettings={controller.handleUpdateEmbedSettings}
                 isEmbedSettingsPending={controller.updateIntakeLinkPending}
+                embedHealth={controller.settingsPanelProps.selectedEmbedHealth}
+                isEmbedHealthFetching={controller.settingsPanelProps.isEmbedHealthFetching}
+                onRefreshEmbedHealth={controller.settingsPanelProps.onRefreshEmbedHealth}
             />
 
             <AlertDialog

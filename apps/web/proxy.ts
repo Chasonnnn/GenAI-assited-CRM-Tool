@@ -5,8 +5,6 @@ import { buildServerApiHeaders } from './lib/server-api-headers';
 
 const PLATFORM_BASE_DOMAIN =
     process.env.PLATFORM_BASE_DOMAIN || 'surrogacyforce.com';
-const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 const ORG_CACHE_TTL_MS = 60_000;
 const ORG_LOOKUP_TIMEOUT_MS = 2000;
 const ROUTE_LOOKUP_TIMEOUT_MS = 2000;
@@ -31,6 +29,10 @@ const orgCache = new Map<string, OrgCacheEntry>();
 
 export function isPlatformRootHost(hostname: string, platformBaseDomain: string): boolean {
     return hostname === platformBaseDomain || hostname === `www.${platformBaseDomain}`;
+}
+
+export function getServerApiBaseUrl(): string {
+    return process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 }
 
 function getHostname(request: NextRequest) {
@@ -233,7 +235,7 @@ async function enforceRouteResourceHardFail(
             () => controller.abort(),
             ROUTE_LOOKUP_TIMEOUT_MS
         );
-        const res = await fetch(`${API_BASE_URL}${apiPath}`, {
+        const res = await fetch(`${getServerApiBaseUrl()}${apiPath}`, {
             headers,
             cache: 'no-store',
             signal: controller.signal,
@@ -277,7 +279,7 @@ async function applyEmbedFramePolicy(request: NextRequest): Promise<NextResponse
             ROUTE_LOOKUP_TIMEOUT_MS
         );
         const res = await fetch(
-            `${API_BASE_URL}/forms/public/embed/${encodeURIComponent(slug)}/frame-policy`,
+            `${getServerApiBaseUrl()}/forms/public/embed/${encodeURIComponent(slug)}/frame-policy`,
             {
                 headers: buildServerApiHeaders(request.headers, {
                     'Content-Type': 'application/json',
@@ -390,7 +392,7 @@ export async function proxy(request: NextRequest) {
             ORG_LOOKUP_TIMEOUT_MS
         );
         const res = await fetch(
-            `${API_BASE_URL}/public/org-by-domain?domain=${encodeURIComponent(hostname)}`,
+            `${getServerApiBaseUrl()}/public/org-by-domain?domain=${encodeURIComponent(hostname)}`,
             {
                 headers: buildServerApiHeaders(request.headers, {
                     'Content-Type': 'application/json',

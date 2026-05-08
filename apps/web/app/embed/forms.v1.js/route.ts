@@ -25,6 +25,15 @@ const SCRIPT = `
         return new URL(script.src).origin;
       } catch (_) {}
     }
+    var scripts = document.getElementsByTagName("script");
+    for (var index = scripts.length - 1; index >= 0; index -= 1) {
+      var src = scripts[index] && scripts[index].src;
+      if (src && src.indexOf("/embed/forms.v1.js") !== -1) {
+        try {
+          return new URL(src).origin;
+        } catch (_) {}
+      }
+    }
     return window.location.origin;
   }
 
@@ -35,8 +44,13 @@ const SCRIPT = `
       var value = params.get(key);
       if (value) data[key] = value;
     });
-    if (document.referrer) data.referrer = document.referrer;
-    data.landing_url = window.location.href;
+    if (document.referrer) {
+      try {
+        var referrerUrl = new URL(document.referrer);
+        data.referrer = referrerUrl.origin + referrerUrl.pathname;
+      } catch (_) {}
+    }
+    data.landing_url = window.location.origin + window.location.pathname;
     return data;
   }
 

@@ -11,6 +11,8 @@ export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_inta
 export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
 export type FormLinkMode = 'shared'
 export type SharedSubmissionOutcome = 'linked' | 'ambiguous_review' | 'lead_created'
+export type EmbedHealthCheckStatus = 'pass' | 'warning' | 'block'
+export type EmbedHealthStatus = 'ready' | 'needs_attention' | 'blocked'
 export type FieldSensitivity =
     | 'identity'
     | 'contact'
@@ -352,6 +354,19 @@ export interface FormEmbedSubmitPayload {
     attribution?: Record<string, unknown>
 }
 
+export interface FormEmbedHealthCheckRead {
+    key: string
+    label: string
+    status: EmbedHealthCheckStatus
+    message: string
+}
+
+export interface FormEmbedHealthRead {
+    status: EmbedHealthStatus
+    checks: FormEmbedHealthCheckRead[]
+    updated_at: string
+}
+
 export interface MatchCandidateRead {
     id: string
     submission_id: string
@@ -598,6 +613,10 @@ export function updateFormIntakeLink(
     payload: FormIntakeLinkUpdatePayload,
 ): Promise<FormIntakeLinkRead> {
     return api.patch<FormIntakeLinkRead>(`/forms/intake-links/${linkId}`, payload)
+}
+
+export function getFormEmbedHealth(linkId: string): Promise<FormEmbedHealthRead> {
+    return api.get<FormEmbedHealthRead>(`/forms/intake-links/${linkId}/embed-health`)
 }
 
 export function rotateFormIntakeLink(linkId: string): Promise<FormIntakeLinkRead> {

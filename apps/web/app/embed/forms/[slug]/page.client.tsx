@@ -124,6 +124,8 @@ function asJsonObject(answers: Answers): JsonObject {
 
 export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props) {
     const containerRef = React.useRef<HTMLDivElement | null>(null)
+    const sessionTokenRef = React.useRef<string | null>(null)
+    const sessionRequestRef = React.useRef<Promise<void> | null>(null)
     const [parentOrigin, setParentOrigin] = React.useState<string | null>(
         () => initialParentOrigin ?? getInitialParentOrigin(),
     )
@@ -155,6 +157,31 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
     }, [initialParentOrigin])
 
     React.useEffect(() => {
+        sessionTokenRef.current = null
+        sessionRequestRef.current = null
+        setSessionToken(null)
+    }, [parentOrigin, slug])
+
+    const ensureSession = React.useCallback(
+        (origin: string, attribution: Record<string, unknown>) => {
+            if (sessionTokenRef.current || sessionRequestRef.current) return
+            const request = (async () => {
+                try {
+                    const session = await createEmbedFormSession(slug, origin, attribution)
+                    sessionTokenRef.current = session.session_token
+                    setSessionToken(session.session_token)
+                } catch {
+                    setError("This form is not available for this website.")
+                } finally {
+                    sessionRequestRef.current = null
+                }
+            })()
+            sessionRequestRef.current = request
+        },
+        [slug],
+    )
+
+    React.useEffect(() => {
         if (!parentOrigin) return
         const loadForm = async () => {
             try {
@@ -175,39 +202,20 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
         const onMessage = (event: MessageEvent<ParentMessage>) => {
             if (event.origin !== parentOrigin) return
             if (!event.data || event.data.type !== "sf:form:init") return
-            void (async () => {
-                try {
-                    const session = await createEmbedFormSession(
-                        slug,
-                        event.origin,
-                        sanitizeAttribution(event.data.attribution),
-                    )
-                    setSessionToken(session.session_token)
-                } catch {
-                    setError("This form is not available for this website.")
-                }
-            })()
+            ensureSession(event.origin, sanitizeAttribution(event.data.attribution))
         }
         window.addEventListener("message", onMessage)
         postToParent({ type: "sf:form:ready" })
 
         const fallback = window.setTimeout(() => {
-            if (sessionToken) return
-            void (async () => {
-                try {
-                    const session = await createEmbedFormSession(slug, parentOrigin, {})
-                    setSessionToken(session.session_token)
-                } catch {
-                    setError("This form is not available for this website.")
-                }
-            })()
+            ensureSession(parentOrigin, {})
         }, 1000)
 
         return () => {
             window.removeEventListener("message", onMessage)
             window.clearTimeout(fallback)
         }
-    }, [formConfig, parentOrigin, postToParent, sessionToken, slug])
+    }, [ensureSession, formConfig, parentOrigin, postToParent])
 
     React.useEffect(() => {
         if (!containerRef.current) return
