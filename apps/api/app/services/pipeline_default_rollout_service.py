@@ -275,7 +275,9 @@ def _build_report_item(
     final_stage_order = _stage_order(final_stage_keys)
 
     target_stage_keys = list(TARGET_INSERTIONS.keys())
-    missing_stage_keys = [stage_key for stage_key in target_stage_keys if stage_key not in existing_stage_keys]
+    missing_stage_keys = [
+        stage_key for stage_key in target_stage_keys if stage_key not in existing_stage_keys
+    ]
     existing_matching_stage_keys = [
         stage_key for stage_key in target_stage_keys if stage_key in existing_stage_keys
     ]
@@ -285,13 +287,15 @@ def _build_report_item(
         if current_stage_order.get(stage_key) != final_stage_order.get(stage_key)
     ]
 
-    current_feature_config = pipeline_semantics_service.get_pipeline_feature_config(pipeline).model_dump(
-        mode="json"
-    )
+    current_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
+        pipeline
+    ).model_dump(mode="json")
     next_feature_config = pipeline_semantics_service.get_pipeline_feature_config(
         {"entity_type": pipeline.entity_type, "feature_config": feature_config}
     ).model_dump(mode="json")
-    would_change = active_stage_keys != final_stage_keys or current_feature_config != next_feature_config
+    would_change = (
+        active_stage_keys != final_stage_keys or current_feature_config != next_feature_config
+    )
 
     preview = None
     preview_blockers: list[str] = []

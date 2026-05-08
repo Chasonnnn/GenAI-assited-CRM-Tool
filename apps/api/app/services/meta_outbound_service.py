@@ -73,7 +73,11 @@ def map_stage_key_to_meta_status_for_org(
     stage = snapshot.stage_by_key.get(normalized_stage_key)
     if not stage:
         stage = next(
-            (snapshot_stage for snapshot_stage in snapshot.stages if snapshot_stage.slug == stage_key),
+            (
+                snapshot_stage
+                for snapshot_stage in snapshot.stages
+                if snapshot_stage.slug == stage_key
+            ),
             None,
         )
 

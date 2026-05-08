@@ -3175,8 +3175,7 @@ def _store_message_attachment(
 
     checksum_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     storage_key = (
-        f"email-attachments/{organization_id}/{uuid4()}"
-        f"{_attachment_storage_suffix(filename)}"
+        f"email-attachments/{organization_id}/{uuid4()}{_attachment_storage_suffix(filename)}"
     )
     attachment_service.store_file(storage_key, io.BytesIO(raw_bytes), content_type)
 

@@ -737,7 +737,9 @@ def replay_failed_jobs_cli(
 
 
 @cli.command("rollout-surrogate-default-pipeline")
-@click.option("--org-slug", "org_slugs", multiple=True, help="Limit rollout to one or more org slugs")
+@click.option(
+    "--org-slug", "org_slugs", multiple=True, help="Limit rollout to one or more org slugs"
+)
 @click.option("--apply", is_flag=True, help="Apply the rollout. Default is dry-run.")
 def rollout_surrogate_default_pipeline_cli(org_slugs: tuple[str, ...], apply: bool):
     """Preview or apply the platform surrogate default pipeline rollout."""
@@ -755,12 +757,8 @@ def rollout_surrogate_default_pipeline_cli(org_slugs: tuple[str, ...], apply: bo
                 f"pipeline={report['pipeline_id'] or 'missing'}"
             )
             click.echo(f"  missing: {', '.join(report['missing_stage_keys']) or 'none'}")
-            click.echo(
-                f"  existing: {', '.join(report['existing_matching_stage_keys']) or 'none'}"
-            )
-            click.echo(
-                f"  reorder: {', '.join(report['reordered_stage_keys']) or 'none'}"
-            )
+            click.echo(f"  existing: {', '.join(report['existing_matching_stage_keys']) or 'none'}")
+            click.echo(f"  reorder: {', '.join(report['reordered_stage_keys']) or 'none'}")
             click.echo(
                 "  insertions: "
                 + (

@@ -126,7 +126,8 @@ def _resolve_stage_ref(
             matches = [
                 resolved
                 for pipeline_id in default_pipeline_ids
-                if (resolved := pipeline_service.resolve_stage(db, pipeline_id, str(value))) is not None
+                if (resolved := pipeline_service.resolve_stage(db, pipeline_id, str(value)))
+                is not None
             ]
             if len(matches) == 1:
                 stage = matches[0]

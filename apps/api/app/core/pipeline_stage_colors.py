@@ -44,7 +44,9 @@ def _normalize_stage_text(*parts: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", " ", joined.lower()).strip()
 
 
-def _fallback_palette_index(stage_type: str | None, stage_key: str | None, order: int | None) -> int:
+def _fallback_palette_index(
+    stage_type: str | None, stage_key: str | None, order: int | None
+) -> int:
     palette = CUSTOM_STAGE_COLOR_PRESETS.get(stage_type or "", [DEFAULT_CUSTOM_STAGE_COLOR])
     if order and order > 0:
         return (order - 1) % len(palette)

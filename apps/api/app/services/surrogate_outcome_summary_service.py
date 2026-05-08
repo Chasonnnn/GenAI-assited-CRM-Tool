@@ -61,8 +61,14 @@ def get_latest_interview_outcome(surrogate, db: Session) -> LatestInterviewOutco
         if not isinstance(outcome, str):
             continue
         effective_at = _parse_iso_datetime(details.get("occurred_at")) or activity.created_at
-        if latest is None or effective_at > latest.at or (
-            effective_at == latest.at and latest_created_at is not None and activity.created_at > latest_created_at
+        if (
+            latest is None
+            or effective_at > latest.at
+            or (
+                effective_at == latest.at
+                and latest_created_at is not None
+                and activity.created_at > latest_created_at
+            )
         ):
             latest = LatestInterviewOutcomeRead(
                 outcome=outcome,

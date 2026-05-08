@@ -30,7 +30,13 @@ from app.schemas.surrogate import (
     SurrogateSensitiveInfoRevealResponse,
     SurrogateUpdate,
 )
-from app.services import activity_service, audit_service, membership_service, queue_service, surrogate_service
+from app.services import (
+    activity_service,
+    audit_service,
+    membership_service,
+    queue_service,
+    surrogate_service,
+)
 
 from .surrogates_shared import _surrogate_to_read
 

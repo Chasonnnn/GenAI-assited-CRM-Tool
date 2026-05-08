@@ -869,6 +869,8 @@ def _build_meta_tracking_fields(db: Session, meta_lead: MetaLead) -> dict[str, s
         tracking["meta_platform"] = _stringify_value(platform)
 
     return tracking
+
+
 def _record_conversion_failure_alert(meta_lead: MetaLead, error: Exception) -> None:
     from app.services import alert_service
 
