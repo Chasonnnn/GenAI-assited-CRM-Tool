@@ -38,6 +38,8 @@ FieldSensitivity = Literal[
     "file",
 ]
 TrackingMode = Literal["internal_only", "privacy_safe_lead", "disabled", "advanced"]
+EmbedHealthCheckStatus = Literal["pass", "warning", "block"]
+EmbedHealthStatus = Literal["ready", "needs_attention", "blocked"]
 
 
 class FormFieldOption(BaseModel):
@@ -370,6 +372,19 @@ class FormEmbedPublicRead(BaseModel):
 class FormEmbedFramePolicyRead(BaseModel):
     frame_ancestors: list[str]
     content_security_policy: str
+
+
+class FormEmbedHealthCheckRead(BaseModel):
+    key: str
+    label: str
+    status: EmbedHealthCheckStatus
+    message: str
+
+
+class FormEmbedHealthRead(BaseModel):
+    status: EmbedHealthStatus
+    checks: list[FormEmbedHealthCheckRead]
+    updated_at: datetime
 
 
 class FormEmbedSessionCreate(BaseModel):

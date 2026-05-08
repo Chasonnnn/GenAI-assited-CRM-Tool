@@ -95,12 +95,12 @@ def _get_active_intake_link_or_404(
 
 
 def _get_embed_origin(request: Request) -> str | None:
-    origin = request.headers.get("origin")
-    if origin:
-        return origin
     parent_origin = request.query_params.get("parent_origin")
     if parent_origin:
         return parent_origin
+    origin = request.headers.get("origin")
+    if origin:
+        return origin
     referer = request.headers.get("referer")
     if not referer:
         return None
@@ -214,8 +214,12 @@ def get_shared_public_form(
 @router.get("/embed/{slug}", response_model=FormEmbedPublicRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_embed_public_form(
-    request: Request, slug: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+    request: Request,
+    slug: str,
+    response: Response,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "no-store"
     if not settings.FORMS_SHARED_INTAKE:
         raise HTTPException(status_code=404, detail="Form not found")
 
@@ -264,8 +268,12 @@ def get_embed_public_form(
 @router.get("/embed/{slug}/frame-policy", response_model=FormEmbedFramePolicyRead)
 @limiter.limit(f"{settings.RATE_LIMIT_PUBLIC_READ}/minute")
 def get_embed_frame_policy(
-    request: Request, slug: str, db: Annotated[Session, "fastapi_param"] = Depends(get_db)
+    request: Request,
+    slug: str,
+    response: Response,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "no-store"
     intake_link = _get_active_embed_link_or_404(db=db, request=request, slug=slug)
     csp = embed_policy_service.build_frame_ancestors_header(intake_link)
     return FormEmbedFramePolicyRead(

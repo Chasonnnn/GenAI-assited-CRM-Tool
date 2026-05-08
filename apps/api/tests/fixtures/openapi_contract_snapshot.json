@@ -1108,6 +1108,12 @@
       "422"
     ]
   },
+  "/forms/intake-links/{link_id}/embed-health": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/intake-links/{link_id}/rotate": {
     "POST": [
       "200",

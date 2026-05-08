@@ -39,6 +39,7 @@ from app.schemas.forms import (
     FormDeliverySettingsUpdate,
     FormDraftStatusRead,
     FormFieldMappingsUpdate,
+    FormEmbedHealthRead,
     FormIntakeLinkCreate,
     FormIntakeLinkRead,
     FormIntakeLinkSendRequest,
@@ -836,6 +837,26 @@ def update_form_intake_link(
         link,
         intake_url=form_intake_service.build_shared_application_link(base_url, link.slug),
     )
+
+
+@router.get(
+    "/intake-links/{link_id}/embed-health",
+    response_model=FormEmbedHealthRead,
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def get_form_intake_link_embed_health(
+    link_id: UUID,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    if not settings.FORMS_SHARED_INTAKE:
+        raise HTTPException(status_code=404, detail="Shared intake is disabled")
+
+    link = form_intake_service.get_intake_link(db, org_id=session.org_id, intake_link_id=link_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="Intake link not found")
+
+    return form_intake_service.get_embed_setup_health(db=db, link=link)
 
 
 @router.post(

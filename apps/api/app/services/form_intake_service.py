@@ -8,6 +8,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 from fastapi import UploadFile
 from sqlalchemy import or_
@@ -66,6 +67,7 @@ EMBED_ALLOWED_ATTRIBUTION_KEYS = {
     "referrer",
     "landing_url",
 }
+EMBED_URL_ATTRIBUTION_KEYS = {"referrer", "landing_url"}
 logger = logging.getLogger(__name__)
 
 
@@ -323,6 +325,134 @@ def ensure_link_published_version(
     db.commit()
     db.refresh(link)
     return version
+
+
+def get_embed_setup_health(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+) -> dict[str, Any]:
+    """Return a PHI-safe readiness report for publishing an embedded intake link."""
+    checks: list[dict[str, str]] = []
+
+    def add_check(key: str, label: str, status: str, message: str) -> None:
+        checks.append(
+            {
+                "key": key,
+                "label": label,
+                "status": status,
+                "message": message,
+            }
+        )
+
+    form = form_service.get_form(db, link.organization_id, link.form_id)
+    if not link.is_active:
+        add_check("link_active", "Intake link active", "block", "This intake link is inactive.")
+    else:
+        add_check("link_active", "Intake link active", "pass", "This intake link is active.")
+
+    if not form:
+        add_check("form", "Published form", "block", "The linked form no longer exists.")
+    elif form.status != FormStatus.PUBLISHED.value:
+        add_check("form", "Published form", "block", "The form must be published before embedding.")
+    else:
+        add_check("form", "Published form", "pass", "The form is published.")
+
+    if form and form.purpose != FormPurpose.LEAD_CAPTURE.value:
+        add_check(
+            "purpose",
+            "Lead capture purpose",
+            "block",
+            "Embedded v1 intake requires a lead_capture form.",
+        )
+    else:
+        add_check("purpose", "Lead capture purpose", "pass", "The form uses lead_capture purpose.")
+
+    if link.embed_enabled:
+        add_check("embed_enabled", "Embed enabled", "pass", "Iframe embedding is enabled.")
+    else:
+        add_check("embed_enabled", "Embed enabled", "block", "Enable iframe embed for this link.")
+
+    allowed_origins = link.allowed_embed_origins or []
+    if allowed_origins:
+        origin_count = len(allowed_origins)
+        suffix = "s" if origin_count != 1 else ""
+        add_check(
+            "allowed_origins",
+            "Allowed origins",
+            "pass",
+            f"{origin_count} allowed origin{suffix} configured.",
+        )
+    else:
+        add_check(
+            "allowed_origins",
+            "Allowed origins",
+            "block",
+            "Add at least one exact website origin.",
+        )
+
+    if link.consent_text and link.consent_text.strip():
+        add_check("consent", "Consent text", "pass", "Consent text is configured.")
+    else:
+        add_check(
+            "consent",
+            "Consent text",
+            "warning",
+            "Add contact consent text before a customer pilot.",
+        )
+
+    if form and form.status == FormStatus.PUBLISHED.value:
+        try:
+            if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+                form_service.validate_privacy_safe_lead_schema(db, form)
+            else:
+                form_service.validate_lead_capture_schema(db, form)
+        except ValueError as exc:
+            add_check("tracking_policy", "Tracking policy", "block", str(exc))
+        else:
+            add_check(
+                "tracking_policy",
+                "Tracking policy",
+                "pass",
+                "Field classification is compatible with the selected tracking mode.",
+            )
+    else:
+        add_check(
+            "tracking_policy",
+            "Tracking policy",
+            "block",
+            "Publish the form before validating tracking policy.",
+        )
+
+    if link.published_version_id:
+        add_check(
+            "published_version",
+            "Published version",
+            "pass",
+            "A frozen published intake version exists.",
+        )
+    else:
+        add_check(
+            "published_version",
+            "Published version",
+            "block",
+            "A frozen published intake version is required before submissions.",
+        )
+
+    add_check("snippet", "Embed snippet", "pass", f"Snippet slug {link.slug} is current")
+
+    if any(check["status"] == "block" for check in checks):
+        status = "blocked"
+    elif any(check["status"] == "warning" for check in checks):
+        status = "needs_attention"
+    else:
+        status = "ready"
+
+    return {
+        "status": status,
+        "checks": checks,
+        "updated_at": datetime.now(timezone.utc),
+    }
 
 
 def _trigger_config_form_id(trigger_config: dict[str, Any] | None) -> str | None:
@@ -1099,6 +1229,11 @@ def sanitize_embed_attribution(payload: dict[str, Any] | None) -> dict[str, str]
         text = str(value).strip()
         if not text:
             continue
+        if key in EMBED_URL_ATTRIBUTION_KEYS:
+            parsed = urlparse(text)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                continue
+            text = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
         sanitized[key] = text[:1000]
     return sanitized
 

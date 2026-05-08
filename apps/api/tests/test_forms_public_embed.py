@@ -182,6 +182,20 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     assert public_payload["published_version_id"]
     assert public_payload["consent"]["text"] == "I agree to be contacted about my inquiry."
     assert "meta_pixel_id" not in public_payload
+    assert public_res.headers["cache-control"] == "no-store"
+
+    frame_policy_res = await authed_client.get(f"/forms/public/embed/{slug}/frame-policy")
+    assert frame_policy_res.status_code == 200
+    assert frame_policy_res.headers["cache-control"] == "no-store"
+    assert frame_policy_res.json()["content_security_policy"] == (
+        "frame-ancestors 'self' https://www.ewisurrogacy.com"
+    )
+
+    iframe_origin_res = await authed_client.get(
+        f"/forms/public/embed/{slug}?parent_origin={allowed_origin}",
+        headers={"origin": "https://app.surrogacyforce.com"},
+    )
+    assert iframe_origin_res.status_code == 200
 
     denied_session_res = await authed_client.post(
         f"/forms/public/embed/{slug}/session",
@@ -197,6 +211,8 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
                 "utm_source": "meta",
                 "utm_campaign": "spring-surrogate",
                 "fbclid": "fb-test-click",
+                "landing_url": "https://www.ewisurrogacy.com/apply?full_name=Leak#step",
+                "referrer": "https://www.facebook.com/ad?click_id=secret",
                 "medical_condition": "should-not-store-as-campaign-field",
             },
         },
@@ -223,6 +239,8 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
                 "utm_source": "meta",
                 "utm_campaign": "spring-surrogate",
                 "fbclid": "fb-test-click",
+                "landing_url": "https://www.ewisurrogacy.com/apply?email=leak@example.com",
+                "referrer": "https://www.facebook.com/ad?click_id=secret",
                 "free_text_medical_notes": "not allowed outbound",
             },
         },
@@ -279,7 +297,10 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     assert attribution.source == "meta"
     assert attribution.campaign == "spring-surrogate"
     assert attribution.fbclid == "fb-test-click"
+    assert attribution.landing_url == "https://www.ewisurrogacy.com/apply"
+    assert attribution.referrer == "https://www.facebook.com/ad"
     assert "medical_condition" not in (attribution.first_touch_json or {})
+    assert "leak@example.com" not in str(attribution.first_touch_json)
 
     consent = (
         db.query(ConsentRecord).filter(ConsentRecord.form_submission_id == submission_id).one()
@@ -361,3 +382,37 @@ async def test_embed_submit_requires_valid_session_and_published_version(
         },
     )
     assert wrong_version_res.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_embed_health_reports_blockers_and_ready_state(authed_client):
+    _form_id, link_id, _slug = await _create_published_lead_capture_form(authed_client)
+
+    blocked_res = await authed_client.get(f"/forms/intake-links/{link_id}/embed-health")
+    assert blocked_res.status_code == 200
+    blocked_payload = blocked_res.json()
+    assert blocked_payload["status"] == "blocked"
+    blocked_checks = {check["key"]: check for check in blocked_payload["checks"]}
+    assert blocked_checks["embed_enabled"]["status"] == "block"
+    assert blocked_checks["allowed_origins"]["status"] == "block"
+
+    update_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": ["https://www.ewisurrogacy.com/"],
+            "tracking_mode": "privacy_safe_lead",
+            "consent_text": "I agree to be contacted about my inquiry.",
+        },
+    )
+    assert update_res.status_code == 200
+
+    ready_res = await authed_client.get(f"/forms/intake-links/{link_id}/embed-health")
+    assert ready_res.status_code == 200
+    ready_payload = ready_res.json()
+    assert ready_payload["status"] == "ready"
+    ready_checks = {check["key"]: check for check in ready_payload["checks"]}
+    assert ready_checks["embed_enabled"]["status"] == "pass"
+    assert ready_checks["allowed_origins"]["status"] == "pass"
+    assert ready_checks["tracking_policy"]["status"] == "pass"
+    assert ready_checks["snippet"]["message"].endswith("is current")
