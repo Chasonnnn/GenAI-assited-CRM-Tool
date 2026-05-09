@@ -36,7 +36,7 @@ from app.schemas.surrogate import (
     SurrogateUpdate,
     mask_ssn_last4,
 )
-from app.utils.pagination import PaginationParams, paginate_query, _resolve_total
+from app.utils.pagination import PaginationParams, paginate_query
 from app.utils.normalization import (
     escape_like_string,
     extract_email_domain,
@@ -1800,6 +1800,13 @@ def list_surrogates(
             )
         )
 
+    # Count total (optional)
+    total = (
+        base_query.with_entities(func.count(Surrogate.id)).order_by(None).scalar()
+        if include_total
+        else None
+    )
+
     # Paginate
     next_cursor = None
     if cursor:
@@ -1807,20 +1814,6 @@ def list_surrogates(
     else:
         offset = (page - 1) * per_page
         surrogates = query.offset(offset).limit(per_page).all()
-
-    # Count total (optional, optimized to skip if we already have the answer)
-    total = None
-    if include_total:
-        if cursor:
-            # We cannot optimize the total count for cursor pagination because the offset is unknown
-            total = base_query.with_entities(func.count(Surrogate.id)).order_by(None).scalar()
-        else:
-            total = _resolve_total(
-                surrogates,
-                offset=offset,
-                limit=per_page,
-                count_query=base_query.with_entities(func.count(Surrogate.id)).order_by(None),
-            )
 
     _attach_last_activity_to_surrogates(db, org_id, surrogates)
 

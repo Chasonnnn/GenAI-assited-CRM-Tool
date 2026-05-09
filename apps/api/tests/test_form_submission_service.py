@@ -36,15 +36,22 @@ def _create_surrogate(db, org_id, user_id, stage):
 
 def _identity_fields() -> list[dict[str, object]]:
     return [
-        {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+        {
+            "key": "full_name",
+            "label": "Full Name",
+            "type": "text",
+            "required": True,
+            "sensitivity": "pii",
+        },
         {
             "key": "date_of_birth",
             "label": "Date of Birth",
             "type": "date",
             "required": True,
+            "sensitivity": "pii",
         },
-        {"key": "phone", "label": "Phone", "type": "text", "required": True},
-        {"key": "email", "label": "Email", "type": "email", "required": True},
+        {"key": "phone", "label": "Phone", "type": "text", "required": True, "sensitivity": "pii"},
+        {"key": "email", "label": "Email", "type": "email", "required": True, "sensitivity": "pii"},
     ]
 
 

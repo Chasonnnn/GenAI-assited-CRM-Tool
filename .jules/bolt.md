@@ -1,3 +1,0 @@
-## 2024-05-09 - Avoid manual count calculations in list endpoints
-**Learning:** Manual `func.count(...)` queries are an anti-pattern when fetching paginated lists because they cause redundant database round-trips if the fetched results are smaller than the limit, indicating the end of the data. The codebase has utility `_resolve_total` in `app.utils.pagination` that skips the count query in such cases.
-**Action:** When implementing or fixing pagination endpoints (e.g. `list_surrogates`), always use `paginate_query`, `paginate_query_by_offset`, or `_resolve_total` directly rather than executing a manual `count_query.scalar()` to save a database round-trip.

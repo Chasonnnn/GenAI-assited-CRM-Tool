@@ -73,10 +73,34 @@ async def _create_published_form_and_shared_link(authed_client):
             {
                 "title": "Identity",
                 "fields": [
-                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
-                    {"key": "date_of_birth", "label": "DOB", "type": "date", "required": True},
-                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
-                    {"key": "email", "label": "Email", "type": "email", "required": True},
+                    {
+                        "key": "full_name",
+                        "label": "Full Name",
+                        "type": "text",
+                        "required": True,
+                        "sensitivity": "pii",
+                    },
+                    {
+                        "key": "date_of_birth",
+                        "label": "DOB",
+                        "type": "date",
+                        "required": True,
+                        "sensitivity": "pii",
+                    },
+                    {
+                        "key": "phone",
+                        "label": "Phone",
+                        "type": "text",
+                        "required": True,
+                        "sensitivity": "pii",
+                    },
+                    {
+                        "key": "email",
+                        "label": "Email",
+                        "type": "email",
+                        "required": True,
+                        "sensitivity": "pii",
+                    },
                 ],
             }
         ]
