@@ -41,17 +41,17 @@ def _identity_fields() -> list[dict[str, object]]:
             "label": "Full Name",
             "type": "text",
             "required": True,
-            "sensitivity": "pii",
+            "sensitivity": "identity",
         },
         {
             "key": "date_of_birth",
             "label": "Date of Birth",
             "type": "date",
             "required": True,
-            "sensitivity": "pii",
+            "sensitivity": "identity",
         },
-        {"key": "phone", "label": "Phone", "type": "text", "required": True, "sensitivity": "pii"},
-        {"key": "email", "label": "Email", "type": "email", "required": True, "sensitivity": "pii"},
+        {"key": "phone", "label": "Phone", "type": "text", "required": True, "sensitivity": "contact"},
+        {"key": "email", "label": "Email", "type": "email", "required": True, "sensitivity": "contact"},
     ]
 
 
