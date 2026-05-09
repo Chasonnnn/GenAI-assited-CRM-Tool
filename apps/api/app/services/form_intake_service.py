@@ -248,9 +248,10 @@ def _validate_link_embed_policy(*, db: Session, form: Form, link: FormIntakeLink
     if link.embed_enabled and not link.allowed_embed_origins:
         raise ValueError("Allowed embed origins are required when embed is enabled")
     if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
-        if form.purpose != FormPurpose.LEAD_CAPTURE.value:
+        if form.purpose != FormPurpose.LEAD_CAPTURE.value and form.purpose != FormPurpose.SURROGATE_APPLICATION.value:
             raise ValueError("Lead tracking requires a lead_capture form")
-        form_service.validate_privacy_safe_lead_schema(db, form)
+        if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+            form_service.validate_privacy_safe_lead_schema(db, form)
     if form.purpose == FormPurpose.LEAD_CAPTURE.value:
         form_service.validate_lead_capture_schema(db, form)
 
