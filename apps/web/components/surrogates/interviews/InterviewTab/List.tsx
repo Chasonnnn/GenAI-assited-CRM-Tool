@@ -18,8 +18,8 @@ export function List({ className }: ListProps) {
             <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b shrink-0">
                 <CardTitle className="text-base">Interviews ({interviews.length})</CardTitle>
                 {canEdit && (
-                    <Button size="sm" onClick={() => openEditor()}>
-                        <PlusIcon className="h-4 w-4" />
+                    <Button size="sm" onClick={() => openEditor()} aria-label="Add interview">
+                        <PlusIcon className="h-4 w-4" aria-hidden="true" />
                     </Button>
                 )}
             </CardHeader>
