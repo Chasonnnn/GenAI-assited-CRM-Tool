@@ -461,6 +461,7 @@ def _create_shared_submission(
         expires_at=None,
         max_submissions=None,
         utm_defaults=None,
+        tracking_mode="internal_only",
     )
     submission = form_intake_service._create_shared_submission(
         db=db,

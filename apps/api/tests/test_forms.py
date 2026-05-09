@@ -85,7 +85,12 @@ def _shared_identity_schema(
 async def _create_published_form_and_shared_link(*, authed_client, name: str, schema: dict):
     create_res = await authed_client.post(
         "/forms",
-        json={"name": name, "description": "Test form", "form_schema": schema},
+        json={
+            "name": name,
+            "description": "Test form",
+            "form_schema": schema,
+            "purpose": "lead_capture",
+        },
     )
     assert create_res.status_code == 200
     form_id = create_res.json()["id"]

@@ -41,6 +41,7 @@ def _create_published_form(db, org_id, user_id):
         name="Application Form",
         description="Candidate application",
         schema=schema,
+        purpose="lead_capture",
         max_file_size_bytes=None,
         max_file_count=None,
         allowed_mime_types=None,

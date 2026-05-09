@@ -70,6 +70,7 @@ async def _create_form_and_submission(authed_client, surrogate: Surrogate, label
             "name": f"Application {label}",
             "description": "Test form",
             "form_schema": schema,
+            "purpose": "lead_capture",
         },
     )
     assert create_res.status_code == 200

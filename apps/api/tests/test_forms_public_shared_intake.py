@@ -88,6 +88,7 @@ async def _create_published_form_and_shared_link(authed_client):
             "name": "Shared Intake Form",
             "description": "Campaign intake",
             "form_schema": schema,
+            "purpose": "lead_capture",
         },
     )
     assert create_res.status_code == 200
