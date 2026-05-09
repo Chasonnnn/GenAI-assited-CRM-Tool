@@ -60,7 +60,7 @@ const embedForm = {
     allowed_mime_types: [],
     campaign_name: "Spring",
     event_name: null,
-    tracking_mode: "privacy_safe_lead",
+    tracking_mode: "enhanced_match_lead",
     consent: {
         text: "I agree to be contacted.",
         privacy_policy_url: "https://www.ewisurrogacy.com/privacy",

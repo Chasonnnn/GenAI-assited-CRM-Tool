@@ -37,7 +37,13 @@ FieldSensitivity = Literal[
     "free_text_unclassified",
     "file",
 ]
-TrackingMode = Literal["internal_only", "privacy_safe_lead", "disabled", "advanced"]
+TrackingMode = Literal[
+    "internal_only",
+    "privacy_safe_lead",
+    "enhanced_match_lead",
+    "disabled",
+    "advanced",
+]
 EmbedHealthCheckStatus = Literal["pass", "warning", "block"]
 EmbedHealthStatus = Literal["ready", "needs_attention", "blocked"]
 

@@ -90,7 +90,7 @@ async def test_lead_capture_publish_requires_name_and_contact_but_not_date_of_bi
     links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
     assert links_res.status_code == 200
     link = next(item for item in links_res.json() if item["id"] == link_id)
-    assert link["tracking_mode"] == "internal_only"
+    assert link["tracking_mode"] == "enhanced_match_lead"
     assert link["embed_enabled"] is False
 
     missing_contact_schema = _lead_capture_schema()
@@ -115,7 +115,7 @@ async def test_lead_capture_publish_requires_name_and_contact_but_not_date_of_bi
 
 
 @pytest.mark.asyncio
-async def test_privacy_safe_lead_publish_blocks_sensitive_and_unclassified_fields(
+async def test_enhanced_match_lead_publish_blocks_sensitive_and_unclassified_fields(
     authed_client,
 ):
     form_id, link_id, _slug = await _create_published_lead_capture_form(authed_client)
@@ -142,7 +142,7 @@ async def test_privacy_safe_lead_publish_blocks_sensitive_and_unclassified_field
         json={
             "embed_enabled": True,
             "allowed_embed_origins": ["https://www.ewisurrogacy.com/"],
-            "tracking_mode": "privacy_safe_lead",
+            "tracking_mode": "enhanced_match_lead",
             "consent_text": "I agree to be contacted about my inquiry.",
         },
     )
@@ -163,7 +163,7 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
         json={
             "embed_enabled": True,
             "allowed_embed_origins": [f"{allowed_origin}/apply"],
-            "tracking_mode": "privacy_safe_lead",
+            "tracking_mode": "enhanced_match_lead",
             "consent_text": "I agree to be contacted about my inquiry.",
             "thank_you_config": {"message": "Thank you."},
             "embed_theme_json": {"accent": "#2563eb"},
@@ -178,7 +178,7 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     )
     assert public_res.status_code == 200
     public_payload = public_res.json()
-    assert public_payload["tracking_mode"] == "privacy_safe_lead"
+    assert public_payload["tracking_mode"] == "enhanced_match_lead"
     assert public_payload["published_version_id"]
     assert public_payload["consent"]["text"] == "I agree to be contacted about my inquiry."
     assert "meta_pixel_id" not in public_payload
@@ -211,6 +211,8 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
                 "utm_source": "meta",
                 "utm_campaign": "spring-surrogate",
                 "fbclid": "fb-test-click",
+                "fbc": "fb.1.1772942400.fb-test-click",
+                "fbp": "fb.1.1772942400.1234567890",
                 "landing_url": "https://www.ewisurrogacy.com/apply?full_name=Leak#step",
                 "referrer": "https://www.facebook.com/ad?click_id=secret",
                 "medical_condition": "should-not-store-as-campaign-field",
@@ -318,9 +320,19 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     assert tracking_event.event_name == "Lead"
     assert tracking_event.status == "queued"
     assert tracking_event.payload_json["event_name"] == "Lead"
+    user_data = tracking_event.payload_json["user_data"]
+    assert user_data["em"]
+    assert user_data["ph"]
+    assert user_data["fn"]
+    assert user_data["ln"]
+    assert user_data["fbc"] == "fb.1.1772942400.fb-test-click"
+    assert user_data["fbp"] == "fb.1.1772942400.1234567890"
     assert "answers" not in tracking_event.payload_json
     assert "email" not in tracking_event.payload_json
     assert "phone" not in tracking_event.payload_json
+    assert "embed-lead@example.com" not in str(tracking_event.payload_json)
+    assert "+15554810901" not in str(tracking_event.payload_json)
+    assert "Embed Lead" not in str(tracking_event.payload_json)
     assert "free_text_medical_notes" not in str(tracking_event.payload_json)
 
     embed_session = db.query(EmbedSession).filter(EmbedSession.intake_link_id == link_uuid).one()

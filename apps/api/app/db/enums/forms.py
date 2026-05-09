@@ -40,6 +40,7 @@ class TrackingMode(str, Enum):
 
     INTERNAL_ONLY = "internal_only"
     PRIVACY_SAFE_LEAD = "privacy_safe_lead"
+    ENHANCED_MATCH_LEAD = "enhanced_match_lead"
     DISABLED = "disabled"
     ADVANCED = "advanced"
 

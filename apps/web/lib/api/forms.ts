@@ -24,7 +24,12 @@ export type FieldSensitivity =
     | 'sensitive_legal'
     | 'free_text_unclassified'
     | 'file'
-export type TrackingMode = 'internal_only' | 'privacy_safe_lead' | 'disabled' | 'advanced'
+export type TrackingMode =
+    | 'internal_only'
+    | 'privacy_safe_lead'
+    | 'enhanced_match_lead'
+    | 'disabled'
+    | 'advanced'
 
 export type FieldType =
     | 'text'

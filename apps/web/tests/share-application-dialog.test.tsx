@@ -17,7 +17,7 @@ const link: FormIntakeLinkRead = {
     submissions_count: 0,
     embed_enabled: true,
     allowed_embed_origins: ["https://www.ewisurrogacy.com"],
-    tracking_mode: "privacy_safe_lead",
+    tracking_mode: "enhanced_match_lead",
     consent_text: "I agree to be contacted.",
     privacy_policy_url: null,
     thank_you_config: {},

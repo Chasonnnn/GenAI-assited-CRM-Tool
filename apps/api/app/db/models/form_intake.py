@@ -71,7 +71,7 @@ class FormIntakeLink(Base):
     )
     tracking_mode: Mapped[str] = mapped_column(
         String(30),
-        server_default=text(f"'{TrackingMode.INTERNAL_ONLY.value}'"),
+        server_default=text(f"'{TrackingMode.ENHANCED_MATCH_LEAD.value}'"),
         nullable=False,
     )
     consent_text: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -42,7 +42,7 @@ from app.db.models import (
     TrackingEventLog,
 )
 from app.schemas.surrogate import SurrogateCreate
-from app.services import embed_policy_service, form_service, form_submission_service
+from app.services import embed_policy_service, form_service, form_submission_service, meta_capi
 from app.utils.normalization import (
     normalize_email,
     normalize_name,
@@ -68,6 +68,15 @@ EMBED_ALLOWED_ATTRIBUTION_KEYS = {
     "landing_url",
 }
 EMBED_URL_ATTRIBUTION_KEYS = {"referrer", "landing_url"}
+DEFAULT_EMBED_TRACKING_MODE = TrackingMode.ENHANCED_MATCH_LEAD.value
+META_TRACKING_MODES = {
+    TrackingMode.PRIVACY_SAFE_LEAD.value,
+    TrackingMode.ENHANCED_MATCH_LEAD.value,
+}
+PRIVACY_SAFE_FIELD_POLICY_MODES = {
+    TrackingMode.PRIVACY_SAFE_LEAD.value,
+    TrackingMode.ENHANCED_MATCH_LEAD.value,
+}
 logger = logging.getLogger(__name__)
 
 
@@ -181,7 +190,7 @@ def create_intake_link(
         utm_defaults=utm_defaults or None,
         embed_enabled=bool(embed_enabled),
         allowed_embed_origins=embed_policy_service.normalize_allowed_origins(allowed_embed_origins),
-        tracking_mode=tracking_mode or TrackingMode.INTERNAL_ONLY.value,
+        tracking_mode=tracking_mode or DEFAULT_EMBED_TRACKING_MODE,
         consent_text=(consent_text or "").strip() or None,
         privacy_policy_url=(privacy_policy_url or "").strip() or None,
         thank_you_config=thank_you_config or {},
@@ -238,9 +247,9 @@ def ensure_default_intake_link(
 def _validate_link_embed_policy(*, db: Session, form: Form, link: FormIntakeLink) -> None:
     if link.embed_enabled and not link.allowed_embed_origins:
         raise ValueError("Allowed embed origins are required when embed is enabled")
-    if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+    if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
         if form.purpose != FormPurpose.LEAD_CAPTURE.value:
-            raise ValueError("Privacy-safe lead tracking requires a lead_capture form")
+            raise ValueError("Lead tracking requires a lead_capture form")
         form_service.validate_privacy_safe_lead_schema(db, form)
     if form.purpose == FormPurpose.LEAD_CAPTURE.value:
         form_service.validate_lead_capture_schema(db, form)
@@ -403,7 +412,7 @@ def get_embed_setup_health(
 
     if form and form.status == FormStatus.PUBLISHED.value:
         try:
-            if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+            if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
                 form_service.validate_privacy_safe_lead_schema(db, form)
             else:
                 form_service.validate_lead_capture_schema(db, form)
@@ -705,7 +714,7 @@ def update_intake_link(
             allowed_embed_origins
         )
     if "tracking_mode" in fields_set:
-        link.tracking_mode = tracking_mode or TrackingMode.INTERNAL_ONLY.value
+        link.tracking_mode = tracking_mode or DEFAULT_EMBED_TRACKING_MODE
     if "consent_text" in fields_set:
         link.consent_text = (consent_text or "").strip() or None
     if "privacy_policy_url" in fields_set:
@@ -1335,6 +1344,7 @@ def _enqueue_privacy_safe_tracking_event(
     *,
     link: FormIntakeLink,
     submission: FormSubmission,
+    identity: dict[str, Any],
     attribution: dict[str, str],
 ) -> TrackingEventLog:
     event_payload = {
@@ -1352,6 +1362,10 @@ def _enqueue_privacy_safe_tracking_event(
         event_payload["custom_data"]["source"] = attribution["utm_source"]
     if attribution.get("utm_campaign"):
         event_payload["custom_data"]["campaign"] = attribution["utm_campaign"]
+    if link.tracking_mode == TrackingMode.ENHANCED_MATCH_LEAD.value:
+        user_data = _build_enhanced_match_user_data(identity=identity, attribution=attribution)
+        if user_data:
+            event_payload["user_data"] = user_data
     record = TrackingEventLog(
         organization_id=link.organization_id,
         intake_link_id=link.id,
@@ -1365,6 +1379,38 @@ def _enqueue_privacy_safe_tracking_event(
     db.add(record)
     db.flush()
     return record
+
+
+def _build_enhanced_match_user_data(
+    *,
+    identity: dict[str, Any],
+    attribution: dict[str, str],
+) -> dict[str, object]:
+    user_data: dict[str, object] = {}
+    email = identity.get("email")
+    phone = identity.get("phone")
+    full_name = identity.get("full_name")
+    if isinstance(email, str) and "@" in email:
+        user_data["em"] = [meta_capi.hash_for_capi(email)]
+    if isinstance(phone, str):
+        phone_digits = re.sub(r"\D", "", phone)
+        if len(phone_digits) >= 10:
+            user_data["ph"] = [meta_capi.hash_for_capi(phone_digits)]
+    if isinstance(full_name, str) and full_name.strip():
+        name_parts = full_name.strip().split()
+        first_name = name_parts[0] if name_parts else None
+        last_name = name_parts[-1] if len(name_parts) > 1 else None
+        if first_name:
+            user_data["fn"] = [meta_capi.hash_for_capi(first_name)]
+        if last_name:
+            user_data["ln"] = [meta_capi.hash_for_capi(last_name)]
+    fbc = attribution.get("fbc")
+    fbp = attribution.get("fbp")
+    if fbc:
+        user_data["fbc"] = fbc
+    if fbp:
+        user_data["fbp"] = fbp
+    return user_data
 
 
 def create_embed_session(
@@ -1437,7 +1483,7 @@ def submit_lead_capture_embed(
         raise LookupError("Published version not found")
     if link.consent_text and not consent_accepted:
         raise ValueError("Consent is required")
-    if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+    if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
         form_service.validate_privacy_safe_lead_schema(db, form)
     else:
         form_service.validate_lead_capture_schema(db, form)
@@ -1493,11 +1539,12 @@ def submit_lead_capture_embed(
     )
     submission.intake_lead_id = lead.id
     session.consumed_at = datetime.now(timezone.utc)
-    if link.tracking_mode == TrackingMode.PRIVACY_SAFE_LEAD.value:
+    if link.tracking_mode in META_TRACKING_MODES:
         _enqueue_privacy_safe_tracking_event(
             db,
             link=link,
             submission=submission,
+            identity=identity,
             attribution=sanitized_attribution,
         )
     db.commit()

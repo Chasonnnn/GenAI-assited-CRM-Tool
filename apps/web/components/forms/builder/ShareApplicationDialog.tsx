@@ -67,14 +67,14 @@ export function ShareApplicationDialog({
 }: ShareApplicationDialogProps) {
     const [embedEnabled, setEmbedEnabled] = React.useState(false)
     const [originText, setOriginText] = React.useState("")
-    const [trackingMode, setTrackingMode] = React.useState<TrackingMode>("privacy_safe_lead")
+    const [trackingMode, setTrackingMode] = React.useState<TrackingMode>("enhanced_match_lead")
     const [consentText, setConsentText] = React.useState("")
 
     React.useEffect(() => {
         if (!selectedQrLink) return
         setEmbedEnabled(selectedQrLink.embed_enabled)
         setOriginText((selectedQrLink.allowed_embed_origins || []).join("\n"))
-        setTrackingMode(selectedQrLink.tracking_mode || "privacy_safe_lead")
+        setTrackingMode(selectedQrLink.tracking_mode || "enhanced_match_lead")
         setConsentText(selectedQrLink.consent_text || "")
     }, [selectedQrLink])
 
@@ -212,11 +212,12 @@ export function ShareApplicationDialog({
                                             <SelectTrigger id="sf-embed-tracking">
                                                 <SelectValue>
                                                     {(value: string | null) =>
-                                                        getTrackingModeLabel((value as TrackingMode | null) ?? "privacy_safe_lead")
+                                                        getTrackingModeLabel((value as TrackingMode | null) ?? "enhanced_match_lead")
                                                     }
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="enhanced_match_lead">Enhanced Match Lead</SelectItem>
                                                 <SelectItem value="privacy_safe_lead">Privacy-safe Lead</SelectItem>
                                                 <SelectItem value="internal_only">Internal Only</SelectItem>
                                                 <SelectItem value="disabled">Disabled</SelectItem>
@@ -320,6 +321,7 @@ export function ShareApplicationDialog({
 function getTrackingModeLabel(value: TrackingMode): string {
     const labels: Record<TrackingMode, string> = {
         privacy_safe_lead: "Privacy-safe Lead",
+        enhanced_match_lead: "Enhanced Match Lead",
         internal_only: "Internal Only",
         disabled: "Disabled",
         advanced: "Advanced",
