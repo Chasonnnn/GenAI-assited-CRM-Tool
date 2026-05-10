@@ -11,14 +11,16 @@ function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const activityTimestampFormatterForTest = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+})
+
 function formatActivityTimestampForTest(value: string): string {
-    return new Intl.DateTimeFormat(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-    }).format(new Date(value))
+    return activityTimestampFormatterForTest.format(new Date(value))
 }
 
 vi.mock('@/lib/hooks/use-surrogates', () => ({

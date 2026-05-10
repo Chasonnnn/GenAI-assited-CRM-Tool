@@ -125,8 +125,10 @@ const getCalendarDayButton = (date: Date) => {
     return button as HTMLButtonElement
 }
 
+const shortDateFormatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" })
+
 const shortDateLabel = (date: Date) =>
-    new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)
+    shortDateFormatter.format(date)
 
 const selectCustomRange = (startDate: Date, endDate: Date) => {
     fireEvent.click(screen.getByRole("button", { name: /all time/i }))

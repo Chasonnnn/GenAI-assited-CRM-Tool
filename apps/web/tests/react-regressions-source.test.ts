@@ -610,6 +610,8 @@ describe("React regression guards (source)", () => {
         const activityTimelineSource = readSource("components/surrogates/ActivityTimeline.tsx")
         const aiStudioSource = readSource("app/(app)/ai-studio/page.tsx")
         const unassignedSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
+        const activityTimelineTestSource = readSource("tests/activity-timeline.test.tsx")
+        const dateRangePickerTestSource = readSource("tests/date-range-picker.test.tsx")
 
         expect(unifiedCalendarSource).toContain("clientDateFormatter = useMemo(")
         expect(unifiedCalendarSource).toContain("clientTimeFormatter = useMemo(")
@@ -621,9 +623,13 @@ describe("React regression guards (source)", () => {
         expect(activityTimelineSource).toContain("const activityTimestampFormatter = new Intl.DateTimeFormat")
         expect(aiStudioSource).toContain("const draftDateFormatter = new Intl.DateTimeFormat")
         expect(unassignedSource).toContain("const unassignedDateFormatter = new Intl.DateTimeFormat")
+        expect(activityTimelineTestSource).toContain("const activityTimestampFormatterForTest = new Intl.DateTimeFormat")
+        expect(dateRangePickerTestSource).toContain("const shortDateFormatter = new Intl.DateTimeFormat")
         expect(activityTimelineSource).not.toMatch(/function formatActivityTimestamp[\s\S]*new Intl\.DateTimeFormat/)
         expect(aiStudioSource).not.toMatch(/function formatDraftDate[\s\S]*new Intl\.DateTimeFormat/)
         expect(unassignedSource).not.toMatch(/function formatDate[\s\S]*new Intl\.DateTimeFormat/)
+        expect(activityTimelineTestSource).not.toMatch(/function formatActivityTimestampForTest[\s\S]*new Intl\.DateTimeFormat/)
+        expect(dateRangePickerTestSource).not.toMatch(/const shortDateLabel = \(date: Date\) =>\s*new Intl\.DateTimeFormat/)
     })
 
     it("keeps InlineDateField draft state tied to edit lifecycle", () => {
