@@ -6,5 +6,4 @@
 // Re-export types from API client
 export type {
     NoteRead,
-    NoteCreatePayload,
 } from '../api/notes';

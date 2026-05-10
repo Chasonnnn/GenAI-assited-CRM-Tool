@@ -360,6 +360,14 @@ describe("React regression guards (source)", () => {
         expect(usStatesSource).not.toContain("export function getStateLabel")
     })
 
+    it("keeps unused note payload aliases out of the public API", () => {
+        const notesApiSource = readSource("lib/api/notes.ts")
+        const noteTypesSource = readSource("lib/types/note.ts")
+
+        expect(notesApiSource).not.toContain("NoteCreatePayload")
+        expect(noteTypesSource).not.toContain("NoteCreatePayload")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

@@ -14,11 +14,6 @@ export interface NoteRead {
     created_at: string;
 }
 
-// Create note payload
-export interface NoteCreatePayload {
-    body: string;
-}
-
 /**
  * List notes for a surrogate.
  */
