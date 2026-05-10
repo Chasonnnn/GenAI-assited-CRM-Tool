@@ -1,15 +1,18 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
     AlertCircleIcon,
     CheckIcon,
+    ClipboardPasteIcon,
     ImageIcon,
     RefreshCwIcon,
     SaveIcon,
     Settings2Icon,
     SparklesIcon,
+    UploadCloudIcon,
+    XIcon,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -58,6 +61,7 @@ import {
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-context"
 import type {
@@ -67,6 +71,7 @@ import type {
     AIStudioImageQuality,
     AIStudioImageSize,
     AIStudioPlatform,
+    AIStudioReferenceImageInput,
     AIStudioSettingsUpdate,
     AIStudioTone,
 } from "@/lib/api/ai-studio"
@@ -140,6 +145,16 @@ const imageQualityLabels = Object.fromEntries(
     imageQualityOptions.map((option) => [option.value, option.label])
 ) as Record<AIStudioImageQuality, string>
 
+const maxReferenceImages = 4
+const maxReferenceImageBytes = 8 * 1024 * 1024
+const allowedReferenceMimeTypes = ["image/png", "image/jpeg", "image/webp"] as const
+
+type ReferenceImageDraft = AIStudioReferenceImageInput & {
+    id: string
+    dataUrl: string
+    size_bytes: number
+}
+
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong."
 }
@@ -157,16 +172,53 @@ function formatDraftDate(value: string) {
     return draftDateFormatter.format(date)
 }
 
+function isAllowedReferenceMimeType(type: string): type is ReferenceImageDraft["mime_type"] {
+    return allowedReferenceMimeTypes.includes(type as ReferenceImageDraft["mime_type"])
+}
+
+function fileToReferenceImage(file: File): Promise<ReferenceImageDraft> {
+    const mimeType = file.type
+    if (!isAllowedReferenceMimeType(mimeType)) {
+        return Promise.reject(new Error("Use PNG, JPEG, or WebP sample pictures."))
+    }
+    if (file.size > maxReferenceImageBytes) {
+        return Promise.reject(new Error("Sample pictures must be 8 MB or smaller."))
+    }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+            const dataUrl = String(reader.result ?? "")
+            const dataBase64 = dataUrl.includes(",") ? dataUrl.split(",", 2)[1] : dataUrl
+            if (!dataBase64) {
+                reject(new Error("Sample picture could not be read."))
+                return
+            }
+            resolve({
+                id: `${file.name}-${file.size}-${file.lastModified}`,
+                filename: file.name || "sample-picture",
+                mime_type: mimeType,
+                data_base64: dataBase64,
+                dataUrl,
+                size_bytes: file.size,
+            })
+        }
+        reader.onerror = () => reject(new Error("Sample picture could not be read."))
+        reader.readAsDataURL(file)
+    })
+}
+
 function DraftPreview({
     draft,
     isSaving,
     onSave,
     onRegenerate,
+    showActions = true,
 }: {
     draft: AIStudioDraft | null
     isSaving: boolean
     onSave: () => void
     onRegenerate: () => void
+    showActions?: boolean
 }) {
     if (!draft) {
         return (
@@ -193,8 +245,17 @@ function DraftPreview({
                     </Badge>
                     <Badge variant="outline">{platformLabels[draft.platform]}</Badge>
                     <Badge variant="outline">{formatLabels[draft.format]}</Badge>
+                    {draft.audience && (
+                        <Badge variant="outline">Audience: {draft.audience}</Badge>
+                    )}
                     <Badge variant="outline">{imageSizeLabels[draft.image_size]}</Badge>
                     <Badge variant="outline">{imageQualityLabels[draft.image_quality]}</Badge>
+                    {draft.reference_images?.length > 0 && (
+                        <Badge variant="outline">
+                            {draft.reference_images.length} sample
+                            {draft.reference_images.length === 1 ? "" : "s"}
+                        </Badge>
+                    )}
                     <Badge variant="outline">Draft only</Badge>
                 </div>
                 <CardTitle>Generated draft</CardTitle>
@@ -240,20 +301,26 @@ function DraftPreview({
                     <p className="text-sm leading-6 text-muted-foreground">{draft.image_prompt}</p>
                 </div>
             </CardContent>
-            <CardFooter className="flex-wrap gap-2">
-                <Button
-                    type="button"
-                    onClick={onSave}
-                    disabled={draft.status === "saved" || isSaving}
-                >
-                    {isSaving ? <Spinner data-icon="inline-start" /> : <SaveIcon data-icon="inline-start" />}
-                    Save draft
-                </Button>
-                <Button type="button" variant="outline" onClick={onRegenerate}>
-                    <RefreshCwIcon data-icon="inline-start" />
-                    Regenerate
-                </Button>
-            </CardFooter>
+            {showActions && (
+                <CardFooter className="flex-wrap gap-2">
+                    <Button
+                        type="button"
+                        onClick={onSave}
+                        disabled={draft.status === "saved" || isSaving}
+                    >
+                        {isSaving ? (
+                            <Spinner data-icon="inline-start" />
+                        ) : (
+                            <SaveIcon data-icon="inline-start" />
+                        )}
+                        Save draft
+                    </Button>
+                    <Button type="button" variant="outline" onClick={onRegenerate}>
+                        <RefreshCwIcon data-icon="inline-start" />
+                        Regenerate
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
     )
 }
@@ -325,6 +392,148 @@ function SavedDraftsPanel({
     )
 }
 
+function ReferenceImagesField({
+    images,
+    isAdding,
+    errorMessage,
+    onFiles,
+    onRemove,
+}: {
+    images: ReferenceImageDraft[]
+    isAdding: boolean
+    errorMessage: string
+    onFiles: (files: File[]) => void
+    onRemove: (id: string) => void
+}) {
+    const inputRef = useRef<HTMLInputElement | null>(null)
+
+    const handleFiles = (files: FileList | File[] | null) => {
+        const fileList = files ? Array.from(files) : []
+        if (fileList.length === 0) return
+        onFiles(fileList)
+    }
+
+    return (
+        <Field>
+            <div className="flex items-center justify-between gap-3">
+                <FieldLabel htmlFor="ai-studio-reference-images">Sample pictures</FieldLabel>
+                <Badge variant="outline">
+                    {images.length}/{maxReferenceImages}
+                </Badge>
+            </div>
+            <div
+                data-testid="ai-studio-reference-dropzone"
+                tabIndex={0}
+                onPaste={(event) => {
+                    const pastedFiles = Array.from(event.clipboardData.files).filter((file) =>
+                        file.type.startsWith("image/")
+                    )
+                    if (pastedFiles.length === 0) return
+                    event.preventDefault()
+                    handleFiles(pastedFiles)
+                }}
+                onDrop={(event) => {
+                    event.preventDefault()
+                    handleFiles(event.dataTransfer.files)
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                className="rounded-lg border border-dashed bg-muted/20 p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Paste, drop, or upload sample pictures"
+            >
+                <input
+                    ref={inputRef}
+                    id="ai-studio-reference-images"
+                    type="file"
+                    accept={allowedReferenceMimeTypes.join(",")}
+                    multiple
+                    className="sr-only"
+                    aria-label="Upload sample pictures"
+                    onChange={(event) => {
+                        handleFiles(event.target.files)
+                        event.target.value = ""
+                    }}
+                />
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 rounded-md bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+                                <ClipboardPasteIcon className="size-4" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <div className="text-sm font-medium">
+                                    Paste or upload samples
+                                </div>
+                                <p className="text-xs leading-5 text-muted-foreground">
+                                    Samples guide image style and audience detection.
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => inputRef.current?.click()}
+                        >
+                            <UploadCloudIcon data-icon="inline-start" />
+                            Upload
+                        </Button>
+                    </div>
+
+                    {images.length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            {images.map((image) => (
+                                <div
+                                    key={image.id}
+                                    className="flex min-w-0 items-center gap-3 rounded-md border bg-background p-2"
+                                >
+                                    <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                                        <Image
+                                            alt={image.filename}
+                                            src={image.dataUrl}
+                                            fill
+                                            className="object-cover"
+                                            sizes="48px"
+                                            unoptimized
+                                        />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="truncate text-sm font-medium">
+                                            {image.filename}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {Math.max(1, Math.round(image.size_bytes / 1024))} KB
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        aria-label={`Remove ${image.filename}`}
+                                        onClick={() => onRemove(image.id)}
+                                    >
+                                        <XIcon />
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+            <FieldDescription>
+                Up to four PNG, JPEG, or WebP images. Samples are sent for generation only and
+                only sample details are stored with the draft.
+            </FieldDescription>
+            {isAdding && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Spinner data-icon="inline-start" />
+                    Reading sample picture
+                </div>
+            )}
+            {errorMessage && <FieldError>{errorMessage}</FieldError>}
+        </Field>
+    )
+}
+
 export default function AIStudioPage() {
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
@@ -342,6 +551,11 @@ export default function AIStudioPage() {
     const [imageSize, setImageSize] = useState<AIStudioImageSize>("auto")
     const [imageQuality, setImageQuality] = useState<AIStudioImageQuality>("auto")
     const [previewDraft, setPreviewDraft] = useState<AIStudioDraft | null>(null)
+    const [galleryDraft, setGalleryDraft] = useState<AIStudioDraft | null>(null)
+    const [activeTab, setActiveTab] = useState<"create" | "gallery">("create")
+    const [referenceImages, setReferenceImages] = useState<ReferenceImageDraft[]>([])
+    const [referenceImageError, setReferenceImageError] = useState("")
+    const [isAddingReferenceImage, setIsAddingReferenceImage] = useState(false)
     const [errorMessage, setErrorMessage] = useState("")
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsApiKey, setSettingsApiKey] = useState("")
@@ -382,7 +596,48 @@ export default function AIStudioPage() {
         audience: audience.trim(),
         image_size: imageSize,
         image_quality: imageQuality,
+        reference_images: referenceImages.map((image) => ({
+            filename: image.filename,
+            mime_type: image.mime_type,
+            data_base64: image.data_base64,
+        })),
     })
+
+    const handleReferenceFiles = async (files: File[]) => {
+        setReferenceImageError("")
+        const imageFiles = files.filter((file) => file.type.startsWith("image/"))
+        if (imageFiles.length === 0) {
+            setReferenceImageError("Paste or upload PNG, JPEG, or WebP images.")
+            return
+        }
+        const remainingSlots = maxReferenceImages - referenceImages.length
+        if (remainingSlots <= 0) {
+            setReferenceImageError("Remove a sample before adding another image.")
+            return
+        }
+        const selectedFiles = imageFiles.slice(0, remainingSlots)
+        if (imageFiles.length > remainingSlots) {
+            setReferenceImageError(`AI Studio supports up to ${maxReferenceImages} samples.`)
+        }
+        setIsAddingReferenceImage(true)
+        try {
+            const nextImages = await Promise.all(selectedFiles.map(fileToReferenceImage))
+            setReferenceImages((current) => {
+                const seen = new Set(current.map((image) => image.id))
+                const unique = nextImages.filter((image) => !seen.has(image.id))
+                return [...current, ...unique].slice(0, maxReferenceImages)
+            })
+        } catch (error) {
+            setReferenceImageError(getErrorMessage(error))
+        } finally {
+            setIsAddingReferenceImage(false)
+        }
+    }
+
+    const handleRemoveReferenceImage = (id: string) => {
+        setReferenceImageError("")
+        setReferenceImages((current) => current.filter((image) => image.id !== id))
+    }
 
     const handleGenerate = async () => {
         if (!canGenerate) return
@@ -425,6 +680,7 @@ export default function AIStudioPage() {
     }
 
     const savedDrafts = draftsQuery.data?.items ?? []
+    const selectedGalleryDraft = galleryDraft ?? savedDrafts[0] ?? null
 
     return (
         <div className="h-full overflow-y-auto bg-muted/20">
@@ -489,276 +745,340 @@ export default function AIStudioPage() {
                         <Skeleton className="h-[620px] w-full" />
                     </div>
                 ) : (
-                    <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
-                        <div className="flex flex-col gap-6">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Draft generator</CardTitle>
-                                    <CardDescription>
-                                        Start with a brief. AI Studio returns one caption and one
-                                        image for review.
-                                    </CardDescription>
-                                    {!settings?.has_api_key && (
-                                        <CardAction>
-                                            <Badge variant="destructive">Key required</Badge>
-                                        </CardAction>
-                                    )}
-                                </CardHeader>
-                                <CardContent>
-                                    <FieldGroup>
-                                        <Field>
-                                            <FieldLabel htmlFor="ai-studio-brief">Brief</FieldLabel>
-                                            <Textarea
-                                                id="ai-studio-brief"
-                                                value={brief}
-                                                onChange={(event) => setBrief(event.target.value)}
-                                                placeholder="Launch announcement, patient education topic, campaign hook..."
-                                                className="min-h-32 resize-none"
-                                            />
-                                            <FieldDescription>
-                                                Include the goal, audience, offer, and any wording
-                                                constraints.
-                                            </FieldDescription>
-                                        </Field>
+                    <Tabs
+                        value={activeTab}
+                        onValueChange={(value) => setActiveTab(value as "create" | "gallery")}
+                        className="gap-6"
+                    >
+                        <TabsList aria-label="AI Studio sections">
+                            <TabsTrigger value="create">Create</TabsTrigger>
+                            <TabsTrigger value="gallery">Gallery</TabsTrigger>
+                        </TabsList>
 
-                                        <div className="grid gap-4 sm:grid-cols-2">
-                                            <Field>
-                                                <FieldLabel htmlFor="ai-studio-platform">
-                                                    Platform
-                                                </FieldLabel>
-                                                <Select
-                                                    value={platform}
-                                                    onValueChange={(value) => {
-                                                        if (value) setPlatform(value as AIStudioPlatform)
-                                                    }}
-                                                >
-                                                    <SelectTrigger id="ai-studio-platform">
-                                                        <SelectValue>
-                                                            {(value: string | null) =>
-                                                                platformLabels[
-                                                                    (value || platform) as AIStudioPlatform
-                                                                ]
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            {platformOptions.map((option) => (
-                                                                <SelectItem
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-
-                                            <Field>
-                                                <FieldLabel htmlFor="ai-studio-format">
-                                                    Format
-                                                </FieldLabel>
-                                                <Select
-                                                    value={format}
-                                                    onValueChange={(value) => {
-                                                        if (value) setFormat(value as AIStudioFormat)
-                                                    }}
-                                                >
-                                                    <SelectTrigger id="ai-studio-format">
-                                                        <SelectValue>
-                                                            {(value: string | null) =>
-                                                                formatLabels[
-                                                                    (value || format) as AIStudioFormat
-                                                                ]
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            {formatOptions.map((option) => (
-                                                                <SelectItem
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-                                        </div>
-
-                                        <div className="grid gap-4 sm:grid-cols-2">
-                                            <Field>
-                                                <FieldLabel htmlFor="ai-studio-tone">Tone</FieldLabel>
-                                                <Select
-                                                    value={tone}
-                                                    onValueChange={(value) => {
-                                                        if (value) setTone(value as AIStudioTone)
-                                                    }}
-                                                >
-                                                    <SelectTrigger id="ai-studio-tone">
-                                                        <SelectValue>
-                                                            {(value: string | null) =>
-                                                                toneLabels[(value || tone) as AIStudioTone]
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            {toneOptions.map((option) => (
-                                                                <SelectItem
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-
-                                            <Field>
-                                                <FieldLabel htmlFor="ai-studio-audience">
-                                                    Audience
-                                                </FieldLabel>
-                                                <Input
-                                                    id="ai-studio-audience"
-                                                    value={audience}
-                                                    onChange={(event) =>
-                                                        setAudience(event.target.value)
-                                                    }
-                                                    placeholder="Optional"
-                                                />
-                                            </Field>
-                                        </div>
-
-                                        <div className="grid gap-4 sm:grid-cols-2">
-                                            <Field>
-                                                <FieldLabel htmlFor="ai-studio-image-size">
-                                                    Size
-                                                </FieldLabel>
-                                                <Select
-                                                    value={imageSize}
-                                                    onValueChange={(value) => {
-                                                        if (value) {
-                                                            setImageSize(value as AIStudioImageSize)
-                                                        }
-                                                    }}
-                                                >
-                                                    <SelectTrigger id="ai-studio-image-size">
-                                                        <SelectValue>
-                                                            {(value: string | null) =>
-                                                                imageSizeLabels[
-                                                                    (value || imageSize) as AIStudioImageSize
-                                                                ]
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            {imageSizeOptions.map((option) => (
-                                                                <SelectItem
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-
-                                            <Field>
-                                                <FieldLabel htmlFor="ai-studio-image-quality">
-                                                    Quality
-                                                </FieldLabel>
-                                                <Select
-                                                    value={imageQuality}
-                                                    onValueChange={(value) => {
-                                                        if (value) {
-                                                            setImageQuality(
-                                                                value as AIStudioImageQuality
-                                                            )
-                                                        }
-                                                    }}
-                                                >
-                                                    <SelectTrigger id="ai-studio-image-quality">
-                                                        <SelectValue>
-                                                            {(value: string | null) =>
-                                                                imageQualityLabels[
-                                                                    (value ||
-                                                                        imageQuality) as AIStudioImageQuality
-                                                                ]
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            {imageQualityOptions.map((option) => (
-                                                                <SelectItem
-                                                                    key={option.value}
-                                                                    value={option.value}
-                                                                >
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-                                        </div>
-
-                                        {!settings?.has_api_key && (
-                                            <Alert>
-                                                <AlertCircleIcon />
-                                                <AlertTitle>Connect OpenAI</AlertTitle>
-                                                <AlertDescription>
-                                                    Admins can add an organization API key in Studio
-                                                    settings. Keys are stored server-side only.
-                                                </AlertDescription>
-                                            </Alert>
-                                        )}
-
-                                        <Button
-                                            type="button"
-                                            onClick={handleGenerate}
-                                            disabled={!canGenerate}
-                                            className="w-full"
-                                        >
-                                            {generateDraft.isPending ? (
-                                                <Spinner data-icon="inline-start" />
-                                            ) : (
-                                                <SparklesIcon data-icon="inline-start" />
+                        <TabsContent value="create" className="mt-0">
+                            {activeTab === "create" && (
+                                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Draft generator</CardTitle>
+                                            <CardDescription>
+                                                Start with a brief. AI Studio returns one caption
+                                                and one image for review.
+                                            </CardDescription>
+                                            {!settings?.has_api_key && (
+                                                <CardAction>
+                                                    <Badge variant="destructive">Key required</Badge>
+                                                </CardAction>
                                             )}
-                                            Generate draft
-                                        </Button>
-                                        {brief.trim().length > 0 && brief.trim().length < 8 && (
-                                            <FieldError>Brief must be at least 8 characters.</FieldError>
-                                        )}
-                                    </FieldGroup>
-                                </CardContent>
-                            </Card>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <FieldGroup>
+                                                <Field>
+                                                    <FieldLabel htmlFor="ai-studio-brief">
+                                                        Brief
+                                                    </FieldLabel>
+                                                    <Textarea
+                                                        id="ai-studio-brief"
+                                                        value={brief}
+                                                        onChange={(event) =>
+                                                            setBrief(event.target.value)
+                                                        }
+                                                        placeholder="Launch announcement, patient education topic, campaign hook..."
+                                                        className="min-h-32 resize-none"
+                                                    />
+                                                    <FieldDescription>
+                                                        Include the goal, offer, and any wording
+                                                        constraints. Audience can be detected.
+                                                    </FieldDescription>
+                                                </Field>
 
-                            <SavedDraftsPanel
-                                drafts={savedDrafts}
-                                isLoading={draftsQuery.isLoading}
-                                onSelect={setPreviewDraft}
-                            />
-                        </div>
+                                                <ReferenceImagesField
+                                                    images={referenceImages}
+                                                    isAdding={isAddingReferenceImage}
+                                                    errorMessage={referenceImageError}
+                                                    onFiles={handleReferenceFiles}
+                                                    onRemove={handleRemoveReferenceImage}
+                                                />
 
-                        <DraftPreview
-                            draft={previewDraft}
-                            isSaving={saveDraft.isPending}
-                            onSave={handleSaveDraft}
-                            onRegenerate={handleGenerate}
-                        />
-                    </div>
+                                                <div className="grid gap-4 sm:grid-cols-2">
+                                                    <Field>
+                                                        <FieldLabel htmlFor="ai-studio-platform">
+                                                            Platform
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={platform}
+                                                            onValueChange={(value) => {
+                                                                if (value) {
+                                                                    setPlatform(
+                                                                        value as AIStudioPlatform
+                                                                    )
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger id="ai-studio-platform">
+                                                                <SelectValue>
+                                                                    {(value: string | null) =>
+                                                                        platformLabels[
+                                                                            (value ||
+                                                                                platform) as AIStudioPlatform
+                                                                        ]
+                                                                    }
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    {platformOptions.map((option) => (
+                                                                        <SelectItem
+                                                                            key={option.value}
+                                                                            value={option.value}
+                                                                        >
+                                                                            {option.label}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+
+                                                    <Field>
+                                                        <FieldLabel htmlFor="ai-studio-format">
+                                                            Format
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={format}
+                                                            onValueChange={(value) => {
+                                                                if (value) {
+                                                                    setFormat(value as AIStudioFormat)
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger id="ai-studio-format">
+                                                                <SelectValue>
+                                                                    {(value: string | null) =>
+                                                                        formatLabels[
+                                                                            (value ||
+                                                                                format) as AIStudioFormat
+                                                                        ]
+                                                                    }
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    {formatOptions.map((option) => (
+                                                                        <SelectItem
+                                                                            key={option.value}
+                                                                            value={option.value}
+                                                                        >
+                                                                            {option.label}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+                                                </div>
+
+                                                <div className="grid gap-4 sm:grid-cols-2">
+                                                    <Field>
+                                                        <FieldLabel htmlFor="ai-studio-tone">
+                                                            Tone
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={tone}
+                                                            onValueChange={(value) => {
+                                                                if (value) {
+                                                                    setTone(value as AIStudioTone)
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger id="ai-studio-tone">
+                                                                <SelectValue>
+                                                                    {(value: string | null) =>
+                                                                        toneLabels[
+                                                                            (value ||
+                                                                                tone) as AIStudioTone
+                                                                        ]
+                                                                    }
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    {toneOptions.map((option) => (
+                                                                        <SelectItem
+                                                                            key={option.value}
+                                                                            value={option.value}
+                                                                        >
+                                                                            {option.label}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+
+                                                    <Field>
+                                                        <FieldLabel htmlFor="ai-studio-audience">
+                                                            Audience
+                                                        </FieldLabel>
+                                                        <Input
+                                                            id="ai-studio-audience"
+                                                            value={audience}
+                                                            onChange={(event) =>
+                                                                setAudience(event.target.value)
+                                                            }
+                                                            placeholder="Auto-detect"
+                                                        />
+                                                        <FieldDescription>
+                                                            Leave blank to detect from the brief and
+                                                            samples.
+                                                        </FieldDescription>
+                                                    </Field>
+                                                </div>
+
+                                                <div className="grid gap-4 sm:grid-cols-2">
+                                                    <Field>
+                                                        <FieldLabel htmlFor="ai-studio-image-size">
+                                                            Size
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={imageSize}
+                                                            onValueChange={(value) => {
+                                                                if (value) {
+                                                                    setImageSize(
+                                                                        value as AIStudioImageSize
+                                                                    )
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger id="ai-studio-image-size">
+                                                                <SelectValue>
+                                                                    {(value: string | null) =>
+                                                                        imageSizeLabels[
+                                                                            (value ||
+                                                                                imageSize) as AIStudioImageSize
+                                                                        ]
+                                                                    }
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    {imageSizeOptions.map((option) => (
+                                                                        <SelectItem
+                                                                            key={option.value}
+                                                                            value={option.value}
+                                                                        >
+                                                                            {option.label}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+
+                                                    <Field>
+                                                        <FieldLabel htmlFor="ai-studio-image-quality">
+                                                            Quality
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={imageQuality}
+                                                            onValueChange={(value) => {
+                                                                if (value) {
+                                                                    setImageQuality(
+                                                                        value as AIStudioImageQuality
+                                                                    )
+                                                                }
+                                                            }}
+                                                        >
+                                                            <SelectTrigger id="ai-studio-image-quality">
+                                                                <SelectValue>
+                                                                    {(value: string | null) =>
+                                                                        imageQualityLabels[
+                                                                            (value ||
+                                                                                imageQuality) as AIStudioImageQuality
+                                                                        ]
+                                                                    }
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    {imageQualityOptions.map((option) => (
+                                                                        <SelectItem
+                                                                            key={option.value}
+                                                                            value={option.value}
+                                                                        >
+                                                                            {option.label}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+                                                </div>
+
+                                                {!settings?.has_api_key && (
+                                                    <Alert>
+                                                        <AlertCircleIcon />
+                                                        <AlertTitle>Connect OpenAI</AlertTitle>
+                                                        <AlertDescription>
+                                                            Admins can add an organization API key in
+                                                            Studio settings. Keys are stored
+                                                            server-side only.
+                                                        </AlertDescription>
+                                                    </Alert>
+                                                )}
+
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleGenerate}
+                                                    disabled={!canGenerate}
+                                                    className="w-full"
+                                                >
+                                                    {generateDraft.isPending ? (
+                                                        <Spinner data-icon="inline-start" />
+                                                    ) : (
+                                                        <SparklesIcon data-icon="inline-start" />
+                                                    )}
+                                                    Generate draft
+                                                </Button>
+                                                {brief.trim().length > 0 &&
+                                                    brief.trim().length < 8 && (
+                                                        <FieldError>
+                                                            Brief must be at least 8 characters.
+                                                        </FieldError>
+                                                    )}
+                                            </FieldGroup>
+                                        </CardContent>
+                                    </Card>
+
+                                    <DraftPreview
+                                        draft={previewDraft}
+                                        isSaving={saveDraft.isPending}
+                                        onSave={handleSaveDraft}
+                                        onRegenerate={handleGenerate}
+                                    />
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="gallery" className="mt-0">
+                            {activeTab === "gallery" && (
+                                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+                                    <SavedDraftsPanel
+                                        drafts={savedDrafts}
+                                        isLoading={draftsQuery.isLoading}
+                                        onSelect={setGalleryDraft}
+                                    />
+                                    <DraftPreview
+                                        draft={selectedGalleryDraft}
+                                        isSaving={false}
+                                        onSave={() => undefined}
+                                        onRegenerate={() => undefined}
+                                        showActions={false}
+                                    />
+                                </div>
+                            )}
+                        </TabsContent>
+                    </Tabs>
                 )}
             </div>
 

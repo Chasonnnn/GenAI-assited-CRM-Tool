@@ -23,6 +23,7 @@ const generatedDraft = {
     image_revised_prompt: "A revised calm editorial image",
     image_size: "auto",
     image_quality: "auto",
+    reference_images: [],
     reasoning_model: "gpt-5.5",
     image_model: "gpt-image-2",
     created_at: "2026-05-09T12:00:00Z",
@@ -38,6 +39,8 @@ let studioSettings = {
     image_model: "gpt-image-2",
 }
 
+let studioDrafts = { items: [] as typeof generatedDraft[] }
+
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
 }))
@@ -51,7 +54,7 @@ vi.mock("@/lib/hooks/use-ai-studio", () => ({
     useUpdateAIStudioSettings: () => ({ mutateAsync: mockUpdateSettings, isPending: false }),
     useGenerateAIStudioDraft: () => ({ mutateAsync: mockGenerate, isPending: false }),
     useSaveAIStudioDraft: () => ({ mutateAsync: mockSaveDraft, isPending: false }),
-    useAIStudioDrafts: () => ({ data: { items: [] }, isLoading: false }),
+    useAIStudioDrafts: () => ({ data: studioDrafts, isLoading: false }),
 }))
 
 describe("AIStudioPage", () => {
@@ -64,6 +67,7 @@ describe("AIStudioPage", () => {
             reasoning_model: "gpt-5.5",
             image_model: "gpt-image-2",
         }
+        studioDrafts = { items: [] }
         mockUseAuth.mockReturnValue({ user: { ai_enabled: true, user_id: "user-1" } })
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ["use_ai_assistant", "manage_ai_settings"] },
@@ -105,6 +109,7 @@ describe("AIStudioPage", () => {
             audience: "",
             image_size: "auto",
             image_quality: "auto",
+            reference_images: [],
         })
         expect(await screen.findByText("A thoughtful caption for intended parents.")).toBeInTheDocument()
         expect(screen.getByAltText("Generated social media visual")).toHaveAttribute(
@@ -118,6 +123,58 @@ describe("AIStudioPage", () => {
             expect(mockSaveDraft).toHaveBeenCalledWith("draft-1")
         })
         expect(await screen.findByText("Saved")).toBeInTheDocument()
+    })
+
+    it("adds pasted sample pictures to the generation payload", async () => {
+        mockGenerate.mockResolvedValue({
+            ...generatedDraft,
+            audience: "clinic partners",
+            reference_images: [
+                { filename: "clinic-reference.png", mime_type: "image/png", size_bytes: 15 },
+            ],
+        })
+
+        render(<AIStudioPage />)
+
+        const file = new File(["reference-image"], "clinic-reference.png", {
+            type: "image/png",
+        })
+        fireEvent.paste(screen.getByTestId("ai-studio-reference-dropzone"), {
+            clipboardData: { files: [file] },
+        })
+        expect(await screen.findByText("clinic-reference.png")).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText(/brief/i), {
+            target: { value: "Campaign announcement" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: /generate draft/i }))
+
+        await waitFor(() => {
+            expect(mockGenerate).toHaveBeenCalled()
+        })
+        const payload = mockGenerate.mock.calls[0][0]
+        expect(payload.audience).toBe("")
+        expect(payload.reference_images).toEqual([
+            {
+                filename: "clinic-reference.png",
+                mime_type: "image/png",
+                data_base64: "cmVmZXJlbmNlLWltYWdl",
+            },
+        ])
+        expect(await screen.findByText("Audience: clinic partners")).toBeInTheDocument()
+    })
+
+    it("keeps saved drafts in the Gallery tab", () => {
+        studioDrafts = { items: [{ ...generatedDraft, status: "saved" }] }
+
+        render(<AIStudioPage />)
+
+        expect(screen.queryByText("Saved drafts")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("tab", { name: /gallery/i }))
+
+        expect(screen.getByText("Saved drafts")).toBeInTheDocument()
+        fireEvent.click(screen.getByText("Launch announcement"))
+        expect(screen.getAllByText("A thoughtful caption for intended parents.").length).toBeGreaterThan(1)
     })
 
     it("keeps Studio guidance editable behind the settings dialog", async () => {

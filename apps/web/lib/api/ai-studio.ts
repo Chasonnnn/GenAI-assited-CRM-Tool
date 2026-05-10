@@ -28,6 +28,18 @@ export interface AIStudioSettingsUpdate {
     skills_md?: string
 }
 
+export interface AIStudioReferenceImageInput {
+    filename: string
+    mime_type: "image/png" | "image/jpeg" | "image/webp"
+    data_base64: string
+}
+
+export interface AIStudioReferenceImageMetadata {
+    filename: string
+    mime_type: "image/png" | "image/jpeg" | "image/webp"
+    size_bytes: number
+}
+
 export interface AIStudioGenerateRequest {
     brief: string
     platform: AIStudioPlatform
@@ -36,6 +48,7 @@ export interface AIStudioGenerateRequest {
     audience: string
     image_size: AIStudioImageSize
     image_quality: AIStudioImageQuality
+    reference_images: AIStudioReferenceImageInput[]
 }
 
 export interface AIStudioDraft {
@@ -53,6 +66,7 @@ export interface AIStudioDraft {
     image_revised_prompt: string | null
     image_size: AIStudioImageSize
     image_quality: AIStudioImageQuality
+    reference_images: AIStudioReferenceImageMetadata[]
     reasoning_model: "gpt-5.5"
     image_model: "gpt-image-2"
     created_at: string
