@@ -470,6 +470,32 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps system and Meta OAuth internal types private", () => {
+        const systemSource = readSource("lib/api/system.ts")
+        const metaOAuthSource = readSource("lib/api/meta-oauth.ts")
+
+        expect(systemSource).not.toContain("export interface SystemHealth")
+        expect(metaOAuthSource).not.toContain("export type ErrorCategory")
+    })
+
+    it("keeps Meta CRM dataset response subtypes private", () => {
+        const source = readSource("lib/api/meta-crm-dataset.ts")
+        const privateDatasetTypes = [
+            "MetaCrmDatasetSettings",
+            "UpdateMetaCrmDatasetSettingsRequest",
+            "MetaCrmDatasetOutboundTestRequest",
+            "MetaCrmDatasetOutboundTestResponse",
+            "MetaCrmDatasetEventStatus",
+            "MetaCrmDatasetEvent",
+            "MetaCrmDatasetEventsResponse",
+            "MetaCrmDatasetEventsSummary",
+        ]
+
+        for (const typeName of privateDatasetTypes) {
+            expect(source, typeName).not.toMatch(new RegExp(`export (interface|type) ${typeName}\\b`))
+        }
+    })
+
     it("keeps MFA API response shapes private", () => {
         const source = readSource("lib/api/mfa.ts")
         const privateResponses = [

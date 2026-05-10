@@ -8,7 +8,7 @@ export interface MetaCrmDatasetEventMappingItem {
     bucket?: ZapierStageBucket | null
 }
 
-export interface MetaCrmDatasetSettings {
+interface MetaCrmDatasetSettings {
     dataset_id?: string | null
     access_token_configured: boolean
     enabled: boolean
@@ -18,7 +18,7 @@ export interface MetaCrmDatasetSettings {
     test_event_code?: string | null
 }
 
-export interface UpdateMetaCrmDatasetSettingsRequest {
+interface UpdateMetaCrmDatasetSettingsRequest {
     dataset_id?: string | null
     access_token?: string | null
     enabled?: boolean
@@ -28,23 +28,23 @@ export interface UpdateMetaCrmDatasetSettingsRequest {
     test_event_code?: string | null
 }
 
-export interface MetaCrmDatasetOutboundTestRequest {
+interface MetaCrmDatasetOutboundTestRequest {
     stage_key?: string
     lead_id?: string
     fbc?: string | null
     test_event_code?: string | null
 }
 
-export interface MetaCrmDatasetOutboundTestResponse {
+interface MetaCrmDatasetOutboundTestResponse {
     status: string
     event_name: string
     event_id: string
     lead_id: string
 }
 
-export type MetaCrmDatasetEventStatus = 'queued' | 'delivered' | 'failed' | 'skipped'
+type MetaCrmDatasetEventStatus = 'queued' | 'delivered' | 'failed' | 'skipped'
 
-export interface MetaCrmDatasetEvent {
+interface MetaCrmDatasetEvent {
     id: string
     source: string
     status: MetaCrmDatasetEventStatus
@@ -65,12 +65,12 @@ export interface MetaCrmDatasetEvent {
     can_retry: boolean
 }
 
-export interface MetaCrmDatasetEventsResponse {
+interface MetaCrmDatasetEventsResponse {
     items: MetaCrmDatasetEvent[]
     total: number
 }
 
-export interface MetaCrmDatasetEventsSummary {
+interface MetaCrmDatasetEventsSummary {
     window_hours: number
     total_count: number
     queued_count: number

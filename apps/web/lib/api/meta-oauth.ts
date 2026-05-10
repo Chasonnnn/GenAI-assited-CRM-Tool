@@ -73,9 +73,6 @@ export interface DisconnectResponse {
     unlinked: number
 }
 
-// Error categories for health status
-export type ErrorCategory = 'auth' | 'rate_limit' | 'transient' | 'permission' | 'unknown'
-
 // API functions
 
 /**

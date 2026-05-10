@@ -4,7 +4,7 @@
 
 import api from '../api';
 
-export interface SystemHealth {
+interface SystemHealth {
     status: string;
     env?: string;
     version?: string;
