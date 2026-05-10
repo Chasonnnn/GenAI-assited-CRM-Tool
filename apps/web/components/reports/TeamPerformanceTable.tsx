@@ -104,7 +104,7 @@ export function TeamPerformanceTable({
 
     const sortedData = useMemo(() => {
         if (!data) return []
-        return [...data].sort((a, b) => {
+        return data.toSorted((a, b) => {
             const aValue = getSortableValue(a, sortKey)
             const bValue = getSortableValue(b, sortKey)
             if (typeof aValue === "string" && typeof bValue === "string") {
