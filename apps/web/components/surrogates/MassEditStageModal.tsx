@@ -38,6 +38,87 @@ import { toast } from "sonner"
 type TriState = "any" | "true" | "false"
 type ComparisonOp = ">" | ">=" | "<" | "<=" | "="
 type ActionMode = "change_stage" | "archive"
+type PreviewState = {
+    signature: string
+    result: SurrogateMassEditStagePreviewResponse
+}
+type MassEditStageState = {
+    statesInput: string
+    createdFrom: string
+    createdTo: string
+    selectedRaces: string[]
+    raceToAdd: string | null
+    ageOp: ComparisonOp | null
+    ageValue: string
+    bmiOp: ComparisonOp | null
+    bmiValue: string
+    isAgeEligible: TriState
+    isCitizenOrPr: TriState
+    hasChild: TriState
+    isNonSmoker: boolean | null
+    hasSurrogateExperience: TriState
+    targetStageId: string
+    actionMode: ActionMode
+    triggerWorkflows: boolean
+    reason: string
+    previewState: PreviewState | null
+}
+type MassEditStageAction =
+    | { type: "reset"; targetStageId: string }
+    | { type: "set"; patch: Partial<MassEditStageState> }
+    | { type: "addRace"; race: string }
+    | { type: "removeRace"; race: string }
+
+function createInitialMassEditStageState(targetStageId = ""): MassEditStageState {
+    return {
+        statesInput: "",
+        createdFrom: "",
+        createdTo: "",
+        selectedRaces: [],
+        raceToAdd: null,
+        ageOp: null,
+        ageValue: "",
+        bmiOp: null,
+        bmiValue: "",
+        isAgeEligible: "any",
+        isCitizenOrPr: "any",
+        hasChild: "any",
+        isNonSmoker: null,
+        hasSurrogateExperience: "any",
+        targetStageId,
+        actionMode: "change_stage",
+        triggerWorkflows: false,
+        reason: "",
+        previewState: null,
+    }
+}
+
+function massEditStageReducer(
+    state: MassEditStageState,
+    action: MassEditStageAction
+): MassEditStageState {
+    switch (action.type) {
+        case "reset":
+            return createInitialMassEditStageState(action.targetStageId)
+        case "set":
+            return { ...state, ...action.patch }
+        case "addRace": {
+            if (state.selectedRaces.includes(action.race)) {
+                return { ...state, raceToAdd: null }
+            }
+            return {
+                ...state,
+                selectedRaces: [...state.selectedRaces, action.race],
+                raceToAdd: null,
+            }
+        }
+        case "removeRace":
+            return {
+                ...state,
+                selectedRaces: state.selectedRaces.filter((race) => race !== action.race),
+            }
+    }
+}
 
 const UTC_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -117,28 +198,32 @@ export function MassEditStageModal({
     const applyArchiveMutation = useApplySurrogateMassEditArchive()
     const optionsQuery = useSurrogateMassEditOptions({ enabled: open })
 
-    const [statesInput, setStatesInput] = React.useState("")
-    const [createdFrom, setCreatedFrom] = React.useState("")
-    const [createdTo, setCreatedTo] = React.useState("")
-    const [selectedRaces, setSelectedRaces] = React.useState<string[]>([])
-    const [raceToAdd, setRaceToAdd] = React.useState<string | null>(null)
-    const [ageOp, setAgeOp] = React.useState<ComparisonOp | null>(null)
-    const [ageValue, setAgeValue] = React.useState("")
-    const [bmiOp, setBmiOp] = React.useState<ComparisonOp | null>(null)
-    const [bmiValue, setBmiValue] = React.useState("")
-
-    const [isAgeEligible, setIsAgeEligible] = React.useState<TriState>("any")
-    const [isCitizenOrPr, setIsCitizenOrPr] = React.useState<TriState>("any")
-    const [hasChild, setHasChild] = React.useState<TriState>("any")
-    const [isNonSmoker, setIsNonSmoker] = React.useState<boolean | null>(null)
-    const [hasSurrogateExperience, setHasSurrogateExperience] = React.useState<TriState>("any")
-
-    const [targetStageId, setTargetStageId] = React.useState<string>("")
-    const [actionMode, setActionMode] = React.useState<ActionMode>("change_stage")
-    const [triggerWorkflows, setTriggerWorkflows] = React.useState(false)
-    const [reason, setReason] = React.useState("")
-
-    const [preview, setPreview] = React.useState<SurrogateMassEditStagePreviewResponse | null>(null)
+    const [state, dispatch] = React.useReducer(
+        massEditStageReducer,
+        "",
+        createInitialMassEditStageState
+    )
+    const {
+        statesInput,
+        createdFrom,
+        createdTo,
+        selectedRaces,
+        raceToAdd,
+        ageOp,
+        ageValue,
+        bmiOp,
+        bmiValue,
+        isAgeEligible,
+        isCitizenOrPr,
+        hasChild,
+        isNonSmoker,
+        hasSurrogateExperience,
+        targetStageId,
+        actionMode,
+        triggerWorkflows,
+        reason,
+        previewState,
+    } = state
 
     const activeStages = React.useMemo(
         () => stages.filter((s) => s.is_active).toSorted((a, b) => a.order - b.order),
@@ -159,31 +244,13 @@ export function MassEditStageModal({
         if (hasInitializedOpenRef.current) return
 
         hasInitializedOpenRef.current = true
-        setStatesInput("")
-        setCreatedFrom("")
-        setCreatedTo("")
-        setSelectedRaces([])
-        setRaceToAdd(null)
-        setAgeOp(null)
-        setAgeValue("")
-        setBmiOp(null)
-        setBmiValue("")
-        setIsAgeEligible("any")
-        setIsCitizenOrPr("any")
-        setHasChild("any")
-        setIsNonSmoker(null)
-        setHasSurrogateExperience("any")
-        setActionMode("change_stage")
-        setTriggerWorkflows(false)
-        setReason("")
-        setPreview(null)
-        setTargetStageId(defaultTargetStageId)
+        dispatch({ type: "reset", targetStageId: defaultTargetStageId })
     }, [open, defaultTargetStageId])
 
     // If stages load after opening, apply the default only while no stage is selected.
     React.useEffect(() => {
         if (!open || targetStageId || !defaultTargetStageId) return
-        setTargetStageId(defaultTargetStageId)
+        dispatch({ type: "set", patch: { targetStageId: defaultTargetStageId } })
     }, [open, targetStageId, defaultTargetStageId])
 
     const { states, error: statesError } = React.useMemo(() => parseStates(statesInput), [statesInput])
@@ -289,11 +356,6 @@ export function MassEditStageModal({
         createdTo,
     ])
 
-    // Any filter change invalidates preview (forces a re-preview before apply)
-    React.useEffect(() => {
-        setPreview(null)
-    }, [derivedFilters, targetStageId, actionMode, triggerWorkflows, reason])
-
     const mergedFilters: SurrogateMassEditStageFilters = React.useMemo(() => {
         const merged: SurrogateMassEditStageFilters = { ...baseFilters, ...derivedFilters }
         const hasModalCreatedOverride = Boolean(createdFrom || createdTo)
@@ -309,6 +371,19 @@ export function MassEditStageModal({
             ...(createdTo ? { created_to: createdTo } : {}),
         }
     }, [baseFilters, derivedFilters, createdFrom, createdTo])
+    const previewSignature = React.useMemo(
+        () =>
+            JSON.stringify({
+                filters: mergedFilters,
+                targetStageId,
+                actionMode,
+                triggerWorkflows,
+                reason,
+            }),
+        [mergedFilters, targetStageId, actionMode, triggerWorkflows, reason]
+    )
+    const preview =
+        previewState?.signature === previewSignature ? previewState.result : null
 
     const hasCreatedOverride = Boolean((baseFilters.created_from || baseFilters.created_to) && (createdFrom || createdTo))
     const effectiveCreatedRange = React.useMemo(() => {
@@ -333,7 +408,7 @@ export function MassEditStageModal({
         if (!canPreview) return
         try {
             const result = await previewMutation.mutateAsync({ data: { filters: mergedFilters }, limit: 25 })
-            setPreview(result)
+            dispatch({ type: "set", patch: { previewState: { result, signature: previewSignature } } })
             if (result.total === 0) toast.info("No surrogates matched those filters.")
         } catch (err) {
             const message = err instanceof Error ? err.message : "Preview failed"
@@ -455,7 +530,7 @@ export function MassEditStageModal({
                                     <Input
                                         id="mass-states"
                                         value={statesInput}
-                                        onChange={(e) => setStatesInput(e.target.value)}
+                                        onChange={(e) => dispatch({ type: "set", patch: { statesInput: e.target.value } })}
                                         placeholder="CA, TX, FL"
                                     />
                                     {statesError && (
@@ -469,7 +544,7 @@ export function MassEditStageModal({
                                         id="mass-created-from"
                                         type="date"
                                         value={createdFrom}
-                                        onChange={(e) => setCreatedFrom(e.target.value)}
+                                        onChange={(e) => dispatch({ type: "set", patch: { createdFrom: e.target.value } })}
                                     />
                                 </div>
 
@@ -479,7 +554,7 @@ export function MassEditStageModal({
                                         id="mass-created-to"
                                         type="date"
                                         value={createdTo}
-                                        onChange={(e) => setCreatedTo(e.target.value)}
+                                        onChange={(e) => dispatch({ type: "set", patch: { createdTo: e.target.value } })}
                                     />
                                     {createdDateError ? (
                                         <p className="text-xs text-destructive">{createdDateError}</p>
@@ -496,10 +571,7 @@ export function MassEditStageModal({
                                         value={raceToAdd}
                                         onValueChange={(value) => {
                                             if (!value) return
-                                            setSelectedRaces((prev) =>
-                                                prev.includes(value) ? prev : [...prev, value]
-                                            )
-                                            setRaceToAdd(null)
+                                            dispatch({ type: "addRace", race: value })
                                         }}
                                         disabled={optionsQuery.isPending || optionsQuery.isError}
                                     >
@@ -531,7 +603,7 @@ export function MassEditStageModal({
                                                         type="button"
                                                         className="rounded-sm p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                         onClick={() =>
-                                                            setSelectedRaces((prev) => prev.filter((r) => r !== raceKey))
+                                                            dispatch({ type: "removeRace", race: raceKey })
                                                         }
                                                         aria-label={`Remove race ${formatRace(raceKey)}`}
                                                     >
@@ -544,7 +616,7 @@ export function MassEditStageModal({
                                                 variant="ghost"
                                                 size="sm"
                                                 className="h-6 px-2"
-                                                onClick={() => setSelectedRaces([])}
+                                                onClick={() => dispatch({ type: "set", patch: { selectedRaces: [] } })}
                                             >
                                                 Clear
                                             </Button>
@@ -561,7 +633,9 @@ export function MassEditStageModal({
                                     <div className="grid grid-cols-[96px_1fr] gap-3">
                                         <Select
                                             value={ageOp}
-                                            onValueChange={(v) => setAgeOp(v ? (v as ComparisonOp) : null)}
+                                            onValueChange={(v) =>
+                                                dispatch({ type: "set", patch: { ageOp: v ? (v as ComparisonOp) : null } })
+                                            }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Op" />
@@ -577,7 +651,7 @@ export function MassEditStageModal({
                                         <Input
                                             inputMode="numeric"
                                             value={ageValue}
-                                            onChange={(e) => setAgeValue(e.target.value)}
+                                            onChange={(e) => dispatch({ type: "set", patch: { ageValue: e.target.value } })}
                                             placeholder="e.g. 36"
                                         />
                                     </div>
@@ -589,7 +663,9 @@ export function MassEditStageModal({
                                     <div className="grid grid-cols-[96px_1fr] gap-3">
                                         <Select
                                             value={bmiOp}
-                                            onValueChange={(v) => setBmiOp(v ? (v as ComparisonOp) : null)}
+                                            onValueChange={(v) =>
+                                                dispatch({ type: "set", patch: { bmiOp: v ? (v as ComparisonOp) : null } })
+                                            }
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Op" />
@@ -605,7 +681,7 @@ export function MassEditStageModal({
                                         <Input
                                             inputMode="decimal"
                                             value={bmiValue}
-                                            onChange={(e) => setBmiValue(e.target.value)}
+                                            onChange={(e) => dispatch({ type: "set", patch: { bmiValue: e.target.value } })}
                                             placeholder="e.g. 32"
                                         />
                                     </div>
@@ -620,7 +696,10 @@ export function MassEditStageModal({
 
                                 <div className="space-y-2">
                                     <Label>Age Eligible</Label>
-                                    <Select value={isAgeEligible} onValueChange={(v) => setIsAgeEligible(v as TriState)}>
+                                    <Select
+                                        value={isAgeEligible}
+                                        onValueChange={(v) => dispatch({ type: "set", patch: { isAgeEligible: v as TriState } })}
+                                    >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="any">Any</SelectItem>
@@ -632,7 +711,10 @@ export function MassEditStageModal({
 
                                 <div className="space-y-2">
                                     <Label>US Citizen or PR</Label>
-                                    <Select value={isCitizenOrPr} onValueChange={(v) => setIsCitizenOrPr(v as TriState)}>
+                                    <Select
+                                        value={isCitizenOrPr}
+                                        onValueChange={(v) => dispatch({ type: "set", patch: { isCitizenOrPr: v as TriState } })}
+                                    >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="any">Any</SelectItem>
@@ -644,7 +726,10 @@ export function MassEditStageModal({
 
                                 <div className="space-y-2">
                                     <Label>Has Child</Label>
-                                    <Select value={hasChild} onValueChange={(v) => setHasChild(v as TriState)}>
+                                    <Select
+                                        value={hasChild}
+                                        onValueChange={(v) => dispatch({ type: "set", patch: { hasChild: v as TriState } })}
+                                    >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="any">Any</SelectItem>
@@ -661,7 +746,12 @@ export function MassEditStageModal({
                                             type="button"
                                             variant={isNonSmoker === true ? "secondary" : "outline"}
                                             size="sm"
-                                            onClick={() => setIsNonSmoker((prev) => (prev === true ? null : true))}
+                                            onClick={() =>
+                                                dispatch({
+                                                    type: "set",
+                                                    patch: { isNonSmoker: isNonSmoker === true ? null : true },
+                                                })
+                                            }
                                         >
                                             Non-smoker
                                         </Button>
@@ -669,7 +759,12 @@ export function MassEditStageModal({
                                             type="button"
                                             variant={isNonSmoker === false ? "secondary" : "outline"}
                                             size="sm"
-                                            onClick={() => setIsNonSmoker((prev) => (prev === false ? null : false))}
+                                            onClick={() =>
+                                                dispatch({
+                                                    type: "set",
+                                                    patch: { isNonSmoker: isNonSmoker === false ? null : false },
+                                                })
+                                            }
                                         >
                                             Smoker allowed
                                         </Button>
@@ -678,7 +773,7 @@ export function MassEditStageModal({
                                                 type="button"
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => setIsNonSmoker(null)}
+                                                onClick={() => dispatch({ type: "set", patch: { isNonSmoker: null } })}
                                             >
                                                 Clear
                                             </Button>
@@ -691,7 +786,12 @@ export function MassEditStageModal({
 
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Prior Surrogate Experience</Label>
-                                    <Select value={hasSurrogateExperience} onValueChange={(v) => setHasSurrogateExperience(v as TriState)}>
+                                    <Select
+                                        value={hasSurrogateExperience}
+                                        onValueChange={(v) =>
+                                            dispatch({ type: "set", patch: { hasSurrogateExperience: v as TriState } })
+                                        }
+                                    >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="any">Any</SelectItem>
@@ -713,7 +813,7 @@ export function MassEditStageModal({
                                     type="button"
                                     variant={actionMode === "change_stage" ? "secondary" : "outline"}
                                     size="sm"
-                                    onClick={() => setActionMode("change_stage")}
+                                    onClick={() => dispatch({ type: "set", patch: { actionMode: "change_stage" } })}
                                 >
                                     Change Stage
                                 </Button>
@@ -721,7 +821,7 @@ export function MassEditStageModal({
                                     type="button"
                                     variant={actionMode === "archive" ? "secondary" : "outline"}
                                     size="sm"
-                                    onClick={() => setActionMode("archive")}
+                                    onClick={() => dispatch({ type: "set", patch: { actionMode: "archive" } })}
                                 >
                                     Archive
                                 </Button>
@@ -731,7 +831,10 @@ export function MassEditStageModal({
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label>New Stage</Label>
-                                        <Select value={targetStageId} onValueChange={(v) => setTargetStageId(v ?? "")}>
+                                        <Select
+                                            value={targetStageId}
+                                            onValueChange={(v) => dispatch({ type: "set", patch: { targetStageId: v ?? "" } })}
+                                        >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Select a stage">
                                                     {(value: string | null) => {
@@ -765,7 +868,12 @@ export function MassEditStageModal({
                                                     Toggle whether status-change workflows run.
                                                 </div>
                                             </div>
-                                            <Switch checked={triggerWorkflows} onCheckedChange={setTriggerWorkflows} />
+                                            <Switch
+                                                checked={triggerWorkflows}
+                                                onCheckedChange={(checked) =>
+                                                    dispatch({ type: "set", patch: { triggerWorkflows: checked } })
+                                                }
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -780,7 +888,7 @@ export function MassEditStageModal({
                                 <Textarea
                                     id="mass-reason"
                                     value={reason}
-                                    onChange={(e) => setReason(e.target.value)}
+                                    onChange={(e) => dispatch({ type: "set", patch: { reason: e.target.value } })}
                                     placeholder={
                                         actionMode === "archive"
                                             ? "e.g. Bulk archive dormant leads"

@@ -103,6 +103,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
         expect(source).toContain("const defaultTargetStageId = React.useMemo")
         expect(source).toContain("if (!open || targetStageId || !defaultTargetStageId) return")
+        expect(source).toContain("const previewSignature = React.useMemo")
+        expect(source).toContain("previewState?.signature === previewSignature")
+        expect(source).toContain("function massEditStageReducer")
+        expect(source).toContain("const [state, dispatch] = React.useReducer(")
+        expect(source).toContain("massEditStageReducer,")
+        expect(source).not.toContain("setStatesInput")
+        expect(source).not.toContain("setPreviewState")
+        expect(source).not.toContain("setPreview(null)")
     })
 
     it("derives open alert count instead of storing duplicate state", () => {
