@@ -300,6 +300,17 @@ describe("React regression guards (source)", () => {
         expect(aiBuilderSource).not.toContain("flex flex-col items-center text-center space-y-4")
     })
 
+    it("uses plain punctuation for Meta asset detail labels", () => {
+        const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
+
+        expect(source).toContain("{` (${account.name})`}")
+        expect(source).toContain("{` (${page.name})`}")
+        expect(source).toContain("{`${conflict.id}: connected by ${conflict.connected_by_meta_user || \"Unknown\"}`}")
+        expect(source).not.toContain("— {account.name}")
+        expect(source).not.toContain("— {page.name}")
+        expect(source).not.toContain("{conflict.id} — connected by")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

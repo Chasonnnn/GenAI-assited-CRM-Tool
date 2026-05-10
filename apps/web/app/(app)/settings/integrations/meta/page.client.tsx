@@ -276,10 +276,7 @@ function MetaAssetSelection({
                                             <div className="text-sm">
                                                 <span className="font-mono">{account.id}</span>
                                                 {account.name && (
-                                                    <span className="text-muted-foreground">
-                                                        {" "}
-                                                        — {account.name}
-                                                    </span>
+                                                    <span className="text-muted-foreground">{` (${account.name})`}</span>
                                                 )}
                                             </div>
                                         </div>
@@ -311,10 +308,7 @@ function MetaAssetSelection({
                                             <div className="text-sm">
                                                 <span className="font-mono">{page.id}</span>
                                                 {page.name && (
-                                                    <span className="text-muted-foreground">
-                                                        {" "}
-                                                        — {page.name}
-                                                    </span>
+                                                    <span className="text-muted-foreground">{` (${page.name})`}</span>
                                                 )}
                                             </div>
                                         </div>
@@ -371,7 +365,7 @@ function MetaAssetSelection({
                     <div className="space-y-2">
                         {conflicts.map((conflict) => (
                             <div key={`${conflict.id}`} className="text-sm text-muted-foreground">
-                                {conflict.id} — connected by {conflict.connected_by_meta_user || "Unknown"}
+                                {`${conflict.id}: connected by ${conflict.connected_by_meta_user || "Unknown"}`}
                             </div>
                         ))}
                     </div>
