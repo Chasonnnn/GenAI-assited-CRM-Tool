@@ -17,6 +17,7 @@ function Slider({
   max = 100,
   ...props
 }: SliderProps) {
+  const sliderId = React.useId()
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -25,6 +26,10 @@ function Slider({
           ? defaultValue
           : [min, max],
     [value, defaultValue, min, max]
+  )
+  const thumbKeys = React.useMemo(
+    () => Array.from({ length: _values.length }, (_, index) => `${sliderId}-thumb-${index}`),
+    [sliderId, _values.length]
   )
 
   return (
@@ -53,10 +58,10 @@ function Slider({
             className="bg-primary select-none data-horizontal:h-full data-vertical:w-full"
           />
         </SliderPrimitive.Track>
-        {Array.from({ length: _values.length }, (_, index) => (
+        {thumbKeys.map((thumbKey) => (
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
-            key={index}
+            key={thumbKey}
             className="border-primary ring-ring/50 size-4 rounded-4xl border bg-white shadow-sm transition-colors hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
           />
         ))}
