@@ -93,22 +93,26 @@ function TrustAddressField({
     const [draft, setDraft] = React.useState<TrustAddressDraft>(() => buildAddressDraft(intendedParent))
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const firstInputRef = React.useRef<HTMLInputElement>(null)
+    const shouldFocusFirstInputRef = React.useRef(false)
 
     const addressSummary = formatTrustAddress(intendedParent)
 
-    React.useEffect(() => {
-        setDraft(buildAddressDraft(intendedParent))
-    }, [intendedParent])
-
-    React.useEffect(() => {
-        if (isEditing) {
-            firstInputRef.current?.focus()
+    const setFirstInputRef = (element: HTMLInputElement | null) => {
+        if (element && shouldFocusFirstInputRef.current) {
+            shouldFocusFirstInputRef.current = false
+            element.focus()
         }
-    }, [isEditing])
+    }
 
     const setField = (field: keyof TrustAddressDraft, value: string) => {
         setDraft((current) => ({ ...current, [field]: value }))
+    }
+
+    const openAddressEditor = () => {
+        setDraft(buildAddressDraft(intendedParent))
+        setError(null)
+        shouldFocusFirstInputRef.current = true
+        setIsEditing(true)
     }
 
     const handleCancel = () => {
@@ -155,14 +159,14 @@ function TrustAddressField({
         return (
             <div
                 className="group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={() => setIsEditing(true)}
+                onClick={openAddressEditor}
                 role="button"
                 tabIndex={0}
                 aria-label="Edit Trust address"
                 onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
                         event.preventDefault()
-                        setIsEditing(true)
+                        openAddressEditor()
                     }
                 }}
             >
@@ -184,7 +188,7 @@ function TrustAddressField({
                     <span className="text-xs text-muted-foreground">Address line 1</span>
                     <Input
                         id="trust-address-line-1"
-                        ref={firstInputRef}
+                        ref={setFirstInputRef}
                         value={draft.trust_address_line1}
                         onChange={(event) => setField("trust_address_line1", event.target.value)}
                         aria-label="Trust address line 1"
@@ -279,17 +283,21 @@ function TrustNotesField({
     const [draft, setDraft] = React.useState(value ?? "")
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+    const shouldFocusTextareaRef = React.useRef(false)
 
-    React.useEffect(() => {
-        setDraft(value ?? "")
-    }, [value])
-
-    React.useEffect(() => {
-        if (isEditing) {
-            textareaRef.current?.focus()
+    const setTextareaRef = (element: HTMLTextAreaElement | null) => {
+        if (element && shouldFocusTextareaRef.current) {
+            shouldFocusTextareaRef.current = false
+            element.focus()
         }
-    }, [isEditing])
+    }
+
+    const openNotesEditor = () => {
+        setDraft(value ?? "")
+        setError(null)
+        shouldFocusTextareaRef.current = true
+        setIsEditing(true)
+    }
 
     const handleCancel = () => {
         setDraft(value ?? "")
@@ -321,14 +329,14 @@ function TrustNotesField({
         return (
             <div
                 className="group flex items-start gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={() => setIsEditing(true)}
+                onClick={openNotesEditor}
                 role="button"
                 tabIndex={0}
                 aria-label="Edit Trust notes"
                 onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
                         event.preventDefault()
-                        setIsEditing(true)
+                        openNotesEditor()
                     }
                 }}
             >
@@ -346,7 +354,7 @@ function TrustNotesField({
     return (
         <div className="space-y-3">
             <Textarea
-                ref={textareaRef}
+                ref={setTextareaRef}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 aria-label="Trust notes"

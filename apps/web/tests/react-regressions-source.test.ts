@@ -1117,6 +1117,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setEditingRuleDraft({ ...editingRuleDraft")
     })
 
+    it("resets intended-parent trust drafts from edit events, not prop-sync effects", () => {
+        const source = readSource("components/intended-parents/TrustInfoCard.tsx")
+
+        expect(source).toContain("const openAddressEditor = () => {")
+        expect(source).toContain("const openNotesEditor = () => {")
+        expect(source).not.toContain("React.useEffect(() => {\n        setDraft(buildAddressDraft(intendedParent))")
+        expect(source).not.toContain("React.useEffect(() => {\n        setDraft(value ?? \"\")")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
