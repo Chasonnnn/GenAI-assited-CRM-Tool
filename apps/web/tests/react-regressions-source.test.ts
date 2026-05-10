@@ -229,6 +229,7 @@ describe("React regression guards (source)", () => {
     it("keeps test-only factories and interview internals private", () => {
         const handlersSource = readSource("tests/mocks/handlers.ts")
         const interviewWrapperSource = readSource("components/surrogates/interviews/SurrogateInterviewTab.tsx")
+        const interviewApiSource = readSource("lib/api/interviews.ts")
 
         expect(handlersSource).not.toContain("export const mockSurrogate")
         expect(handlersSource).not.toContain("export const mockUser")
@@ -237,6 +238,7 @@ describe("React regression guards (source)", () => {
         expect(interviewWrapperSource).not.toContain("type DialogState")
         expect(interviewWrapperSource).not.toContain("type UploadState")
         expect(interviewWrapperSource).not.toContain("type FormState")
+        expect(interviewApiSource).not.toContain("export type TranscriptionStatus")
     })
 
     it("keeps unused task and stage helper exports out of public modules", () => {

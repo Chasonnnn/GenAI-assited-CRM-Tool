@@ -13,7 +13,7 @@ import type { JsonObject } from '../types/json';
 // Interview types
 export type InterviewType = 'phone' | 'video' | 'in_person';
 export type InterviewStatus = 'draft' | 'completed';
-export type TranscriptionStatus = 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
+type TranscriptionStatus = 'not_started' | 'pending' | 'processing' | 'completed' | 'failed';
 
 // Interview list item
 export interface InterviewListItem {
