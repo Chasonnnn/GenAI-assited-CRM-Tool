@@ -1008,6 +1008,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("return sourceGroups\n            .map")
     })
 
+    it("uses project theme tokens instead of default indigo accents", () => {
+        const aiBuilderSource = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+        const integrationsSource = readSource("app/(app)/settings/integrations/page.tsx")
+
+        expect(aiBuilderSource).not.toContain("indigo-")
+        expect(integrationsSource).not.toContain("indigo-")
+    })
+
     it("documents the generic label accessibility lint boundary", () => {
         const source = readSource("components/ui/label.tsx")
 

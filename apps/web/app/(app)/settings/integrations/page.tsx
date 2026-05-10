@@ -2047,8 +2047,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                     <Card>
                         <CardHeader className="pb-3">
                             <div className="flex items-center gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900">
-                                    <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+                                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
+                                    <LinkIcon className="size-5 text-primary" aria-hidden="true" />
                                 </div>
                                 <div>
                                     <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
@@ -4090,8 +4090,8 @@ export default function IntegrationsPage() {
                         <Card>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900">
-                                        <LinkIcon className="size-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+                                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
+                                        <LinkIcon className="size-5 text-primary" aria-hidden="true" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Zapier</CardTitle>

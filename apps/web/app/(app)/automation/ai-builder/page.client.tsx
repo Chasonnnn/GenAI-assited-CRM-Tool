@@ -402,7 +402,7 @@ export default function AIWorkflowBuilderPage() {
                                 {mode === "workflow" ? (
                                     <SparklesIcon className="size-6 text-teal-500" />
                                 ) : (
-                                    <MailIcon className="size-6 text-indigo-500" />
+                                    <MailIcon className="size-6 text-primary" />
                                 )}
                                 <h1 className="text-2xl font-semibold">
                                     {mode === "workflow" ? "AI Workflow Builder" : "AI Email Template Builder"}
@@ -709,12 +709,12 @@ export default function AIWorkflowBuilderPage() {
                 )}
 
                 {mode === "email_template" && generatedTemplate && (
-                    <Card className="border-indigo-500/30">
+                    <Card className="border-primary/30">
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <div>
                                     <CardTitle className="flex items-center gap-2">
-                                        <MailIcon className="size-5 text-indigo-500" />
+                                        <MailIcon className="size-5 text-primary" />
                                         {templateName || generatedTemplate.name}
                                     </CardTitle>
                                 {templateExplanation && (
@@ -873,8 +873,8 @@ export default function AIWorkflowBuilderPage() {
                     <Card className="bg-muted/30 border-dashed">
                         <CardContent className="py-8">
                             <div className="flex flex-col items-center text-center gap-y-4">
-                                <div className="size-16 rounded-full bg-indigo-500/10 flex items-center justify-center">
-                                    <MailIcon className="size-8 text-indigo-500" />
+                                <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <MailIcon className="size-8 text-primary" />
                                 </div>
                                 <div>
                                     <h3 className="font-semibold text-lg">How It Works</h3>
