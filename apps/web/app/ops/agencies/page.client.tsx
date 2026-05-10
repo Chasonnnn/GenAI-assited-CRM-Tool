@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import Link from "@/components/app-link";
 import { useRouter } from 'next/navigation';
 import { listOrganizations, type OrganizationSummary } from '@/lib/api/platform';
@@ -22,8 +22,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { RelativeTime } from '@/components/ui/time-display';
 import { Building2, Plus, Search, ChevronRight, Loader2, Users } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 
 const STATUS_BADGE_VARIANTS: Record<string, string> = {
     active: 'bg-green-500/10 text-green-600 border-green-500/20',
@@ -38,34 +38,69 @@ const PLAN_BADGE_VARIANTS: Record<string, string> = {
     enterprise: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
 };
 
+type AgenciesState = {
+    agencies: OrganizationSummary[]
+    total: number
+    isLoading: boolean
+    search: string
+    statusFilter: string
+}
+
+type AgenciesAction =
+    | { type: "set-search"; search: string }
+    | { type: "set-status-filter"; statusFilter: string }
+    | { type: "load-start" }
+    | { type: "load-success"; agencies: OrganizationSummary[]; total: number }
+    | { type: "load-error" }
+
+const INITIAL_AGENCIES_STATE: AgenciesState = {
+    agencies: [],
+    total: 0,
+    isLoading: true,
+    search: "",
+    statusFilter: "",
+}
+
+function agenciesReducer(state: AgenciesState, action: AgenciesAction): AgenciesState {
+    switch (action.type) {
+        case "set-search":
+            return { ...state, search: action.search }
+        case "set-status-filter":
+            return { ...state, statusFilter: action.statusFilter }
+        case "load-start":
+            return { ...state, isLoading: true }
+        case "load-success":
+            return { ...state, agencies: action.agencies, total: action.total, isLoading: false }
+        case "load-error":
+            return { ...state, isLoading: false }
+    }
+}
+
 export default function AgenciesPage() {
-    const router = useRouter();
-    const [agencies, setAgencies] = useState<OrganizationSummary[]>([]);
-    const [total, setTotal] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-    const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<string>('');
+    const { push } = useRouter();
+    const [state, dispatch] = useReducer(agenciesReducer, INITIAL_AGENCIES_STATE);
+    const { agencies, total, isLoading, search, statusFilter } = state;
 
     useEffect(() => {
         let isCurrent = true;
 
         async function fetchAgencies() {
-            setIsLoading(true);
+            dispatch({ type: "load-start" });
             try {
                 const data = await listOrganizations({
                     ...(search ? { search } : {}),
                     ...(statusFilter ? { status: statusFilter } : {}),
                 });
                 if (!isCurrent) return;
-                setAgencies(data.items.filter((item) => !item.deleted_at));
-                setTotal(data.total);
+                dispatch({
+                    type: "load-success",
+                    agencies: data.items.filter((item) => !item.deleted_at),
+                    total: data.total,
+                });
             } catch (error) {
                 if (!isCurrent) return;
                 console.error('Failed to fetch agencies:', error);
-            } finally {
-                if (isCurrent) {
-                    setIsLoading(false);
-                }
+                dispatch({ type: "load-error" });
             }
         }
 
@@ -101,11 +136,14 @@ export default function AgenciesPage() {
                     <Input
                         placeholder="Search by name or slug..."
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) => dispatch({ type: "set-search", search: e.target.value })}
                         className="pl-9"
                     />
                 </div>
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v || '')}>
+                <Select
+                    value={statusFilter}
+                    onValueChange={(v) => dispatch({ type: "set-status-filter", statusFilter: v || "" })}
+                >
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
@@ -155,7 +193,7 @@ export default function AgenciesPage() {
                                 <TableRow
                                     key={agency.id}
                                     className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                                    onClick={() => router.push(`/ops/agencies/${agency.id}`)}
+                                    onClick={() => push(`/ops/agencies/${agency.id}`)}
                                 >
                                     <TableCell>
                                         <div>
@@ -193,9 +231,7 @@ export default function AgenciesPage() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-stone-500 dark:text-stone-400 text-sm">
-                                        {formatDistanceToNow(new Date(agency.created_at), {
-                                            addSuffix: true,
-                                        })}
+                                        <RelativeTime value={agency.created_at} />
                                     </TableCell>
                                     <TableCell>
                                         <ChevronRight className="size-4 text-stone-400" />

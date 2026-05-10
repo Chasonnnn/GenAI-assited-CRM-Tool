@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import Link from "@/components/app-link";
 import { listAlerts, acknowledgeAlert, resolveAlert, type PlatformAlert } from '@/lib/api/platform';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { RelativeTime } from '@/components/ui/time-display';
 import { AlertTriangle, CheckCircle, XCircle, AlertCircle, RefreshCw, Loader2, Building2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 
 type SeverityConfig = { icon: React.ElementType; color: string; badge: string };
@@ -49,28 +49,83 @@ const STATUS_BADGE: Record<string, string> = {
     snoozed: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
 };
 
+type AlertsState = {
+    alerts: PlatformAlert[]
+    total: number
+    isLoading: boolean
+    statusFilter: string
+    severityFilter: string
+    actionLoading: string | null
+}
+
+type AlertsAction =
+    | { type: "set-status-filter"; statusFilter: string }
+    | { type: "set-severity-filter"; severityFilter: string }
+    | { type: "load-start" }
+    | { type: "load-success"; alerts: PlatformAlert[]; total: number }
+    | { type: "load-error" }
+    | { type: "set-action-loading"; alertId: string | null }
+    | { type: "acknowledge-alert"; alertId: string }
+    | { type: "resolve-alert"; alertId: string; resolvedAt: string | undefined }
+
+const INITIAL_ALERTS_STATE: AlertsState = {
+    alerts: [],
+    total: 0,
+    isLoading: true,
+    statusFilter: "",
+    severityFilter: "",
+    actionLoading: null,
+}
+
+function alertsReducer(state: AlertsState, action: AlertsAction): AlertsState {
+    switch (action.type) {
+        case "set-status-filter":
+            return { ...state, statusFilter: action.statusFilter }
+        case "set-severity-filter":
+            return { ...state, severityFilter: action.severityFilter }
+        case "load-start":
+            return { ...state, isLoading: true }
+        case "load-success":
+            return { ...state, alerts: action.alerts, total: action.total, isLoading: false }
+        case "load-error":
+            return { ...state, isLoading: false }
+        case "set-action-loading":
+            return { ...state, actionLoading: action.alertId }
+        case "acknowledge-alert":
+            return {
+                ...state,
+                alerts: state.alerts.map((alert) =>
+                    alert.id === action.alertId ? { ...alert, status: "acknowledged" as const } : alert,
+                ),
+            }
+        case "resolve-alert":
+            return {
+                ...state,
+                alerts: state.alerts.map((alert): PlatformAlert =>
+                    alert.id === action.alertId
+                        ? { ...alert, status: "resolved", resolved_at: action.resolvedAt }
+                        : alert,
+                ),
+            }
+    }
+}
+
 export default function GlobalAlertsPage() {
-    const [alerts, setAlerts] = useState<PlatformAlert[]>([]);
-    const [total, setTotal] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState<string>('');
-    const [severityFilter, setSeverityFilter] = useState<string>('');
-    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [state, dispatch] = useReducer(alertsReducer, INITIAL_ALERTS_STATE);
+    const { alerts, total, isLoading, statusFilter, severityFilter, actionLoading } = state;
 
     const fetchAlerts = useCallback(async () => {
-        setIsLoading(true);
+        dispatch({ type: "load-start" });
         try {
             const data = await listAlerts({
                 ...(statusFilter ? { status: statusFilter } : {}),
                 ...(severityFilter ? { severity: severityFilter } : {}),
             });
-            setAlerts(data.items);
-            setTotal(data.total);
+            dispatch({ type: "load-success", alerts: data.items, total: data.total });
         } catch (error) {
             console.error('Failed to fetch alerts:', error);
             toast.error('Failed to load alerts');
-        } finally {
-            setIsLoading(false);
+            dispatch({ type: "load-error" });
         }
     }, [statusFilter, severityFilter]);
 
@@ -79,38 +134,30 @@ export default function GlobalAlertsPage() {
     }, [fetchAlerts]);
 
     const handleAcknowledge = async (alertId: string) => {
-        setActionLoading(alertId);
+        dispatch({ type: "set-action-loading", alertId });
         try {
             await acknowledgeAlert(alertId);
-            setAlerts((prev) =>
-                prev.map((a) => (a.id === alertId ? { ...a, status: 'acknowledged' as const } : a))
-            );
+            dispatch({ type: "acknowledge-alert", alertId });
             toast.success('Alert acknowledged');
         } catch (error) {
             console.error('Failed to acknowledge alert:', error);
             toast.error('Failed to acknowledge alert');
         } finally {
-            setActionLoading(null);
+            dispatch({ type: "set-action-loading", alertId: null });
         }
     };
 
     const handleResolve = async (alertId: string) => {
-        setActionLoading(alertId);
+        dispatch({ type: "set-action-loading", alertId });
         try {
             const result = await resolveAlert(alertId);
-            setAlerts((prev) =>
-                prev.map((a): PlatformAlert =>
-                    a.id === alertId
-                        ? { ...a, status: 'resolved', resolved_at: result.resolved_at ?? undefined }
-                        : a
-                )
-            );
+            dispatch({ type: "resolve-alert", alertId, resolvedAt: result.resolved_at ?? undefined });
             toast.success('Alert resolved');
         } catch (error) {
             console.error('Failed to resolve alert:', error);
             toast.error('Failed to resolve alert');
         } finally {
-            setActionLoading(null);
+            dispatch({ type: "set-action-loading", alertId: null });
         }
     };
 
@@ -134,7 +181,10 @@ export default function GlobalAlertsPage() {
 
             {/* Filters */}
             <div className="flex gap-4">
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v || '')}>
+                <Select
+                    value={statusFilter}
+                    onValueChange={(v) => dispatch({ type: "set-status-filter", statusFilter: v || "" })}
+                >
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
@@ -147,7 +197,10 @@ export default function GlobalAlertsPage() {
                     </SelectContent>
                 </Select>
 
-                <Select value={severityFilter} onValueChange={(v) => setSeverityFilter(v || '')}>
+                <Select
+                    value={severityFilter}
+                    onValueChange={(v) => dispatch({ type: "set-severity-filter", severityFilter: v || "" })}
+                >
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="All severities" />
                     </SelectTrigger>
@@ -215,9 +268,7 @@ export default function GlobalAlertsPage() {
                                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                             <span>
                                                 Last seen:{' '}
-                                                {formatDistanceToNow(new Date(alert.last_seen_at), {
-                                                    addSuffix: true,
-                                                })}
+                                                <RelativeTime value={alert.last_seen_at} />
                                             </span>
                                             {alert.occurrence_count > 1 && (
                                                 <span className="font-medium">
