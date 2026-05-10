@@ -210,10 +210,15 @@ export default function AIWorkflowBuilderPage() {
         () => new Set(templateVariableCatalog.map((variable) => variable.name)),
         [templateVariableCatalog]
     )
-    const requiredTemplateVariableNames = useMemo(
-        () => templateVariableCatalog.filter((variable) => variable.required).map((variable) => variable.name),
-        [templateVariableCatalog]
-    )
+    const requiredTemplateVariableNames = useMemo(() => {
+        const names: string[] = []
+        for (const variable of templateVariableCatalog) {
+            if (variable.required) {
+                names.push(variable.name)
+            }
+        }
+        return names
+    }, [templateVariableCatalog])
     const missingRequiredVariables = useMemo(() => {
         if (!generatedTemplate) return []
         if (!canValidateTemplateVariables) return []
@@ -616,24 +621,26 @@ export default function AIWorkflowBuilderPage() {
                             <div className="bg-muted/50 rounded-lg p-4">
                                 <p className="text-sm font-medium text-muted-foreground mb-2">Actions</p>
                                 <ul className="space-y-2">
-                                    {getStableKeyedItems(generatedWorkflow.actions, getWorkflowActionKey).map(({ item: action, key, position }) => (
-                                        <li key={key} className="flex items-start gap-2">
-                                            <Badge variant="secondary" className="shrink-0">
-                                                {position + 1}
-                                            </Badge>
-                                            <div>
-                                                <p className="font-medium">
-                                                    {ACTION_LABELS[action.action_type] || action.action_type}
-                                                </p>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {Object.entries(action)
-                                                        .filter(([k]) => k !== "action_type")
-                                                        .map(([k, v]) => `${k}: ${v}`)
-                                                        .join(", ")}
-                                                </p>
-                                            </div>
-                                        </li>
-                                    ))}
+                                    {getStableKeyedItems(generatedWorkflow.actions, getWorkflowActionKey).map(({ item: action, key, position }) => {
+                                        const workflowActionDetails = Object.entries(action).flatMap(([k, v]) =>
+                                            k === "action_type" ? [] : [`${k}: ${v}`]
+                                        )
+                                        return (
+                                            <li key={key} className="flex items-start gap-2">
+                                                <Badge variant="secondary" className="shrink-0">
+                                                    {position + 1}
+                                                </Badge>
+                                                <div>
+                                                    <p className="font-medium">
+                                                        {ACTION_LABELS[action.action_type] || action.action_type}
+                                                    </p>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {workflowActionDetails.join(", ")}
+                                                    </p>
+                                                </div>
+                                            </li>
+                                        )
+                                    })}
                                 </ul>
                             </div>
 

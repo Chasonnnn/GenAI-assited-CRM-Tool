@@ -1171,6 +1171,27 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setPendingFocus(")
     })
 
+    it("keeps automation and AI derived lists single pass", () => {
+        const emailTemplatesSource = readSource("app/(app)/automation/email-templates/page.tsx")
+        const aiBuilderSource = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+        const aiAssistantSource = readSource("app/(app)/ai-assistant/page.tsx")
+
+        expect(emailTemplatesSource).toContain("const requiredVariableNames = React.useMemo(() => {")
+        expect(emailTemplatesSource).toContain("for (const variable of templateVariables) {")
+        expect(emailTemplatesSource).not.toContain("templateVariables.filter((variable) => variable.required).map")
+
+        expect(aiBuilderSource).toContain("const requiredTemplateVariableNames = useMemo(() => {")
+        expect(aiBuilderSource).toContain("for (const variable of templateVariableCatalog) {")
+        expect(aiBuilderSource).toContain("const workflowActionDetails = Object.entries(action).flatMap")
+        expect(aiBuilderSource).not.toContain("templateVariableCatalog.filter((variable) => variable.required).map")
+        expect(aiBuilderSource).not.toContain(".filter(([k]) => k !== \"action_type\")")
+
+        expect(aiAssistantSource).toContain("for (const entry of parsed) {")
+        expect(aiAssistantSource).toContain("for (const msg of rawMessages) {")
+        expect(aiAssistantSource).not.toContain("return parsed\n            .filter")
+        expect(aiAssistantSource).not.toContain("const messages: Message[] = rawMessages\n                    .filter")
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

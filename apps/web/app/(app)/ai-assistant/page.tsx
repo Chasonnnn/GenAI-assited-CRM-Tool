@@ -54,19 +54,19 @@ function formatHistoryTime(value: string) {
 }
 
 function normalizeMessagesForSession(messages: Message[]) {
-    return messages
-        .filter((msg) => msg.id !== "welcome")
-        .slice(-SESSION_MESSAGE_LIMIT)
-        .map((msg) => {
-            const normalizedStatus =
-                msg.status === "thinking" || msg.status === "streaming"
-                    ? "done"
-                    : msg.status ?? "done"
-            return {
-                ...msg,
-                status: normalizedStatus,
-            }
+    const normalizedMessages: Message[] = []
+    for (const msg of messages) {
+        if (msg.id === "welcome") continue
+        const normalizedStatus =
+            msg.status === "thinking" || msg.status === "streaming"
+                ? "done"
+                : msg.status ?? "done"
+        normalizedMessages.push({
+            ...msg,
+            status: normalizedStatus,
         })
+    }
+    return normalizedMessages.slice(-SESSION_MESSAGE_LIMIT)
 }
 
 function safeParseHistory(raw: string | null): ChatSession[] {
@@ -74,68 +74,69 @@ function safeParseHistory(raw: string | null): ChatSession[] {
     try {
         const parsed = JSON.parse(raw)
         if (!Array.isArray(parsed)) return []
-        return parsed
-            .filter((entry) => entry && typeof entry === "object")
-            .map((entry): ChatSession | null => {
-                const hasSurrogateContext =
-                    entry.entityType === "surrogate" || typeof entry.entityId === "string"
-                if (hasSurrogateContext) {
-                    return null
-                }
-                const id = typeof entry.id === "string" ? entry.id : `session-${Date.now()}`
-                const label = typeof entry.label === "string" ? entry.label : "Chat"
-                const preview = typeof entry.preview === "string" ? entry.preview : ""
-                const updatedAt =
-                    typeof entry.updatedAt === "string" ? entry.updatedAt : new Date().toISOString()
-                const conversationId =
-                    typeof entry.conversationId === "string" ? entry.conversationId : null
-                const rawMessages = Array.isArray(entry.messages)
-                    ? (entry.messages as unknown[])
-                    : []
-                const messages: Message[] = rawMessages
-                    .filter((msg): msg is Record<string, unknown> => !!msg && typeof msg === "object")
-                    .map((msg) => {
-                              const rawStatus = msg.status
-                              const status =
-                                  rawStatus === "thinking" ||
-                                  rawStatus === "streaming" ||
-                                  rawStatus === "done" ||
-                                  rawStatus === "error"
-                                      ? rawStatus
-                                      : undefined
-                              const rawRole = msg.role
-                              const rawTimestamp = msg.timestamp
-                              const rawContent = msg.content
-                              const rawActions = msg.proposed_actions
-                              const proposed_actions = Array.isArray(rawActions) ? rawActions as ProposedAction[] : undefined
-                              return {
-                                  id: typeof msg.id === "string" ? msg.id : `msg-${Date.now()}`,
-                                  role: rawRole === "assistant" ? "assistant" : "user",
-                                  content: typeof rawContent === "string" ? rawContent : "",
-                                  timestamp:
-                                      typeof rawTimestamp === "string"
-                                          ? rawTimestamp
-                                          : new Date().toLocaleTimeString("en-US", {
-                                                hour: "numeric",
-                                                minute: "2-digit",
-                                            }),
-                                  ...(proposed_actions ? { proposed_actions } : {}),
-                                  ...(status ? { status } : {}),
-                              }
-                          })
-                return {
-                    id,
-                    label,
-                    preview,
-                    updatedAt,
-                    entityType: "global",
-                    entityId: null,
-                    conversationId,
-                    messages,
-                }
+        const sessions: ChatSession[] = []
+        for (const entry of parsed) {
+            if (!entry || typeof entry !== "object") continue
+            const record = entry as Record<string, unknown>
+            const hasSurrogateContext =
+                record.entityType === "surrogate" || typeof record.entityId === "string"
+            if (hasSurrogateContext) continue
+
+            const id = typeof record.id === "string" ? record.id : `session-${Date.now()}`
+            const label = typeof record.label === "string" ? record.label : "Chat"
+            const preview = typeof record.preview === "string" ? record.preview : ""
+            const updatedAt =
+                typeof record.updatedAt === "string" ? record.updatedAt : new Date().toISOString()
+            const conversationId =
+                typeof record.conversationId === "string" ? record.conversationId : null
+            const rawMessages = Array.isArray(record.messages) ? record.messages : []
+            const messages: Message[] = []
+
+            for (const msg of rawMessages) {
+                if (!msg || typeof msg !== "object") continue
+                const messageRecord = msg as Record<string, unknown>
+                const rawStatus = messageRecord.status
+                const status =
+                    rawStatus === "thinking" ||
+                    rawStatus === "streaming" ||
+                    rawStatus === "done" ||
+                    rawStatus === "error"
+                        ? rawStatus
+                        : undefined
+                const rawRole = messageRecord.role
+                const rawTimestamp = messageRecord.timestamp
+                const rawContent = messageRecord.content
+                const rawActions = messageRecord.proposed_actions
+                const proposed_actions = Array.isArray(rawActions) ? rawActions as ProposedAction[] : undefined
+                messages.push({
+                    id: typeof messageRecord.id === "string" ? messageRecord.id : `msg-${Date.now()}`,
+                    role: rawRole === "assistant" ? "assistant" : "user",
+                    content: typeof rawContent === "string" ? rawContent : "",
+                    timestamp:
+                        typeof rawTimestamp === "string"
+                            ? rawTimestamp
+                            : new Date().toLocaleTimeString("en-US", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                              }),
+                    ...(proposed_actions ? { proposed_actions } : {}),
+                    ...(status ? { status } : {}),
+                })
+            }
+
+            sessions.push({
+                id,
+                label,
+                preview,
+                updatedAt,
+                entityType: "global",
+                entityId: null,
+                conversationId,
+                messages,
             })
-            .filter((entry): entry is ChatSession => entry !== null)
-            .slice(0, MAX_CHAT_HISTORY)
+            if (sessions.length >= MAX_CHAT_HISTORY) break
+        }
+        return sessions
     } catch {
         return []
     }

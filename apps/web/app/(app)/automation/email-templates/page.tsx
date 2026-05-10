@@ -798,10 +798,15 @@ export default function EmailTemplatesPage() {
         () => new Set(templateVariables.map((variable) => variable.name)),
         [templateVariables]
     )
-    const requiredVariableNames = React.useMemo(
-        () => templateVariables.filter((variable) => variable.required).map((variable) => variable.name),
-        [templateVariables]
-    )
+    const requiredVariableNames = React.useMemo(() => {
+        const names: string[] = []
+        for (const variable of templateVariables) {
+            if (variable.required) {
+                names.push(variable.name)
+            }
+        }
+        return names
+    }, [templateVariables])
     const usedVariableNames = React.useMemo(
         () => extractTemplateVariables(`${templateSubject}\n${templateBody}`),
         [templateSubject, templateBody]
