@@ -117,10 +117,12 @@ export function ChangeStageModal({
     const [interviewHourInput, setInterviewHourInput] = useState("")
     const [interviewMinuteInput, setInterviewMinuteInput] = useState("")
     const [interviewMeridiem, setInterviewMeridiem] = useState<InterviewMeridiem>("PM")
+    const [calendarToday, setCalendarToday] = useState<Date | undefined>(undefined)
 
     // Reset state when modal opens
     useEffect(() => {
         if (open) {
+            setCalendarToday(new Date())
             setSelectedStageId(null)
             setEffectiveNow(true)
             setSelectedDate(undefined)
@@ -136,6 +138,12 @@ export function ChangeStageModal({
             setInterviewDatePickerOpen(false)
         }
     }, [open, initialDeliveryBabyGender, initialDeliveryBabyWeight])
+    const calendarStartOfToday = useMemo(
+        () => calendarToday ? startOfDay(calendarToday) : undefined,
+        [calendarToday]
+    )
+    const selectedDateDefaultMonth = selectedDate ?? calendarToday
+    const interviewDateDefaultMonth = interviewDate ?? calendarToday
 
     // Get the current stage order
     const currentStage = useMemo(
@@ -198,13 +206,14 @@ export function ChangeStageModal({
         if (effectiveNow) return false
         if (!selectedDate) return false
         if (!hasTime) {
-            const today = startOfDay(new Date())
+            if (!calendarStartOfToday) return false
             const selected = startOfDay(selectedDate)
-            return isBefore(selected, today)
+            return isBefore(selected, calendarStartOfToday)
         }
         if (!effectiveDateTime) return false
-        return isBefore(effectiveDateTime, new Date())
-    }, [effectiveNow, selectedDate, hasTime, effectiveDateTime])
+        if (!calendarToday) return false
+        return isBefore(effectiveDateTime, calendarToday)
+    }, [calendarStartOfToday, calendarToday, effectiveNow, selectedDate, hasTime, effectiveDateTime])
 
     // Check if reason is required
     const reasonRequired =
@@ -409,8 +418,8 @@ export function ChangeStageModal({
                                                 setSelectedDate(date)
                                                 setDatePickerOpen(false)
                                             }}
-                                            disabled={(date) => date > new Date()}
-                                            defaultMonth={selectedDate || new Date()}
+                                            {...(calendarToday ? { disabled: (date: Date) => date > calendarToday } : {})}
+                                            {...(selectedDateDefaultMonth ? { defaultMonth: selectedDateDefaultMonth } : {})}
                                         />
                                     </PopoverContent>
                                 </Popover>
@@ -532,8 +541,8 @@ export function ChangeStageModal({
                                                     setInterviewDate(date)
                                                     setInterviewDatePickerOpen(false)
                                                 }}
-                                                disabled={(date) => date < startOfDay(new Date())}
-                                                defaultMonth={interviewDate || new Date()}
+                                                {...(calendarStartOfToday ? { disabled: (date: Date) => date < calendarStartOfToday } : {})}
+                                                {...(interviewDateDefaultMonth ? { defaultMonth: interviewDateDefaultMonth } : {})}
                                             />
                                         </PopoverContent>
                                     </Popover>

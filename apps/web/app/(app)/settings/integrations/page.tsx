@@ -101,7 +101,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
 import { PencilIcon } from "lucide-react"
-import { formatRelativeTime } from "@/lib/formatters"
+import { formatDateTime, formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
@@ -3690,6 +3690,7 @@ export default function IntegrationsPage() {
     const googleLastSyncLabel = googleLastSyncAt
         ? `${formatRelativeTime(googleLastSyncAt)}`
         : "Not synced yet"
+    const googleLastSyncAbsoluteLabel = formatDateTime(googleLastSyncAt)
     const aiProviderLabel = aiSettings?.provider
         ? AI_PROVIDERS.find((providerOption) => providerOption.value === aiSettings.provider)?.label
             ?? aiSettings.provider
@@ -3930,9 +3931,9 @@ export default function IntegrationsPage() {
                                             <p className="text-xs font-medium">
                                                 {googleLastSyncLabel}
                                             </p>
-                                            {googleLastSyncAt ? (
+                                            {googleLastSyncAbsoluteLabel ? (
                                                 <p className="text-[11px] text-muted-foreground">
-                                                    {new Date(googleLastSyncAt).toLocaleString()}
+                                                    {googleLastSyncAbsoluteLabel}
                                                 </p>
                                             ) : null}
                                         </div>

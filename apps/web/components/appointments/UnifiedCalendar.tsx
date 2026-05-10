@@ -110,6 +110,13 @@ function formatItemCount(count: number) {
     return `${count} item${count === 1 ? "" : "s"}`
 }
 
+const DAY_VIEW_HOURS = Array.from({ length: 13 }, (_, i) => i + 8)
+const DAY_VIEW_HOUR_LABELS = DAY_VIEW_HOURS.reduce<Record<number, string>>((labels, hour) => {
+    const displayHour = hour > 12 ? hour - 12 : hour
+    labels[hour] = `${displayHour} ${hour >= 12 ? "PM" : "AM"}`
+    return labels
+}, {})
+
 // View type
 type ViewType = "month" | "week" | "day"
 
@@ -1185,9 +1192,6 @@ function DayView({
     const allDayTasks = dayTasks.filter((task) => !task.due_time)
     const timedTasks = dayTasks.filter((task) => task.due_time)
 
-    // Time slots (8am - 8pm)
-    const hours = Array.from({ length: 13 }, (_, i) => i + 8)
-
     return (
         <div className="border border-border rounded-lg overflow-hidden">
             <div className="p-3 bg-muted border-b border-border text-center">
@@ -1220,7 +1224,7 @@ function DayView({
                 </div>
             )}
             <div className="divide-y divide-border">
-                {hours.map((hour) => {
+                {DAY_VIEW_HOURS.map((hour) => {
                     const hourAppointments = dayAppointments.filter((appt) => {
                         const apptHour = parseISO(appt.scheduled_start).getHours()
                         return apptHour === hour
@@ -1238,7 +1242,7 @@ function DayView({
                     return (
                         <div key={hour} className="flex min-h-[60px]">
                             <div className="w-20 p-2 text-sm text-muted-foreground border-r border-border flex-shrink-0">
-                                {format(new Date(2000, 0, 1, hour), "h:mm a")}
+                                {DAY_VIEW_HOUR_LABELS[hour]}
                             </div>
                             <div className="flex-1 p-2 space-y-1">
                                 {hourAppointments.map((appt) => (
@@ -1394,6 +1398,9 @@ export function UnifiedCalendar({
         setDragRescheduleDialogOpen(true)
         setDraggedAppointment(null)
     }, [draggedAppointment])
+    const handleTodayClick = useCallback(() => {
+        setCurrentDate(new Date())
+    }, [])
 
     return (
         <Card className="gap-3 overflow-hidden border-border/70">
@@ -1417,7 +1424,7 @@ export function UnifiedCalendar({
                             <ChevronRightIcon className="size-4" />
                         </Button>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
+                    <Button variant="outline" size="sm" onClick={handleTodayClick}>
                         Today
                     </Button>
                 </div>

@@ -10,7 +10,6 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect } from "react"
-import { formatDistanceToNow } from "date-fns"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -23,6 +22,7 @@ import {
     CornerDownRightIcon,
     CheckIcon,
 } from "lucide-react"
+import { formatRelativeTime } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 import type { InterviewNoteRead } from "@/lib/api/interviews"
 import { SafeHtmlContent } from "@/components/safe-html-content"
@@ -83,7 +83,7 @@ const ReplyItem = memo(function ReplyItem({
                             {reply.author_name}
                         </span>
                         <span className="text-muted-foreground">
-                            {formatDistanceToNow(new Date(reply.created_at), { addSuffix: true })}
+                            {formatRelativeTime(reply.created_at)}
                         </span>
                     </div>
                     {isEditing ? (
@@ -328,7 +328,7 @@ export const CommentCard = memo(function CommentCard({
                         {note.author_name}
                     </span>
                     <span className="shrink-0">
-                        {formatDistanceToNow(new Date(note.created_at), { addSuffix: true })}
+                        {formatRelativeTime(note.created_at)}
                     </span>
                 </div>
 
