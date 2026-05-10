@@ -135,22 +135,34 @@ function getMeetingModes(type: AppointmentType | null | undefined): MeetingMode[
     return type.meeting_mode ? [type.meeting_mode] : []
 }
 
-function formatTimeInZone(date: Date, timezone: string) {
-    return new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        hour: "numeric",
-        minute: "2-digit",
-    }).format(date)
-}
+function useBookingDateTimeFormatters(timezone: string) {
+    const timeFormatter = useMemo(
+        () => Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            hour: "numeric",
+            minute: "2-digit",
+        }),
+        [timezone]
+    )
 
-function formatDateInZone(date: Date, timezone: string) {
-    return new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-    }).format(date)
+    const dateFormatter = useMemo(
+        () => Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+        }),
+        [timezone]
+    )
+
+    return useMemo(
+        () => ({
+            formatTimeInZone: (date: Date) => timeFormatter.format(date),
+            formatDateInZone: (date: Date) => dateFormatter.format(date),
+        }),
+        [dateFormatter, timeFormatter]
+    )
 }
 
 function hashIdempotencyKey(input: string) {
@@ -480,6 +492,8 @@ function TimeSlotSelector({
     isLoading: boolean
     timezone: string
 }) {
+    const { formatTimeInZone } = useBookingDateTimeFormatters(timezone)
+
     if (isLoading) {
         return (
             <div className="py-8 flex items-center justify-center">
@@ -502,7 +516,7 @@ function TimeSlotSelector({
             <Label className="text-base font-medium">Select a Time</Label>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
                 {slots.map((slot) => {
-                    const time = formatTimeInZone(parseISO(slot.start), timezone)
+                    const time = formatTimeInZone(parseISO(slot.start))
                     const isSelected = selectedSlot?.start === slot.start
 
                     return (
@@ -582,6 +596,7 @@ function BookingForm({
     const ModeIcon = mode?.icon || VideoIcon
     const isInPerson = meetingMode === "in_person"
     const isPhone = meetingMode === "phone"
+    const { formatDateInZone, formatTimeInZone } = useBookingDateTimeFormatters(timezone)
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -593,11 +608,11 @@ function BookingForm({
                             <h3 className="font-medium">{appointmentType.name}</h3>
                             <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                                 <CalendarIcon className="size-4" />
-                                {formatDateInZone(parseISO(selectedSlot.start), timezone)}
+                                {formatDateInZone(parseISO(selectedSlot.start))}
                             </p>
                             <p className="text-sm text-muted-foreground flex items-center gap-2">
                                 <ClockIcon className="size-4" />
-                                {formatTimeInZone(parseISO(selectedSlot.start), timezone)} ({appointmentType.duration_minutes} min)
+                                {formatTimeInZone(parseISO(selectedSlot.start))} ({appointmentType.duration_minutes} min)
                             </p>
                             <p className="text-sm text-muted-foreground flex items-center gap-2">
                                 <ModeIcon className="size-4" />
@@ -778,6 +793,7 @@ function ConfirmationView({
     const joinUrl = confirmation?.zoom_join_url || confirmation?.google_meet_url || null
     const showLocation = effectiveMeetingMode === "in_person" && meetingLocation
     const showDialIn = effectiveMeetingMode === "phone" && dialInNumber
+    const { formatDateInZone, formatTimeInZone } = useBookingDateTimeFormatters(timezone)
 
     const handleDownloadICS = () => {
         const ics = generateICSFile(appointmentType, selectedSlot.start, timezone, staffName, effectiveMeetingMode, {
@@ -824,9 +840,9 @@ function ConfirmationView({
                     <div className="flex items-center gap-3">
                         <CalendarIcon className="size-5 text-muted-foreground flex-shrink-0" />
                         <div>
-                            <p className="font-medium">{formatDateInZone(parseISO(selectedSlot.start), timezone)}</p>
+                            <p className="font-medium">{formatDateInZone(parseISO(selectedSlot.start))}</p>
                             <p className="text-sm text-muted-foreground">
-                                {formatTimeInZone(parseISO(selectedSlot.start), timezone)} ({timezone.split('/')[1]?.replace('_', ' ') || timezone})
+                                {formatTimeInZone(parseISO(selectedSlot.start))} ({timezone.split('/')[1]?.replace('_', ' ') || timezone})
                             </p>
                         </div>
                     </div>

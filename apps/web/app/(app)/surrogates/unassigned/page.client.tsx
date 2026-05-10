@@ -24,15 +24,17 @@ function parsePageParam(value: string | null): number {
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
 }
 
+const unassignedDateFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+})
+
 function formatDate(dateString: string | null | undefined): string {
     if (!dateString) return "—"
     const date = new Date(dateString)
     if (Number.isNaN(date.getTime())) return "—"
-    return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-    }).format(date)
+    return unassignedDateFormatter.format(date)
 }
 
 export default function UnassignedSurrogatesPage() {

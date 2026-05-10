@@ -127,17 +127,19 @@ function getActivityConfig(type: string): ActivityTypeConfig {
 // Preview Content Strategy (Safe fields only - avoid PII)
 // ============================================================================
 
-function formatActivityTimestamp(value: unknown): string | null {
-    if (typeof value !== "string") return null
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return null
-    return new Intl.DateTimeFormat(undefined, {
+const activityTimestampFormatter = new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
         year: "numeric",
         hour: "numeric",
         minute: "2-digit",
-    }).format(date)
+})
+
+function formatActivityTimestamp(value: unknown): string | null {
+    if (typeof value !== "string") return null
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return activityTimestampFormatter.format(date)
 }
 
 function getActivityPreview(activity: SurrogateActivity): string {

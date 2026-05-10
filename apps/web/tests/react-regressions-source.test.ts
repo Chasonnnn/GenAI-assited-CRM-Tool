@@ -604,6 +604,28 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("memoizes production date-time formatters instead of rebuilding them per call", () => {
+        const unifiedCalendarSource = readSource("components/appointments/UnifiedCalendar.tsx")
+        const publicBookingSource = readSource("components/appointments/PublicBookingPage.tsx")
+        const activityTimelineSource = readSource("components/surrogates/ActivityTimeline.tsx")
+        const aiStudioSource = readSource("app/(app)/ai-studio/page.tsx")
+        const unassignedSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
+
+        expect(unifiedCalendarSource).toContain("clientDateFormatter = useMemo(")
+        expect(unifiedCalendarSource).toContain("clientTimeFormatter = useMemo(")
+        expect(unifiedCalendarSource).not.toMatch(/new Intl\.DateTimeFormat/)
+        expect(publicBookingSource).toContain("function useBookingDateTimeFormatters")
+        expect(publicBookingSource).toContain("timeFormatter = useMemo(")
+        expect(publicBookingSource).toContain("dateFormatter = useMemo(")
+        expect(publicBookingSource).not.toMatch(/new Intl\.DateTimeFormat/)
+        expect(activityTimelineSource).toContain("const activityTimestampFormatter = new Intl.DateTimeFormat")
+        expect(aiStudioSource).toContain("const draftDateFormatter = new Intl.DateTimeFormat")
+        expect(unassignedSource).toContain("const unassignedDateFormatter = new Intl.DateTimeFormat")
+        expect(activityTimelineSource).not.toMatch(/function formatActivityTimestamp[\s\S]*new Intl\.DateTimeFormat/)
+        expect(aiStudioSource).not.toMatch(/function formatDraftDate[\s\S]*new Intl\.DateTimeFormat/)
+        expect(unassignedSource).not.toMatch(/function formatDate[\s\S]*new Intl\.DateTimeFormat/)
+    })
+
     it("keeps InlineDateField draft state tied to edit lifecycle", () => {
         const source = readSource("components/inline-date-field.tsx")
 

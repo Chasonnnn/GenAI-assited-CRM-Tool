@@ -345,27 +345,37 @@ function AppointmentDetailDialog({
         }
     }, [appointment, open])
 
-    if (!appointment) return null
+    const userTimezone = useMemo(
+        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
+        []
+    )
+    const clientTimezone = appointment?.client_timezone || userTimezone
+    const showClientTimezone = !!appointment && clientTimezone !== userTimezone
 
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles"
-    const clientTimezone = appointment.client_timezone || userTimezone
-    const showClientTimezone = clientTimezone !== userTimezone
-
-    const formatDateInZone = (iso: string, timeZone: string) =>
-        new Intl.DateTimeFormat(undefined, {
-            timeZone,
+    const clientDateFormatter = useMemo(
+        () => Intl.DateTimeFormat(undefined, {
+            timeZone: clientTimezone,
             weekday: "long",
             year: "numeric",
             month: "long",
             day: "numeric",
-        }).format(new Date(iso))
+        }),
+        [clientTimezone]
+    )
 
-    const formatTimeInZone = (iso: string, timeZone: string) =>
-        new Intl.DateTimeFormat(undefined, {
-            timeZone,
+    const clientTimeFormatter = useMemo(
+        () => Intl.DateTimeFormat(undefined, {
+            timeZone: clientTimezone,
             hour: "numeric",
             minute: "2-digit",
-        }).format(new Date(iso))
+        }),
+        [clientTimezone]
+    )
+
+    const formatDateInClientZone = (iso: string) => clientDateFormatter.format(new Date(iso))
+    const formatTimeInClientZone = (iso: string) => clientTimeFormatter.format(new Date(iso))
+
+    if (!appointment) return null
 
     const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
     const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
@@ -447,9 +457,9 @@ function AppointmentDetailDialog({
                             <div className="mt-2 rounded-md border border-dashed border-border bg-muted/40 p-2 text-xs text-muted-foreground">
                                 <p>Client timezone: {clientTimezone}</p>
                                 <p className="mt-1">
-                                    {formatDateInZone(appointment.scheduled_start, clientTimezone)}{" "}
-                                    {formatTimeInZone(appointment.scheduled_start, clientTimezone)} -{" "}
-                                    {formatTimeInZone(appointment.scheduled_end, clientTimezone)}
+                                    {formatDateInClientZone(appointment.scheduled_start)}{" "}
+                                    {formatTimeInClientZone(appointment.scheduled_start)} -{" "}
+                                    {formatTimeInClientZone(appointment.scheduled_end)}
                                 </p>
                             </div>
                         )}

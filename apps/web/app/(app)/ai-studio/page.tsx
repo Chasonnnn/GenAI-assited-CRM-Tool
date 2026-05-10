@@ -143,15 +143,17 @@ function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong."
 }
 
+const draftDateFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+})
+
 function formatDraftDate(value: string) {
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return ""
-    return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    }).format(date)
+    return draftDateFormatter.format(date)
 }
 
 function DraftPreview({
