@@ -103,20 +103,21 @@ export function buildImportSubmitPayload(
     default_source: SurrogateSource
     validation_mode: ValidationMode
 } {
-    const column_mappings = mappings
-        .filter((mapping) => {
-            if (behavior !== 'warn') return true
+    const column_mappings: ColumnMappingItem[] = []
+    for (const mapping of mappings) {
+        if (behavior === 'warn') {
             const isUntouched = !touchedColumns.has(mapping.csv_column)
             const isUnknown = !mapping.surrogate_field && mapping.action !== 'custom'
-            return !(isUntouched && isUnknown)
-        })
-        .map((mapping) => ({
+            if (isUntouched && isUnknown) continue
+        }
+        column_mappings.push({
             csv_column: mapping.csv_column,
             surrogate_field: mapping.action === 'map' ? mapping.surrogate_field : null,
             transformation: mapping.action === 'map' ? mapping.transformation : null,
             action: mapping.action,
             custom_field_key: mapping.action === 'custom' ? mapping.custom_field_key ?? null : null,
-        }))
+        })
+    }
 
     return {
         column_mappings,
