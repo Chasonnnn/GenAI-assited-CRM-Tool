@@ -48,7 +48,7 @@ const parsePageParam = (value: string | null): number => {
 
 export default function MatchesPage() {
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { replace } = useRouter()
     const currentQuery = searchParams.toString()
 
     const urlStatus = searchParams.get("status")
@@ -86,8 +86,8 @@ export default function MatchesPage() {
         const newUrl = nextQuery ? `/intended-parents/matches?${nextQuery}` : "/intended-parents/matches"
         const currentUrl = currentQuery ? `/intended-parents/matches?${currentQuery}` : "/intended-parents/matches"
         if (newUrl === currentUrl) return
-        router.replace(newUrl, { scroll: false })
-    }, [router, searchParams])
+        replace(newUrl, { scroll: false })
+    }, [replace, searchParams])
 
     const handleStatusChange = useCallback((value: string) => {
         const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"

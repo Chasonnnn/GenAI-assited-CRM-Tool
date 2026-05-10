@@ -83,7 +83,7 @@ const datesEqual = (left?: Date, right?: Date) => {
 
 export default function IntendedParentsPage() {
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { replace } = useRouter()
     const currentQuery = searchParams.toString()
 
     // Read initial values from URL params
@@ -164,8 +164,8 @@ export default function IntendedParentsPage() {
         const newUrl = nextQuery ? `/intended-parents?${nextQuery}` : "/intended-parents"
         const currentUrl = currentQuery ? `/intended-parents?${currentQuery}` : "/intended-parents"
         if (newUrl === currentUrl) return
-        router.replace(newUrl, { scroll: false })
-    }, [router, searchParams])
+        replace(newUrl, { scroll: false })
+    }, [replace, searchParams])
 
     // Handle status filter change
     const handleStatusChange = useCallback((status: string) => {

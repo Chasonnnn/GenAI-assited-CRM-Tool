@@ -1129,6 +1129,35 @@ describe("React regression guards (source)", () => {
         expect(newAgencySource).not.toContain("router.push(")
     })
 
+    it("destructures router navigation methods in routed filter pages", () => {
+        const tasksSource = readSource("app/(app)/tasks/page.client.tsx")
+        const intendedParentsSource = readSource("app/(app)/intended-parents/page.client.tsx")
+        const matchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+        const dashboardFiltersSource = readSource("app/(app)/dashboard/context/dashboard-filters.tsx")
+        const metaSource = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
+        const metaMappingSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
+
+        expect(tasksSource).toContain("const { replace } = useRouter()")
+        expect(intendedParentsSource).toContain("const { replace } = useRouter()")
+        expect(matchesSource).toContain("const { replace } = useRouter()")
+        expect(dashboardFiltersSource).toContain("const { push, replace } = useRouter()")
+        expect(metaSource).toContain("const { push } = useRouter()")
+        expect(metaMappingSource).toContain("const { push } = useRouter()")
+
+        for (const source of [
+            tasksSource,
+            intendedParentsSource,
+            matchesSource,
+            dashboardFiltersSource,
+            metaSource,
+            metaMappingSource,
+        ]) {
+            expect(source).not.toContain("const router = useRouter()")
+            expect(source).not.toContain("router.push(")
+            expect(source).not.toContain("router.replace(")
+        }
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

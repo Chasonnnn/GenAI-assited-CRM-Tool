@@ -66,7 +66,7 @@ type TaskEditPayload = {
 
 export default function TasksPage() {
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { replace } = useRouter()
     const { user: currentUser } = useAuth()
     const canApproveImports = ["admin", "developer"].includes(currentUser?.role || "")
     const currentUserId = currentUser?.user_id ?? null
@@ -112,8 +112,8 @@ export default function TasksPage() {
         const newUrl = nextQuery ? `/tasks?${nextQuery}` : "/tasks"
         const currentUrl = currentQuery ? `/tasks?${currentQuery}` : "/tasks"
         if (newUrl === currentUrl) return
-        router.replace(newUrl, { scroll: false })
-    }, [searchParams, router])
+        replace(newUrl, { scroll: false })
+    }, [searchParams, replace])
 
     // Handle filter change
     const handleFilterChange = useCallback((newFilter: FilterType) => {

@@ -93,7 +93,7 @@ interface DashboardFiltersProviderProps {
 export function DashboardFiltersProvider({ children }: DashboardFiltersProviderProps) {
     const { user } = useAuth()
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { push, replace } = useRouter()
     const currentQuery = searchParams.toString()
 
     // Read initial values from URL params
@@ -150,8 +150,8 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         const newUrl = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
         const currentUrl = currentQuery ? `/dashboard?${currentQuery}` : "/dashboard"
         if (newUrl === currentUrl) return
-        router.push(newUrl, { scroll: false })
-    }, [router, searchParams])
+        push(newUrl, { scroll: false })
+    }, [push, searchParams])
 
     // Set date range
     const setDateRange = useCallback((preset: DateRangePreset) => {
@@ -187,8 +187,8 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         setDateRangeState("all")
         setCustomRangeState({ from: undefined, to: undefined })
         setAssigneeIdState(undefined)
-        router.replace("/dashboard", { scroll: false })
-    }, [router])
+        replace("/dashboard", { scroll: false })
+    }, [replace])
 
     // Sync URL changes back to state (e.g., browser back/forward)
     useEffect(() => {

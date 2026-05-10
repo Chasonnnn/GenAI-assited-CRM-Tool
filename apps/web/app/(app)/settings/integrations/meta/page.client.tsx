@@ -151,7 +151,7 @@ function MetaAssetSelection({
     connectionName: string
     onClose: () => void
 }) {
-    const router = useRouter()
+    const { push } = useRouter()
     const [search, setSearch] = useState("")
     const [selectedAdAccounts, setSelectedAdAccounts] = useState<string[]>([])
     const [selectedPages, setSelectedPages] = useState<string[]>([])
@@ -223,7 +223,7 @@ function MetaAssetSelection({
                 overwrite_existing: overwrite,
             })
             onClose()
-            router.push("/settings/integrations/meta")
+            push("/settings/integrations/meta")
         } catch {
             // Error handled by mutation
         }
@@ -381,7 +381,7 @@ function MetaAssetSelection({
 
 export default function MetaIntegrationPage() {
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { push } = useRouter()
     const step = searchParams.get("step")
     const activeConnectionId = searchParams.get("connection")
 
@@ -543,7 +543,7 @@ export default function MetaIntegrationPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() =>
-                                                        router.push(
+                                                        push(
                                                             `/settings/integrations/meta?step=select-assets&connection=${connection.id}`
                                                         )
                                                     }
@@ -607,7 +607,7 @@ export default function MetaIntegrationPage() {
                     <MetaAssetSelection
                         connectionId={activeConnection.id}
                         connectionName={activeConnection.meta_user_name || "Meta user"}
-                        onClose={() => router.push("/settings/integrations/meta")}
+                        onClose={() => push("/settings/integrations/meta")}
                     />
                 )}
 

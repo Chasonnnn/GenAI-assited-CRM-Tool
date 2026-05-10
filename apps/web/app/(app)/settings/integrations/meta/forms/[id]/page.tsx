@@ -84,7 +84,7 @@ function getUnknownColumnBehaviorLabel(value: UnknownColumnBehavior | null) {
 
 export default function MetaFormMappingPage() {
     const params = useParams()
-    const router = useRouter()
+    const { push } = useRouter()
     const formId = params?.id as string
 
     const { data, isLoading } = useMetaFormMapping(formId)
@@ -275,7 +275,7 @@ export default function MetaFormMappingPage() {
                         <h1 className="text-2xl font-semibold">{data.form.form_name}</h1>
                         <p className="text-sm text-muted-foreground">{data.form.form_external_id}</p>
                     </div>
-                    <Button variant="ghost" onClick={() => router.push("/settings/integrations/meta/forms")}>
+                    <Button variant="ghost" onClick={() => push("/settings/integrations/meta/forms")}>
                         <ArrowLeftIcon className="mr-2 size-4" aria-hidden="true" />
                         Back to forms
                     </Button>
@@ -539,7 +539,7 @@ export default function MetaFormMappingPage() {
                 )}
 
                 <div className="flex items-center justify-end gap-3">
-                    <Button variant="outline" onClick={() => router.push("/settings/integrations/meta/forms")}>
+                    <Button variant="outline" onClick={() => push("/settings/integrations/meta/forms")}>
                         Cancel
                     </Button>
                     <Button onClick={handleSave} disabled={updateMutation.isPending}>
