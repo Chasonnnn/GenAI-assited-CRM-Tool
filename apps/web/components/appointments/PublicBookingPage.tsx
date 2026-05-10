@@ -940,7 +940,6 @@ export function PublicBookingPage({
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [selectedMeetingMode, setSelectedMeetingMode] = useState<MeetingMode | null>(null)
     const [showForm, setShowForm] = useState(false)
-    const [isConfirmed, setIsConfirmed] = useState(false)
     const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
     const [timezone, setTimezone] = useState("America/Los_Angeles")
 
@@ -1071,7 +1070,6 @@ export function PublicBookingPage({
             {
                 onSuccess: (response) => {
                     setConfirmation(response)
-                    setIsConfirmed(true)
                 },
             }
         )
@@ -1105,7 +1103,7 @@ export function PublicBookingPage({
     }
 
     // Confirmed state
-    if (isConfirmed && selectedType && selectedSlot) {
+    if (confirmation && selectedType && selectedSlot) {
         const confirmationMeetingMode =
             confirmation?.meeting_mode ??
             selectedMeetingMode ??

@@ -204,6 +204,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setFormData({ ...formData")
     })
 
+    it("derives public booking confirmation state from the response", () => {
+        const source = readSource("components/appointments/PublicBookingPage.tsx")
+
+        expect(source).toContain("if (confirmation && selectedType && selectedSlot)")
+        expect(source).not.toContain("const [isConfirmed")
+        expect(source).not.toContain("setIsConfirmed")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 
