@@ -466,10 +466,12 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("shadow-[inset_3px_0_0_rgb(168_85_247)]")
         expect(source).toContain("const openGoogleCalendarEvent = () =>")
         expect(source).toContain("onClick={openGoogleCalendarEvent}")
+        expect(source).toContain("Saving…")
         expect(source).not.toContain("border-l-4 border-purple-500")
         expect(source).not.toContain("border-l-4 border-slate-400")
         expect(source).not.toContain("const handleClick = () =>")
         expect(source).not.toContain("onClick={handleClick}")
+        expect(source).not.toContain("Saving...")
     })
 
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {

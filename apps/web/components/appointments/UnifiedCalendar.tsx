@@ -578,7 +578,7 @@ function AppointmentDetailDialog({
                                         {updateLinkMutation.isPending ? (
                                             <>
                                                 <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                                Saving...
+                                                Saving…
                                             </>
                                         ) : (
                                             "Save"
