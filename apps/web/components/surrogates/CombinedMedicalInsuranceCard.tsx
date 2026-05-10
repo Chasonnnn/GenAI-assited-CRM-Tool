@@ -191,12 +191,15 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
     const dataRecord = surrogateData as unknown as Record<string, string | null | undefined>
 
     const sectionsWithData = useMemo(() => {
-        return SECTION_CONFIGS.filter((section) =>
-            section.fields.some((f) => {
+        const sections: SectionType[] = []
+        for (const section of SECTION_CONFIGS) {
+            const hasData = section.fields.some((f) => {
                 const val = dataRecord[f]
                 return val !== null && val !== undefined && val !== ""
             })
-        ).map((s) => s.key)
+            if (hasData) sections.push(section.key)
+        }
+        return sections
     }, [dataRecord])
 
     useEffect(() => {
@@ -208,8 +211,13 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
     const visibleSections = useMemo(() => {
         const visible = new Set([...sectionsWithData, ...manuallyAdded])
         const hidden = new Set(optimisticallyHiddenSections)
-        return SECTION_CONFIGS.filter((s) => visible.has(s.key))
-            .filter((section) => !hidden.has(section.key))
+        const sections: SectionConfig[] = []
+        for (const section of SECTION_CONFIGS) {
+            if (visible.has(section.key) && !hidden.has(section.key)) {
+                sections.push(section)
+            }
+        }
+        return sections
     }, [sectionsWithData, manuallyAdded, optimisticallyHiddenSections])
 
     const availableSections = useMemo(() => {

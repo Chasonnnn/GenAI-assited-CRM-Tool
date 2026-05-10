@@ -428,9 +428,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     const handleAiHelp = async () => {
         if (!preview) return
 
-        const unmatched = mappings
-            .filter((mapping) => !mapping.surrogate_field && mapping.action !== "custom")
-            .map((mapping) => mapping.csv_column)
+        const unmatched: string[] = []
+        for (const mapping of mappings) {
+            if (!mapping.surrogate_field && mapping.action !== "custom") {
+                unmatched.push(mapping.csv_column)
+            }
+        }
 
         if (unmatched.length === 0) return
 
@@ -450,11 +453,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
     }
 
     const ensureRequiredMappings = () => {
-        const mappedFields = new Set(
-            mappings
-                .filter((mapping) => mapping.action === "map" && mapping.surrogate_field)
-                .map((mapping) => mapping.surrogate_field)
-        )
+        const mappedFields = new Set<string>()
+        for (const mapping of mappings) {
+            if (mapping.action === "map" && mapping.surrogate_field) {
+                mappedFields.add(mapping.surrogate_field)
+            }
+        }
 
         if (!mappedFields.has("full_name") || !mappedFields.has("email")) {
             dispatch({

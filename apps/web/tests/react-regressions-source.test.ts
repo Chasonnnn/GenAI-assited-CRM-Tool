@@ -852,6 +852,19 @@ describe("React regression guards (source)", () => {
         expect(automationFormBuilderSource).not.toMatch(/\.filter\(\(option\) => option\.is_critical\)\s*\.map/)
     })
 
+    it("keeps surrogate card, task calendar, and CSV derived lists single pass", () => {
+        const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
+        const taskCalendarSource = readSource("components/surrogates/SurrogateTasksCalendar.tsx")
+        const csvUploadSource = readSource("components/import/CSVUpload.tsx")
+
+        expect(medicalInsuranceSource).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*?\)\.map\(/)
+        expect(medicalInsuranceSource).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*?\)\s*\.filter\(/)
+        expect(taskCalendarSource).toContain("const orphanedCompletedTasks = useMemo")
+        expect(taskCalendarSource).not.toContain("tasks.filter(t => t.is_completed).map")
+        expect(csvUploadSource).not.toMatch(/const unmatched = mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)
+        expect(csvUploadSource).not.toMatch(/new Set\(\s*mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)
+    })
+
     it("uses single-pass activity timeline list derivation", () => {
         const source = readSource("components/surrogates/ActivityTimeline.tsx")
 

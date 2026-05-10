@@ -165,6 +165,31 @@ export function SurrogateTasksCalendar({
         ].filter(group => group.tasks.length > 0)
     }, [tasks])
 
+    const orphanedCompletedTasks = useMemo(() => {
+        const groupedTaskIds = new Set<string>()
+        for (const group of taskGroups) {
+            for (const task of group.tasks) {
+                groupedTaskIds.add(task.id)
+            }
+        }
+
+        const completedTasks: TaskListItem[] = []
+        for (const task of tasks) {
+            if (task.is_completed && !groupedTaskIds.has(task.id)) {
+                completedTasks.push(task)
+            }
+        }
+        return completedTasks
+    }, [taskGroups, tasks])
+
+    const completedTaskCount = useMemo(() => {
+        let count = 0
+        for (const task of tasks) {
+            if (task.is_completed) count += 1
+        }
+        return count
+    }, [tasks])
+
     // Don't render until mounted to avoid hydration mismatch
     if (!mounted) {
         return (
@@ -347,17 +372,17 @@ export function SurrogateTasksCalendar({
                                 </div>
                             ))}
 
-                            {tasks.some(t => t.is_completed && taskGroups.every(g => !g.tasks.includes(t))) && (
+                            {orphanedCompletedTasks.length > 0 && (
                                 <details className="py-3 px-4">
                                     <summary className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors">
                                         <CalendarCheckIcon className="size-4" />
                                         <span className="font-medium">Completed</span>
                                         <Badge variant="secondary" className="h-5 text-xs">
-                                            {tasks.filter(t => t.is_completed).length}
+                                            {completedTaskCount}
                                         </Badge>
                                     </summary>
                                     <div className="mt-3 space-y-1">
-                                        {tasks.filter(t => t.is_completed).map((task) => (
+                                        {orphanedCompletedTasks.map((task) => (
                                             <div
                                                 key={task.id}
                                                 className="flex items-start gap-3 py-2 px-3 rounded-lg opacity-50"
