@@ -37,7 +37,7 @@ export interface StageSemantics {
     requires_reason_on_enter: boolean;
 }
 
-export interface JourneyMilestoneDefinition {
+interface JourneyMilestoneDefinition {
     slug: string;
     label: string;
     description: string;
@@ -45,7 +45,7 @@ export interface JourneyMilestoneDefinition {
     is_soft: boolean;
 }
 
-export interface JourneyPhaseDefinition {
+interface JourneyPhaseDefinition {
     slug: string;
     label: string;
     milestone_slugs: string[];
@@ -180,7 +180,7 @@ export interface PipelineDependencyGraph {
     stages: PipelineStageDependency[];
 }
 
-export interface PipelineDraftStage {
+interface PipelineDraftStage {
     id?: string;
     stage_key?: string;
     slug: string;
@@ -223,7 +223,7 @@ export interface PipelineChangePreview {
     dependency_graph: PipelineDependencyGraph;
 }
 
-export interface PipelineVersion {
+interface PipelineVersion {
     id: string;
     version: number;
     payload: {
@@ -243,7 +243,7 @@ export interface PipelineVersion {
     created_at: string;
 }
 
-export interface PipelineVersionsResponse {
+interface PipelineVersionsResponse {
     versions: PipelineVersion[];
 }
 

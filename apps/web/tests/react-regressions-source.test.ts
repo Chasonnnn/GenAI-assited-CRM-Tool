@@ -399,6 +399,11 @@ describe("React regression guards (source)", () => {
 
         expect(source).not.toContain("export type TerminalOutcome")
         expect(source).not.toContain("export type IntegrationBucket")
+        expect(source).not.toContain("export interface JourneyMilestoneDefinition")
+        expect(source).not.toContain("export interface JourneyPhaseDefinition")
+        expect(source).not.toContain("export interface PipelineDraftStage")
+        expect(source).not.toContain("export interface PipelineVersion")
+        expect(source).not.toContain("export interface PipelineVersionsResponse")
     })
 
     it("keeps surrogate detail layout context internals private", () => {
