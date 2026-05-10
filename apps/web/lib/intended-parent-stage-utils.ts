@@ -59,7 +59,7 @@ export function getIntendedParentStageOptions(
     options: StageMetadataOption[] | undefined | null,
 ): StageMetadataOption[] {
     const resolved = options?.length ? options : DEFAULT_INTENDED_PARENT_STAGE_OPTIONS
-    return [...resolved].sort((left, right) => left.order - right.order)
+    return resolved.toSorted((left, right) => left.order - right.order)
 }
 
 export function getIntendedParentStageOptionByValue(

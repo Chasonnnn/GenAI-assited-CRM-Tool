@@ -244,6 +244,26 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("[...data].sort(")
     })
 
+    it("uses immutable sorting for stage and intake link ordering", () => {
+        const intendedParentStageSource = readSource("lib/intended-parent-stage-utils.ts")
+        const formBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")
+        const surrogateActivitySource = readSource("components/surrogates/ActivityTimeline.tsx")
+        const intendedParentActivitySource = readSource("components/intended-parents/IntendedParentActivityTimeline.tsx")
+
+        expect(intendedParentStageSource).toContain("resolved.toSorted(")
+        expect(formBuilderSource).toContain("intakeLinks.toSorted(")
+        expect(surrogateActivitySource).toContain("history.toSorted(")
+        expect(surrogateActivitySource).toContain("stageHistory.toSorted(")
+        expect(intendedParentActivitySource).toContain("history.toSorted(")
+        expect(intendedParentActivitySource).toContain("stageHistory.toSorted(")
+        expect(intendedParentStageSource).not.toContain("[...resolved].sort(")
+        expect(formBuilderSource).not.toContain("[...intakeLinks].sort(")
+        expect(surrogateActivitySource).not.toContain("[...history].sort(")
+        expect(surrogateActivitySource).not.toContain("[...stageHistory].sort(")
+        expect(intendedParentActivitySource).not.toContain("[...history].sort(")
+        expect(intendedParentActivitySource).not.toContain("[...stageHistory].sort(")
+    })
+
     it("hoists Meta spend dashboard number formatters", () => {
         const source = readSource("components/reports/MetaSpendDashboard.tsx")
 

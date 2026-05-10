@@ -88,7 +88,7 @@ function dedupeStageHistory(
     const seenStages = new Set<string>()
     const deduped: IntendedParentStatusHistoryItem[] = []
 
-    const sortedHistory = [...history].sort(
+    const sortedHistory = history.toSorted(
         (a, b) =>
             new Date(getHistoryTimestamp(b)).getTime() - new Date(getHistoryTimestamp(a)).getTime(),
     )
@@ -107,7 +107,7 @@ function assignActivityToStage(
     activityTimestamp: string,
     stageHistory: IntendedParentStatusHistoryItem[],
 ): string | null {
-    const sortedHistory = [...stageHistory].sort(
+    const sortedHistory = stageHistory.toSorted(
         (a, b) =>
             new Date(getHistoryTimestamp(b)).getTime() - new Date(getHistoryTimestamp(a)).getTime(),
     )

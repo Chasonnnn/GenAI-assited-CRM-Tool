@@ -284,7 +284,7 @@ function dedupeStageHistory(history: SurrogateStatusHistory[]): SurrogateStatusH
     const seenStages = new Set<string>()
     const deduped: SurrogateStatusHistory[] = []
 
-    const sortedHistory = [...history].sort(
+    const sortedHistory = history.toSorted(
         (a, b) => new Date(getEntryTimestamp(b)).getTime() - new Date(getEntryTimestamp(a)).getTime()
     )
 
@@ -319,7 +319,7 @@ function assignActivityToStage(
     stageHistory: SurrogateStatusHistory[]
 ): string | null {
     // Sort history by entry timestamp DESC (most recent first)
-    const sortedHistory = [...stageHistory].sort(
+    const sortedHistory = stageHistory.toSorted(
         (a, b) => new Date(getEntryTimestamp(b)).getTime() - new Date(getEntryTimestamp(a)).getTime()
     )
 

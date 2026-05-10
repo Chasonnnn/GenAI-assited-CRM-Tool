@@ -602,7 +602,7 @@ export function useAutomationFormBuilderPage() {
 
     const sortedIntakeLinks = useMemo(
         () =>
-            [...intakeLinks].sort((a, b) => {
+            intakeLinks.toSorted((a, b) => {
                 const left = new Date(a.created_at).getTime()
                 const right = new Date(b.created_at).getTime()
                 return right - left
