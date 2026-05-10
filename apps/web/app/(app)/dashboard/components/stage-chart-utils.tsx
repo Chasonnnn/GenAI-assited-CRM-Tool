@@ -7,7 +7,7 @@ export interface StageStatus {
     order: number | null
 }
 
-export interface StageChartDatum {
+interface StageChartDatum {
     status: string
     stage_id: string | null
     count: number
@@ -44,7 +44,7 @@ export function buildStageChartData(
     const maxVisibleStages = options?.maxVisibleStages ?? DEFAULT_MAX_VISIBLE_STAGES
     const lowCountThreshold = options?.lowCountThreshold ?? DEFAULT_LOW_COUNT_THRESHOLD
 
-    const sorted = [...statusData].sort((a, b) => {
+    const sorted = statusData.toSorted((a, b) => {
         const orderA = a.order ?? 999
         const orderB = b.order ?? 999
         return orderA - orderB
@@ -78,9 +78,7 @@ export function buildStageChartData(
     const maxRemaining = Math.max(maxVisibleStages - 1, 1)
     if (remaining.length > maxRemaining) {
         const overflowCount = remaining.length - maxRemaining
-        const overflowItems = [...remaining]
-            .sort((a, b) => a.count - b.count)
-            .slice(0, overflowCount)
+        const overflowItems = remaining.toSorted((a, b) => a.count - b.count).slice(0, overflowCount)
         const overflowKeys = new Set(overflowItems.map(getItemKey))
         groupedItems = [...groupedItems, ...overflowItems]
         remaining = remaining.filter((item) => !overflowKeys.has(getItemKey(item)))

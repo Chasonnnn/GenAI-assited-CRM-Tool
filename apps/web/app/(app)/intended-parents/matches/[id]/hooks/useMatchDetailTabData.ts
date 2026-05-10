@@ -311,7 +311,7 @@ function filterBySource<T extends { source: DataSource }>(
     return items.filter((item) => item.source === sourceFilter)
 }
 
-export function buildMatchCombinedActivity({
+function buildMatchCombinedActivity({
     surrogateActivity,
     intendedParentNotes,
     intendedParentFiles,
