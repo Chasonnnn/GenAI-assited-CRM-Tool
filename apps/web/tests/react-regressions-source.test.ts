@@ -630,6 +630,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("currentPage.fields\n                                    .filter")
     })
 
+    it("keeps dashboard URL filter sync in one reducer update", () => {
+        const source = readSource("app/(app)/dashboard/context/dashboard-filters.tsx")
+
+        expect(source).toContain("type DashboardFiltersAction")
+        expect(source).toContain("function dashboardFiltersReducer")
+        expect(source).toMatch(/dispatchFilters\(\{\s*type: "syncFromUrl"/)
+        expect(source).not.toContain("setDateRangeState")
+        expect(source).not.toContain("setCustomRangeState")
+        expect(source).not.toContain("setAssigneeIdState")
+    })
+
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
         const formsApiSource = readSource("lib/api/forms.ts")
         const shareDialogSource = readSource("components/forms/builder/ShareApplicationDialog.tsx")

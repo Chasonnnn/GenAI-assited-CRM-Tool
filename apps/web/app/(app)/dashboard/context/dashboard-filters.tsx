@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, use, useCallback, useState, useEffect, type ReactNode } from "react"
+import { createContext, use, useCallback, useEffect, useReducer, type ReactNode } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { DateRangePreset } from "@/components/ui/date-range-picker"
 import { useAuth } from "@/lib/auth-context"
@@ -19,6 +19,17 @@ interface DashboardFilters {
     dateRange: DateRangePreset
     customRange: DateRange
     assigneeId?: string | undefined
+}
+
+type DashboardFiltersAction =
+    | { type: "setDateRange"; preset: DateRangePreset }
+    | { type: "setCustomRange"; range: DateRange }
+    | { type: "setAssigneeId"; assigneeId: string | undefined }
+    | { type: "reset" }
+    | { type: "syncFromUrl"; filters: DashboardFilters }
+
+type SearchParamReader = {
+    get(name: string): string | null
 }
 
 interface DashboardFiltersContextValue {
@@ -68,6 +79,58 @@ const datesEqual = (left?: Date, right?: Date) => {
     return (left?.getTime() ?? null) === (right?.getTime() ?? null)
 }
 
+const emptyDateRange = (): DateRange => ({ from: undefined, to: undefined })
+
+const filtersEqual = (left: DashboardFilters, right: DashboardFilters) =>
+    left.dateRange === right.dateRange &&
+    left.assigneeId === right.assigneeId &&
+    datesEqual(left.customRange.from, right.customRange.from) &&
+    datesEqual(left.customRange.to, right.customRange.to)
+
+function readDashboardFiltersFromSearchParams(
+    searchParams: SearchParamReader,
+    userId: string | undefined,
+    role: string | undefined,
+): DashboardFilters {
+    const urlRange = searchParams.get("range")
+    const dateRange = isDateRangePreset(urlRange) ? urlRange : "all"
+    const customRange =
+        dateRange === "custom"
+            ? { from: parseDateParam(searchParams.get("from")), to: parseDateParam(searchParams.get("to")) }
+            : emptyDateRange()
+    const assigneeId = normalizeAssigneeForUser(
+        normalizeFilterValue(searchParams.get("assignee")),
+        userId,
+        role,
+    )
+
+    return { dateRange, customRange, assigneeId }
+}
+
+function dashboardFiltersReducer(
+    state: DashboardFilters,
+    action: DashboardFiltersAction,
+): DashboardFilters {
+    switch (action.type) {
+        case "setDateRange":
+            return {
+                ...state,
+                dateRange: action.preset,
+                customRange: action.preset === "custom" ? state.customRange : emptyDateRange(),
+            }
+        case "setCustomRange":
+            return { ...state, dateRange: "custom", customRange: action.range }
+        case "setAssigneeId":
+            return { ...state, assigneeId: action.assigneeId }
+        case "reset":
+            return { dateRange: "all", customRange: emptyDateRange(), assigneeId: undefined }
+        case "syncFromUrl":
+            return filtersEqual(state, action.filters) ? state : action.filters
+        default:
+            return state
+    }
+}
+
 // =============================================================================
 // Context
 // =============================================================================
@@ -95,26 +158,11 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
     const searchParams = useSearchParams()
     const { push, replace } = useRouter()
     const currentQuery = searchParams.toString()
-
-    // Read initial values from URL params
-    const urlRange = searchParams.get("range")
-    const urlFrom = searchParams.get("from")
-    const urlTo = searchParams.get("to")
-    const urlAssignee = searchParams.get("assignee")
-
-    const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
-    const initialCustomRange = initialRange === "custom"
-        ? { from: parseDateParam(urlFrom), to: parseDateParam(urlTo) }
-        : { from: undefined, to: undefined }
-    const initialAssignee = normalizeAssigneeForUser(
-        normalizeFilterValue(urlAssignee),
-        user?.user_id,
-        user?.role,
+    const [filters, dispatchFilters] = useReducer(
+        dashboardFiltersReducer,
+        readDashboardFiltersFromSearchParams(searchParams, user?.user_id, user?.role),
     )
-
-    const [dateRange, setDateRangeState] = useState<DateRangePreset>(initialRange)
-    const [customRange, setCustomRangeState] = useState<DateRange>(initialCustomRange)
-    const [assigneeId, setAssigneeIdState] = useState<string | undefined>(initialAssignee)
+    const { dateRange, customRange, assigneeId } = filters
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((
@@ -155,68 +203,41 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
 
     // Set date range
     const setDateRange = useCallback((preset: DateRangePreset) => {
-        setDateRangeState(preset)
-        if (preset !== "custom") {
-            setCustomRangeState({ from: undefined, to: undefined })
-        }
+        const nextCustomRange = preset === "custom" ? customRange : emptyDateRange()
+        dispatchFilters({ type: "setDateRange", preset })
         updateUrlParams(
             preset,
-            preset === "custom" ? customRange : { from: undefined, to: undefined },
+            nextCustomRange,
             assigneeId
         )
     }, [customRange, assigneeId, updateUrlParams])
 
     // Set custom date range
     const setCustomRange = useCallback((range: DateRange) => {
-        setCustomRangeState(range)
-        if (dateRange !== "custom") {
-            setDateRangeState("custom")
-        }
+        dispatchFilters({ type: "setCustomRange", range })
         updateUrlParams("custom", range, assigneeId)
-    }, [dateRange, assigneeId, updateUrlParams])
+    }, [assigneeId, updateUrlParams])
 
     // Set assignee filter
     const setAssigneeId = useCallback((id: string | undefined) => {
         const nextId = normalizeAssigneeForUser(id, user?.user_id, user?.role)
-        setAssigneeIdState(nextId)
+        dispatchFilters({ type: "setAssigneeId", assigneeId: nextId })
         updateUrlParams(dateRange, customRange, nextId)
     }, [customRange, dateRange, updateUrlParams, user?.role, user?.user_id])
 
     // Reset all filters
     const resetFilters = useCallback(() => {
-        setDateRangeState("all")
-        setCustomRangeState({ from: undefined, to: undefined })
-        setAssigneeIdState(undefined)
+        dispatchFilters({ type: "reset" })
         replace("/dashboard", { scroll: false })
     }, [replace])
 
     // Sync URL changes back to state (e.g., browser back/forward)
     useEffect(() => {
-        const nextRange = isDateRangePreset(searchParams.get("range"))
-            ? searchParams.get("range") as DateRangePreset
-            : "all"
-        if (nextRange !== dateRange) {
-            setDateRangeState(nextRange)
-        }
-        if (nextRange === "custom") {
-            const nextFrom = parseDateParam(searchParams.get("from"))
-            const nextTo = parseDateParam(searchParams.get("to"))
-            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                setCustomRangeState({ from: nextFrom, to: nextTo })
-            }
-        } else if (customRange.from || customRange.to) {
-            setCustomRangeState({ from: undefined, to: undefined })
-        }
-
-        const nextAssignee = normalizeAssigneeForUser(
-            normalizeFilterValue(searchParams.get("assignee")),
-            user?.user_id,
-            user?.role,
-        )
-        if (nextAssignee !== assigneeId) {
-            setAssigneeIdState(nextAssignee)
-        }
-    }, [assigneeId, currentQuery, customRange.from, customRange.to, dateRange, searchParams, user?.role, user?.user_id])
+        dispatchFilters({
+            type: "syncFromUrl",
+            filters: readDashboardFiltersFromSearchParams(searchParams, user?.user_id, user?.role),
+        })
+    }, [currentQuery, searchParams, user?.role, user?.user_id])
 
     // Compute date params for API calls
     const getDateParams = useCallback((): { from_date?: string; to_date?: string } => {
