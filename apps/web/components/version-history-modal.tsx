@@ -39,6 +39,20 @@ interface VersionHistoryModalProps {
     canRollback?: boolean  // Developer-only feature
 }
 
+function getPayloadPreview(
+    entityType: VersionHistoryModalProps["entityType"],
+    payload: Record<string, unknown>
+) {
+    if (entityType === "pipeline") {
+        const stages = (payload.stages as Array<{ label: string }>) || []
+        return `${stages.length} stages: ${stages.map(s => s.label).join(", ")}`
+    }
+    if (entityType === "email_template") {
+        return `Subject: ${payload.subject || "(empty)"}`
+    }
+    return `${JSON.stringify(payload).slice(0, 100)}…`
+}
+
 export function VersionHistoryModal({
     open,
     onOpenChange,
@@ -63,18 +77,6 @@ export function VersionHistoryModal({
 
     const toggleExpanded = (version: number) => {
         setExpandedVersion(expandedVersion === version ? null : version)
-    }
-
-    const renderPayloadPreview = (payload: Record<string, unknown>) => {
-        // Show relevant fields based on entity type
-        if (entityType === "pipeline") {
-            const stages = (payload.stages as Array<{ label: string }>) || []
-            return `${stages.length} stages: ${stages.map(s => s.label).join(", ")}`
-        }
-        if (entityType === "email_template") {
-            return `Subject: ${payload.subject || "(empty)"}`
-        }
-        return JSON.stringify(payload).slice(0, 100) + "..."
     }
 
     return (
@@ -196,7 +198,7 @@ export function VersionHistoryModal({
                                     {/* Collapsed preview */}
                                     {expandedVersion !== v.version && (
                                         <div className="mt-2 text-xs text-muted-foreground truncate">
-                                            {renderPayloadPreview(v.payload)}
+                                            {getPayloadPreview(entityType, v.payload)}
                                         </div>
                                     )}
                                 </div>

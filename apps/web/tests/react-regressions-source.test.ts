@@ -447,6 +447,14 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("forwards htmlFor and children from call sites")
     })
 
+    it("keeps version history payload previews outside render", () => {
+        const source = readSource("components/version-history-modal.tsx")
+
+        expect(source).toContain("function getPayloadPreview(")
+        expect(source).toContain("getPayloadPreview(entityType, v.payload)")
+        expect(source).not.toContain("const renderPayloadPreview =")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
