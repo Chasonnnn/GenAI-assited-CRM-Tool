@@ -309,6 +309,17 @@ describe("React regression guards (source)", () => {
         expect(versionHistorySource).not.toContain("export interface VersionItem")
     })
 
+    it("keeps intended-parent option defaults private", () => {
+        const trustFundingSource = readSource("lib/trust-funding-status.ts")
+        const maritalStatusSource = readSource("lib/intended-parent-marital-status.ts")
+
+        expect(trustFundingSource).not.toContain("export const DEFAULT_TRUST_FUNDING_STATUS_OPTIONS")
+        expect(trustFundingSource).not.toContain("export type TrustFundingStatusOption")
+        expect(maritalStatusSource).not.toContain("export const MARITAL_STATUS_VALUES")
+        expect(maritalStatusSource).not.toContain("export type MaritalStatusOption")
+        expect(maritalStatusSource).not.toContain("export const DEFAULT_MARITAL_STATUS_OPTIONS")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
