@@ -14,7 +14,7 @@ export type StageCapabilityKey =
     | 'shows_pregnancy_tracking'
     | 'requires_delivery_details'
     | 'tracks_interview_outcome';
-export type PauseBehavior = 'none' | 'resume_previous_stage';
+type PauseBehavior = 'none' | 'resume_previous_stage';
 export type TerminalOutcome = 'none' | 'lost' | 'disqualified';
 export type IntegrationBucket = 'none' | 'intake' | 'qualified' | 'converted' | 'lost' | 'not_qualified';
 
@@ -251,10 +251,6 @@ export interface PipelineVersionsResponse {
 // Pipelines API
 // ============================================================================
 
-export async function listPipelines(): Promise<Pipeline[]> {
-    return listPipelinesForEntity('surrogate');
-}
-
 function withEntityType(path: string, entityType: PipelineEntityType): string {
     const params = new URLSearchParams({ entity_type: entityType });
     return `${path}?${params.toString()}`;
@@ -355,13 +351,6 @@ export async function deletePipeline(id: string, entityType?: PipelineEntityType
 // ============================================================================
 // Stage CRUD API
 // ============================================================================
-
-export async function listStages(pipelineId: string, includeInactive = false): Promise<PipelineStage[]> {
-    const params = new URLSearchParams();
-    if (includeInactive) params.set('include_inactive', 'true');
-    const query = params.toString();
-    return api.get<PipelineStage[]>(`/settings/pipelines/${pipelineId}/stages${query ? `?${query}` : ''}`);
-}
 
 export async function createStage(pipelineId: string, data: StageCreate): Promise<PipelineStage> {
     return api.post<PipelineStage>(`/settings/pipelines/${pipelineId}/stages`, data);
