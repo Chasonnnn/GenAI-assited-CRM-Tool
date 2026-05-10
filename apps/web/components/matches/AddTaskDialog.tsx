@@ -115,19 +115,19 @@ export function AddTaskDialog({
                             aria-labelledby="match-task-target-label"
                             className="flex flex-col gap-3"
                         >
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="match" id="task-target-match" />
                                 <Label htmlFor="task-target-match" className="font-normal cursor-pointer">
                                     Match (both sides)
                                 </Label>
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="surrogate" id="task-target-surrogate" />
                                 <Label htmlFor="task-target-surrogate" className="font-normal cursor-pointer">
                                     {surrogateName} (Surrogate)
                                 </Label>
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="ip" id="task-target-ip" />
                                 <Label htmlFor="task-target-ip" className="font-normal cursor-pointer">
                                     {ipName} (IP)

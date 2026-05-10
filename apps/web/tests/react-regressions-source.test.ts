@@ -212,6 +212,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setIsConfirmed")
     })
 
+    it("uses gap spacing for match dialog radio rows", () => {
+        const addTaskSource = readSource("components/matches/AddTaskDialog.tsx")
+        const uploadFileSource = readSource("components/matches/UploadFileDialog.tsx")
+
+        expect(addTaskSource).not.toContain("flex items-center space-x-2")
+        expect(uploadFileSource).not.toContain("flex items-center space-x-2")
+        expect(addTaskSource).toContain("flex items-center gap-2")
+        expect(uploadFileSource).toContain("flex items-center gap-2")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

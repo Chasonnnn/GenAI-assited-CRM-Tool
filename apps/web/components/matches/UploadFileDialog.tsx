@@ -96,13 +96,13 @@ export function UploadFileDialog({
                             onValueChange={(v) => setTarget(v as "surrogate" | "ip")}
                             className="flex gap-4"
                         >
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="surrogate" id="target-surrogate" />
                                 <Label htmlFor="target-surrogate" className="font-normal cursor-pointer">
                                     {surrogateName} (Surrogate)
                                 </Label>
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="ip" id="target-ip" />
                                 <Label htmlFor="target-ip" className="font-normal cursor-pointer">
                                     {ipName} (IP)
