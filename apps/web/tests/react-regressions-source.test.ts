@@ -129,6 +129,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("KPICardSkeleton")
     })
 
+    it("uses stable keys for report chart cells and parser warnings", () => {
+        const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
+        const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
+        const scheduleParserSource = readSource("components/ai/ScheduleParserDialog.tsx")
+
+        expect(teamChartSource).toContain("userId: user.user_id")
+        expect(teamChartSource).toContain("key={entry.userId}")
+        expect(teamChartSource).not.toContain("key={`cell-${index}`}")
+        expect(metaSpendSource).toContain("breakdownValue: item.breakdown_value")
+        expect(metaSpendSource).toContain("platformKey: item.platform")
+        expect(metaSpendSource).not.toContain("Cell key={index}")
+        expect(scheduleParserSource).toContain("getWarningKey")
+        expect(scheduleParserSource).not.toContain("key={i}")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")

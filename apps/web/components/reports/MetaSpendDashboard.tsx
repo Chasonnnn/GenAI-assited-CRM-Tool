@@ -348,6 +348,7 @@ function BreakdownChart({
     }
 
     const chartData = data.slice(0, 6).map((item, idx) => ({
+        breakdownValue: item.breakdown_value,
         name: item.breakdown_value.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
         spend: item.spend,
         leads: item.leads,
@@ -374,8 +375,8 @@ function BreakdownChart({
                     }}
                 />
                 <Bar dataKey="spend" radius={[0, 4, 4, 0]}>
-                    {chartData.map((entry, index) => (
-                        <Cell key={index} fill={entry.fill ?? "hsl(var(--primary))"} />
+                    {chartData.map((entry) => (
+                        <Cell key={entry.breakdownValue} fill={entry.fill ?? "hsl(var(--primary))"} />
                     ))}
                 </Bar>
             </BarChart>
@@ -538,6 +539,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
     const platformChartData = useMemo(() => {
         if (!platforms) return []
         return platforms.map((item, idx) => ({
+            platformKey: item.platform,
             platform: item.platform.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
             leads: item.lead_count,
             fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
@@ -792,8 +794,8 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                                 }}
                                             />
                                             <Bar dataKey="leads" radius={[0, 4, 4, 0]}>
-                                                {platformChartData.map((entry, index) => (
-                                                    <Cell key={index} fill={entry.fill ?? "hsl(var(--primary))"} />
+                                                {platformChartData.map((entry) => (
+                                                    <Cell key={entry.platformKey} fill={entry.fill ?? "hsl(var(--primary))"} />
                                                 ))}
                                             </Bar>
                                         </BarChart>

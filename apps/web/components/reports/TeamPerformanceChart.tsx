@@ -45,6 +45,7 @@ export function TeamPerformanceChart({
             .sort((a, b) => b.conversion_rate - a.conversion_rate)
             .slice(0, 10)
             .map((user) => ({
+                userId: user.user_id,
                 name: user.user_name.split(" ")[0], // First name only for chart
                 fullName: user.user_name,
                 conversion_rate: user.conversion_rate,
@@ -164,8 +165,8 @@ export function TeamPerformanceChart({
                             dataKey="conversion_rate"
                             radius={[0, 4, 4, 0]}
                         >
-                            {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                            {chartData.map((entry) => (
+                                <Cell key={entry.userId} fill={entry.fill} />
                             ))}
                         </Bar>
                     </BarChart>
