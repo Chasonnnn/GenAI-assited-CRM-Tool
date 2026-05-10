@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
@@ -20,11 +21,6 @@ import {
     FileTextIcon,
     ClockIcon,
 } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Area, AreaChart, Cell } from "recharts"
-import {
-    ChartContainer,
-    ChartTooltip,
-} from "@/components/ui/chart"
 import {
     useMetaAdAccounts,
     useSpendTotals,
@@ -41,6 +37,40 @@ import { cn } from "@/lib/utils"
 interface MetaSpendDashboardProps {
     dateParams: DateRangeParams
 }
+
+type BreakdownChartDatum = {
+    breakdownValue: string
+    name: string
+    spend: number
+    leads: number
+    fill: string | undefined
+}
+
+type SpendTrendChartDatum = {
+    date: string
+    spend: number
+    leads: number
+}
+
+type PlatformChartDatum = {
+    platformKey: string
+    platform: string
+    leads: number
+    fill: string | undefined
+}
+
+type AdChartDatum = {
+    ad: string
+    leads: number
+    surrogates: number
+    fill: string | undefined
+}
+
+type MetaSpendChartCanvasProps =
+    {
+        kind: "breakdown" | "trend" | "platform" | "ads"
+        data: BreakdownChartDatum[] | SpendTrendChartDatum[] | PlatformChartDatum[] | AdChartDatum[]
+    }
 
 // Refined color palette with depth
 const CHART_COLORS = {
@@ -92,6 +122,167 @@ const formatPercent = (value: number | null) => {
     if (value === null || value === undefined) return "—"
     return `${value.toFixed(1)}%`
 }
+
+const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
+    () =>
+        Promise.all([
+            import("recharts"),
+            import("@/components/ui/chart"),
+        ]).then(([{
+            Area,
+            AreaChart,
+            Bar,
+            BarChart,
+            CartesianGrid,
+            Cell,
+            XAxis,
+            YAxis,
+        }, { ChartContainer, ChartTooltip }]) => {
+            function MetaSpendChartCanvasComponent(props: MetaSpendChartCanvasProps) {
+                if (props.kind === "breakdown") {
+                    const data = props.data as BreakdownChartDatum[]
+                    return (
+                        <ChartContainer config={{ spend: { label: "Spend" } }} className="h-[200px] w-full">
+                            <BarChart data={data} layout="vertical" margin={{ left: 0, right: 16 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
+                                <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `$${formatCompact(v)}`} />
+                                <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={80} fontSize={11} />
+                                <ChartTooltip
+                                    content={({ payload }) => {
+                                        if (!payload?.length) return null
+                                        const d = payload[0].payload as BreakdownChartDatum
+                                        return (
+                                            <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                                <p className="font-medium">{d.name}</p>
+                                                <p className="text-muted-foreground">Spend: {formatCurrency(d.spend)}</p>
+                                                <p className="text-muted-foreground">Leads: {d.leads}</p>
+                                            </div>
+                                        )
+                                    }}
+                                />
+                                <Bar dataKey="spend" radius={[0, 4, 4, 0]}>
+                                    {data.map((entry) => (
+                                        <Cell key={entry.breakdownValue} fill={entry.fill ?? "hsl(var(--primary))"} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ChartContainer>
+                    )
+                }
+
+                if (props.kind === "trend") {
+                    const data = props.data as SpendTrendChartDatum[]
+                    return (
+                        <ChartContainer config={{ spend: { label: "Spend", color: CHART_COLORS.primary } }} className="h-[250px] w-full">
+                            <AreaChart data={data} margin={{ left: 0, right: 0 }}>
+                                <defs>
+                                    <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
+                                <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
+                                <YAxis tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `$${formatCompact(v)}`} />
+                                <ChartTooltip
+                                    content={({ payload }) => {
+                                        if (!payload?.length) return null
+                                        const d = payload[0].payload as SpendTrendChartDatum
+                                        return (
+                                            <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                                <p className="font-medium">{d.date}</p>
+                                                <p className="text-muted-foreground">Spend: {formatCurrency(d.spend)}</p>
+                                                <p className="text-muted-foreground">Leads: {d.leads}</p>
+                                            </div>
+                                        )
+                                    }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="spend"
+                                    stroke={CHART_COLORS.primary}
+                                    strokeWidth={2}
+                                    fill="url(#spendGradient)"
+                                />
+                            </AreaChart>
+                        </ChartContainer>
+                    )
+                }
+
+                if (props.kind === "platform") {
+                    const data = props.data as PlatformChartDatum[]
+                    return (
+                        <ChartContainer config={{ leads: { label: "Leads" } }} className="h-[220px] w-full">
+                            <BarChart data={data} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
+                                <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                                <YAxis dataKey="platform" type="category" tickLine={false} axisLine={false} width={110} fontSize={11} />
+                                <ChartTooltip
+                                    content={({ payload }) => {
+                                        if (!payload?.length) return null
+                                        const d = payload[0].payload as PlatformChartDatum
+                                        return (
+                                            <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                                <p className="font-medium">{d.platform}</p>
+                                                <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
+                                            </div>
+                                        )
+                                    }}
+                                />
+                                <Bar dataKey="leads" radius={[0, 4, 4, 0]}>
+                                    {data.map((entry) => (
+                                        <Cell key={entry.platformKey} fill={entry.fill ?? "hsl(var(--primary))"} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ChartContainer>
+                    )
+                }
+
+                const data = props.data as AdChartDatum[]
+                return (
+                    <ChartContainer
+                        config={{
+                            leads: { label: "Leads", color: CHART_COLORS.primary },
+                            surrogates: { label: "Surrogates", color: CHART_COLORS.accent },
+                        }}
+                        className="h-[220px] w-full"
+                    >
+                        <BarChart data={data} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
+                            <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
+                            <YAxis dataKey="ad" type="category" tickLine={false} axisLine={false} width={140} fontSize={11} />
+                            <ChartTooltip
+                                content={({ payload }) => {
+                                    if (!payload?.length) return null
+                                    const d = payload[0].payload as AdChartDatum
+                                    return (
+                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
+                                            <p className="font-medium truncate max-w-[220px]">{d.ad}</p>
+                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
+                                            <p className="text-muted-foreground">Surrogates: {formatNumber(d.surrogates)}</p>
+                                        </div>
+                                    )
+                                }}
+                            />
+                            <Bar dataKey="leads" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} />
+                            <Bar dataKey="surrogates" fill={CHART_COLORS.accent} radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                    </ChartContainer>
+                )
+            }
+
+            return MetaSpendChartCanvasComponent
+        }),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="flex h-[220px] items-center justify-center">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+            </div>
+        ),
+    }
+)
 
 // Sync status indicator
 function SyncStatusBadge({ status, lastSynced }: { status: string; lastSynced: string | null }) {
@@ -359,33 +550,7 @@ function BreakdownChart({
         fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
     }))
 
-    return (
-        <ChartContainer config={{ spend: { label: "Spend" } }} className="h-[200px] w-full">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
-                <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `$${formatCompact(v)}`} />
-                <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={80} fontSize={11} />
-                <ChartTooltip
-                    content={({ payload }) => {
-                        if (!payload?.length) return null
-                        const d = payload[0].payload
-                        return (
-                            <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
-                                <p className="font-medium">{d.name}</p>
-                                <p className="text-muted-foreground">Spend: {formatCurrency(d.spend)}</p>
-                                <p className="text-muted-foreground">Leads: {d.leads}</p>
-                            </div>
-                        )
-                    }}
-                />
-                <Bar dataKey="spend" radius={[0, 4, 4, 0]}>
-                    {chartData.map((entry) => (
-                        <Cell key={entry.breakdownValue} fill={entry.fill ?? "hsl(var(--primary))"} />
-                    ))}
-                </Bar>
-            </BarChart>
-        </ChartContainer>
-    )
+    return <MetaSpendChartCanvas kind="breakdown" data={chartData} />
 }
 
 // Form performance table component
@@ -669,39 +834,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                     No trend data available
                                 </div>
                             ) : (
-                                <ChartContainer config={{ spend: { label: "Spend", color: CHART_COLORS.primary } }} className="h-[250px] w-full">
-                                    <AreaChart data={trendChartData} margin={{ left: 0, right: 0 }}>
-                                        <defs>
-                                            <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
-                                        <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
-                                        <YAxis tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `$${formatCompact(v)}`} />
-                                        <ChartTooltip
-                                            content={({ payload }) => {
-                                                if (!payload?.length) return null
-                                                const d = payload[0].payload
-                                                return (
-                                                    <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
-                                                        <p className="font-medium">{d.date}</p>
-                                                        <p className="text-muted-foreground">Spend: {formatCurrency(d.spend)}</p>
-                                                        <p className="text-muted-foreground">Leads: {d.leads}</p>
-                                                    </div>
-                                                )
-                                            }}
-                                        />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="spend"
-                                            stroke={CHART_COLORS.primary}
-                                            strokeWidth={2}
-                                            fill="url(#spendGradient)"
-                                        />
-                                    </AreaChart>
-                                </ChartContainer>
+                                <MetaSpendChartCanvas kind="trend" data={trendChartData} />
                             )}
                         </CardContent>
                     </Card>
@@ -780,30 +913,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                         Unable to load platform data
                                     </div>
                                 ) : platformChartData.length > 0 ? (
-                                    <ChartContainer config={{ leads: { label: "Leads" } }} className="h-[220px] w-full">
-                                        <BarChart data={platformChartData} layout="vertical">
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
-                                            <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
-                                            <YAxis dataKey="platform" type="category" tickLine={false} axisLine={false} width={110} fontSize={11} />
-                                            <ChartTooltip
-                                                content={({ payload }) => {
-                                                    if (!payload?.length) return null
-                                                    const d = payload[0].payload
-                                                    return (
-                                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
-                                                            <p className="font-medium">{d.platform}</p>
-                                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
-                                                        </div>
-                                                    )
-                                                }}
-                                            />
-                                            <Bar dataKey="leads" radius={[0, 4, 4, 0]}>
-                                                {platformChartData.map((entry) => (
-                                                    <Cell key={entry.platformKey} fill={entry.fill ?? "hsl(var(--primary))"} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ChartContainer>
+                                    <MetaSpendChartCanvas kind="platform" data={platformChartData} />
                                 ) : (
                                     <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
                                         No platform data yet
@@ -831,34 +941,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                                         Unable to load ad performance
                                     </div>
                                 ) : adChartData.length > 0 ? (
-                                    <ChartContainer
-                                        config={{
-                                            leads: { label: "Leads", color: CHART_COLORS.primary },
-                                            surrogates: { label: "Surrogates", color: CHART_COLORS.accent },
-                                        }}
-                                        className="h-[220px] w-full"
-                                    >
-                                        <BarChart data={adChartData} layout="vertical">
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
-                                            <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
-                                            <YAxis dataKey="ad" type="category" tickLine={false} axisLine={false} width={140} fontSize={11} />
-                                            <ChartTooltip
-                                                content={({ payload }) => {
-                                                    if (!payload?.length) return null
-                                                    const d = payload[0].payload
-                                                    return (
-                                                        <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
-                                                            <p className="font-medium truncate max-w-[220px]">{d.ad}</p>
-                                                            <p className="text-muted-foreground">Leads: {formatNumber(d.leads)}</p>
-                                                            <p className="text-muted-foreground">Surrogates: {formatNumber(d.surrogates)}</p>
-                                                        </div>
-                                                    )
-                                                }}
-                                            />
-                                            <Bar dataKey="leads" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} />
-                                            <Bar dataKey="surrogates" fill={CHART_COLORS.accent} radius={[0, 4, 4, 0]} />
-                                        </BarChart>
-                                    </ChartContainer>
+                                    <MetaSpendChartCanvas kind="ads" data={adChartData} />
                                 ) : (
                                     <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
                                         No ad performance data yet

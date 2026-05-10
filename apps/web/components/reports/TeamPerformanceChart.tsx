@@ -1,13 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from "recharts"
-import {
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-} from "@/components/ui/chart"
 import { Loader2Icon, BarChart3Icon } from "lucide-react"
 import type { UserPerformanceData } from "@/lib/api/analytics"
 
@@ -17,6 +12,20 @@ interface TeamPerformanceChartProps {
     isLoading?: boolean
     isError?: boolean
     title?: string
+}
+
+type TeamPerformanceChartDatum = {
+    userId: string
+    name: string
+    fullName: string
+    conversion_rate: number
+    total_surrogates: number
+    converted_count: number
+    fill: string
+}
+
+type TeamPerformanceBarsProps = {
+    chartData: TeamPerformanceChartDatum[]
 }
 
 // Color scale for conversion rates
@@ -30,6 +39,68 @@ const getConversionColor = (rate: number) => {
 const chartConfig = {
     conversion_rate: { label: "Conversion Rate" },
 }
+
+const TeamPerformanceBars = dynamic<TeamPerformanceBarsProps>(
+    () =>
+        Promise.all([
+            import("recharts"),
+            import("@/components/ui/chart"),
+        ]).then(([{
+            Bar,
+            BarChart,
+            CartesianGrid,
+            XAxis,
+            YAxis,
+            Cell,
+        }, { ChartContainer, ChartTooltip, ChartTooltipContent }]) => {
+            function TeamPerformanceBarsComponent({ chartData }: TeamPerformanceBarsProps) {
+                return (
+                    <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                        <BarChart data={chartData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis
+                                type="number"
+                                domain={[0, Math.max(50, Math.ceil(Math.max(...chartData.map((d) => d.conversion_rate)) / 10) * 10)]}
+                                tickLine={false}
+                                axisLine={false}
+                                tickFormatter={(value) => `${value}%`}
+                            />
+                            <YAxis
+                                dataKey="name"
+                                type="category"
+                                tickLine={false}
+                                axisLine={false}
+                                width={80}
+                                fontSize={12}
+                            />
+                            <ChartTooltip
+                                content={<ChartTooltipContent />}
+                                cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+                            />
+                            <Bar
+                                dataKey="conversion_rate"
+                                radius={[0, 4, 4, 0]}
+                            >
+                                {chartData.map((entry) => (
+                                    <Cell key={entry.userId} fill={entry.fill} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ChartContainer>
+                )
+            }
+
+            return TeamPerformanceBarsComponent
+        }),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="flex h-[300px] items-center justify-center">
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+            </div>
+        ),
+    }
+)
 
 export function TeamPerformanceChart({
     data,
@@ -46,7 +117,7 @@ export function TeamPerformanceChart({
             .slice(0, 10)
             .map((user) => ({
                 userId: user.user_id,
-                name: user.user_name.split(" ")[0], // First name only for chart
+                name: user.user_name.split(" ")[0] ?? user.user_name,
                 fullName: user.user_name,
                 conversion_rate: user.conversion_rate,
                 total_surrogates: user.total_surrogates,
@@ -139,38 +210,7 @@ export function TeamPerformanceChart({
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                    <BarChart data={chartData} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis
-                            type="number"
-                            domain={[0, Math.max(50, Math.ceil(Math.max(...chartData.map((d) => d.conversion_rate)) / 10) * 10)]}
-                            tickLine={false}
-                            axisLine={false}
-                            tickFormatter={(value) => `${value}%`}
-                        />
-                        <YAxis
-                            dataKey="name"
-                            type="category"
-                            tickLine={false}
-                            axisLine={false}
-                            width={80}
-                            fontSize={12}
-                        />
-                        <ChartTooltip
-                            content={<ChartTooltipContent />}
-                            cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
-                        />
-                        <Bar
-                            dataKey="conversion_rate"
-                            radius={[0, 4, 4, 0]}
-                        >
-                            {chartData.map((entry) => (
-                                <Cell key={entry.userId} fill={entry.fill} />
-                            ))}
-                        </Bar>
-                    </BarChart>
-                </ChartContainer>
+                <TeamPerformanceBars chartData={chartData} />
 
                 {/* Legend */}
                 <div className="mt-4 flex items-center justify-center gap-6 text-xs">

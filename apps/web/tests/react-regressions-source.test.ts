@@ -211,6 +211,21 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps report chart surfaces code split from Recharts", () => {
+        const sources = [
+            readSource("components/reports/TeamPerformanceChart.tsx"),
+            readSource("components/reports/MetaSpendDashboard.tsx"),
+            readSource("app/(app)/reports/components/ReportsChartsGrid.tsx"),
+        ]
+
+        for (const source of sources) {
+            expect(source).toContain('import dynamic from "next/dynamic"')
+            expect(source).toContain('import("recharts")')
+            expect(source).not.toContain('from "recharts"')
+            expect(source).not.toContain('from "@/components/ui/chart"')
+        }
+    })
+
     it("uses Next Image for journey, AI studio, and platform branding images", () => {
         const sources = [
             readSource("components/surrogates/journey/JourneyPrintView.tsx"),
