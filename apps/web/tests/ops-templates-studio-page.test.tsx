@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
+import { renderToString } from "react-dom/server"
 import TemplatesPage from "../app/ops/templates/page.client"
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
+const templateMocks = vi.hoisted(() => ({
+    emailTemplates: [] as unknown[],
+    formTemplates: [] as unknown[],
+    workflowTemplates: [] as unknown[],
+    systemTemplates: [] as unknown[],
+}))
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
@@ -13,16 +20,20 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-platform-templates", () => ({
-    usePlatformEmailTemplates: () => ({ data: [], isLoading: false }),
-    usePlatformFormTemplates: () => ({ data: [], isLoading: false }),
-    usePlatformWorkflowTemplates: () => ({ data: [], isLoading: false }),
-    usePlatformSystemEmailTemplates: () => ({ data: [], isLoading: false }),
+    usePlatformEmailTemplates: () => ({ data: templateMocks.emailTemplates, isLoading: false }),
+    usePlatformFormTemplates: () => ({ data: templateMocks.formTemplates, isLoading: false }),
+    usePlatformWorkflowTemplates: () => ({ data: templateMocks.workflowTemplates, isLoading: false }),
+    usePlatformSystemEmailTemplates: () => ({ data: templateMocks.systemTemplates, isLoading: false }),
 }))
 
 describe("Templates Studio (Ops)", () => {
     beforeEach(() => {
         mockPush.mockClear()
         mockReplace.mockClear()
+        templateMocks.emailTemplates = []
+        templateMocks.formTemplates = []
+        templateMocks.workflowTemplates = []
+        templateMocks.systemTemplates = []
         try {
             window.history.pushState({}, "", "/ops/templates?tab=system")
         } catch {
@@ -45,5 +56,29 @@ describe("Templates Studio (Ops)", () => {
         fireEvent.click(button)
 
         expect(mockPush).toHaveBeenCalledWith("/ops/templates/system/new")
+    })
+
+    it("server-renders template timestamps as deterministic UTC fallback labels", () => {
+        templateMocks.emailTemplates = [
+            {
+                id: "email_template_1",
+                status: "published",
+                published_version: 1,
+                is_published_globally: true,
+                published_at: "2026-06-03T00:30:00.000Z",
+                updated_at: "2026-06-04T00:30:00.000Z",
+                draft: {
+                    name: "Welcome email",
+                    subject: "Welcome",
+                },
+            },
+        ]
+
+        const html = renderToString(<TemplatesPage />)
+
+        expect(html).toContain("Jun 3, 2026")
+        expect(html).toContain("Jun 4, 2026")
+        expect(html).not.toContain("ago")
+        expect(html).not.toContain("in ")
     })
 })

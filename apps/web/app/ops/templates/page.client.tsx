@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { type ReactNode, useEffect, useMemo, useState } from "react"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { formatDistanceToNow } from "date-fns"
+import { RelativeTime } from "@/components/ui/time-display"
 import {
     MailIcon,
     ClipboardListIcon,
@@ -31,12 +31,7 @@ import {
     usePlatformWorkflowTemplates,
     usePlatformSystemEmailTemplates,
 } from "@/lib/hooks/use-platform-templates"
-import type {
-    PlatformEmailTemplateListItem,
-    PlatformFormTemplateListItem,
-    PlatformWorkflowTemplateListItem,
-    SystemEmailTemplate,
-} from "@/lib/api/platform"
+import type { SystemEmailTemplate } from "@/lib/api/platform"
 
 const TABS = ["email", "forms", "workflows", "system"] as const
 type TemplatesTab = (typeof TABS)[number]
@@ -117,8 +112,228 @@ function EmptyState({
     )
 }
 
+function TemplatesLoadingState() {
+    return (
+        <div className="flex items-center justify-center py-16">
+            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+        </div>
+    )
+}
+
+type PublishedTemplateListItem = {
+    id: string
+    status: string
+    published_version: number
+    is_published_globally: boolean
+    published_at?: string | null
+    updated_at: string
+    draft: {
+        name: string
+    }
+}
+
+function TemplateTableFrame({
+    children,
+    showScope = true,
+}: {
+    children: ReactNode
+    showScope?: boolean
+}) {
+    return (
+        <div className="border rounded-lg bg-white dark:bg-stone-900">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Template</TableHead>
+                        <TableHead>Status</TableHead>
+                        {showScope && <TableHead>Scope</TableHead>}
+                        <TableHead>Updated</TableHead>
+                        <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>{children}</TableBody>
+            </Table>
+        </div>
+    )
+}
+
+function PublishedScopeCell({ template }: { template: PublishedTemplateListItem }) {
+    if (template.published_version <= 0) {
+        return <span className="text-xs text-muted-foreground">Not published</span>
+    }
+
+    return (
+        <div className="space-y-1">
+            <PublishScopeBadge isGlobal={template.is_published_globally} />
+            <div className="text-xs text-muted-foreground">
+                <RelativeTime value={template.published_at} />
+            </div>
+        </div>
+    )
+}
+
+function TemplateListSection<TTemplate extends PublishedTemplateListItem>({
+    rows,
+    isLoading,
+    isError,
+    error,
+    errorTitle,
+    onRetry,
+    emptyTitle,
+    emptyDescription,
+    emptyHref,
+    emptyLabel,
+    getDescription,
+    onOpen,
+}: {
+    rows: TTemplate[]
+    isLoading: boolean
+    isError: boolean
+    error: unknown
+    errorTitle: string
+    onRetry: () => void
+    emptyTitle: string
+    emptyDescription: string
+    emptyHref: string
+    emptyLabel: string
+    getDescription: (template: TTemplate) => string
+    onOpen: (template: TTemplate) => void
+}) {
+    if (isError) {
+        return <QueryErrorState title={errorTitle} error={error} onRetry={onRetry} />
+    }
+
+    if (isLoading) {
+        return <TemplatesLoadingState />
+    }
+
+    if (rows.length === 0) {
+        return (
+            <EmptyState
+                title={emptyTitle}
+                description={emptyDescription}
+                ctaHref={emptyHref}
+                ctaLabel={emptyLabel}
+            />
+        )
+    }
+
+    return (
+        <TemplateTableFrame>
+            {rows.map((template) => (
+                <TableRow
+                    key={template.id}
+                    className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                    onClick={() => onOpen(template)}
+                >
+                    <TableCell>
+                        <div className="font-medium text-stone-900 dark:text-stone-100">
+                            {template.draft.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                            {getDescription(template)}
+                        </div>
+                    </TableCell>
+                    <TableCell>
+                        <StatusBadge status={template.status} />
+                    </TableCell>
+                    <TableCell>
+                        <PublishedScopeCell template={template} />
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                        <RelativeTime value={template.updated_at} />
+                    </TableCell>
+                    <TableCell>
+                        <ArrowRightIcon className="size-4 text-muted-foreground" />
+                    </TableCell>
+                </TableRow>
+            ))}
+        </TemplateTableFrame>
+    )
+}
+
+function SystemTemplatesSection({
+    rows,
+    isLoading,
+    isError,
+    error,
+    onRetry,
+    onOpen,
+}: {
+    rows: SystemEmailTemplate[]
+    isLoading: boolean
+    isError: boolean
+    error: unknown
+    onRetry: () => void
+    onOpen: (template: SystemEmailTemplate) => void
+}) {
+    if (isError) {
+        return (
+            <QueryErrorState
+                title="Failed to load system email templates"
+                error={error}
+                onRetry={onRetry}
+            />
+        )
+    }
+
+    if (isLoading) {
+        return <TemplatesLoadingState />
+    }
+
+    if (rows.length === 0) {
+        return (
+            <EmptyState
+                title="No system templates found"
+                description="System emails are managed at the platform level."
+                ctaHref="/ops/templates"
+                ctaLabel="Refresh"
+            />
+        )
+    }
+
+    return (
+        <TemplateTableFrame showScope={false}>
+            {rows.map((template) => (
+                <TableRow
+                    key={template.system_key}
+                    className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                    onClick={() => onOpen(template)}
+                >
+                    <TableCell>
+                        <div className="font-medium text-stone-900 dark:text-stone-100">
+                            {template.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                            {template.system_key}
+                        </div>
+                    </TableCell>
+                    <TableCell>
+                        <Badge
+                            variant="outline"
+                            className={
+                                template.is_active
+                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                    : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300"
+                            }
+                        >
+                            {template.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                        <RelativeTime value={template.updated_at} />
+                    </TableCell>
+                    <TableCell>
+                        <ArrowRightIcon className="size-4 text-muted-foreground" />
+                    </TableCell>
+                </TableRow>
+            ))}
+        </TemplateTableFrame>
+    )
+}
+
 export default function TemplatesPage() {
-    const router = useRouter()
+    const { push, replace } = useRouter()
     const [activeTab, setActiveTab] = useState<TemplatesTab>("email")
 
     useEffect(() => {
@@ -165,7 +380,7 @@ export default function TemplatesPage() {
     const handleTabChange = (next: string) => {
         const value = TABS.includes(next as TemplatesTab) ? (next as TemplatesTab) : "email"
         setActiveTab(value)
-        router.replace(`/ops/templates?tab=${value}`)
+        replace(`/ops/templates?tab=${value}`)
     }
 
     const emailRows = useMemo(() => emailTemplates, [emailTemplates])
@@ -195,7 +410,7 @@ export default function TemplatesPage() {
                     </p>
                 </div>
                 {canCreate && (
-                    <Button onClick={() => router.push(`/ops/templates/${activeTab}/new`)}>
+                    <Button onClick={() => push(`/ops/templates/${activeTab}/new`)}>
                         <PlusIcon className="mr-2 size-4" />
                         New {createLabel}
                     </Button>
@@ -223,307 +438,65 @@ export default function TemplatesPage() {
                 </TabsList>
 
                 <TabsContent value="email" className="mt-6">
-                    {emailIsError ? (
-                        <QueryErrorState
-                            title="Failed to load email templates"
-                            error={emailError}
-                            onRetry={() => void refetchEmailTemplates()}
-                        />
-                    ) : emailLoading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : emailRows.length === 0 ? (
-                        <EmptyState
-                            title="No email templates yet"
-                            description="Create platform email templates to seed org libraries."
-                            ctaHref="/ops/templates/email/new"
-                            ctaLabel="Create Email Template"
-                        />
-                    ) : (
-                        <div className="border rounded-lg bg-white dark:bg-stone-900">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Template</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Scope</TableHead>
-                                        <TableHead>Updated</TableHead>
-                                        <TableHead className="w-12"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {emailRows.map((template: PlatformEmailTemplateListItem) => (
-                                        <TableRow
-                                            key={template.id}
-                                            className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                                            onClick={() => router.push(`/ops/templates/email/${template.id}`)}
-                                        >
-                                            <TableCell>
-                                                <div className="font-medium text-stone-900 dark:text-stone-100">
-                                                    {template.draft.name}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground truncate">
-                                                    {template.draft.subject}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <StatusBadge status={template.status} />
-                                            </TableCell>
-                                            <TableCell>
-                                                {template.published_version > 0 ? (
-                                                    <div className="space-y-1">
-                                                        <PublishScopeBadge isGlobal={template.is_published_globally} />
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {template.published_at
-                                                                ? formatDistanceToNow(new Date(template.published_at), { addSuffix: true })
-                                                                : "—"}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground">Not published</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {formatDistanceToNow(new Date(template.updated_at), { addSuffix: true })}
-                                            </TableCell>
-                                            <TableCell>
-                                                <ArrowRightIcon className="size-4 text-muted-foreground" />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
+                    <TemplateListSection
+                        rows={emailRows}
+                        isLoading={emailLoading}
+                        isError={emailIsError}
+                        error={emailError}
+                        errorTitle="Failed to load email templates"
+                        onRetry={() => void refetchEmailTemplates()}
+                        emptyTitle="No email templates yet"
+                        emptyDescription="Create platform email templates to seed org libraries."
+                        emptyHref="/ops/templates/email/new"
+                        emptyLabel="Create Email Template"
+                        getDescription={(template) => template.draft.subject}
+                        onOpen={(template) => push(`/ops/templates/email/${template.id}`)}
+                    />
                 </TabsContent>
 
                 <TabsContent value="forms" className="mt-6">
-                    {formIsError ? (
-                        <QueryErrorState
-                            title="Failed to load form templates"
-                            error={formError}
-                            onRetry={() => void refetchFormTemplates()}
-                        />
-                    ) : formLoading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : formRows.length === 0 ? (
-                        <EmptyState
-                            title="No form templates yet"
-                            description="Design form templates to publish into org libraries."
-                            ctaHref="/ops/templates/forms/new"
-                            ctaLabel="Create Form Template"
-                        />
-                    ) : (
-                        <div className="border rounded-lg bg-white dark:bg-stone-900">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Template</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Scope</TableHead>
-                                        <TableHead>Updated</TableHead>
-                                        <TableHead className="w-12"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {formRows.map((template: PlatformFormTemplateListItem) => (
-                                        <TableRow
-                                            key={template.id}
-                                            className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                                            onClick={() => router.push(`/ops/templates/forms/${template.id}`)}
-                                        >
-                                            <TableCell>
-                                                <div className="font-medium text-stone-900 dark:text-stone-100">
-                                                    {template.draft.name}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground truncate">
-                                                    {template.draft.description || "No description"}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <StatusBadge status={template.status} />
-                                            </TableCell>
-                                            <TableCell>
-                                                {template.published_version > 0 ? (
-                                                    <div className="space-y-1">
-                                                        <PublishScopeBadge isGlobal={template.is_published_globally} />
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {template.published_at
-                                                                ? formatDistanceToNow(new Date(template.published_at), { addSuffix: true })
-                                                                : "—"}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground">Not published</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {formatDistanceToNow(new Date(template.updated_at), { addSuffix: true })}
-                                            </TableCell>
-                                            <TableCell>
-                                                <ArrowRightIcon className="size-4 text-muted-foreground" />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
+                    <TemplateListSection
+                        rows={formRows}
+                        isLoading={formLoading}
+                        isError={formIsError}
+                        error={formError}
+                        errorTitle="Failed to load form templates"
+                        onRetry={() => void refetchFormTemplates()}
+                        emptyTitle="No form templates yet"
+                        emptyDescription="Design form templates to publish into org libraries."
+                        emptyHref="/ops/templates/forms/new"
+                        emptyLabel="Create Form Template"
+                        getDescription={(template) => template.draft.description || "No description"}
+                        onOpen={(template) => push(`/ops/templates/forms/${template.id}`)}
+                    />
                 </TabsContent>
 
                 <TabsContent value="workflows" className="mt-6">
-                    {workflowIsError ? (
-                        <QueryErrorState
-                            title="Failed to load workflow templates"
-                            error={workflowError}
-                            onRetry={() => void refetchWorkflowTemplates()}
-                        />
-                    ) : workflowLoading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : workflowRows.length === 0 ? (
-                        <EmptyState
-                            title="No workflow templates yet"
-                            description="Build workflow templates to publish across orgs."
-                            ctaHref="/ops/templates/workflows/new"
-                            ctaLabel="Create Workflow Template"
-                        />
-                    ) : (
-                        <div className="border rounded-lg bg-white dark:bg-stone-900">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Template</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Scope</TableHead>
-                                        <TableHead>Updated</TableHead>
-                                        <TableHead className="w-12"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {workflowRows.map((template: PlatformWorkflowTemplateListItem) => (
-                                        <TableRow
-                                            key={template.id}
-                                            className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                                            onClick={() => router.push(`/ops/templates/workflows/${template.id}`)}
-                                        >
-                                            <TableCell>
-                                                <div className="font-medium text-stone-900 dark:text-stone-100">
-                                                    {template.draft.name}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground truncate">
-                                                    {template.draft.description || "No description"}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <StatusBadge status={template.status} />
-                                            </TableCell>
-                                            <TableCell>
-                                                {template.published_version > 0 ? (
-                                                    <div className="space-y-1">
-                                                        <PublishScopeBadge isGlobal={template.is_published_globally} />
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {template.published_at
-                                                                ? formatDistanceToNow(new Date(template.published_at), { addSuffix: true })
-                                                                : "—"}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground">Not published</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {formatDistanceToNow(new Date(template.updated_at), { addSuffix: true })}
-                                            </TableCell>
-                                            <TableCell>
-                                                <ArrowRightIcon className="size-4 text-muted-foreground" />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
+                    <TemplateListSection
+                        rows={workflowRows}
+                        isLoading={workflowLoading}
+                        isError={workflowIsError}
+                        error={workflowError}
+                        errorTitle="Failed to load workflow templates"
+                        onRetry={() => void refetchWorkflowTemplates()}
+                        emptyTitle="No workflow templates yet"
+                        emptyDescription="Build workflow templates to publish across orgs."
+                        emptyHref="/ops/templates/workflows/new"
+                        emptyLabel="Create Workflow Template"
+                        getDescription={(template) => template.draft.description || "No description"}
+                        onOpen={(template) => push(`/ops/templates/workflows/${template.id}`)}
+                    />
                 </TabsContent>
 
                 <TabsContent value="system" className="mt-6">
-                    {systemIsError ? (
-                        <QueryErrorState
-                            title="Failed to load system email templates"
-                            error={systemError}
-                            onRetry={() => void refetchSystemTemplates()}
-                        />
-                    ) : systemLoading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : systemRows.length === 0 ? (
-                        <EmptyState
-                            title="No system templates found"
-                            description="System emails are managed at the platform level."
-                            ctaHref="/ops/templates"
-                            ctaLabel="Refresh"
-                        />
-                    ) : (
-                        <div className="border rounded-lg bg-white dark:bg-stone-900">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Template</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Updated</TableHead>
-                                        <TableHead className="w-12"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {systemRows.map((template: SystemEmailTemplate) => (
-                                        <TableRow
-                                            key={template.system_key}
-                                            className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
-                                            onClick={() =>
-                                                router.push(`/ops/templates/system/${template.system_key}`)
-                                            }
-                                        >
-                                            <TableCell>
-                                                <div className="font-medium text-stone-900 dark:text-stone-100">
-                                                    {template.name}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {template.system_key}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant="outline"
-                                                    className={
-                                                        template.is_active
-                                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                                            : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300"
-                                                    }
-                                                >
-                                                    {template.is_active ? "Active" : "Inactive"}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {template.updated_at
-                                                    ? formatDistanceToNow(new Date(template.updated_at), {
-                                                          addSuffix: true,
-                                                      })
-                                                    : "—"}
-                                            </TableCell>
-                                            <TableCell>
-                                                <ArrowRightIcon className="size-4 text-muted-foreground" />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
+                    <SystemTemplatesSection
+                        rows={systemRows}
+                        isLoading={systemLoading}
+                        isError={systemIsError}
+                        error={systemError}
+                        onRetry={() => void refetchSystemTemplates()}
+                        onOpen={(template) => push(`/ops/templates/system/${template.system_key}`)}
+                    />
                 </TabsContent>
             </Tabs>
         </div>
