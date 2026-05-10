@@ -354,7 +354,7 @@ export function AutomationFormSettingsPanel({
                                 Publish this form to generate the share link and QR code.
                             </p>
                         ) : !selectedQrLink?.intake_url ? (
-                            <p className="text-xs text-stone-500">Preparing shared link...</p>
+                            <p className="text-xs text-stone-500">Preparing shared link…</p>
                         ) : (
                             <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
                                 <div className="break-all text-xs text-stone-600">{selectedQrLink.intake_url}</div>

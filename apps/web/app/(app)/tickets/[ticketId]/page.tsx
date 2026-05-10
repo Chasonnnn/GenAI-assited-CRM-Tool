@@ -180,7 +180,7 @@ export default function TicketDetailPage() {
     }
 
     if (isLoading) {
-        return <div className="p-4 text-sm text-muted-foreground md:p-6">Loading ticket...</div>
+        return <div className="p-4 text-sm text-muted-foreground md:p-6">Loading ticket…</div>
     }
 
     if (!data?.ticket) {
@@ -246,7 +246,7 @@ export default function TicketDetailPage() {
                             </SelectContent>
                         </Select>
                         <Button onClick={handleUpdate} disabled={patchMutation.isPending}>
-                            {patchMutation.isPending ? 'Saving...' : 'Save'}
+                            {patchMutation.isPending ? 'Saving…' : 'Save'}
                         </Button>
                     </div>
 
@@ -262,7 +262,7 @@ export default function TicketDetailPage() {
                             disabled={linkMutation.isPending}
                             className="md:col-span-2"
                         >
-                            {linkMutation.isPending ? 'Updating link...' : 'Update Surrogate Link'}
+                            {linkMutation.isPending ? 'Updating link…' : 'Update Surrogate Link'}
                         </Button>
                     </div>
                 </CardContent>
@@ -285,7 +285,7 @@ export default function TicketDetailPage() {
                         rows={4}
                     />
                     <Button onClick={handleReply} disabled={replyMutation.isPending}>
-                        {replyMutation.isPending ? 'Sending...' : 'Send reply'}
+                        {replyMutation.isPending ? 'Sending…' : 'Send reply'}
                     </Button>
                 </CardContent>
             </Card>
@@ -302,7 +302,7 @@ export default function TicketDetailPage() {
                         rows={3}
                     />
                     <Button onClick={handleAddNote} disabled={addNoteMutation.isPending}>
-                        {addNoteMutation.isPending ? 'Saving...' : 'Add note'}
+                        {addNoteMutation.isPending ? 'Saving…' : 'Add note'}
                     </Button>
                     <div className="space-y-2">
                         {data.notes.map((note) => (

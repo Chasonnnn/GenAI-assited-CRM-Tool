@@ -226,7 +226,7 @@ export default function MatchesPage() {
                     <div className="relative w-full max-w-sm">
                         <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search case or IP name..."
+                            placeholder="Search case or IP name…"
                             value={search}
                             onChange={(e) => {
                                 setSearch(e.target.value)
@@ -242,7 +242,7 @@ export default function MatchesPage() {
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                                <span className="ml-2 text-muted-foreground">Loading...</span>
+                                <span className="ml-2 text-muted-foreground">Loading…</span>
                             </div>
                         ) : isError ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">

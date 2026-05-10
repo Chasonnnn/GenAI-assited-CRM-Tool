@@ -213,7 +213,7 @@ export function TasksListView({
                         {bulkCompletePending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                Completing...
+                                Completing…
                             </>
                         ) : (
                             "Complete selected"

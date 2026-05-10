@@ -176,7 +176,7 @@ export default function WelcomePage() {
                             {isSubmitting ? (
                                 <>
                                     <Loader2 className="mr-2 size-4 animate-spin" />
-                                    Saving...
+                                    Saving…
                                 </>
                             ) : (
                                 "Complete Profile"

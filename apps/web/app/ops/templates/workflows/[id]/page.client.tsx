@@ -516,7 +516,7 @@ function WorkflowTemplateHeader({
                     aria-label="Workflow template name"
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder="Workflow template name..."
+                    placeholder="Workflow template name…"
                     className="h-9 w-72 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
                 />
                 <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
@@ -2499,7 +2499,7 @@ export default function PlatformWorkflowTemplatePage() {
             <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
                 <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
                     <Loader2Icon className="size-5 animate-spin" />
-                    <span>Loading template...</span>
+                    <span>Loading template…</span>
                 </div>
             </div>
         )

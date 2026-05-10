@@ -78,7 +78,7 @@ export default function SurrogateEmailsPage() {
                 </CardHeader>
                 <CardContent>
                     {emailsLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading emails...</p>
+                        <p className="text-sm text-muted-foreground">Loading emails…</p>
                     ) : emailsData?.items.length ? (
                         <div className="space-y-2">
                             {emailsData.items.map((item) => (
@@ -129,11 +129,11 @@ export default function SurrogateEmailsPage() {
                         />
                     </div>
                     <Button onClick={handleAddContact} disabled={createContact.isPending}>
-                        {createContact.isPending ? 'Adding...' : 'Add Contact'}
+                        {createContact.isPending ? 'Adding…' : 'Add Contact'}
                     </Button>
 
                     {contactsLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading contacts...</p>
+                        <p className="text-sm text-muted-foreground">Loading contacts…</p>
                     ) : (
                         <div className="space-y-2">
                             {contactsData?.items.map((contact) => (

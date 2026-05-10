@@ -1244,7 +1244,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                                                     updateRow(rowIndex, column.key, e.target.value)
                                                                 }
                                                             >
-                                                                <option value="">Select...</option>
+                                                                <option value="">Select…</option>
                                                                 {(column.options || []).map((option) => (
                                                                     <option key={option.value} value={option.value}>
                                                                         {option.label}
@@ -1306,7 +1306,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
                 <div className="text-center">
                     <Loader2Icon className="size-10 animate-spin text-primary mx-auto mb-4" />
-                    <p className="text-stone-600">Loading application form...</p>
+                    <p className="text-stone-600">Loading application form…</p>
                 </div>
             </div>
         )
@@ -1370,7 +1370,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     isPreview
                         ? "Preview Mode"
                         : draftSaveState === "saving"
-                            ? "Saving..."
+                            ? "Saving…"
                             : draftSaveState === "error"
                                 ? "Autosave unavailable"
                                 : draftUpdatedAt
@@ -1413,7 +1413,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                     {isRestoringResume ? (
                                         <>
                                             <Loader2Icon className="mr-2 size-3.5 animate-spin" />
-                                            Restoring...
+                                            Restoring…
                                         </>
                                     ) : (
                                         "Continue previous application"
@@ -1623,7 +1623,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                     {isSubmitting ? (
                                         <>
                                             <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                            Submitting...
+                                            Submitting…
                                         </>
                                     ) : (
                                         "Submit Application"

@@ -428,7 +428,7 @@ export default function TasksPage() {
                 {isLoading && (
                     <Card className="flex items-center justify-center p-12">
                         <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                        <span className="ml-2 text-muted-foreground">Loading tasks...</span>
+                        <span className="ml-2 text-muted-foreground">Loading tasks…</span>
                     </Card>
                 )}
 

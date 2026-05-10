@@ -202,7 +202,7 @@ export default function TicketsPage() {
                         rows={4}
                     />
                     <Button onClick={handleCompose} disabled={composeMutation.isPending}>
-                        {composeMutation.isPending ? 'Sending...' : 'Send'}
+                        {composeMutation.isPending ? 'Sending…' : 'Send'}
                     </Button>
                 </CardContent>
             </Card>
@@ -213,7 +213,7 @@ export default function TicketsPage() {
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading tickets...</p>
+                        <p className="text-sm text-muted-foreground">Loading tickets…</p>
                     ) : data?.items.length ? (
                         <div className="space-y-2">
                             {data.items.map((ticket) => (

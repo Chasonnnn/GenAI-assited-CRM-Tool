@@ -134,7 +134,7 @@ export default function UnassignedSurrogatesPage() {
                     {!authLoaded || isLoading ? (
                         <div className="flex items-center justify-center py-12 text-muted-foreground">
                             <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            Loading unassigned cases...
+                            Loading unassigned cases…
                         </div>
                     ) : error ? (
                         <div className="px-6 py-10">
@@ -207,7 +207,7 @@ export default function UnassignedSurrogatesPage() {
                                                     {claimingId === s.id ? (
                                                         <>
                                                             <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                                            Claiming...
+                                                            Claiming…
                                                         </>
                                                     ) : (
                                                         <>

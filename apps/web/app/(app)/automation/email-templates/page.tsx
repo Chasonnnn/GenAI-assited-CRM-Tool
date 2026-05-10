@@ -1611,7 +1611,7 @@ export default function EmailTemplatesPage() {
                                                 {updateSignatureMutation.isPending ? (
                                                     <>
                                                         <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                                        Saving...
+                                                        Saving…
                                                     </>
                                                 ) : (
                                                     "Save Signature"
@@ -1735,7 +1735,7 @@ export default function EmailTemplatesPage() {
                                     <CardContent>
                                         <div className="border rounded-lg p-4 bg-white min-h-[200px]">
                                             <p className="text-muted-foreground text-sm mb-4 border-b pb-4">
-                                                [Your email content here...]
+                                                [Your email content here…]
                                             </p>
                                             {signaturePreviewMode === "personal" ? (
                                                 <SignaturePreviewComponent />
@@ -1845,7 +1845,7 @@ export default function EmailTemplatesPage() {
                                     <TemplateVariablePicker
                                         variables={templateVariables}
                                         disabled={templateVariablesLoading || templateVariables.length === 0}
-                                        triggerLabel={templateVariablesLoading ? "Loading..." : "Insert Variable"}
+                                        triggerLabel={templateVariablesLoading ? "Loading…" : "Insert Variable"}
                                         onSelect={(variable) => {
                                             if (variable.name === "unsubscribe_url") {
                                                 toast.info("Unsubscribe link is added automatically.")
@@ -1866,7 +1866,7 @@ export default function EmailTemplatesPage() {
                                     onChange={(html) => setTemplateBody(html)}
                                     onFocus={() => setActiveInsertionTarget("body_visual")}
                                     ariaLabelledBy="template-body-label"
-                                    placeholder="Write your email content here... Use the toolbar to format text."
+                                    placeholder="Write your email content here… Use the toolbar to format text."
                                     minHeight="200px"
                                     maxHeight="350px"
                                     enableImages
@@ -1886,7 +1886,7 @@ export default function EmailTemplatesPage() {
                                     onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                                     onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                                     onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    placeholder="Paste or edit the HTML for this template..."
+                                    placeholder="Paste or edit the HTML for this template…"
                                     className="min-h-[220px] font-mono text-xs leading-relaxed"
                                 />
                             )}
@@ -2112,7 +2112,7 @@ export default function EmailTemplatesPage() {
                                         {testSendTemplateLoading ? (
                                             <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                                                 <Loader2Icon className="size-4 animate-spin" />
-                                                Loading variables...
+                                                Loading variables…
                                             </div>
                                         ) : (
                                             <>

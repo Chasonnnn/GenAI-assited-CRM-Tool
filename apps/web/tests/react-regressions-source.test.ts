@@ -409,6 +409,28 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain('suggestion.slice(0, 50) + "..."')
     })
 
+    it("uses typographic ellipses for operational loading labels", () => {
+        const welcomeSource = readSource("app/(app)/welcome/page.tsx")
+        const ticketDetailSource = readSource("app/(app)/tickets/[ticketId]/page.tsx")
+        const tasksListSource = readSource("components/tasks/TasksListView.tsx")
+        const publishDialogSource = readSource("components/ops/templates/PublishDialog.tsx")
+
+        expect(welcomeSource).toContain("Saving…")
+        expect(ticketDetailSource).toContain("Loading ticket…")
+        expect(ticketDetailSource).toContain("'Saving…'")
+        expect(ticketDetailSource).toContain("'Updating link…'")
+        expect(ticketDetailSource).toContain("'Sending…'")
+        expect(tasksListSource).toContain("Completing…")
+        expect(publishDialogSource).toContain("Loading organizations…")
+        expect(welcomeSource).not.toContain("Saving...")
+        expect(ticketDetailSource).not.toContain("Loading ticket...")
+        expect(ticketDetailSource).not.toContain("'Saving...'")
+        expect(ticketDetailSource).not.toContain("'Updating link...'")
+        expect(ticketDetailSource).not.toContain("'Sending...'")
+        expect(tasksListSource).not.toContain("Completing...")
+        expect(publishDialogSource).not.toContain("Loading organizations...")
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
@@ -495,6 +517,74 @@ describe("React regression guards (source)", () => {
 
         expect(source).not.toContain("border-l-")
         expect(source).not.toContain("Add your comment...")
+    })
+
+    it("uses typographic ellipses in user-facing loading and placeholder copy", () => {
+        const sources = [
+            "components/appointments/AppointmentsList.tsx",
+            "components/tasks/TasksListView.tsx",
+            "app/(app)/welcome/page.tsx",
+            "app/(app)/tasks/page.client.tsx",
+            "app/(app)/automation/email-templates/page.tsx",
+            "app/(app)/tickets/page.tsx",
+            "components/import/CSVUpload.tsx",
+            "app/(app)/tickets/[ticketId]/page.tsx",
+            "components/forms/builder/AutomationFormSettingsPanel.tsx",
+            "components/forms/builder/AutomationFormSubmissionsPanel.tsx",
+            "tests/integration/permissions.integration.test.tsx",
+            "app/(app)/surrogates/[id]/emails/page.tsx",
+            "components/surrogates/journey/MilestoneImageSelector.tsx",
+            "components/ops/templates/PublishDialog.tsx",
+            "app/intake/[slug]/page.client.tsx",
+            "app/(app)/surrogates/unassigned/page.client.tsx",
+            "app/(app)/intended-parents/matches/page.client.tsx",
+            "app/ops/templates/workflows/[id]/page.client.tsx",
+            "app/(app)/intended-parents/page.client.tsx",
+        ].map(readSource)
+
+        const userFacingThreeDotCopy = [
+            "Adding...",
+            "Approving...",
+            "Claiming...",
+            "Completing...",
+            "Loading...",
+            "Loading application form...",
+            "Loading available slots...",
+            "Loading candidates...",
+            "Loading contacts...",
+            "Loading emails...",
+            "Loading organizations...",
+            "Loading submission history...",
+            "Loading tasks...",
+            "Loading template...",
+            "Loading ticket...",
+            "Loading tickets...",
+            "Loading unassigned cases...",
+            "Loading variables...",
+            "Preparing shared link...",
+            "Processing CSV...",
+            "Restoring...",
+            "Saving...",
+            "Select...",
+            "Sending...",
+            "Submitting...",
+            "Updating link...",
+            "[Your email content here...",
+            "Search case or IP name...",
+            "Search name, number, email, phone...",
+            "Search organizations...",
+            "Workflow template name...",
+            "Write your email content here...",
+            "Paste or edit the HTML for this template...",
+            "Why this match was resolved...",
+            "Enter reason for cancellation...",
+        ]
+
+        for (const source of sources) {
+            for (const copy of userFacingThreeDotCopy) {
+                expect(source).not.toContain(copy)
+            }
+        }
     })
 
     it("keeps InlineDateField draft state tied to edit lifecycle", () => {

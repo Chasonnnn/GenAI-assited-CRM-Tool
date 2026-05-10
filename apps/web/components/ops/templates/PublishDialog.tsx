@@ -139,7 +139,7 @@ export function PublishDialog({
                             <div className="relative">
                                 <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
-                                    placeholder="Search organizations..."
+                                    placeholder="Search organizations…"
                                     value={search}
                                     onChange={(event) => setSearch(event.target.value)}
                                     className="pl-9"
@@ -164,7 +164,7 @@ export function PublishDialog({
                                     {orgsLoading ? (
                                         <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
                                             <Loader2Icon className="size-4 animate-spin" />
-                                            Loading organizations...
+                                            Loading organizations…
                                         </div>
                                     ) : filteredOrgs.length === 0 ? (
                                         <div className="p-4 text-sm text-muted-foreground">

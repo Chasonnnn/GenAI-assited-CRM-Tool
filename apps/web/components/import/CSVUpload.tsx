@@ -589,7 +589,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         {previewMutation.isPending ? (
                             <>
                                 <Loader2Icon className="mb-4 size-12 animate-spin text-muted-foreground" />
-                                <h3 className="mb-2 text-lg font-semibold">Processing CSV...</h3>
+                                <h3 className="mb-2 text-lg font-semibold">Processing CSV…</h3>
                                 <p className="text-sm text-muted-foreground">Analyzing rows and detecting duplicates</p>
                             </>
                         ) : (
@@ -1088,7 +1088,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                             {submitMutation.isPending ? (
                                 <>
                                     <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    Submitting...
+                                    Submitting…
                                 </>
                             ) : (
                                 "Submit Import"
@@ -1113,7 +1113,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             {approveMutation.isPending ? (
                                                 <>
                                                     <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                                    Approving...
+                                                    Approving…
                                                 </>
                                             ) : (
                                                 "Approve & Run Import"
@@ -1219,7 +1219,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     {submitMutation.isPending ? (
                                         <>
                                             <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                            Submitting...
+                                            Submitting…
                                         </>
                                     ) : (
                                         "Submit import"

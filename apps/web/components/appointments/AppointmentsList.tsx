@@ -426,7 +426,7 @@ export function AppointmentDetailDialog({
                             <Textarea
                                 value={cancelReason}
                                 onChange={(e) => setCancelReason(e.target.value)}
-                                placeholder="Enter reason for cancellation..."
+                                placeholder="Enter reason for cancellation…"
                                 rows={3}
                             />
                         </div>
@@ -452,7 +452,7 @@ export function AppointmentDetailDialog({
                                 {slotsQuery.isLoading ? (
                                     <div className="py-2 flex items-center gap-2 text-sm text-muted-foreground">
                                         <Loader2Icon className="size-4 animate-spin" />
-                                        Loading available slots...
+                                        Loading available slots…
                                     </div>
                                 ) : slotsQuery.data?.slots?.length ? (
                                     <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">

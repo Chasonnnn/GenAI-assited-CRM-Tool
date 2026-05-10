@@ -289,7 +289,7 @@ export function AutomationFormSubmissionsPanel({
                     </div>
 
                     {isSubmissionHistoryLoading ? (
-                        <p className="text-sm text-stone-500">Loading submission history...</p>
+                        <p className="text-sm text-stone-500">Loading submission history…</p>
                     ) : visibleSubmissionHistory.length === 0 ? (
                         <p className="text-sm text-stone-500">No submissions in this view.</p>
                     ) : (
@@ -437,7 +437,7 @@ export function AutomationFormSubmissionsPanel({
                                 rows={2}
                                 value={resolveReviewNotes}
                                 onChange={(event) => onResolveReviewNotesChange(event.target.value)}
-                                placeholder="Why this match was resolved..."
+                                placeholder="Why this match was resolved…"
                             />
                         </div>
 
@@ -462,7 +462,7 @@ export function AutomationFormSubmissionsPanel({
                         </div>
 
                         {isMatchCandidatesLoading ? (
-                            <p className="text-sm text-stone-500">Loading candidates...</p>
+                            <p className="text-sm text-stone-500">Loading candidates…</p>
                         ) : selectedMatchCandidates.length === 0 ? (
                             <p className="text-sm text-stone-500">No candidates found.</p>
                         ) : (

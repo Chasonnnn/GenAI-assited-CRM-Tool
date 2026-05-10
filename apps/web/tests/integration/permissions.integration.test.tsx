@@ -47,7 +47,7 @@ function PermissionsTestComponent() {
         },
     })
 
-    if (isLoading) return <div>Loading...</div>
+    if (isLoading) return <div>Loading…</div>
     if (error) return <div>Error: {(error as Error).message}</div>
 
     return (
@@ -64,7 +64,7 @@ describe('Integration: Permissions', () => {
         renderWithProviders(<PermissionsTestComponent />)
 
         // Initially shows loading
-        expect(screen.getByText('Loading...')).toBeInTheDocument()
+        expect(screen.getByText('Loading…')).toBeInTheDocument()
 
         // Wait for data to load
         await waitFor(() => {
@@ -103,7 +103,7 @@ describe('Integration: Permissions', () => {
         renderWithProviders(<PermissionsTestComponent />)
 
         await waitFor(() => {
-            expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
+            expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
         })
 
         // No list items should be rendered
