@@ -170,6 +170,26 @@ describe('IntendedParentDetailPage', () => {
         expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0)
     })
 
+    it("sanitizes intended-parent note HTML at the render boundary", () => {
+        mockUseIntendedParentNotes.mockReturnValueOnce({
+            data: [
+                {
+                    id: "note-xss",
+                    author_id: "user-1",
+                    content: '<img src=x onerror="alert(1)"><p>Safe note</p><script>alert("x")</script>',
+                    created_at: "2026-02-25T21:46:00Z",
+                },
+            ],
+        })
+
+        const { container } = render(<IntendedParentDetailPage />)
+
+        expect(screen.getByText("Safe note")).toBeInTheDocument()
+        expect(container.querySelector("img")).toBeNull()
+        expect(container.querySelector("script")).toBeNull()
+        expect(container.querySelector("[onerror]")).toBeNull()
+    })
+
     it("adds accessible labels to the back link and actions menu", () => {
         render(<IntendedParentDetailPage />)
 

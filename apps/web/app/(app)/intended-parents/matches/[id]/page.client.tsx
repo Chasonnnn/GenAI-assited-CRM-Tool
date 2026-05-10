@@ -38,6 +38,12 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { parseDateInput } from "@/lib/utils/date"
+
+const USD_WHOLE_DOLLAR_FORMATTER = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+})
 import { formatRace } from "@/lib/formatters"
 import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
 import {
@@ -403,7 +409,7 @@ export default function MatchDetailPage() {
                                         <div className="space-y-3">
                                             {/* Profile Header */}
                                             <div className="flex items-start gap-3">
-                                                <Avatar className="h-10 w-10">
+                                                <Avatar className="size-10">
                                                     <AvatarFallback className="bg-purple-500/10 text-purple-500 text-sm">
                                                         {(surrogateData.full_name || "S").charAt(0).toUpperCase()}
                                                     </AvatarFallback>
@@ -489,7 +495,7 @@ export default function MatchDetailPage() {
                                         <div className="space-y-3">
                                             {/* Profile Header */}
                                             <div className="flex items-start gap-3">
-                                                <Avatar className="h-10 w-10">
+                                                <Avatar className="size-10">
                                                     <AvatarFallback className="bg-green-500/10 text-green-500 text-sm">
                                                         {(ipData.full_name || "IP").charAt(0).toUpperCase()}
                                                     </AvatarFallback>
@@ -529,7 +535,7 @@ export default function MatchDetailPage() {
                                                     <DollarSignIcon className="size-3.5 text-muted-foreground flex-shrink-0" />
                                                     <span>
                                                         {ipData.budget
-                                                            ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(ipData.budget)
+                                                            ? USD_WHOLE_DOLLAR_FORMATTER.format(ipData.budget)
                                                             : "—"}
                                                     </span>
                                                 </div>

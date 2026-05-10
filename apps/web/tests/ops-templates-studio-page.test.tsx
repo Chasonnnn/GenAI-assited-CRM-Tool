@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
-import TemplatesPage from "../app/ops/templates/page"
+import TemplatesPage from "../app/ops/templates/page.client"
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()

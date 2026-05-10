@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import DuoCallbackPage from "../app/auth/duo/callback/page"
+import DuoCallbackPage from "../app/auth/duo/callback/page.client"
 
 const mockUseAuth = vi.fn()
 const mockVerifyDuoCallback = vi.fn()

@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation"
+import type { Metadata } from "next"
 
 import PlatformEmailTemplatePageClient from "./page.client"
 import { getServerRouteResourceStatus } from "@/lib/server-route-resource"
+
+export const metadata: Metadata = {
+    title: "Email template | SurrogacyForce Ops",
+    description: "Review and edit a platform email template.",
+}
 
 type PageProps = {
     params: Promise<{ id?: string | string[] }>

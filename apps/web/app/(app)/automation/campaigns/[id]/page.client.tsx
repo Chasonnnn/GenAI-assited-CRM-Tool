@@ -56,6 +56,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
+import { parseDateInput } from "@/lib/utils/date"
 import {
     useCampaign,
     useCampaignRuns,
@@ -115,7 +116,7 @@ const toLocalDateTimeInput = (date: Date) => {
 
 export default function CampaignDetailPage() {
     const params = useParams()
-    const router = useRouter()
+    const { push } = useRouter()
     const rawCampaignId = params.id
     const campaignId =
         typeof rawCampaignId === "string"
@@ -233,7 +234,7 @@ export default function CampaignDetailPage() {
         try {
             await deleteCampaign.mutateAsync(campaignId)
             toast.success("Campaign deleted")
-            router.push("/automation/campaigns")
+            push("/automation/campaigns")
         } catch {
             toast.error("Failed to delete campaign. Only drafts can be deleted.")
         }
@@ -244,7 +245,7 @@ export default function CampaignDetailPage() {
         try {
             const newCampaign = await duplicateCampaign.mutateAsync(campaignId)
             toast.success("Campaign duplicated")
-            router.push(`/automation/campaigns/${newCampaign.id}`)
+            push(`/automation/campaigns/${newCampaign.id}`)
         } catch {
             toast.error("Failed to duplicate campaign")
         }
@@ -629,7 +630,7 @@ export default function CampaignDetailPage() {
                                 <CardTitle>Recipients</CardTitle>
                                 <CardDescription>
                                     {latestRun
-                                        ? `Last run: ${format(new Date(latestRun.started_at), "MMM d, yyyy 'at' h:mm a")}`
+                                        ? `Last run: ${format(parseDateInput(latestRun.started_at), "MMM d, yyyy 'at' h:mm a")}`
                                         : "No runs yet"}
                                 </CardDescription>
                             </div>
@@ -694,7 +695,7 @@ export default function CampaignDetailPage() {
                                             </TableCell>
                                             <TableCell className="text-muted-foreground text-sm">
                                                 {recipient.sent_at
-                                                    ? format(new Date(recipient.sent_at), "MMM d, yyyy h:mm a")
+                                                    ? format(parseDateInput(recipient.sent_at), "MMM d, yyyy h:mm a")
                                                     : "-"}
                                             </TableCell>
                                         </TableRow>
@@ -789,20 +790,20 @@ export default function CampaignDetailPage() {
                             <Label>{editRecipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
                             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                                 {editStageOptions.map((stage) => (
-                                    <div key={stage.id} className="flex items-center space-x-2">
+                                    <div key={stage.id} className="flex items-center gap-x-2">
                                         <Checkbox
                                             id={`edit-stage-${stage.id}`}
                                             checked={editStages.includes(stage.id)}
                                             onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    setEditStages([...editStages, stage.id])
-                                                } else {
-                                                    setEditStages(editStages.filter((s) => s !== stage.id))
-                                                }
+                                                setEditStages((currentStages) =>
+                                                    checked
+                                                        ? [...currentStages, stage.id]
+                                                        : currentStages.filter((stageId) => stageId !== stage.id)
+                                                )
                                             }}
                                         />
                                         <Label htmlFor={`edit-stage-${stage.id}`} className="text-sm">
-                                            <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
+                                            <span className="inline-block size-2 rounded-full mr-1.5" style={{ backgroundColor: stage.color }} />
                                             {stage.label}
                                         </Label>
                                     </div>
@@ -813,16 +814,16 @@ export default function CampaignDetailPage() {
                             <Label>Filter by State (optional)</Label>
                             <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
                                 {US_STATES.map((state) => (
-                                    <div key={state.value} className="flex items-center space-x-2">
+                                        <div key={state.value} className="flex items-center gap-x-2">
                                         <Checkbox
                                             id={`edit-state-${state.value}`}
                                             checked={editStates.includes(state.value)}
                                             onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    setEditStates([...editStates, state.value])
-                                                } else {
-                                                    setEditStates(editStates.filter((s) => s !== state.value))
-                                                }
+                                                setEditStates((currentStates) =>
+                                                    checked
+                                                        ? [...currentStates, state.value]
+                                                        : currentStates.filter((stateValue) => stateValue !== state.value)
+                                                )
                                             }}
                                         />
                                         <Label htmlFor={`edit-state-${state.value}`} className="text-sm cursor-pointer">

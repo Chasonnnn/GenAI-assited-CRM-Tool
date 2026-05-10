@@ -45,7 +45,7 @@ describe("React regression guards (source)", () => {
     })
 
     it("derives open alert count instead of storing duplicate state", () => {
-        const source = readSource("app/ops/agencies/[orgId]/page.tsx")
+        const source = readSource("app/ops/agencies/[orgId]/page.client.tsx")
 
         expect(source).toContain("const openAlertCount = useMemo(")
         expect(source).not.toContain("const [openAlertCount, setOpenAlertCount] = useState")

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 
-import AgenciesPage from "../app/ops/agencies/page"
+import AgenciesPage from "../app/ops/agencies/page.client"
 
 const mockListOrganizations = vi.fn()
 const mockPush = vi.fn()

@@ -15,6 +15,42 @@ vi.mock("@/components/ui/select", () => ({
 }))
 
 describe("MatchDetailOverviewTabs", () => {
+    it("sanitizes note HTML before rendering match notes", () => {
+        const { container } = render(
+            <MatchDetailOverviewTabs
+                activeTab="notes"
+                sourceFilter="all"
+                filteredNotes={[
+                    {
+                        id: "note-xss",
+                        content: '<img src=x onerror="alert(1)"><p>Safe match note</p><script>alert("x")</script>',
+                        created_at: "2026-01-01T00:00:00Z",
+                        source: "match",
+                    },
+                ]}
+                filteredFiles={[]}
+                filteredTasks={[]}
+                filteredActivity={[]}
+                onTabChange={vi.fn()}
+                onSourceFilterChange={vi.fn()}
+                onAddTask={vi.fn()}
+                onAddNote={vi.fn()}
+                onUploadFile={vi.fn()}
+                onDownloadFile={vi.fn()}
+                onDeleteFile={vi.fn()}
+                isDownloadPending={false}
+                isDeletePending={false}
+                formatDate={() => "Jan 1, 2026"}
+                formatDateTime={() => "Jan 1, 2026"}
+            />,
+        )
+
+        expect(screen.getByText("Safe match note")).toBeInTheDocument()
+        expect(container.querySelector("img")).toBeNull()
+        expect(container.querySelector("script")).toBeNull()
+        expect(container.querySelector("[onerror]")).toBeNull()
+    })
+
     it("uses filename-specific labels for file action buttons", () => {
         render(
             <MatchDetailOverviewTabs

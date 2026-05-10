@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
-import OpsAlertsPage from "../app/ops/alerts/page"
+import OpsAlertsPage from "../app/ops/alerts/page.client"
 
 const mockListAlerts = vi.fn()
 const mockAcknowledgeAlert = vi.fn()
