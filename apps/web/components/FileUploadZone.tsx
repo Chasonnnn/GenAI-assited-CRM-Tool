@@ -26,7 +26,20 @@ interface FileUploadZoneProps {
 }
 
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "doc", "docx", "xls", "xlsx"]
+const ALLOWED_EXTENSION_SET = new Set(ALLOWED_EXTENSIONS)
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
+
+type UploadAcceptedFile = (file: File) => Promise<void>
+
+function uploadAcceptedFilesSequentially(
+    files: File[],
+    uploadAcceptedFile: UploadAcceptedFile,
+): Promise<void> {
+    return files.reduce<Promise<void>>(
+        (previousUpload, file) => previousUpload.then(() => uploadAcceptedFile(file)),
+        Promise.resolve(),
+    )
+}
 
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
@@ -92,14 +105,14 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
         async (acceptedFiles: File[]) => {
             setError(null)
 
-            for (const file of acceptedFiles) {
+            await uploadAcceptedFilesSequentially(acceptedFiles, async (file) => {
                 // Validate extension
                 const ext = file.name.split(".").pop()?.toLowerCase()
-                if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+                if (!ext || !ALLOWED_EXTENSION_SET.has(ext)) {
                     const message = `File type .${ext} not allowed`
                     setError(message)
                     setLiveMessage(message)
-                    continue
+                    return
                 }
 
                 // Validate size
@@ -107,7 +120,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     const message = "File exceeds 25 MB limit"
                     setError(message)
                     setLiveMessage(message)
-                    continue
+                    return
                 }
 
                 try {
@@ -123,7 +136,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                     setLiveMessage(message)
                     setUploadProgress(null)
                 }
-            }
+            })
         },
         [surrogateId, uploadMutation]
     )
@@ -200,7 +213,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                 />
                 <Upload className="size-8 mx-auto mb-2 text-muted-foreground" aria-hidden="true" />
                 {isDragActive ? (
-                    <p className="text-sm text-primary">Drop files here...</p>
+                    <p className="text-sm text-primary">Drop files here…</p>
                 ) : (
                     <>
                         <p className="text-sm text-muted-foreground">

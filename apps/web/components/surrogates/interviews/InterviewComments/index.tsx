@@ -58,6 +58,11 @@ function escapeHtml(text: string): string {
         .replace(/'/g, "&#039;")
 }
 
+const EXISTING_COMMENT_ID_REGEX = /data-comment-id="([^"]+)"/g
+const HTML_TOKEN_REGEX = /(<\/?[^>]+>)/g
+const COMMENT_HIGHLIGHT_OPEN_TAG_REGEX = /^<span\b[^>]*\bcomment-highlight\b/i
+const SPAN_CLOSE_TAG_REGEX = /^<\/span\b/i
+
 function applyMark(
     text: string,
     mark: TipTapMark,
@@ -157,8 +162,43 @@ function renderNode(
     }
 }
 
-function escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+function collectExistingCommentIds(html: string): Set<string> {
+    const existingCommentIds = new Set<string>()
+    for (const match of html.matchAll(EXISTING_COMMENT_ID_REGEX)) {
+        if (match[1]) {
+            existingCommentIds.add(match[1])
+        }
+    }
+    return existingCommentIds
+}
+
+function replaceFirstAnchorOutsideSpan(html: string, anchorText: string, replacement: string): string {
+    let replaced = false
+    let commentSpanDepth = 0
+
+    return html
+        .split(HTML_TOKEN_REGEX)
+        .map((token) => {
+            if (!token) return token
+
+            if (token.startsWith("<")) {
+                if (COMMENT_HIGHLIGHT_OPEN_TAG_REGEX.test(token)) {
+                    commentSpanDepth += 1
+                } else if (SPAN_CLOSE_TAG_REGEX.test(token) && commentSpanDepth > 0) {
+                    commentSpanDepth -= 1
+                }
+                return token
+            }
+
+            if (replaced || commentSpanDepth > 0) return token
+
+            const [before, ...afterParts] = token.split(anchorText)
+            if (afterParts.length === 0) return token
+
+            replaced = true
+            return `${before}${replacement}${afterParts.join(anchorText)}`
+        })
+        .join("")
 }
 
 function highlightAnchorTexts(
@@ -166,10 +206,13 @@ function highlightAnchorTexts(
     notes: InterviewNoteRead[]
 ): string {
     let result = html
+    const existingCommentIds = collectExistingCommentIds(result)
 
     for (const note of notes) {
         if (!note.anchor_text || !note.comment_id) continue
-        if (result.includes(`data-comment-id="${note.comment_id}"`)) continue
+
+        const safeCommentId = escapeHtml(note.comment_id)
+        if (existingCommentIds.has(safeCommentId)) continue
 
         const baseClasses = "transition-all duration-150 rounded-sm cursor-pointer"
         const stateClasses = cn(
@@ -178,11 +221,13 @@ function highlightAnchorTexts(
         )
 
         const safeAnchorText = escapeHtml(note.anchor_text)
-        const escapedAnchor = escapeRegex(safeAnchorText)
-        const regex = new RegExp(`(?<!data-comment-id[^>]*>)${escapedAnchor}(?![^<]*</span>)`, "")
-        const replacement = `<span class="comment-highlight ${baseClasses} ${stateClasses}" data-comment-id="${escapeHtml(note.comment_id)}" data-note-id="${escapeHtml(note.id)}">${safeAnchorText}</span>`
+        const replacement = `<span class="comment-highlight ${baseClasses} ${stateClasses}" data-comment-id="${safeCommentId}" data-note-id="${escapeHtml(note.id)}">${safeAnchorText}</span>`
 
-        result = result.replace(regex, replacement)
+        const nextResult = replaceFirstAnchorOutsideSpan(result, safeAnchorText, replacement)
+        if (nextResult !== result) {
+            existingCommentIds.add(safeCommentId)
+            result = nextResult
+        }
     }
 
     return result

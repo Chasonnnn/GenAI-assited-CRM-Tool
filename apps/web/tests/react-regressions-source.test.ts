@@ -82,6 +82,24 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("TrustedSanitizedHtmlContent")
     })
 
+    it("keeps interview comment anchor highlighting single-pass", () => {
+        const source = readSource("components/surrogates/interviews/InterviewComments/index.tsx")
+
+        expect(source).toContain("EXISTING_COMMENT_ID_REGEX")
+        expect(source).not.toContain('result.includes(`data-comment-id="${note.comment_id}"`)')
+        expect(source).not.toMatch(/for \(const note of notes\)[\s\S]*new RegExp/)
+    })
+
+    it("uses Set membership for attachment upload extension validation", () => {
+        const source = readSource("components/FileUploadZone.tsx")
+
+        expect(source).toContain("const ALLOWED_EXTENSION_SET = new Set")
+        expect(source).toContain("ALLOWED_EXTENSION_SET.has(ext)")
+        expect(source).toContain("uploadAcceptedFilesSequentially")
+        expect(source).not.toContain("ALLOWED_EXTENSIONS.includes(ext)")
+        expect(source).not.toContain("for (const file of acceptedFiles)")
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 
