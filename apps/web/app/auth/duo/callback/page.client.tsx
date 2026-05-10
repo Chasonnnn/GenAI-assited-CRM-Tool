@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useReducer, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -50,6 +50,47 @@ const APP_POST_MFA_PATH = "/dashboard"
 
 const duoVerifyAttempts = new Set<string>()
 
+type DuoCallbackState = {
+    status: "loading" | "error" | "success"
+    errorMessage: string | null
+    recoveryCodes: string[] | null
+}
+
+type DuoCallbackAction =
+    | { type: "error"; message: string }
+    | { type: "success"; recoveryCodes?: string[] | null }
+    | { type: "clearRecoveryCodes" }
+
+const initialDuoCallbackState: DuoCallbackState = {
+    status: "loading",
+    errorMessage: null,
+    recoveryCodes: null,
+}
+
+function duoCallbackReducer(state: DuoCallbackState, action: DuoCallbackAction): DuoCallbackState {
+    switch (action.type) {
+        case "error":
+            return {
+                status: "error",
+                errorMessage: action.message,
+                recoveryCodes: null,
+            }
+        case "success":
+            return {
+                status: "success",
+                errorMessage: null,
+                recoveryCodes: action.recoveryCodes ?? null,
+            }
+        case "clearRecoveryCodes":
+            return {
+                ...state,
+                recoveryCodes: null,
+            }
+        default:
+            return state
+    }
+}
+
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
     const [copied, setCopied] = useState(false)
 
@@ -80,8 +121,8 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                 </Alert>
 
                 <div className="grid grid-cols-2 gap-2 p-4 bg-muted rounded-lg font-mono text-sm">
-                    {codes.map((code, i) => (
-                        <div key={i} className="p-2 bg-background rounded text-center">
+                    {codes.map((code) => (
+                        <div key={code} className="p-2 bg-background rounded text-center">
                             {code}
                         </div>
                     ))}
@@ -109,12 +150,13 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
 }
 
 export default function DuoCallbackPage() {
-    const router = useRouter()
-    const { user, isLoading: authLoading, refetch } = useAuth()
+    const { replace } = useRouter()
+    const { user, isLoading: authLoading, refetch: refreshAuth } = useAuth()
 
-    const [status, setStatus] = useState<"loading" | "error" | "success">("loading")
-    const [errorMessage, setErrorMessage] = useState<string | null>(null)
-    const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null)
+    const [{ status, errorMessage, recoveryCodes }, dispatch] = useReducer(
+        duoCallbackReducer,
+        initialDuoCallbackState,
+    )
 
     useEffect(() => {
         if (authLoading) return
@@ -129,13 +171,13 @@ export default function DuoCallbackPage() {
                     : "app"
 
             if (returnTo === "ops") {
-                router.replace("/ops/login")
+                replace("/ops/login")
                 return
             }
 
-            router.replace("/login")
+            replace("/login")
         }
-    }, [authLoading, user, router])
+    }, [authLoading, user, replace])
 
     useEffect(() => {
         if (authLoading || !user) return
@@ -157,8 +199,10 @@ export default function DuoCallbackPage() {
         const code = urlParams.get("duo_code") ?? urlParams.get("code")
         const state = urlParams.get("state")
         if (!code || !state) {
-            setStatus("error")
-            setErrorMessage("Missing Duo response parameters. Please try again.")
+            dispatch({
+                type: "error",
+                message: "Missing Duo response parameters. Please try again.",
+            })
             return
         }
 
@@ -171,28 +215,31 @@ export default function DuoCallbackPage() {
         const verify = async () => {
             try {
                 const result = await verifyDuoCallback(code, state, returnTo)
-                if (result.recovery_codes && result.recovery_codes.length > 0) {
-                    setRecoveryCodes(result.recovery_codes)
-                }
-                await refetch()
-                setStatus("success")
-                if (!result.recovery_codes || result.recovery_codes.length === 0) {
+                const resultRecoveryCodes =
+                    result.recovery_codes && result.recovery_codes.length > 0
+                        ? result.recovery_codes
+                        : null
+                await refreshAuth()
+                dispatch({ type: "success", recoveryCodes: resultRecoveryCodes })
+                if (!resultRecoveryCodes) {
                     if (returnTo === "ops") {
                         clearStoredAuthReturnTo()
-                        router.replace("/ops")
+                        replace("/ops")
                         return
                     }
-                    router.replace(APP_POST_MFA_PATH)
+                    replace(APP_POST_MFA_PATH)
                 }
             } catch (error) {
                 console.error("Duo verification failed:", error)
-                setStatus("error")
-                setErrorMessage("Duo verification failed. Please try again.")
+                dispatch({
+                    type: "error",
+                    message: "Duo verification failed. Please try again.",
+                })
             }
         }
 
         verify()
-    }, [authLoading, user, refetch, router])
+    }, [authLoading, user, refreshAuth, replace])
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
@@ -205,7 +252,7 @@ export default function DuoCallbackPage() {
                     {status === "loading" && (
                         <div className="flex flex-col items-center gap-3">
                             <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                            <p className="text-sm text-muted-foreground">Verifying Duo response...</p>
+                            <p className="text-sm text-muted-foreground">Verifying Duo response&hellip;</p>
                         </div>
                     )}
 
@@ -214,7 +261,7 @@ export default function DuoCallbackPage() {
                             <AlertTitle>Verification failed</AlertTitle>
                             <AlertDescription>{errorMessage}</AlertDescription>
                             <div className="mt-4">
-                                <Button onClick={() => router.replace("/mfa")} className="w-full">
+                                <Button onClick={() => replace("/mfa")} className="w-full">
                                     Return to MFA
                                 </Button>
                             </div>
@@ -224,7 +271,7 @@ export default function DuoCallbackPage() {
                     {status === "success" && (
                         <div className="space-y-2">
                             <p className="text-sm text-muted-foreground">Duo verification complete.</p>
-                            <Button onClick={() => router.replace(APP_POST_MFA_PATH)}>Continue to dashboard</Button>
+                            <Button onClick={() => replace(APP_POST_MFA_PATH)}>Continue to dashboard</Button>
                         </div>
                     )}
                 </CardContent>
@@ -234,7 +281,7 @@ export default function DuoCallbackPage() {
                 <RecoveryCodesDisplay
                     codes={recoveryCodes}
                     onClose={() => {
-                        setRecoveryCodes(null)
+                        dispatch({ type: "clearRecoveryCodes" })
                         const urlReturnTo = new URLSearchParams(window.location.search).get("return_to")
                         const returnTo =
                             getStoredAuthReturnTo() === "ops" ||
@@ -245,10 +292,10 @@ export default function DuoCallbackPage() {
                                 : "app"
                         if (returnTo === "ops") {
                             clearStoredAuthReturnTo()
-                            router.replace("/ops")
+                            replace("/ops")
                             return
                         }
-                        router.replace(APP_POST_MFA_PATH)
+                        replace(APP_POST_MFA_PATH)
                     }}
                 />
             )}
