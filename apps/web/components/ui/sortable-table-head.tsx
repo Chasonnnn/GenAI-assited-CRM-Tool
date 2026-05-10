@@ -13,6 +13,17 @@ interface SortableTableHeadProps {
     className?: string
 }
 
+function SortIcon({ isActive, order }: { isActive: boolean; order: "asc" | "desc" }) {
+    if (!isActive) {
+        return <ArrowUpDown className="size-4 text-muted-foreground/50" />
+    }
+    return order === "asc" ? (
+        <ArrowUp className="size-4 text-foreground" />
+    ) : (
+        <ArrowDown className="size-4 text-foreground" />
+    )
+}
+
 /**
  * Sortable table header with flip icon.
  * Click toggles between ascending and descending.
@@ -27,19 +38,8 @@ export function SortableTableHead({
 }: SortableTableHeadProps) {
     const isActive = currentSort === column
 
-    const handleClick = () => {
+    const sortColumn = () => {
         onSort(column)
-    }
-
-    const renderIcon = () => {
-        if (!isActive) {
-            return <ArrowUpDown className="size-4 text-muted-foreground/50" />
-        }
-        return currentOrder === "asc" ? (
-            <ArrowUp className="size-4 text-foreground" />
-        ) : (
-            <ArrowDown className="size-4 text-foreground" />
-        )
     }
 
     return (
@@ -48,12 +48,16 @@ export function SortableTableHead({
                 "cursor-pointer select-none hover:bg-muted/50 transition-colors",
                 className
             )}
-            onClick={handleClick}
+            onClick={sortColumn}
         >
             <div className="inline-flex w-full items-center justify-center gap-1">
-                <span className="invisible">{renderIcon()}</span>
+                <span className="invisible">
+                    <SortIcon isActive={isActive} order={currentOrder} />
+                </span>
                 <span>{label}</span>
-                <span>{renderIcon()}</span>
+                <span>
+                    <SortIcon isActive={isActive} order={currentOrder} />
+                </span>
             </div>
         </TableHead>
     )
