@@ -101,6 +101,23 @@ function invalidateFormSubmissionMutationCaches(
     }
 }
 
+function invalidateFormSubmissionFileMutationCaches(
+    queryClient: QueryClient,
+    formId: string,
+    surrogateId?: string | null
+) {
+    queryClient.invalidateQueries({
+        queryKey: formKeys.submissionLists(formId),
+        exact: false,
+    })
+
+    if (surrogateId) {
+        queryClient.invalidateQueries({
+            queryKey: formKeys.surrogateSubmission(formId, surrogateId),
+        })
+    }
+}
+
 export function useForms() {
     return useQuery({
         queryKey: formKeys.list(),
@@ -486,10 +503,7 @@ export function useUploadSubmissionFile() {
             return { result: await uploadSubmissionFile(submissionId, file, fieldKey), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
-            if (!surrogateId) return
-            queryClient.invalidateQueries({
-                queryKey: formKeys.surrogateSubmission(formId, surrogateId),
-            })
+            invalidateFormSubmissionFileMutationCaches(queryClient, formId, surrogateId)
         },
     })
 }
@@ -557,10 +571,7 @@ export function useDeleteSubmissionFile() {
             return { result: await deleteSubmissionFile(submissionId, fileId), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
-            if (!surrogateId) return
-            queryClient.invalidateQueries({
-                queryKey: formKeys.surrogateSubmission(formId, surrogateId),
-            })
+            invalidateFormSubmissionFileMutationCaches(queryClient, formId, surrogateId)
         },
     })
 }

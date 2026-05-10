@@ -12,8 +12,15 @@ import { useCancelCampaign, useSendCampaign } from '@/lib/hooks/use-campaigns'
 import { complianceKeys, useExecutePurge } from '@/lib/hooks/use-compliance'
 import { useDeleteEmailTemplate, useSendEmail } from '@/lib/hooks/use-email-templates'
 import {
+    useAnalyzeDashboard,
+    useDraftEmail,
+    useSendMessage,
+    useSummarizeSurrogate,
+} from '@/lib/hooks/use-ai'
+import {
     formKeys,
     useApproveFormSubmission,
+    useDeleteSubmissionFile,
     usePromoteIntakeLead,
     useRejectFormSubmission,
     useResolveSubmissionMatch,
@@ -21,7 +28,12 @@ import {
     useRotateFormIntakeLink,
     useSendFormIntakeLink,
     useUpdateSubmissionAnswers,
+    useUploadSubmissionFile,
 } from '@/lib/hooks/use-forms'
+import {
+    useSummarizeAllInterviews,
+    useSummarizeInterview,
+} from '@/lib/hooks/use-interviews'
 import { useDisconnectMetaConnection } from '@/lib/hooks/use-meta-oauth'
 import { metaFormsKeys } from '@/lib/hooks/use-meta-forms'
 import {
@@ -598,6 +610,92 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: surrogateKeys.activity('surrogate-1'),
         })
+    })
+
+    it('refreshes form submission lists after submission file changes', () => {
+        useUploadSubmissionFile()
+        capturedOptions?.onSuccess?.(
+            {
+                result: {},
+                formId: 'form-1',
+                surrogateId: null,
+            },
+            {}
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: formKeys.submissionLists('form-1'),
+            exact: false,
+        })
+
+        invalidateQueries.mockClear()
+
+        useDeleteSubmissionFile()
+        capturedOptions?.onSuccess?.(
+            {
+                result: {},
+                formId: 'form-1',
+                surrogateId: null,
+            },
+            {}
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: formKeys.submissionLists('form-1'),
+            exact: false,
+        })
+    })
+
+    it('refreshes AI usage summaries after AI-generating mutations', () => {
+        const expectUsageSummaryInvalidated = () => {
+            expect(invalidateQueries).toHaveBeenCalledWith({
+                queryKey: ['ai', 'usage', 'summary'],
+                exact: false,
+            })
+            invalidateQueries.mockClear()
+        }
+
+        useSendMessage()
+        expect(capturedOptions?.onSuccess).toBeTypeOf('function')
+        capturedOptions?.onSuccess?.(
+            {},
+            {
+                entity_type: 'global',
+                entity_id: null,
+            }
+        )
+        expectUsageSummaryInvalidated()
+
+        useSummarizeSurrogate()
+        expect(capturedOptions?.onSuccess).toBeTypeOf('function')
+        capturedOptions?.onSuccess?.({}, 'surrogate-1')
+        expectUsageSummaryInvalidated()
+
+        useDraftEmail()
+        expect(capturedOptions?.onSuccess).toBeTypeOf('function')
+        capturedOptions?.onSuccess?.(
+            {},
+            {
+                surrogate_id: 'surrogate-1',
+                email_type: 'follow_up',
+            }
+        )
+        expectUsageSummaryInvalidated()
+
+        useAnalyzeDashboard()
+        expect(capturedOptions?.onSuccess).toBeTypeOf('function')
+        capturedOptions?.onSuccess?.({}, {})
+        expectUsageSummaryInvalidated()
+
+        useSummarizeInterview()
+        expect(capturedOptions?.onSuccess).toBeTypeOf('function')
+        capturedOptions?.onSuccess?.({}, 'interview-1')
+        expectUsageSummaryInvalidated()
+
+        useSummarizeAllInterviews()
+        expect(capturedOptions?.onSuccess).toBeTypeOf('function')
+        capturedOptions?.onSuccess?.({}, 'surrogate-1')
+        expectUsageSummaryInvalidated()
     })
 
     it('uses the same form submission invalidation contract for reject, match retry, and answer edits', () => {

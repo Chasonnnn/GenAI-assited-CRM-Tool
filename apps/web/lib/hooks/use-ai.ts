@@ -2,7 +2,7 @@
  * React Query hooks for AI Assistant.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import * as aiApi from '../api/ai';
 import type { AISettingsUpdate, ChatRequest } from '../api/ai';
@@ -12,9 +12,17 @@ const aiKeys = {
     all: ['ai'] as const,
     settings: () => [...aiKeys.all, 'settings'] as const,
     consent: () => [...aiKeys.all, 'consent'] as const,
+    usageSummary: () => [...aiKeys.all, 'usage', 'summary'] as const,
     conversation: (entityType: string, entityId: string) =>
         [...aiKeys.all, 'conversation', entityType, entityId] as const,
 };
+
+export function invalidateAIUsageCaches(queryClient: QueryClient) {
+    queryClient.invalidateQueries({
+        queryKey: aiKeys.usageSummary(),
+        exact: false,
+    });
+}
 
 // ============================================================================
 // Settings Hooks
@@ -118,6 +126,7 @@ export function useSendMessage() {
                     queryKey: aiKeys.conversation(variables.entity_type!, variables.entity_id!)
                 });
             }
+            invalidateAIUsageCaches(queryClient);
         },
     });
 }
@@ -148,6 +157,7 @@ export function useStreamChatMessage() {
                     queryKey: aiKeys.conversation(request.entity_type!, request.entity_id!),
                 });
             }
+            invalidateAIUsageCaches(queryClient);
 
             return response;
         },
@@ -187,26 +197,41 @@ export function useRejectAction() {
 // ============================================================================
 
 export function useSummarizeSurrogate() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: (surrogateId: string) => aiApi.summarizeSurrogate(surrogateId),
+        onSuccess: () => {
+            invalidateAIUsageCaches(queryClient);
+        },
     });
 }
 
 export function useDraftEmail() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: (request: aiApi.DraftEmailRequest) => aiApi.draftEmail(request),
+        onSuccess: () => {
+            invalidateAIUsageCaches(queryClient);
+        },
     });
 }
 
 export function useAnalyzeDashboard() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: () => aiApi.analyzeDashboard(),
+        onSuccess: () => {
+            invalidateAIUsageCaches(queryClient);
+        },
     });
 }
 
 export function useAIUsageSummary(days: number = 30) {
     return useQuery({
-        queryKey: [...aiKeys.all, 'usage', 'summary', days],
+        queryKey: [...aiKeys.usageSummary(), days],
         queryFn: () => aiApi.getAIUsageSummary(days),
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
