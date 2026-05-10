@@ -89,7 +89,7 @@ export function AddNoteDialog({
                         <Label htmlFor="content">Note Content</Label>
                         <Textarea
                             id="content"
-                            placeholder="Enter your note..."
+                            placeholder="Enter your note"
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             rows={5}
@@ -107,8 +107,8 @@ export function AddNoteDialog({
                     >
                         {isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Saving
                             </>
                         ) : (
                             "Add Note"

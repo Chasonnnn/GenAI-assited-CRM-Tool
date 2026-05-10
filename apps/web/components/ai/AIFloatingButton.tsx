@@ -36,20 +36,20 @@ export function AIFloatingButton() {
             onClick={togglePanel}
             size="lg"
             className={cn(
-                "fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-lg transition-all hover:scale-105",
+                "fixed bottom-6 right-6 z-40 size-14 rounded-full shadow-lg transition-all hover:scale-105",
                 "bg-primary text-primary-foreground hover:bg-primary/90",
                 isOpen && "opacity-0 pointer-events-none"
             )}
             title={accessibleLabel}
             aria-label={accessibleLabel}
         >
-            <SparklesIcon className="h-6 w-6" aria-hidden="true" />
+            <SparklesIcon className="size-6" aria-hidden="true" />
 
             {/* Pulse indicator when context is available */}
             {entityName && !isOpen && (
-                <span className="absolute -right-1 -top-1 flex h-4 w-4" aria-hidden="true">
-                    <span className="absolute inline-flex h-full w-full animate-ping motion-reduce:animate-none rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex h-4 w-4 rounded-full bg-green-500" />
+                <span className="absolute -right-1 -top-1 flex size-4" aria-hidden="true">
+                    <span className="absolute inline-flex size-full animate-ping motion-reduce:animate-none rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex size-4 rounded-full bg-green-500" />
                 </span>
             )}
         </Button>

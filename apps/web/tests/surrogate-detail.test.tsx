@@ -1004,7 +1004,7 @@ describe('SurrogateDetailPage', () => {
 
         const tooltipContent = screen.getByText('Raw lead value').closest('[data-slot="tooltip-content"]')
         expect(tooltipContent).toHaveClass('bg-white')
-        expect(tooltipContent).toHaveClass('text-slate-950')
+        expect(tooltipContent).toHaveClass('text-zinc-950')
         expect(tooltipContent).toHaveClass('dark:bg-zinc-950')
     })
 

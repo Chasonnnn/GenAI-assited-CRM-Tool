@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
+import { parseDateInput } from "@/lib/utils/date"
 import {
     getEligibleForMatchingStageLabel,
     isEligibleForMatchingCandidate,
@@ -72,12 +73,14 @@ function MatchRow({ match }: { match: MatchListItem }) {
                 <StatusBadge status={status} />
             </TableCell>
             <TableCell className="text-muted-foreground text-sm">
-                {formatDistanceToNow(new Date(match.proposed_at), { addSuffix: true })}
+                <span suppressHydrationWarning>
+                    {formatDistanceToNow(parseDateInput(match.proposed_at), { addSuffix: true })}
+                </span>
             </TableCell>
             <TableCell>
                 <Link
                     href={`/intended-parents/matches/${match.id}`}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
+                    className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground"
                 >
                     <ArrowRightIcon className="size-4" />
                 </Link>
@@ -180,7 +183,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                         {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
-                                Loading surrogates...
+                                Loading surrogates&hellip;
                             </div>
                         ) : eligibleSurrogates.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">
@@ -210,7 +213,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                         {ipsLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
-                                Loading intended parents...
+                                Loading intended parents&hellip;
                             </div>
                         ) : (
                             <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>
@@ -235,7 +238,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                     <div className="space-y-2">
                         <Label>Notes (optional)</Label>
                         <Textarea
-                            placeholder="Add any notes about this match proposal..."
+                            placeholder="Add any notes about this match proposal"
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             className="min-h-20"
@@ -276,7 +279,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -292,7 +295,7 @@ function MatchTable({ status, search }: { status?: MatchStatus; search?: string 
     if (!data?.items.length) {
         return (
             <div className="flex flex-col items-center justify-center py-12">
-                <UsersIcon className="h-12 w-12 text-muted-foreground/40 mb-3" />
+                <UsersIcon className="size-12 text-muted-foreground/40 mb-3" />
                 <p className="text-muted-foreground">No matches found</p>
             </div>
         )
@@ -388,7 +391,7 @@ export default function MatchesPage() {
                         <div className="relative w-full max-w-sm">
                             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search surrogate or IP name/number..."
+                                placeholder="Search surrogate or IP name/number"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="pl-9"

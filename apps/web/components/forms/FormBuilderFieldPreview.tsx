@@ -191,7 +191,7 @@ export function FormBuilderFieldPreview({
                     </div>
                     <div className="grid grid-cols-2">
                         {previewColumns.slice(0, 2).map((column) => (
-                            <div key={column.id} className="border-r border-border/70 px-3 py-3 last:border-r-0">
+                            <div key={column.id} className="border-r border-border/70 p-3 last:border-r-0">
                                 <div className="h-4 rounded-full bg-muted/70" />
                             </div>
                         ))}

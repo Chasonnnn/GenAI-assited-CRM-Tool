@@ -29,6 +29,7 @@ import {
     FileTextIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 import { formatDistanceToNow } from "date-fns"
 import {
     useInterviewVersions,
@@ -112,7 +113,7 @@ export function InterviewVersionHistory({
                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <HistoryIcon className="h-5 w-5" />
+                            <HistoryIcon className="size-5" />
                             Version History
                         </DialogTitle>
                     </DialogHeader>
@@ -120,11 +121,11 @@ export function InterviewVersionHistory({
                     <div className="flex-1 overflow-auto -mx-6 px-6">
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : !versions || versions.length === 0 ? (
                             <div className="text-center py-12">
-                                <FileTextIcon className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                                <FileTextIcon className="size-12 mx-auto mb-3 text-muted-foreground/50" />
                                 <p className="text-muted-foreground">No version history available</p>
                             </div>
                         ) : (
@@ -193,12 +194,12 @@ export function InterviewVersionHistory({
                         >
                             {restoreMutation.isPending ? (
                                 <>
-                                    <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                    Restoring...
+                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                    Restoring&hellip;
                                 </>
                             ) : (
                                 <>
-                                    <RotateCcwIcon className="h-4 w-4 mr-2" />
+                                    <RotateCcwIcon className="size-4 mr-2" />
                                     Restore
                                 </>
                             )}
@@ -260,11 +261,11 @@ function VersionItem({
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
-                            <UserIcon className="h-3 w-3" />
+                            <UserIcon className="size-3" />
                             {version.author_name}
                         </span>
-                        <span className="flex items-center gap-1">
-                            <ClockIcon className="h-3 w-3" />
+                        <span className="flex items-center gap-1" suppressHydrationWarning>
+                            <ClockIcon className="size-3" />
                             {formatDistanceToNow(new Date(version.created_at), { addSuffix: true })}
                         </span>
                         <span>{formatBytes(version.content_size_bytes)}</span>
@@ -274,20 +275,20 @@ function VersionItem({
                 <DropdownMenu>
                     <DropdownMenuTrigger
                         aria-label={`Version history actions for version ${version.version}`}
-                        className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                        className={buttonVariants({ variant: "ghost", size: "icon", className: "size-8" })}
                     >
-                        <MoreVerticalIcon className="h-4 w-4" aria-hidden="true" />
+                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         {previousVersion && (
                             <DropdownMenuItem onClick={() => onCompare(previousVersion, version.version)}>
-                                <GitCompareIcon className="h-4 w-4 mr-2" />
+                                <GitCompareIcon className="size-4 mr-2" />
                                 Compare with v{previousVersion}
                             </DropdownMenuItem>
                         )}
                         {canRestore && (
                             <DropdownMenuItem onClick={() => onRestore(version.version)}>
-                                <RotateCcwIcon className="h-4 w-4 mr-2" />
+                                <RotateCcwIcon className="size-4 mr-2" />
                                 Restore this version
                             </DropdownMenuItem>
                         )}
@@ -324,7 +325,7 @@ function VersionDiffDialog({
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <GitCompareIcon className="h-5 w-5" />
+                        <GitCompareIcon className="size-5" />
                         Compare Versions
                     </DialogTitle>
                 </DialogHeader>
@@ -397,12 +398,12 @@ function VersionDiffDialog({
                 <div className="flex-1 overflow-auto border rounded-lg bg-muted/30 p-4">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12">
-                            <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                         </div>
                     ) : diff ? (
-                        <div
+                        <SafeHtmlContent
+                            html={diff.diff_html}
                             className="prose prose-sm max-w-none dark:prose-invert font-mono text-sm whitespace-pre-wrap"
-                            dangerouslySetInnerHTML={{ __html: diff.diff_html }}
                         />
                     ) : (
                         <p className="text-muted-foreground text-center py-8">

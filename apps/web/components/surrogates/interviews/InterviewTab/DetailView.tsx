@@ -88,7 +88,7 @@ export function DetailView() {
         return (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
-                    <FileTextIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <FileTextIcon className="size-12 mx-auto mb-3 opacity-50" />
                     <p>Select an interview to view details</p>
                 </div>
             </div>
@@ -106,7 +106,7 @@ export function DetailView() {
                 <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
                         <div className={cn("p-2 rounded-lg", colorClass)}>
-                            <Icon className="h-5 w-5" />
+                            <Icon className="size-5" />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ export function DetailView() {
                             </div>
                             {interview.duration_minutes && (
                                 <div className="text-sm text-muted-foreground flex items-center gap-1">
-                                    <ClockIcon className="h-3 w-3" />
+                                    <ClockIcon className="size-3" />
                                     {interview.duration_minutes} minutes
                                 </div>
                             )}
@@ -132,19 +132,19 @@ export function DetailView() {
                     <DropdownMenu>
                         <DropdownMenuTrigger
                             aria-label="Interview detail actions"
-                            className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                            className={buttonVariants({ variant: "ghost", size: "icon", className: "size-8" })}
                         >
-                            <MoreVerticalIcon className="h-4 w-4" aria-hidden="true" />
+                            <MoreVerticalIcon className="size-4" aria-hidden="true" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             {canEdit && (
                                 <DropdownMenuItem onClick={() => openEditor(interview)}>
-                                    <EditIcon className="h-4 w-4 mr-2" />
+                                    <EditIcon className="size-4 mr-2" />
                                     Edit
                                 </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={openAttachments}>
-                                <PaperclipIcon className="h-4 w-4 mr-2" />
+                                <PaperclipIcon className="size-4 mr-2" />
                                 Attachments
                                 {attachments.length > 0 && (
                                     <Badge variant="secondary" className="ml-auto text-xs px-1.5 py-0">
@@ -153,16 +153,16 @@ export function DetailView() {
                                 )}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openVersionHistory(interview)}>
-                                <HistoryIcon className="h-4 w-4 mr-2" />
+                                <HistoryIcon className="size-4 mr-2" />
                                 Version History
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={generateAISummary} disabled={isAISummaryPending}>
-                                <SparklesIcon className="h-4 w-4 mr-2" />
+                                <SparklesIcon className="size-4 mr-2" />
                                 {isAISummaryPending ? "Generating..." : "AI Summary"}
                             </DropdownMenuItem>
                             {canDelete && (
                                 <DropdownMenuItem onClick={() => openDeleteDialog(interview)} className="text-destructive">
-                                    <TrashIcon className="h-4 w-4 mr-2" />
+                                    <TrashIcon className="size-4 mr-2" />
                                     Delete
                                 </DropdownMenuItem>
                             )}

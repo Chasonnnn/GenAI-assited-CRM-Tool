@@ -25,25 +25,25 @@ export function MobileHeaderActions() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
-                className={buttonVariants({ variant: "ghost", size: "icon", className: "h-8 w-8" })}
+                className={buttonVariants({ variant: "ghost", size: "icon", className: "size-8" })}
                 aria-label="Interview actions"
             >
-                <MoreVerticalIcon className="h-4 w-4" aria-hidden="true" />
+                <MoreVerticalIcon className="size-4" aria-hidden="true" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                 {canEdit && (
                     <DropdownMenuItem onClick={() => openEditor(selectedInterview)}>
-                        <EditIcon className="h-4 w-4 mr-2" />
+                        <EditIcon className="size-4 mr-2" />
                         Edit
                     </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => openVersionHistory(selectedInterview)}>
-                    <HistoryIcon className="h-4 w-4 mr-2" />
+                    <HistoryIcon className="size-4 mr-2" />
                     Version History
                 </DropdownMenuItem>
                 {canDelete && (
                     <DropdownMenuItem onClick={() => openDeleteDialog(selectedInterview)} className="text-destructive">
-                        <TrashIcon className="h-4 w-4 mr-2" />
+                        <TrashIcon className="size-4 mr-2" />
                         Delete
                     </DropdownMenuItem>
                 )}

@@ -57,10 +57,10 @@ interface PanelMessage {
 
 // Action type icons
 const ACTION_ICONS: Record<string, React.ReactNode> = {
-    send_email: <MailIcon className="h-4 w-4" />,
-    create_task: <ListTodoIcon className="h-4 w-4" />,
-    add_note: <StickyNoteIcon className="h-4 w-4" />,
-    update_status: <ArrowRightIcon className="h-4 w-4" />,
+    send_email: <MailIcon className="size-4" />,
+    create_task: <ListTodoIcon className="size-4" />,
+    add_note: <StickyNoteIcon className="size-4" />,
+    update_status: <ArrowRightIcon className="size-4" />,
 }
 
 // Action type labels
@@ -300,12 +300,12 @@ export function AIChatPanel({
             {/* Header */}
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <SparklesIcon className="h-5 w-5 text-primary" />
+                    <SparklesIcon className="size-5 text-primary" />
                     <span className="font-semibold">AI Assistant</span>
                 </div>
                 {onClose && (
                     <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close AI Assistant">
-                        <XIcon className="h-4 w-4" />
+                        <XIcon className="size-4" />
                     </Button>
                 )}
             </div>
@@ -327,11 +327,11 @@ export function AIChatPanel({
                 <div className="p-4">
                     {loadingConversation ? (
                         <div className="flex items-center justify-center py-8">
-                            <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
+                            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                         </div>
                     ) : messages.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <SparklesIcon className="mb-4 h-10 w-10 text-muted-foreground/50" />
+                            <SparklesIcon className="mb-4 size-10 text-muted-foreground/50" />
                             <p className="text-sm text-muted-foreground">
                                 {entityType === "surrogate"
                                     ? `Ask me anything about this surrogate.`
@@ -358,8 +358,8 @@ export function AIChatPanel({
                                     >
                                         {msg.role === "assistant" && msg.status === "thinking" && !msg.content ? (
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-                                                Thinking...
+                                                <Loader2Icon className="size-3.5 animate-spin" />
+                                                Thinking
                                             </div>
                                         ) : (
                                             <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
@@ -424,7 +424,7 @@ export function AIChatPanel({
                             onClick={() => setScheduleParserOpen(true)}
                             disabled={isStreaming}
                         >
-                            <CalendarPlusIcon className="mr-1 h-3 w-3" />
+                            <CalendarPlusIcon className="mr-1 size-3" />
                             Parse Schedule
                         </QuickActionButton>
                     )}
@@ -439,7 +439,7 @@ export function AIChatPanel({
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Ask anything..."
+                        placeholder="Ask anything"
                         disabled={isStreaming}
                         className="flex-1"
                     />
@@ -450,7 +450,7 @@ export function AIChatPanel({
                             variant="outline"
                             aria-label="Stop generating"
                         >
-                            <StopCircleIcon className="h-4 w-4" />
+                            <StopCircleIcon className="size-4" />
                         </Button>
                     ) : (
                         <Button
@@ -459,7 +459,7 @@ export function AIChatPanel({
                             size="icon"
                             aria-label="Send message"
                         >
-                            <SendIcon className="h-4 w-4" />
+                            <SendIcon className="size-4" />
                         </Button>
                     )}
                 </div>
@@ -499,7 +499,7 @@ function ActionCard({
     isApproving,
     isRejecting,
 }: ActionCardProps) {
-    const icon = ACTION_ICONS[action.action_type] || <SparklesIcon className="h-4 w-4" />
+    const icon = ACTION_ICONS[action.action_type] || <SparklesIcon className="size-4" />
     const label = ACTION_LABELS[action.action_type] || action.action_type
 
     return (
@@ -520,25 +520,25 @@ function ActionCard({
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                            className="size-7 text-destructive hover:bg-destructive/10"
                             onClick={onReject}
                             disabled={isRejecting}
                             aria-label="Reject action"
                         >
-                            <XCircleIcon className="h-4 w-4" />
+                            <XCircleIcon className="size-4" />
                         </Button>
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-green-600 hover:bg-green-600/10"
+                            className="size-7 text-green-600 hover:bg-green-600/10"
                             onClick={onApprove}
                             disabled={isApproving}
                             aria-label="Approve action"
                         >
                             {isApproving ? (
-                                <Loader2Icon className="h-4 w-4 animate-spin" />
+                                <Loader2Icon className="size-4 animate-spin" />
                             ) : (
-                                <CheckIcon className="h-4 w-4" />
+                                <CheckIcon className="size-4" />
                             )}
                         </Button>
                     </div>
@@ -573,7 +573,7 @@ function ActionPreview({ type, data }: { type: string; data: Record<string, unkn
         case "send_email":
             return (
                 <p className="text-xs text-muted-foreground">
-                    To: {String(data.to || "")}, Subject: {String(data.subject || "").slice(0, 30)}...
+                    To: {String(data.to || "")}, Subject: {String(data.subject || "").slice(0, 30)}&hellip;
                 </p>
             )
         case "create_task": {
@@ -587,7 +587,7 @@ function ActionPreview({ type, data }: { type: string; data: Record<string, unkn
         case "add_note":
             return (
                 <p className="text-xs text-muted-foreground">
-                    {String(data.content || data.body || data.text || "").slice(0, 50)}...
+                    {String(data.content || data.body || data.text || "").slice(0, 50)}&hellip;
                 </p>
             )
         case "update_status":

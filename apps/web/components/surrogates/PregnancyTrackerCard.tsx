@@ -240,7 +240,7 @@ export function PregnancyTrackerCard({
                                         type="button"
                                         variant="ghost"
                                         size="icon"
-                                        className="h-6 w-6"
+                                        className="size-6"
                                         onClick={() => {
                                             setEmbryoStageError(null)
                                             setIsEditingEmbryoStage(false)

@@ -52,7 +52,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 export default function QueuesSettingsPage() {
-    const router = useRouter()
+    const { push } = useRouter()
     const { user } = useAuth()
     const { data: queues, isLoading, error } = useQueues(true) // Include inactive
     const createQueueMutation = useCreateQueue()
@@ -80,9 +80,9 @@ export default function QueuesSettingsPage() {
     // Redirect if not admin
     React.useEffect(() => {
         if (user && !isManager) {
-            router.push('/settings')
+            push('/settings')
         }
-    }, [user, isManager, router])
+    }, [user, isManager, push])
 
     const handleCreateQueue = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -173,7 +173,7 @@ export default function QueuesSettingsPage() {
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-semibold flex items-center gap-2">
-                        <UsersIcon className="h-6 w-6" aria-hidden="true" />
+                        <UsersIcon className="size-6" aria-hidden="true" />
                         Queue Management
                     </h1>
                     <p className="text-muted-foreground">
@@ -181,7 +181,7 @@ export default function QueuesSettingsPage() {
                     </p>
                 </div>
                 <Button onClick={() => setCreateDialogOpen(true)}>
-                    <PlusIcon className="h-4 w-4 mr-2" aria-hidden="true" />
+                    <PlusIcon className="size-4 mr-2" aria-hidden="true" />
                     Create Queue
                 </Button>
             </div>
@@ -203,13 +203,13 @@ export default function QueuesSettingsPage() {
             {/* Empty State */}
             {!isLoading && !error && queues?.length === 0 && (
                     <Card className="p-12 text-center">
-                    <UsersIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" aria-hidden="true" />
+                    <UsersIcon className="size-12 mx-auto text-muted-foreground mb-4" aria-hidden="true" />
                     <h3 className="text-lg font-medium mb-2">No queues yet</h3>
                     <p className="text-muted-foreground mb-4">
                         Create your first queue to organize cases
                     </p>
                     <Button onClick={() => setCreateDialogOpen(true)}>
-                        <PlusIcon className="h-4 w-4 mr-2" aria-hidden="true" />
+                        <PlusIcon className="size-4 mr-2" aria-hidden="true" />
                         Create Queue
                     </Button>
                 </Card>
@@ -306,7 +306,7 @@ export default function QueuesSettingsPage() {
                                     name="queueName"
                                     autoComplete="off"
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={(e) => setFormData((currentFormData) => ({ ...currentFormData, name: e.target.value }))}
                                     placeholder="e.g., New Leads Queue"
                                     className="mt-2"
                                 />
@@ -318,7 +318,12 @@ export default function QueuesSettingsPage() {
                                     name="queueDescription"
                                     autoComplete="off"
                                     value={formData.description || ""}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData((currentFormData) => ({
+                                            ...currentFormData,
+                                            description: e.target.value,
+                                        }))
+                                    }
                                     placeholder="Brief description of the queue purpose"
                                     className="mt-2"
                                     rows={3}
@@ -352,7 +357,7 @@ export default function QueuesSettingsPage() {
                                     name="editQueueName"
                                     autoComplete="off"
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={(e) => setFormData((currentFormData) => ({ ...currentFormData, name: e.target.value }))}
                                     className="mt-2"
                                 />
                             </div>
@@ -363,7 +368,12 @@ export default function QueuesSettingsPage() {
                                     name="editQueueDescription"
                                     autoComplete="off"
                                     value={formData.description || ""}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData((currentFormData) => ({
+                                            ...currentFormData,
+                                            description: e.target.value,
+                                        }))
+                                    }
                                     className="mt-2"
                                     rows={3}
                                 />
@@ -469,7 +479,7 @@ export default function QueuesSettingsPage() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setMembersDialogOpen(false)}>
-                            Done
+                            Close member management
                         </Button>
                     </DialogFooter>
                 </DialogContent>

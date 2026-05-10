@@ -139,7 +139,7 @@ export function LogInterviewOutcomeDialog({
                             onValueChange={(value) => setOutcome(value as InterviewOutcome)}
                         >
                             <SelectTrigger id="interview-outcome">
-                                <SelectValue placeholder="Select outcome..." />
+                                <SelectValue placeholder="Select outcome" />
                             </SelectTrigger>
                             <SelectContent>
                                 {INTERVIEW_OUTCOMES.map((item) => (
@@ -160,7 +160,7 @@ export function LogInterviewOutcomeDialog({
                         <Label htmlFor="interview-notes">Notes (optional)</Label>
                         <Textarea
                             id="interview-notes"
-                            placeholder="Add any relevant details..."
+                            placeholder="Add any relevant details"
                             value={notes}
                             onChange={(event) => setNotes(event.target.value)}
                             rows={3}
@@ -181,7 +181,7 @@ export function LogInterviewOutcomeDialog({
                         </div>
                         {isBackdating && (
                             <div className="flex items-center gap-2">
-                                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                <CalendarIcon className="size-4 text-muted-foreground" />
                                 <div className="grid flex-1 gap-1">
                                     <Label htmlFor="interview-occurred-at">Occurred at</Label>
                                     <Input
@@ -212,12 +212,12 @@ export function LogInterviewOutcomeDialog({
                     >
                         {logInterviewOutcome.isPending ? (
                             <>
-                                <Loader2Icon className="h-4 w-4 animate-spin" />
-                                Logging...
+                                <Loader2Icon className="size-4 animate-spin" />
+                                Logging
                             </>
                         ) : (
                             <>
-                                <CalendarIcon className="h-4 w-4" />
+                                <CalendarIcon className="size-4" />
                                 Log Outcome
                             </>
                         )}

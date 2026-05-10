@@ -10,7 +10,7 @@ export default function SettingsLoading() {
             </div>
             <div className="flex-1 p-6">
                 <div className="flex gap-6">
-                    <Card className="h-64 w-64 animate-pulse motion-reduce:animate-none">
+                    <Card className="size-64 animate-pulse motion-reduce:animate-none">
                         <CardContent className="p-4">
                             <div className="space-y-2">
                                 <div className="h-10 rounded bg-muted" />

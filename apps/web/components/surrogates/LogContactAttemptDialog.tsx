@@ -36,9 +36,9 @@ interface LogContactAttemptDialogProps {
 }
 
 const CONTACT_METHODS: { value: ContactMethod; label: string; icon: React.ReactNode }[] = [
-    { value: "phone", label: "Phone", icon: <PhoneIcon className="h-4 w-4" /> },
-    { value: "email", label: "Email", icon: <MailIcon className="h-4 w-4" /> },
-    { value: "sms", label: "SMS", icon: <MessageSquareIcon className="h-4 w-4" /> },
+    { value: "phone", label: "Phone", icon: <PhoneIcon className="size-4" /> },
+    { value: "email", label: "Email", icon: <MailIcon className="size-4" /> },
+    { value: "sms", label: "SMS", icon: <MessageSquareIcon className="size-4" /> },
 ]
 
 const CONTACT_OUTCOMES: { value: ContactOutcome; label: string; description: string }[] = [
@@ -174,7 +174,7 @@ export function LogContactAttemptDialog({
                             onValueChange={(v) => setOutcome(v as ContactOutcome)}
                         >
                             <SelectTrigger id="outcome">
-                                <SelectValue placeholder="Select outcome..." />
+                                <SelectValue placeholder="Select outcome" />
                             </SelectTrigger>
                             <SelectContent>
                                 {CONTACT_OUTCOMES.map(opt => (
@@ -196,7 +196,7 @@ export function LogContactAttemptDialog({
                         <Label htmlFor="notes">Notes (optional)</Label>
                         <Textarea
                             id="notes"
-                            placeholder="Add any relevant details..."
+                            placeholder="Add any relevant details"
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             rows={3}
@@ -218,7 +218,7 @@ export function LogContactAttemptDialog({
                         </div>
                         {isBackdating && (
                             <div className="flex items-center gap-2">
-                                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                <CalendarIcon className="size-4 text-muted-foreground" />
                                 <Input
                                     type="datetime-local"
                                     value={attemptedAt}
@@ -244,8 +244,8 @@ export function LogContactAttemptDialog({
                     >
                         {createContactAttempt.isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                                Logging...
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Logging
                             </>
                         ) : (
                             "Log Attempt"

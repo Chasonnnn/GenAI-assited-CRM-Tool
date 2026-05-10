@@ -69,7 +69,7 @@ export function SurrogateNotesTab({
                                         className="group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30"
                                     >
                                         <div className="flex items-start gap-3">
-                                            <Avatar className="h-9 w-9 flex-shrink-0">
+                                            <Avatar className="size-9 flex-shrink-0">
                                                 <AvatarFallback className="text-xs bg-primary/10 text-primary">
                                                     {getInitials(note.author_name)}
                                                 </AvatarFallback>
@@ -85,11 +85,11 @@ export function SurrogateNotesTab({
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                                                        className="size-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                                                         onClick={() => onDeleteNote(note.id)}
                                                         aria-label={`Delete note by ${note.author_name || "Unknown"}`}
                                                     >
-                                                        <TrashIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" aria-hidden="true" />
+                                                        <TrashIcon className="size-3.5 text-muted-foreground hover:text-destructive" aria-hidden="true" />
                                                     </Button>
                                                 </div>
                                                 <RichTextPreview

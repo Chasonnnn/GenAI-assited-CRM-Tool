@@ -175,7 +175,7 @@ export function InlineDateField({
                                 setError(null)
                                 setPickerOpen(false)
                             }}
-                            defaultMonth={selectedEditDate || new Date()}
+                            {...(selectedEditDate ? { defaultMonth: selectedEditDate } : {})}
                         />
                         <div className="flex items-center justify-between border-t px-3 py-2">
                             <Button
@@ -196,7 +196,7 @@ export function InlineDateField({
                                 size="sm"
                                 onClick={() => setPickerOpen(false)}
                             >
-                                Done
+                                Close calendar
                             </Button>
                         </div>
                     </PopoverContent>
@@ -210,7 +210,7 @@ export function InlineDateField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="size-6"
                     onClick={handleSave}
                     disabled={isSaving}
                     aria-label={`Save ${label}`}
@@ -225,7 +225,7 @@ export function InlineDateField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="size-6"
                     onClick={handleCancel}
                     disabled={isSaving}
                     aria-label={`Cancel ${label}`}

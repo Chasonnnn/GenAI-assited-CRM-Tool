@@ -58,9 +58,9 @@ function AttachmentsSection({
                             disabled={isUploading}
                         >
                             {isUploading ? (
-                                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                <Loader2Icon className="size-4 mr-2 animate-spin" />
                             ) : (
-                                <Upload className="h-4 w-4 mr-2" />
+                                <Upload className="size-4 mr-2" />
                             )}
                             Upload
                         </Button>
@@ -74,7 +74,7 @@ function AttachmentsSection({
 
             {attachments.length === 0 ? (
                 <div className="text-center py-6">
-                    <PaperclipIcon className="h-10 w-10 mx-auto mb-2 text-muted-foreground/50" />
+                    <PaperclipIcon className="size-10 mx-auto mb-2 text-muted-foreground/50" />
                     <p className="text-sm text-muted-foreground">No attachments</p>
                 </div>
             ) : (
@@ -89,7 +89,7 @@ function AttachmentsSection({
                                 key={att.id}
                                 className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors"
                             >
-                                <FileTextIcon className="h-8 w-8 text-muted-foreground" />
+                                <FileTextIcon className="size-8 text-muted-foreground" />
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">{att.filename}</p>
                                     <p className="text-xs text-muted-foreground">
@@ -122,9 +122,9 @@ function AttachmentsSection({
                                                 disabled={!canTranscribe || isUploading || transcribingAttachmentId === att.attachment_id}
                                             >
                                                 {transcribingAttachmentId === att.attachment_id ? (
-                                                    <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
                                                 ) : (
-                                                    <SparklesIcon className="h-4 w-4 mr-2" />
+                                                    <SparklesIcon className="size-4 mr-2" />
                                                 )}
                                                 {status === "failed" ? "Retry" : "Transcribe"}
                                             </Button>
@@ -170,7 +170,7 @@ export function AttachmentsDialog({
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <PaperclipIcon className="h-5 w-5" />
+                        <PaperclipIcon className="size-5" />
                         Attachments
                         {attachments.length > 0 && (
                             <Badge variant="secondary" className="text-xs">{attachments.length}</Badge>

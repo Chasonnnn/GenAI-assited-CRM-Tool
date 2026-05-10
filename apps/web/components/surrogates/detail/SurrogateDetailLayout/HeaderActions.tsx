@@ -132,7 +132,7 @@ export function HeaderActions() {
                     {isChangeStatusPending ? (
                         <>
                             <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            Resuming...
+                            Resuming
                         </>
                     ) : (
                         "Resume"
@@ -191,7 +191,7 @@ export function HeaderActions() {
                     onClick={claimSurrogate}
                     disabled={isClaimPending || surrogate.is_archived}
                 >
-                    {isClaimPending ? "Claiming..." : "Claim Surrogate"}
+                    {isClaimPending ? "Claiming" : "Claim Surrogate"}
                 </Button>
             )}
 
@@ -200,10 +200,6 @@ export function HeaderActions() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                        const nextHour = new Date()
-                        nextHour.setSeconds(0, 0)
-                        nextHour.setMinutes(0)
-                        nextHour.setHours(nextHour.getHours() + 1)
                         openDialog({ type: "zoom_meeting" })
                     }}
                     disabled={surrogate.is_archived}
@@ -229,14 +225,14 @@ export function HeaderActions() {
                     className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
                     aria-label="More actions"
                 >
-                    <MoreVerticalIcon className="h-4 w-4" />
+                    <MoreVerticalIcon className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
                         Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleExport} disabled={isExporting}>
-                        {isExporting ? "Exporting..." : "Export"}
+                        {isExporting ? "Exporting" : "Export"}
                     </DropdownMenuItem>
                     {canManageQueue && isOwnedByUser && queues.length > 0 && (
                         <DropdownMenuItem

@@ -82,17 +82,17 @@ export function VersionHistoryModal({
             <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <History className="h-5 w-5" />
+                        <History className="size-5" />
                         Version History
                     </DialogTitle>
                     <DialogDescription>
-                        {title} — Current version: {currentVersion}
+                        {title}. Current version: {currentVersion}
                     </DialogDescription>
                 </DialogHeader>
 
                 {isLoading ? (
                     <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                        <div className="animate-spin rounded-full size-8 border-b-2 border-primary" />
                     </div>
                 ) : versions.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
@@ -128,9 +128,9 @@ export function VersionHistoryModal({
                                                 onClick={() => toggleExpanded(v.version)}
                                             >
                                                 {expandedVersion === v.version ? (
-                                                    <ChevronUp className="h-4 w-4" />
+                                                    <ChevronUp className="size-4" />
                                                 ) : (
-                                                    <ChevronDown className="h-4 w-4" />
+                                                    <ChevronDown className="size-4" />
                                                 )}
                                             </Button>
                                             {canRollback && v.version !== currentVersion && onRollback && (
@@ -144,7 +144,7 @@ export function VersionHistoryModal({
                                                             />
                                                         }
                                                     >
-                                                        <RotateCcw className="h-3 w-3 mr-1" />
+                                                        <RotateCcw className="size-3 mr-1" />
                                                         Rollback
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
@@ -152,7 +152,7 @@ export function VersionHistoryModal({
                                                             <AlertDialogTitle>Rollback to v{v.version}?</AlertDialogTitle>
                                                             <AlertDialogDescription>
                                                                 This will create a new version with the configuration from v{v.version}.
-                                                                History is never rewritten — you can always roll forward again.
+                                                                History is never rewritten. You can always roll forward again.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
@@ -173,12 +173,12 @@ export function VersionHistoryModal({
                                     {/* Version metadata */}
                                     <div className="mt-2 text-sm text-muted-foreground space-y-1">
                                         <div className="flex items-center gap-1">
-                                            <Calendar className="h-3 w-3" />
+                                            <Calendar className="size-3" />
                                             {formatDate(v.created_at)}
                                         </div>
                                         {v.comment && (
                                             <div className="flex items-center gap-1">
-                                                <MessageSquare className="h-3 w-3" />
+                                                <MessageSquare className="size-3" />
                                                 {v.comment}
                                             </div>
                                         )}

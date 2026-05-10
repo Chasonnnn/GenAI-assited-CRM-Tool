@@ -17,7 +17,7 @@ const AppSidebar = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
       </div>
     )
   }
@@ -30,7 +30,7 @@ export default function AppShellClient({
 }) {
   const { user, isLoading } = useRequireAuth();
   const pathname = usePathname();
-  const router = useRouter();
+  const { replace } = useRouter();
 
   const shouldRedirectToWelcome =
     !!user &&
@@ -42,15 +42,15 @@ export default function AppShellClient({
   // Redirect to welcome page if profile is incomplete
   useEffect(() => {
     if (shouldRedirectToWelcome) {
-      router.replace("/welcome");
+      replace("/welcome");
     }
-  }, [shouldRedirectToWelcome, router]);
+  }, [shouldRedirectToWelcome, replace]);
 
   // Show loading state while checking auth
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -64,7 +64,7 @@ export default function AppShellClient({
   if (shouldRedirectToWelcome) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
       </div>
     );
   }

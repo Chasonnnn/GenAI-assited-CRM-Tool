@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 import { cn } from "@/lib/utils"
 import { SelectionPopover } from "../SelectionPopover"
 import { useInterviewComments } from "./context"
@@ -57,7 +58,7 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
     }, [setFocusedCommentId])
 
     // Handle click on transcript highlights
-    const handleClick = useCallback((e: React.MouseEvent) => {
+    const focusCommentFromClick = useCallback((e: React.MouseEvent) => {
         if (isSelectingRef.current) return
         const target = e.target instanceof HTMLElement ? e.target : null
         focusCommentFromTarget(target)
@@ -75,7 +76,7 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
                 onMouseOver={handleMouseOver}
                 onMouseOut={handleMouseOut}
                 onMouseLeave={handleMouseLeave}
-                onClick={handleClick}
+                onClick={focusCommentFromClick}
                 onKeyDown={(e) => {
                     if (isSelectingRef.current) return
                     if (e.key === "Enter" || e.key === " ") {
@@ -87,8 +88,9 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
                 role="button"
                 tabIndex={0}
                 aria-label="Interview Transcript"
-                dangerouslySetInnerHTML={{ __html: transcriptHtml }}
-            />
+            >
+                <SafeHtmlContent html={transcriptHtml} />
+            </div>
             <SelectionPopover
                 containerRef={transcriptRef}
                 onAddComment={startPendingComment}

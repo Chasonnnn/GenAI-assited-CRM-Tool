@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
+import { useCallback, useMemo, useReducer, useRef, type MutableRefObject } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +26,7 @@ import { toast } from "sonner"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
 import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
@@ -39,10 +40,103 @@ import {
     useUpdatePlatformEmailTemplate,
 } from "@/lib/hooks/use-platform-templates"
 import type { PlatformEmailTemplate } from "@/lib/api/platform"
+import type { TemplateVariableRead } from "@/lib/types/template-variable"
 
 type EditorMode = "visual" | "html"
 
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+
+type TextFieldName = "name" | "subject" | "fromEmail" | "category" | "testOrgId" | "testEmail"
+
+type BusyFlagName = "isSaving" | "isPublishing" | "isSendingTest"
+
+type DialogName = "publish" | "delete"
+
+type TemplatePageMode = "new" | "existing"
+
+type PublicationState = "published" | "draft"
+
+interface TemplatePageBusyState {
+    deletePending: boolean
+    saving: boolean
+    publishing: boolean
+}
+
+interface EmailTemplateEditorState {
+    name: string
+    subject: string
+    fromEmail: string
+    category: string
+    body: string
+    editorMode: EditorMode
+    editorModeTouched: boolean
+    isPublished: boolean
+    showPublishDialog: boolean
+    showDeleteDialog: boolean
+    isSaving: boolean
+    isPublishing: boolean
+    testOrgId: string
+    testEmail: string
+    testVariables: Record<string, string>
+    testTouched: Record<string, boolean>
+    isSendingTest: boolean
+    activeInsertionTarget: ActiveInsertionTarget
+}
+
+type EmailTemplateEditorAction =
+    | { type: "setTextField"; field: TextFieldName; value: string }
+    | { type: "setBody"; value: string; activeInsertionTarget?: ActiveInsertionTarget }
+    | { type: "setEditorMode"; mode: EditorMode }
+    | { type: "setActiveInsertionTarget"; target: ActiveInsertionTarget }
+    | { type: "setPublished"; isPublished: boolean }
+    | { type: "setDialog"; dialog: DialogName; open: boolean }
+    | { type: "setBusy"; flag: BusyFlagName; value: boolean }
+    | { type: "setTestVariable"; name: string; value: string }
+
+const PREVIEW_ALLOWED_TAGS = [
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "td",
+    "th",
+    "colgroup",
+    "col",
+    "img",
+    "hr",
+    "div",
+    "span",
+    "center",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+]
+
+const PREVIEW_ALLOWED_ATTRS = [
+    "style",
+    "class",
+    "align",
+    "valign",
+    "width",
+    "height",
+    "cellpadding",
+    "cellspacing",
+    "border",
+    "bgcolor",
+    "colspan",
+    "rowspan",
+    "role",
+    "target",
+    "rel",
+    "href",
+    "src",
+    "alt",
+    "title",
+]
 
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
@@ -51,8 +145,247 @@ function extractTemplateVariables(text: string): string[] {
     return Array.from(new Set(variables))
 }
 
+function getEditableVariableNames(subject: string, body: string): string[] {
+    return extractTemplateVariables(`${subject}\n${body}`).filter((variable) => variable !== "unsubscribe_url")
+}
+
+function hasComplexTemplateHtml(body: string): boolean {
+    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
+}
+
+function buildTestVariableSample(variableName: string, testEmail: string): string {
+    const toEmail = testEmail.trim()
+    switch (variableName) {
+        case "first_name":
+            return "Jordan"
+        case "full_name":
+            return "Jordan Smith"
+        case "email":
+            return toEmail
+        case "phone":
+            return "(555) 555-5555"
+        case "surrogate_number":
+            return "S10001"
+        case "intended_parent_number":
+            return "I10001"
+        case "status_label":
+            return "Pre-Qualified"
+        case "state":
+            return "CA"
+        case "owner_name":
+            return "Operator"
+        case "form_link":
+            return "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG"
+        case "appointment_link":
+            return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
+        case "appointment_manage_url":
+            return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+        case "appointment_reschedule_url":
+            return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+        case "appointment_cancel_url":
+            return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
+        case "appointment_date":
+            return "2026-01-01"
+        case "appointment_time":
+            return "09:00"
+        case "appointment_location":
+            return "Zoom"
+        case "org_name":
+            return "Sample Org"
+        case "org_logo_url":
+            return ""
+        default:
+            return `TEST_${variableName.toUpperCase()}`
+    }
+}
+
+function syncTestFields(state: EmailTemplateEditorState): EmailTemplateEditorState {
+    const editableVariables = new Set(getEditableVariableNames(state.subject, state.body))
+    const nextVariables: Record<string, string> = { ...state.testVariables }
+    const nextTouched: Record<string, boolean> = { ...state.testTouched }
+
+    for (const variableName of editableVariables) {
+        if (nextVariables[variableName] === undefined) {
+            nextVariables[variableName] = buildTestVariableSample(variableName, state.testEmail)
+        }
+    }
+
+    for (const key of Object.keys(nextVariables)) {
+        if (!editableVariables.has(key)) {
+            delete nextVariables[key]
+        }
+    }
+
+    for (const key of Object.keys(nextTouched)) {
+        if (!editableVariables.has(key)) {
+            delete nextTouched[key]
+        }
+    }
+
+    return {
+        ...state,
+        testVariables: nextVariables,
+        testTouched: nextTouched,
+    }
+}
+
+function createEditorState(templateData: PlatformEmailTemplate | null): EmailTemplateEditorState {
+    const draft = templateData?.draft
+    const body = draft?.body ?? ""
+    const editorMode: EditorMode = body && hasComplexTemplateHtml(body) ? "html" : "visual"
+
+    return syncTestFields({
+        name: draft?.name ?? "",
+        subject: draft?.subject ?? "",
+        fromEmail: draft?.from_email ?? "",
+        category: draft?.category ?? "",
+        body,
+        editorMode,
+        editorModeTouched: false,
+        isPublished: (templateData?.published_version ?? 0) > 0,
+        showPublishDialog: false,
+        showDeleteDialog: false,
+        isSaving: false,
+        isPublishing: false,
+        testOrgId: "",
+        testEmail: "",
+        testVariables: {},
+        testTouched: {},
+        isSendingTest: false,
+        activeInsertionTarget: null,
+    })
+}
+
+function templateEditorReducer(
+    state: EmailTemplateEditorState,
+    action: EmailTemplateEditorAction
+): EmailTemplateEditorState {
+    switch (action.type) {
+        case "setTextField": {
+            const nextState = { ...state, [action.field]: action.value }
+            return action.field === "subject" ? syncTestFields(nextState) : nextState
+        }
+        case "setBody": {
+            const nextState: EmailTemplateEditorState = {
+                ...state,
+                body: action.value,
+                activeInsertionTarget:
+                    action.activeInsertionTarget === undefined
+                        ? state.activeInsertionTarget
+                        : action.activeInsertionTarget,
+            }
+            if (
+                !nextState.editorModeTouched &&
+                nextState.editorMode !== "html" &&
+                hasComplexTemplateHtml(action.value)
+            ) {
+                nextState.editorMode = "html"
+                nextState.activeInsertionTarget = null
+            }
+            return syncTestFields(nextState)
+        }
+        case "setEditorMode":
+            return {
+                ...state,
+                editorMode: action.mode,
+                editorModeTouched: true,
+                activeInsertionTarget:
+                    state.activeInsertionTarget === "subject"
+                        ? "subject"
+                        : action.mode === "html"
+                          ? "body_html"
+                          : "body_visual",
+            }
+        case "setActiveInsertionTarget":
+            return { ...state, activeInsertionTarget: action.target }
+        case "setPublished":
+            return { ...state, isPublished: action.isPublished }
+        case "setDialog":
+            return action.dialog === "publish"
+                ? { ...state, showPublishDialog: action.open }
+                : { ...state, showDeleteDialog: action.open }
+        case "setBusy":
+            return { ...state, [action.flag]: action.value }
+        case "setTestVariable":
+            return {
+                ...state,
+                testVariables: {
+                    ...state.testVariables,
+                    [action.name]: action.value,
+                },
+                testTouched: {
+                    ...state.testTouched,
+                    [action.name]: true,
+                },
+            }
+    }
+}
+
+function recordSelection(
+    el: HTMLInputElement | HTMLTextAreaElement,
+    ref: MutableRefObject<{ start: number; end: number } | null>
+) {
+    ref.current = {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+}
+
+function getFromEmailError(fromEmail: string): string | null {
+    const value = fromEmail.trim()
+    if (!value) return null
+    const basicEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/
+    const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
+    if (basicEmail.test(value) || namedEmail.test(value)) return null
+    return "Use a valid email or name <email@domain> format."
+}
+
+function buildPreviewHtml(body: string): string {
+    let html = normalizeTemplateHtml(body || "")
+
+    html = html.replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, "")
+    html = html.replace(
+        /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
+        ""
+    )
+
+    const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
+    const footerHtml = `
+        <div style="margin-top: 14px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
+            <p style="margin: 0;">
+                Manage email preferences:
+                <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
+            </p>
+        </div>
+    `.trim()
+
+    if (/<\/body\s*>/i.test(html)) {
+        html = html.replace(/<\/body\s*>/i, `${footerHtml}</body>`)
+    } else if (/<\/html\s*>/i.test(html)) {
+        html = html.replace(/<\/html\s*>/i, `${footerHtml}</html>`)
+    } else {
+        html = `${html}${footerHtml}`
+    }
+
+    return DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true },
+        ADD_TAGS: PREVIEW_ALLOWED_TAGS,
+        ADD_ATTR: PREVIEW_ALLOWED_ATTRS,
+    })
+}
+
+function LoadingTemplate() {
+    return (
+        <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
+            <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
+                <Loader2Icon className="size-5 animate-spin" />
+                <span>Loading template&hellip;</span>
+            </div>
+        </div>
+    )
+}
+
 export default function PlatformEmailTemplatePage() {
-    const router = useRouter()
     const params = useParams()
     const id = params?.id as string
     const isNew = id === "new"
@@ -60,50 +393,188 @@ export default function PlatformEmailTemplatePage() {
 
     const { data: templateData, isLoading } = usePlatformEmailTemplate(templateId)
     const { data: templateVariables = [], isLoading: variablesLoading } = usePlatformEmailTemplateVariables()
+
+    if (!isNew && isLoading) {
+        return <LoadingTemplate />
+    }
+
+    if (!isNew && !templateData) return null
+
+    const editorTemplateData: PlatformEmailTemplate | null = isNew ? null : templateData ?? null
+    const editorKey = editorTemplateData
+        ? `${editorTemplateData.id}:${editorTemplateData.current_version}:${editorTemplateData.published_version}`
+        : "new"
+
+    return (
+        <PlatformEmailTemplateEditor
+            key={editorKey}
+            id={id}
+            isNew={isNew}
+            templateId={templateId}
+            templateData={editorTemplateData}
+            templateVariables={templateVariables}
+            variablesLoading={variablesLoading}
+        />
+    )
+}
+
+interface PlatformEmailTemplateEditorProps {
+    id: string
+    isNew: boolean
+    templateId: string | null
+    templateData: PlatformEmailTemplate | null
+    templateVariables: TemplateVariableRead[]
+    variablesLoading: boolean
+}
+
+function PlatformEmailTemplateEditor({
+    id,
+    isNew,
+    templateId,
+    templateData,
+    templateVariables,
+    variablesLoading,
+}: PlatformEmailTemplateEditorProps) {
+    const controller = useEmailTemplateController({
+        id,
+        isNew,
+        templateId,
+        templateData,
+        templateVariables,
+        variablesLoading,
+    })
+    const { actions, derived, refs, state } = controller
+    const mode: TemplatePageMode = isNew ? "new" : "existing"
+
+    return (
+        <div className="min-h-screen bg-stone-100 dark:bg-stone-950">
+            <TemplatePageHeader
+                mode={mode}
+                name={state.name}
+                publicationState={state.isPublished ? "published" : "draft"}
+                busy={{
+                    deletePending: controller.deletePending,
+                    saving: state.isSaving,
+                    publishing: state.isPublishing,
+                }}
+                onBack={actions.navigateBack}
+                onNameChange={(value) => actions.setTextField("name", value)}
+                onRequestDelete={() => actions.setDialog("delete", true)}
+                onSave={actions.handleSave}
+                onPublish={actions.handlePublish}
+            />
+
+            <DeleteTemplateDialog
+                open={state.showDeleteDialog}
+                name={state.name}
+                deletePending={controller.deletePending}
+                onOpenChange={(open) => actions.setDialog("delete", open)}
+                onConfirm={actions.handleDelete}
+            />
+
+            <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
+                <EmailContentCard
+                    subject={state.subject}
+                    fromEmail={state.fromEmail}
+                    category={state.category}
+                    body={state.body}
+                    editorMode={state.editorMode}
+                    hasComplexHtml={derived.hasComplexHtml}
+                    fromEmailError={derived.fromEmailError}
+                    templateVariables={templateVariables}
+                    variablesLoading={variablesLoading}
+                    unknownVariables={derived.unknownVariables}
+                    missingRequiredVariables={derived.missingRequiredVariables}
+                    subjectRef={refs.subjectRef}
+                    htmlBodyRef={refs.htmlBodyRef}
+                    visualBodyRef={refs.visualBodyRef}
+                    onSubjectChange={(value) => actions.setTextField("subject", value)}
+                    onFromEmailChange={(value) => actions.setTextField("fromEmail", value)}
+                    onCategoryChange={(value) => actions.setTextField("category", value)}
+                    onBodyChange={actions.setBody}
+                    onEditorModeChange={actions.setEditorMode}
+                    onInsertVariable={actions.insertVariable}
+                    onInsertLogo={actions.insertOrgLogo}
+                    onActiveInsertionTargetChange={actions.setActiveInsertionTarget}
+                    onSubjectSelection={actions.recordSubjectSelection}
+                    onHtmlBodySelection={actions.recordHtmlBodySelection}
+                />
+
+                <div className="space-y-6">
+                    <PreviewCard previewHtml={derived.previewHtml} />
+                    <SendTestEmailCard
+                        mode={mode}
+                        test={{
+                            orgId: state.testOrgId,
+                            email: state.testEmail,
+                            variables: state.testVariables,
+                            hasUnsubscribeUrl: derived.testHasUnsubscribeUrl,
+                            editableVariableNames: derived.testEditableVariableNames,
+                        }}
+                        busy={{
+                            sending: state.isSendingTest,
+                            saving: state.isSaving,
+                            publishing: state.isPublishing,
+                        }}
+                        onTestOrgIdChange={(value) => actions.setTextField("testOrgId", value)}
+                        onTestEmailChange={(value) => actions.setTextField("testEmail", value)}
+                        onTestVariableChange={actions.setTestVariable}
+                        onSendTest={actions.handleSendTest}
+                    />
+                </div>
+            </div>
+
+            <PublishDialog
+                open={state.showPublishDialog}
+                onOpenChange={(open) => actions.setDialog("publish", open)}
+                onPublish={actions.confirmPublish}
+                isLoading={state.isPublishing}
+                defaultPublishAll={templateData?.is_published_globally ?? true}
+                initialOrgIds={templateData?.target_org_ids ?? []}
+            />
+        </div>
+    )
+}
+
+function useEmailTemplateController({
+    id,
+    isNew,
+    templateId,
+    templateData,
+    templateVariables,
+    variablesLoading,
+}: PlatformEmailTemplateEditorProps) {
+    const { push, replace } = useRouter()
     const createTemplate = useCreatePlatformEmailTemplate()
     const updateTemplate = useUpdatePlatformEmailTemplate()
     const publishTemplate = usePublishPlatformEmailTemplate()
     const deleteTemplate = useDeletePlatformEmailTemplate()
     const sendTest = useSendTestPlatformEmailTemplate()
-
-    const [name, setName] = useState("")
-    const [subject, setSubject] = useState("")
-    const [fromEmail, setFromEmail] = useState("")
-    const [category, setCategory] = useState("")
-    const [body, setBody] = useState("")
-    const [editorMode, setEditorMode] = useState<EditorMode>("visual")
-    const [editorModeTouched, setEditorModeTouched] = useState(false)
-    const [isPublished, setIsPublished] = useState(false)
-    const [showPublishDialog, setShowPublishDialog] = useState(false)
-    const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-    const [isSaving, setIsSaving] = useState(false)
-    const [isPublishing, setIsPublishing] = useState(false)
-
-    const [testOrgId, setTestOrgId] = useState("")
-    const [testEmail, setTestEmail] = useState("")
-    const [testVariables, setTestVariables] = useState<Record<string, string>>({})
-    const [testTouched, setTestTouched] = useState<Record<string, boolean>>({})
-    const [isSendingTest, setIsSendingTest] = useState(false)
+    const [state, dispatch] = useReducer(templateEditorReducer, templateData, createEditorState)
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
     const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
-    const [activeInsertionTarget, setActiveInsertionTarget] = useState<ActiveInsertionTarget>(null)
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
     const allowedVariableNames = useMemo(
         () => new Set(templateVariables.map((variable) => variable.name)),
         [templateVariables]
     )
-    const requiredVariableNames = useMemo(
-        () => templateVariables.filter((variable) => variable.required).map((variable) => variable.name),
-        [templateVariables]
-    )
+    const requiredVariableNames = useMemo(() => {
+        const names: string[] = []
+        for (const variable of templateVariables) {
+            if (variable.required) {
+                names.push(variable.name)
+            }
+        }
+        return names
+    }, [templateVariables])
     const usedVariableNames = useMemo(
-        () => extractTemplateVariables(`${subject}\n${body}`),
-        [subject, body]
+        () => extractTemplateVariables(`${state.subject}\n${state.body}`),
+        [state.body, state.subject]
     )
     const unknownVariables = useMemo(() => {
         if (!canValidateVariables) return []
@@ -113,299 +584,174 @@ export default function PlatformEmailTemplatePage() {
         if (!canValidateVariables) return []
         return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
     }, [canValidateVariables, requiredVariableNames, usedVariableNames])
-
-    const testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")
     const testEditableVariableNames = useMemo(
         () => usedVariableNames.filter((variable) => variable !== "unsubscribe_url"),
         [usedVariableNames]
     )
+    const testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")
+    const fromEmailError = useMemo(() => getFromEmailError(state.fromEmail), [state.fromEmail])
+    const hasComplexHtml = useMemo(() => hasComplexTemplateHtml(state.body), [state.body])
+    const previewHtml = useMemo(() => buildPreviewHtml(state.body), [state.body])
 
-    const buildTestVariableSample = useCallback(
-        (variableName: string): string => {
-            const toEmail = testEmail.trim()
-            switch (variableName) {
-                case "first_name":
-                    return "Jordan"
-                case "full_name":
-                    return "Jordan Smith"
-                case "email":
-                    return toEmail
-                case "phone":
-                    return "(555) 555-5555"
-                case "surrogate_number":
-                    return "S10001"
-                case "intended_parent_number":
-                    return "I10001"
-                case "status_label":
-                    return "Pre-Qualified"
-                case "state":
-                    return "CA"
-                case "owner_name":
-                    return "Operator"
-                case "form_link":
-                    return "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG"
-                case "appointment_link":
-                    return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
-                case "appointment_manage_url":
-                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
-                case "appointment_reschedule_url":
-                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
-                case "appointment_cancel_url":
-                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
-                case "appointment_date":
-                    return "2026-01-01"
-                case "appointment_time":
-                    return "09:00"
-                case "appointment_location":
-                    return "Zoom"
-                case "org_name":
-                    return "Sample Org"
-                case "org_logo_url":
-                    return ""
-                default:
-                    return `TEST_${variableName.toUpperCase()}`
-            }
-        },
-        [testEmail]
-    )
+    const setTextField = useCallback((field: TextFieldName, value: string) => {
+        dispatch({ type: "setTextField", field, value })
+    }, [])
 
-    useEffect(() => {
-        setTestVariables((prev) => {
-            const next: Record<string, string> = { ...prev }
+    const setBody = useCallback((value: string) => {
+        dispatch({ type: "setBody", value })
+    }, [])
 
-            for (const variableName of testEditableVariableNames) {
-                if (next[variableName] === undefined) {
-                    next[variableName] = buildTestVariableSample(variableName)
+    const setDialog = useCallback((dialog: DialogName, open: boolean) => {
+        dispatch({ type: "setDialog", dialog, open })
+    }, [])
+
+    const setActiveInsertionTarget = useCallback((target: ActiveInsertionTarget) => {
+        dispatch({ type: "setActiveInsertionTarget", target })
+    }, [])
+
+    const setEditorMode = useCallback((mode: EditorMode) => {
+        dispatch({ type: "setEditorMode", mode })
+    }, [])
+
+    const setTestVariable = useCallback((name: string, value: string) => {
+        dispatch({ type: "setTestVariable", name, value })
+    }, [])
+
+    const navigateBack = useCallback(() => {
+        push("/ops/templates?tab=email")
+    }, [push])
+
+    const recordSubjectSelection = useCallback((el: HTMLInputElement) => {
+        recordSelection(el, subjectSelectionRef)
+    }, [])
+
+    const recordHtmlBodySelection = useCallback((el: HTMLTextAreaElement) => {
+        recordSelection(el, htmlBodySelectionRef)
+    }, [])
+
+    const applyTextInsertion = useCallback(
+        (
+            el: HTMLInputElement | HTMLTextAreaElement | null,
+            selectionRef: MutableRefObject<{ start: number; end: number } | null>,
+            currentValue: string,
+            token: string,
+            commit: (value: string) => void
+        ) => {
+            const value = el?.value ?? currentValue
+            const selection = el
+                ? selectionRef.current ?? {
+                      start: el.selectionStart ?? value.length,
+                      end: el.selectionEnd ?? value.length,
+                  }
+                : { start: value.length, end: value.length }
+            const result = insertAtCursor(value, token, selection.start, selection.end)
+            commit(result.nextValue)
+
+            if (!el) return
+            requestAnimationFrame(() => {
+                el.focus()
+                el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+                selectionRef.current = {
+                    start: result.nextSelectionStart,
+                    end: result.nextSelectionEnd,
                 }
-            }
-
-            // Drop stale values when variables are removed from the template.
-            for (const key of Object.keys(next)) {
-                if (!testEditableVariableNames.includes(key)) {
-                    delete next[key]
-                }
-            }
-
-            return next
-        })
-
-        setTestTouched((prev) => {
-            const next: Record<string, boolean> = { ...prev }
-            for (const key of Object.keys(next)) {
-                if (!testEditableVariableNames.includes(key)) {
-                    delete next[key]
-                }
-            }
-            return next
-        })
-    }, [buildTestVariableSample, testEditableVariableNames])
-
-    const recordSelection = (
-        el: HTMLInputElement | HTMLTextAreaElement,
-        ref: MutableRefObject<{ start: number; end: number } | null>
-    ) => {
-        ref.current = {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
-        }
-    }
-    const fromEmailError = useMemo(() => {
-        const value = fromEmail.trim()
-        if (!value) return null
-        const basicEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/
-        const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
-        if (basicEmail.test(value) || namedEmail.test(value)) return null
-        return "Use a valid email or name <email@domain> format."
-    }, [fromEmail])
-
-    useEffect(() => {
-        if (!templateData || isNew) return
-        const draft = templateData.draft
-        setName(draft.name ?? "")
-        setSubject(draft.subject ?? "")
-        setFromEmail(draft.from_email ?? "")
-        setCategory(draft.category ?? "")
-        setBody(draft.body ?? "")
-        setIsPublished((templateData.published_version ?? 0) > 0)
-    }, [templateData, isNew])
-
-    const hasComplexHtml = useMemo(
-        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body),
-        [body]
-    )
-
-    useEffect(() => {
-        if (editorModeTouched) return
-        if (body && hasComplexHtml && editorMode !== "html") {
-            setEditorMode("html")
-            setActiveInsertionTarget(null)
-        }
-    }, [body, editorModeTouched, hasComplexHtml, editorMode])
-
-    const effectiveEditorMode: EditorMode =
-        editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
-
-    const previewHtml = useMemo(() => {
-        let html = normalizeTemplateHtml(body || "")
-
-        // Unsubscribe is appended automatically at send time; don't show raw tokens in previews.
-        html = html.replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, "")
-        html = html.replace(
-            /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
-            ""
-        )
-
-        const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
-        const footerHtml = `
-            <div style="margin-top: 14px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
-                <p style="margin: 0;">
-                    Manage email preferences:
-                    <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
-                </p>
-            </div>
-        `.trim()
-
-        if (/<\/body\s*>/i.test(html)) {
-            html = html.replace(/<\/body\s*>/i, `${footerHtml}</body>`)
-        } else if (/<\/html\s*>/i.test(html)) {
-            html = html.replace(/<\/html\s*>/i, `${footerHtml}</html>`)
-        } else {
-            html = `${html}${footerHtml}`
-        }
-
-        return DOMPurify.sanitize(html, {
-            USE_PROFILES: { html: true },
-            ADD_TAGS: [
-                "table",
-                "thead",
-                "tbody",
-                "tfoot",
-                "tr",
-                "td",
-                "th",
-                "colgroup",
-                "col",
-                "img",
-                "hr",
-                "div",
-                "span",
-                "center",
-                "h1",
-                "h2",
-                "h3",
-                "h4",
-                "h5",
-                "h6",
-            ],
-            ADD_ATTR: [
-                "style",
-                "class",
-                "align",
-                "valign",
-                "width",
-                "height",
-                "cellpadding",
-                "cellspacing",
-                "border",
-                "bgcolor",
-                "colspan",
-                "rowspan",
-                "role",
-                "target",
-                "rel",
-                "href",
-                "src",
-                "alt",
-                "title",
-            ],
-        })
-    }, [body])
-
-    const insertIntoTextControl = (
-        el: HTMLInputElement | HTMLTextAreaElement | null,
-        selectionRef: MutableRefObject<{ start: number; end: number } | null>,
-        setValue: Dispatch<SetStateAction<string>>,
-        token: string
-    ) => {
-        if (!el) {
-            setValue((prev) => `${prev}${token}`)
-            return
-        }
-        const selection = selectionRef.current ?? {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
-        }
-        const result = insertAtCursor(el.value, token, selection.start, selection.end)
-        setValue(result.nextValue)
-        requestAnimationFrame(() => {
-            el.focus()
-            el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
-            selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
-        })
-    }
-
-    const insertToken = (token: string) => {
-        if (activeInsertionTarget === "subject") {
-            insertIntoTextControl(subjectRef.current, subjectSelectionRef, setSubject, token)
-            return
-        }
-        if (activeInsertionTarget === "body_html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
-            return
-        }
-        if (activeInsertionTarget === "body_visual") {
-            visualBodyRef.current?.insertText(token)
-            return
-        }
-
-        if (effectiveEditorMode === "html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
-            return
-        }
-        visualBodyRef.current?.insertText(token)
-    }
-
-    const insertOrgLogo = () => {
-        if (body.includes("{{org_logo_url}}")) return
-        const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
-        if (effectiveEditorMode === "visual") {
-            visualBodyRef.current?.insertHtml(logo)
-            setActiveInsertionTarget("body_visual")
-            return
-        }
-        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, logo)
-        setActiveInsertionTarget("body_html")
-    }
-
-    const persistTemplate = useCallback(
-        async (): Promise<PlatformEmailTemplate> => {
-            const payload = {
-                name: name.trim(),
-                subject: subject.trim(),
-                body: body || "",
-                from_email: fromEmail.trim() ? fromEmail.trim() : null,
-                category: category.trim() ? category.trim() : null,
-            }
-
-            if (isNew) {
-                const created = await createTemplate.mutateAsync(payload)
-                router.replace(`/ops/templates/email/${created.id}`)
-                return created
-            }
-
-            return updateTemplate.mutateAsync({
-                id,
-                payload: {
-                    ...payload,
-                    expected_version: templateData?.current_version ?? null,
-                },
             })
         },
-        [body, category, createTemplate, fromEmail, id, isNew, name, router, subject, templateData?.current_version, updateTemplate]
+        []
     )
 
-    const handleSave = async () => {
-        if (!name.trim() || !subject.trim()) {
+    const insertToken = useCallback(
+        (token: string) => {
+            if (state.activeInsertionTarget === "subject") {
+                applyTextInsertion(subjectRef.current, subjectSelectionRef, state.subject, token, (value) =>
+                    dispatch({ type: "setTextField", field: "subject", value })
+                )
+                return
+            }
+            if (state.activeInsertionTarget === "body_html") {
+                applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
+                    dispatch({ type: "setBody", value })
+                )
+                return
+            }
+            if (state.activeInsertionTarget === "body_visual") {
+                visualBodyRef.current?.insertText(token)
+                return
+            }
+
+            if (state.editorMode === "html") {
+                applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
+                    dispatch({ type: "setBody", value })
+                )
+                return
+            }
+            visualBodyRef.current?.insertText(token)
+        },
+        [applyTextInsertion, state.activeInsertionTarget, state.body, state.editorMode, state.subject]
+    )
+
+    const insertOrgLogo = useCallback(() => {
+        if (state.body.includes("{{org_logo_url}}")) return
+        const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
+        if (state.editorMode === "visual") {
+            visualBodyRef.current?.insertHtml(logo)
+            dispatch({ type: "setActiveInsertionTarget", target: "body_visual" })
+            return
+        }
+        applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, logo, (value) =>
+            dispatch({ type: "setBody", value, activeInsertionTarget: "body_html" })
+        )
+    }, [applyTextInsertion, state.body, state.editorMode])
+
+    const insertVariable = useCallback(
+        (variableName: string) => {
+            if (variableName === "unsubscribe_url") {
+                toast.info("Unsubscribe link is added automatically.")
+                return
+            }
+            insertToken(`{{${variableName}}}`)
+        },
+        [insertToken]
+    )
+
+    const persistTemplate = useCallback(async (): Promise<PlatformEmailTemplate> => {
+        const payload = {
+            name: state.name.trim(),
+            subject: state.subject.trim(),
+            body: state.body || "",
+            from_email: state.fromEmail.trim() ? state.fromEmail.trim() : null,
+            category: state.category.trim() ? state.category.trim() : null,
+        }
+
+        if (isNew) {
+            const created = await createTemplate.mutateAsync(payload)
+            replace(`/ops/templates/email/${created.id}`)
+            return created
+        }
+
+        return updateTemplate.mutateAsync({
+            id,
+            payload: {
+                ...payload,
+                expected_version: templateData?.current_version ?? null,
+            },
+        })
+    }, [
+        createTemplate,
+        id,
+        isNew,
+        replace,
+        state.body,
+        state.category,
+        state.fromEmail,
+        state.name,
+        state.subject,
+        templateData?.current_version,
+        updateTemplate,
+    ])
+
+    const handleSave = useCallback(async () => {
+        if (!state.name.trim() || !state.subject.trim()) {
             toast.error("Name and subject are required")
             return
         }
@@ -413,20 +759,20 @@ export default function PlatformEmailTemplatePage() {
             toast.error(fromEmailError)
             return
         }
-        setIsSaving(true)
+        dispatch({ type: "setBusy", flag: "isSaving", value: true })
         try {
             const saved = await persistTemplate()
-            setIsPublished((saved.published_version ?? 0) > 0)
+            dispatch({ type: "setPublished", isPublished: (saved.published_version ?? 0) > 0 })
             toast.success("Template saved")
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to save template")
         } finally {
-            setIsSaving(false)
+            dispatch({ type: "setBusy", flag: "isSaving", value: false })
         }
-    }
+    }, [fromEmailError, persistTemplate, state.name, state.subject])
 
-    const handlePublish = () => {
-        if (!name.trim() || !subject.trim()) {
+    const handlePublish = useCallback(() => {
+        if (!state.name.trim() || !state.subject.trim()) {
             toast.error("Name and subject are required")
             return
         }
@@ -434,62 +780,65 @@ export default function PlatformEmailTemplatePage() {
             toast.error(fromEmailError)
             return
         }
-        if (!body.trim()) {
+        if (!state.body.trim()) {
             toast.error("Email body is required")
             return
         }
-        setShowPublishDialog(true)
-    }
+        dispatch({ type: "setDialog", dialog: "publish", open: true })
+    }, [fromEmailError, state.body, state.name, state.subject])
 
-    const confirmPublish = async (publishAll: boolean, orgIds: string[]) => {
-        setIsPublishing(true)
-        try {
-            const saved = await persistTemplate()
-            await publishTemplate.mutateAsync({
-                id: saved.id,
-                payload: {
-                    publish_all: publishAll,
-                    org_ids: publishAll ? null : orgIds,
-                },
-            })
-            setIsPublished(true)
-            setShowPublishDialog(false)
-            toast.success("Template published")
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to publish template")
-        } finally {
-            setIsPublishing(false)
-        }
-    }
+    const confirmPublish = useCallback(
+        async (publishAll: boolean, orgIds: string[]) => {
+            dispatch({ type: "setBusy", flag: "isPublishing", value: true })
+            try {
+                const saved = await persistTemplate()
+                await publishTemplate.mutateAsync({
+                    id: saved.id,
+                    payload: {
+                        publish_all: publishAll,
+                        org_ids: publishAll ? null : orgIds,
+                    },
+                })
+                dispatch({ type: "setPublished", isPublished: true })
+                dispatch({ type: "setDialog", dialog: "publish", open: false })
+                toast.success("Template published")
+            } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Failed to publish template")
+            } finally {
+                dispatch({ type: "setBusy", flag: "isPublishing", value: false })
+            }
+        },
+        [persistTemplate, publishTemplate]
+    )
 
-    const handleSendTest = async () => {
+    const handleSendTest = useCallback(async () => {
         if (isNew) return
 
-        if (!testOrgId.trim()) {
+        if (!state.testOrgId.trim()) {
             toast.error("Organization ID is required")
             return
         }
-        if (!testEmail.trim()) {
+        if (!state.testEmail.trim()) {
             toast.error("Test email is required")
             return
         }
 
         const overrides: Record<string, string> = {}
-        for (const [key, value] of Object.entries(testVariables)) {
-            if (!testTouched[key]) continue
-            const trimmed = value.trim()
+        for (const variableName of testEditableVariableNames) {
+            if (!state.testTouched[variableName]) continue
+            const trimmed = (state.testVariables[variableName] ?? "").trim()
             if (!trimmed) continue
-            overrides[key] = trimmed
+            overrides[variableName] = trimmed
         }
 
-        setIsSendingTest(true)
+        dispatch({ type: "setBusy", flag: "isSendingTest", value: true })
         try {
             const saved = await persistTemplate()
             const result = await sendTest.mutateAsync({
                 id: saved.id,
                 payload: {
-                    org_id: testOrgId.trim(),
-                    to_email: testEmail.trim(),
+                    org_id: state.testOrgId.trim(),
+                    to_email: state.testEmail.trim(),
                     variables: overrides,
                 },
             })
@@ -498,420 +847,557 @@ export default function PlatformEmailTemplatePage() {
                 result.provider_used === "resend"
                     ? "Resend"
                     : result.provider_used === "gmail"
-                        ? "Gmail"
-                        : "provider"
+                      ? "Gmail"
+                      : "provider"
             toast.success(`Test email sent via ${providerLabel}`)
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
         } finally {
-            setIsSendingTest(false)
+            dispatch({ type: "setBusy", flag: "isSendingTest", value: false })
         }
-    }
+    }, [
+        isNew,
+        persistTemplate,
+        sendTest,
+        state.testEmail,
+        state.testOrgId,
+        state.testTouched,
+        state.testVariables,
+        testEditableVariableNames,
+    ])
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!templateId) return
         try {
             await deleteTemplate.mutateAsync({ id: templateId })
             toast.success("Template deleted")
-            setShowDeleteDialog(false)
-            router.push("/ops/templates?tab=email")
+            dispatch({ type: "setDialog", dialog: "delete", open: false })
+            push("/ops/templates?tab=email")
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to delete template")
         }
-    }
+    }, [deleteTemplate, push, templateId])
 
-    if (!isNew && isLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
-                <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
-                    <Loader2Icon className="size-5 animate-spin" />
-                    <span>Loading template...</span>
-                </div>
-            </div>
-        )
+    return {
+        actions: {
+            confirmPublish,
+            handleDelete,
+            handlePublish,
+            handleSave,
+            handleSendTest,
+            insertOrgLogo,
+            insertVariable,
+            navigateBack,
+            recordHtmlBodySelection,
+            recordSubjectSelection,
+            setActiveInsertionTarget,
+            setBody,
+            setDialog,
+            setEditorMode,
+            setTestVariable,
+            setTextField,
+        },
+        deletePending: deleteTemplate.isPending,
+        derived: {
+            fromEmailError,
+            hasComplexHtml,
+            missingRequiredVariables,
+            previewHtml,
+            testEditableVariableNames,
+            testHasUnsubscribeUrl,
+            unknownVariables,
+        },
+        refs: {
+            htmlBodyRef,
+            subjectRef,
+            visualBodyRef,
+        },
+        state,
     }
+}
 
-    if (!isNew && !templateData) return null
+interface TemplatePageHeaderProps {
+    mode: TemplatePageMode
+    name: string
+    publicationState: PublicationState
+    busy: TemplatePageBusyState
+    onBack: () => void
+    onNameChange: (value: string) => void
+    onRequestDelete: () => void
+    onSave: () => void
+    onPublish: () => void
+}
+
+function TemplatePageHeader({
+    mode,
+    name,
+    publicationState,
+    busy,
+    onBack,
+    onNameChange,
+    onRequestDelete,
+    onSave,
+    onPublish,
+}: TemplatePageHeaderProps) {
+    const isPublished = publicationState === "published"
+    const actionsDisabled = busy.saving || busy.publishing
 
     return (
-        <div className="min-h-screen bg-stone-100 dark:bg-stone-950">
-            <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
-                <div className="flex items-center gap-4">
+        <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
+            <div className="flex items-center gap-4">
+                <Button variant="ghost" size="icon" aria-label="Back to email templates" onClick={onBack}>
+                    <ArrowLeftIcon className="size-5" />
+                </Button>
+                <Input
+                    id="template-name"
+                    aria-label="Template name"
+                    value={name}
+                    onChange={(event) => onNameChange(event.target.value)}
+                    placeholder="Template name..."
+                    className="h-9 w-64 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
+                />
+                <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
+                    {isPublished ? "Published" : "Draft"}
+                </Badge>
+            </div>
+            <div className="flex items-center gap-3">
+                {mode === "existing" && (
                     <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Back to email templates"
-                        onClick={() => router.push("/ops/templates?tab=email")}
+                        variant="destructive"
+                        size="sm"
+                        onClick={onRequestDelete}
+                        disabled={busy.deletePending || actionsDisabled}
                     >
-                        <ArrowLeftIcon className="size-5" />
+                        {busy.deletePending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                        ) : (
+                            <Trash2Icon className="mr-2 size-4" />
+                        )}
+                        Delete
                     </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={onSave} disabled={actionsDisabled}>
+                    {busy.saving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                    Save Draft
+                </Button>
+                <Button size="sm" onClick={onPublish} disabled={actionsDisabled}>
+                    {busy.publishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                    Publish
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+interface DeleteTemplateDialogProps {
+    open: boolean
+    name: string
+    deletePending: boolean
+    onOpenChange: (open: boolean) => void
+    onConfirm: () => void
+}
+
+function DeleteTemplateDialog({
+    open,
+    name,
+    deletePending,
+    onOpenChange,
+    onConfirm,
+}: DeleteTemplateDialogProps) {
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete template?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This permanently deletes{" "}
+                        <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be
+                        undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deletePending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={onConfirm}
+                        disabled={deletePending}
+                        className="bg-destructive text-white hover:bg-destructive/90"
+                    >
+                        Delete
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
+}
+
+interface EmailContentCardProps {
+    subject: string
+    fromEmail: string
+    category: string
+    body: string
+    editorMode: EditorMode
+    hasComplexHtml: boolean
+    fromEmailError: string | null
+    templateVariables: TemplateVariableRead[]
+    variablesLoading: boolean
+    unknownVariables: string[]
+    missingRequiredVariables: string[]
+    subjectRef: MutableRefObject<HTMLInputElement | null>
+    htmlBodyRef: MutableRefObject<HTMLTextAreaElement | null>
+    visualBodyRef: MutableRefObject<RichTextEditorHandle | null>
+    onSubjectChange: (value: string) => void
+    onFromEmailChange: (value: string) => void
+    onCategoryChange: (value: string) => void
+    onBodyChange: (value: string) => void
+    onEditorModeChange: (mode: EditorMode) => void
+    onInsertVariable: (variableName: string) => void
+    onInsertLogo: () => void
+    onActiveInsertionTargetChange: (target: ActiveInsertionTarget) => void
+    onSubjectSelection: (el: HTMLInputElement) => void
+    onHtmlBodySelection: (el: HTMLTextAreaElement) => void
+}
+
+function EmailContentCard(props: EmailContentCardProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Email Content</CardTitle>
+                <CardDescription>Design the default template shared to org libraries.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <TemplateDetailsFields {...props} />
+                <EmailBodyEditor {...props} />
+            </CardContent>
+        </Card>
+    )
+}
+
+function TemplateDetailsFields({
+    subject,
+    fromEmail,
+    category,
+    fromEmailError,
+    subjectRef,
+    onSubjectChange,
+    onFromEmailChange,
+    onCategoryChange,
+    onActiveInsertionTargetChange,
+    onSubjectSelection,
+}: EmailContentCardProps) {
+    return (
+        <>
+            <div className="space-y-2">
+                <Label htmlFor="template-subject">Subject *</Label>
+                <Input
+                    id="template-subject"
+                    ref={subjectRef}
+                    value={subject}
+                    onChange={(event) => onSubjectChange(event.target.value)}
+                    onFocus={(event) => {
+                        onActiveInsertionTargetChange("subject")
+                        onSubjectSelection(event.currentTarget)
+                    }}
+                    onKeyUp={(event) => onSubjectSelection(event.currentTarget)}
+                    onMouseUp={(event) => onSubjectSelection(event.currentTarget)}
+                    onSelect={(event) => onSubjectSelection(event.currentTarget)}
+                    placeholder="You're invited to join {{org_name}}"
+                />
+                <p className="text-xs text-muted-foreground">Used as the default subject in org copies.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                    <Label htmlFor="template-from-email">From (optional)</Label>
                     <Input
-                        id="template-name"
-                        aria-label="Template name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Template name..."
-                        className="h-9 w-64 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
+                        id="template-from-email"
+                        value={fromEmail}
+                        onChange={(event) => onFromEmailChange(event.target.value)}
+                        placeholder="Invites <invites@surrogacyforce.com>"
                     />
-                    <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
-                        {isPublished ? "Published" : "Draft"}
-                    </Badge>
-                </div>
-                <div className="flex items-center gap-3">
-                    {!isNew && (
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setShowDeleteDialog(true)}
-                            disabled={deleteTemplate.isPending || isSaving || isPublishing}
-                        >
-                            {deleteTemplate.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            ) : (
-                                <Trash2Icon className="mr-2 size-4" />
-                            )}
-                            Delete
-                        </Button>
+                    {fromEmailError ? (
+                        <p className="text-xs text-red-600">{fromEmailError}</p>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">Leave blank to use the org default sender.</p>
                     )}
-                    <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving || isPublishing}>
-                        {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                        Save Draft
-                    </Button>
-                    <Button size="sm" onClick={handlePublish} disabled={isSaving || isPublishing}>
-                        {isPublishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                        Publish
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="template-category">Category (optional)</Label>
+                    <Input
+                        id="template-category"
+                        value={category}
+                        onChange={(event) => onCategoryChange(event.target.value)}
+                        placeholder="onboarding"
+                    />
+                    <p className="text-xs text-muted-foreground">Helps orgs filter templates in their library.</p>
+                </div>
+            </div>
+        </>
+    )
+}
+
+function EmailBodyEditor({
+    body,
+    editorMode,
+    hasComplexHtml,
+    templateVariables,
+    variablesLoading,
+    unknownVariables,
+    missingRequiredVariables,
+    htmlBodyRef,
+    visualBodyRef,
+    onBodyChange,
+    onEditorModeChange,
+    onInsertVariable,
+    onInsertLogo,
+    onActiveInsertionTargetChange,
+    onHtmlBodySelection,
+}: EmailContentCardProps) {
+    return (
+        <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label id="template-body-label" htmlFor={editorMode === "html" ? "template-body-html" : undefined}>
+                    Email Body *
+                </Label>
+                <div className="flex flex-wrap items-center gap-2">
+                    <ToggleGroup
+                        multiple={false}
+                        value={editorMode ? [editorMode] : []}
+                        onValueChange={(value) => {
+                            const next = value[0] as EditorMode | undefined
+                            if (next) onEditorModeChange(next)
+                        }}
+                    >
+                        <ToggleGroupItem value="visual" className="h-8">
+                            Visual
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="html" className="h-8">
+                            HTML
+                        </ToggleGroupItem>
+                    </ToggleGroup>
+                    <TemplateVariablePicker
+                        variables={templateVariables}
+                        disabled={variablesLoading || templateVariables.length === 0}
+                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
+                        onSelect={(variable) => onInsertVariable(variable.name)}
+                    />
+                    <Button type="button" variant="ghost" size="sm" onClick={onInsertLogo}>
+                        Insert Logo
                     </Button>
                 </div>
             </div>
-
-            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete template?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This permanently deletes{" "}
-                            <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={deleteTemplate.isPending}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleDelete}
-                            disabled={deleteTemplate.isPending}
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                        >
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Email Content</CardTitle>
-                        <CardDescription>Design the default template shared to org libraries.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="template-subject">Subject *</Label>
-                            <Input
-                                id="template-subject"
-                                ref={subjectRef}
-                                value={subject}
-                                onChange={(e) => setSubject(e.target.value)}
-                                onFocus={(e) => {
-                                    setActiveInsertionTarget("subject")
-                                    recordSelection(e.currentTarget, subjectSelectionRef)
-                                }}
-                                onKeyUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
-                                onMouseUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
-                                onSelect={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
-                                placeholder="You're invited to join {{org_name}}"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Used as the default subject in org copies.
-                            </p>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="template-from-email">From (optional)</Label>
-                                <Input
-                                    id="template-from-email"
-                                    value={fromEmail}
-                                    onChange={(e) => setFromEmail(e.target.value)}
-                                    placeholder="Invites <invites@surrogacyforce.com>"
-                                />
-                                {fromEmailError ? (
-                                    <p className="text-xs text-red-600">{fromEmailError}</p>
-                                ) : (
-                                    <p className="text-xs text-muted-foreground">
-                                        Leave blank to use the org default sender.
-                                    </p>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="template-category">Category (optional)</Label>
-                                <Input
-                                    id="template-category"
-                                    value={category}
-                                    onChange={(e) => setCategory(e.target.value)}
-                                    placeholder="onboarding"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Helps orgs filter templates in their library.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <Label
-                                    id="template-body-label"
-                                    htmlFor={effectiveEditorMode === "html" ? "template-body-html" : undefined}
-                                >
-                                    Email Body *
-                                </Label>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <ToggleGroup
-                                        multiple={false}
-                                        value={effectiveEditorMode ? [effectiveEditorMode] : []}
-                                        onValueChange={(value) => {
-                                            const next = value[0] as EditorMode | undefined
-                                            if (!next) return
-                                            setEditorMode(next)
-                                            setEditorModeTouched(true)
-                                            setActiveInsertionTarget((current) =>
-                                                current === "subject"
-                                                    ? current
-                                                    : next === "html"
-                                                      ? "body_html"
-                                                      : "body_visual"
-                                            )
-                                        }}
-                                    >
-                                        <ToggleGroupItem value="visual" className="h-8">
-                                            Visual
-                                        </ToggleGroupItem>
-                                        <ToggleGroupItem value="html" className="h-8">
-                                            HTML
-                                        </ToggleGroupItem>
-                                    </ToggleGroup>
-                                    <TemplateVariablePicker
-                                        variables={templateVariables}
-                                        disabled={variablesLoading || templateVariables.length === 0}
-                                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                                        onSelect={(variable) => {
-                                            if (variable.name === "unsubscribe_url") {
-                                                toast.info("Unsubscribe link is added automatically.")
-                                                return
-                                            }
-                                            insertToken(`{{${variable.name}}}`)
-                                        }}
-                                    />
-                                    <Button type="button" variant="ghost" size="sm" onClick={insertOrgLogo}>
-                                        Insert Logo
-                                    </Button>
-                                </div>
-                            </div>
-                            {effectiveEditorMode === "visual" ? (
-                                <RichTextEditor
-                                    ref={visualBodyRef}
-                                    content={body}
-                                    onChange={(html) => setBody(html)}
-                                    onFocus={() => setActiveInsertionTarget("body_visual")}
-                                    ariaLabelledBy="template-body-label"
-                                    placeholder="Write your email content here..."
-                                    minHeight="220px"
-                                    maxHeight="420px"
-                                    enableImages
-                                    enableEmojiPicker
-                                />
-                            ) : (
-                                <Textarea
-                                    id="template-body-html"
-                                    aria-labelledby="template-body-label"
-                                    ref={htmlBodyRef}
-                                    value={body}
-                                    onChange={(event) => setBody(event.target.value)}
-                                    onFocus={(event) => {
-                                        setActiveInsertionTarget("body_html")
-                                        recordSelection(event.currentTarget, htmlBodySelectionRef)
-                                    }}
-                                    onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    placeholder="Paste or edit the HTML for this template..."
-                                    className="min-h-[240px] font-mono text-xs leading-relaxed"
-                                />
-                            )}
-                            {effectiveEditorMode === "visual" && hasComplexHtml && (
-                                <p className="text-xs text-amber-600">
-                                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
-                                </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                                Use double braces for variables, e.g. <span className="font-mono">{"{{first_name}}"}</span>.
-                            </p>
-                            {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
-                                (subject.trim() || body.trim()) && (
-                                    <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
-                                        <AlertTriangleIcon className="size-4" />
-                                        <AlertTitle>Template variables</AlertTitle>
-                                        <AlertDescription className="text-amber-800 dark:text-amber-100">
-                                            {unknownVariables.length > 0 && (
-                                                <p>
-                                                    Unknown:{" "}
-                                                    <span className="font-mono">
-                                                        {unknownVariables.map((v) => `{{${v}}}`).join(", ")}
-                                                    </span>
-                                                </p>
-                                            )}
-                                            {missingRequiredVariables.length > 0 && (
-                                                <p>
-                                                    Missing required:{" "}
-                                                    <span className="font-mono">
-                                                        {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
-                                                    </span>
-                                                </p>
-                                            )}
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <div className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <EyeIcon className="size-4" />
-                                Preview
-                            </CardTitle>
-                            <CardDescription>Sanitized preview of the HTML output.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {previewHtml ? (
-                                <div
-                                    className="prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: previewHtml }}
-                                />
-                            ) : (
-                                <div className="text-sm text-muted-foreground">
-                                    Add content to preview the template.
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Send test email</CardTitle>
-                            <CardDescription>
-                                Render this template for a specific organization and send to a test inbox.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="space-y-2">
-                                <Label htmlFor="test-org-id">Organization ID</Label>
-                                <Input
-                                    id="test-org-id"
-                                    value={testOrgId}
-                                    onChange={(event) => setTestOrgId(event.target.value)}
-                                    placeholder="UUID of an organization"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="test-email">Test email</Label>
-                                <Input
-                                    id="test-email"
-                                    type="email"
-                                    value={testEmail}
-                                    onChange={(event) => setTestEmail(event.target.value)}
-                                    placeholder="test@example.com"
-                                />
-                            </div>
-
-                            <Accordion defaultValue={[]} className="rounded-lg">
-                                <AccordionItem value="variables">
-                                    <AccordionTrigger>Variables (optional)</AccordionTrigger>
-                                    <AccordionContent>
-                                        <div className="space-y-3">
-                                            {testHasUnsubscribeUrl && (
-                                                <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                                                    <span className="font-mono">
-                                                        {"{{unsubscribe_url}}"}
-                                                    </span>{" "}
-                                                    is generated automatically for the recipient.
-                                                </div>
-                                            )}
-
-                                            {testEditableVariableNames.length === 0 ? (
-                                                <p className="text-sm text-muted-foreground">
-                                                    No variables found in this template.
-                                                </p>
-                                            ) : (
-                                                testEditableVariableNames.map((variableName) => (
-                                                    <div key={variableName} className="space-y-1">
-                                                        <Label
-                                                            htmlFor={`test-var-${variableName}`}
-                                                            className="font-mono text-xs"
-                                                        >
-                                                            {`{{${variableName}}}`}
-                                                        </Label>
-                                                        <Input
-                                                            id={`test-var-${variableName}`}
-                                                            value={testVariables[variableName] ?? ""}
-                                                            onChange={(event) => {
-                                                                const value = event.target.value
-                                                                setTestVariables((prev) => ({
-                                                                    ...prev,
-                                                                    [variableName]: value,
-                                                                }))
-                                                                setTestTouched((prev) => ({
-                                                                    ...prev,
-                                                                    [variableName]: true,
-                                                                }))
-                                                            }}
-                                                        />
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            </Accordion>
-
-                            {isNew && (
-                                <p className="text-xs text-muted-foreground">
-                                    Save template first.
-                                </p>
-                            )}
-
-                            <Button
-                                onClick={handleSendTest}
-                                disabled={isNew || isSendingTest || isSaving || isPublishing}
-                            >
-                                {isSendingTest ? (
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <SendIcon className="mr-2 size-4" />
-                                )}
-                                Send test
-                            </Button>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-
-            <PublishDialog
-                open={showPublishDialog}
-                onOpenChange={setShowPublishDialog}
-                onPublish={confirmPublish}
-                isLoading={isPublishing}
-                defaultPublishAll={templateData?.is_published_globally ?? true}
-                initialOrgIds={templateData?.target_org_ids ?? []}
+            {editorMode === "visual" ? (
+                <RichTextEditor
+                    ref={visualBodyRef}
+                    content={body}
+                    onChange={onBodyChange}
+                    onFocus={() => onActiveInsertionTargetChange("body_visual")}
+                    ariaLabelledBy="template-body-label"
+                    placeholder="Write your email content here..."
+                    minHeight="220px"
+                    maxHeight="420px"
+                    enableImages
+                    enableEmojiPicker
+                />
+            ) : (
+                <Textarea
+                    id="template-body-html"
+                    aria-labelledby="template-body-label"
+                    ref={htmlBodyRef}
+                    value={body}
+                    onChange={(event) => onBodyChange(event.target.value)}
+                    onFocus={(event) => {
+                        onActiveInsertionTargetChange("body_html")
+                        onHtmlBodySelection(event.currentTarget)
+                    }}
+                    onKeyUp={(event) => onHtmlBodySelection(event.currentTarget)}
+                    onMouseUp={(event) => onHtmlBodySelection(event.currentTarget)}
+                    onSelect={(event) => onHtmlBodySelection(event.currentTarget)}
+                    placeholder="Paste or edit the HTML for this template..."
+                    className="min-h-[240px] font-mono text-xs leading-relaxed"
+                />
+            )}
+            {editorMode === "visual" && hasComplexHtml && (
+                <p className="text-xs text-amber-600">
+                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
+                </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+                Use double braces for variables, e.g. <span className="font-mono">{"{{first_name}}"}</span>.
+            </p>
+            <VariableValidationAlert
+                subjectOrBodyHasContent={Boolean(body.trim())}
+                unknownVariables={unknownVariables}
+                missingRequiredVariables={missingRequiredVariables}
             />
         </div>
+    )
+}
+
+interface VariableValidationAlertProps {
+    subjectOrBodyHasContent: boolean
+    unknownVariables: string[]
+    missingRequiredVariables: string[]
+}
+
+function VariableValidationAlert({
+    subjectOrBodyHasContent,
+    unknownVariables,
+    missingRequiredVariables,
+}: VariableValidationAlertProps) {
+    if (!subjectOrBodyHasContent || (unknownVariables.length === 0 && missingRequiredVariables.length === 0)) {
+        return null
+    }
+
+    return (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
+            <AlertTriangleIcon className="size-4" />
+            <AlertTitle>Template variables</AlertTitle>
+            <AlertDescription className="text-amber-800 dark:text-amber-100">
+                {unknownVariables.length > 0 && (
+                    <p>
+                        Unknown:{" "}
+                        <span className="font-mono">{unknownVariables.map((v) => `{{${v}}}`).join(", ")}</span>
+                    </p>
+                )}
+                {missingRequiredVariables.length > 0 && (
+                    <p>
+                        Missing required:{" "}
+                        <span className="font-mono">
+                            {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
+                        </span>
+                    </p>
+                )}
+            </AlertDescription>
+        </Alert>
+    )
+}
+
+function PreviewCard({ previewHtml }: { previewHtml: string }) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <EyeIcon className="size-4" />
+                    Preview
+                </CardTitle>
+                <CardDescription>Sanitized preview of the HTML output.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {previewHtml ? (
+                    <TrustedSanitizedHtmlContent html={previewHtml} className="prose prose-sm max-w-none" />
+                ) : (
+                    <div className="text-sm text-muted-foreground">Add content to preview the template.</div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+interface SendTestEmailCardProps {
+    mode: TemplatePageMode
+    test: {
+        orgId: string
+        email: string
+        variables: Record<string, string>
+        hasUnsubscribeUrl: boolean
+        editableVariableNames: string[]
+    }
+    busy: {
+        sending: boolean
+        saving: boolean
+        publishing: boolean
+    }
+    onTestOrgIdChange: (value: string) => void
+    onTestEmailChange: (value: string) => void
+    onTestVariableChange: (name: string, value: string) => void
+    onSendTest: () => void
+}
+
+function SendTestEmailCard({
+    mode,
+    test,
+    busy,
+    onTestOrgIdChange,
+    onTestEmailChange,
+    onTestVariableChange,
+    onSendTest,
+}: SendTestEmailCardProps) {
+    const isNew = mode === "new"
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Send test email</CardTitle>
+                <CardDescription>Render this template for a specific organization and send to a test inbox.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="space-y-2">
+                    <Label htmlFor="test-org-id">Organization ID</Label>
+                    <Input
+                        id="test-org-id"
+                        value={test.orgId}
+                        onChange={(event) => onTestOrgIdChange(event.target.value)}
+                        placeholder="UUID of an organization"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="test-email">Test email</Label>
+                    <Input
+                        id="test-email"
+                        type="email"
+                        value={test.email}
+                        onChange={(event) => onTestEmailChange(event.target.value)}
+                        placeholder="test@example.com"
+                    />
+                </div>
+
+                <Accordion defaultValue={[]} className="rounded-lg">
+                    <AccordionItem value="variables">
+                        <AccordionTrigger>Variables (optional)</AccordionTrigger>
+                        <AccordionContent>
+                            <div className="space-y-3">
+                                {test.hasUnsubscribeUrl && (
+                                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                                        <span className="font-mono">{"{{unsubscribe_url}}"}</span> is generated
+                                        automatically for the recipient.
+                                    </div>
+                                )}
+
+                                {test.editableVariableNames.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        No variables found in this template.
+                                    </p>
+                                ) : (
+                                    test.editableVariableNames.map((variableName) => (
+                                        <div key={variableName} className="space-y-1">
+                                            <Label htmlFor={`test-var-${variableName}`} className="font-mono text-xs">
+                                                {`{{${variableName}}}`}
+                                            </Label>
+                                            <Input
+                                                id={`test-var-${variableName}`}
+                                                value={test.variables[variableName] ?? ""}
+                                                onChange={(event) =>
+                                                    onTestVariableChange(variableName, event.target.value)
+                                                }
+                                            />
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+
+                {isNew && <p className="text-xs text-muted-foreground">Save template first.</p>}
+
+                <Button onClick={onSendTest} disabled={isNew || busy.sending || busy.saving || busy.publishing}>
+                    {busy.sending ? (
+                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                    ) : (
+                        <SendIcon className="mr-2 size-4" />
+                    )}
+                    Send test
+                </Button>
+            </CardContent>
+        </Card>
     )
 }

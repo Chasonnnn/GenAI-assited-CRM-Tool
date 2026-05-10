@@ -44,7 +44,7 @@ const SESSION_PREVIEW_LIMIT = 80
 
 function truncateText(text: string, max: number) {
     if (text.length <= max) return text
-    return `${text.slice(0, max)}...`
+    return `${text.slice(0, max)}&hellip;`
 }
 
 function formatHistoryTime(value: string) {
@@ -625,7 +625,7 @@ export default function AIAssistantPage() {
 
             {aiSettingsError && (
                 <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                    <AlertCircleIcon className="h-5 w-5 text-destructive" />
+                    <AlertCircleIcon className="size-5 text-destructive" />
                     <div className="flex-1">
                         <p className="text-sm font-medium">Unable to load AI settings</p>
                         <p className="text-xs text-muted-foreground">
@@ -647,7 +647,7 @@ export default function AIAssistantPage() {
             {/* AI Not Enabled Warning */}
             {aiSettings && !isAIEnabled && (
                 <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
-                    <AlertCircleIcon className="h-5 w-5 text-yellow-500" />
+                    <AlertCircleIcon className="size-5 text-yellow-500" />
                     <div className="flex-1">
                         <p className="text-sm font-medium">AI Assistant is not enabled</p>
                         <p className="text-xs text-muted-foreground">Contact your admin to enable AI features and configure an API key.</p>
@@ -661,7 +661,7 @@ export default function AIAssistantPage() {
                 <div className="hidden lg:block lg:overflow-y-auto">
                     <div className="space-y-4 pr-2">
                         {/* Quick Actions */}
-                        <Card className="gap-2 py-3 px-3">
+                        <Card className="gap-2 p-3">
                             <div className="text-sm font-medium">Quick Actions</div>
                             <div className="text-xs text-muted-foreground">Common tasks to get started</div>
                             <div className="space-y-1">
@@ -674,7 +674,7 @@ export default function AIAssistantPage() {
                                         onClick={() => setMessage(action.label)}
                                         disabled={!isAIEnabled || isStreaming}
                                     >
-                                        <action.icon className={`h-3.5 w-3.5 ${action.color}`} />
+                                        <action.icon className={`size-3.5 ${action.color}`} />
                                         {action.label}
                                     </Button>
                                 ))}
@@ -682,7 +682,7 @@ export default function AIAssistantPage() {
                         </Card>
 
                         {/* Suggested Actions */}
-                        <Card className="gap-2 py-3 px-3">
+                        <Card className="gap-2 p-3">
                             <div className="text-sm font-medium">Suggested Actions</div>
                             <div className="text-xs text-muted-foreground">Based on your recent activity</div>
                             <div className="space-y-0">
@@ -693,7 +693,7 @@ export default function AIAssistantPage() {
                                         disabled={!isAIEnabled || isStreaming}
                                         className="flex w-full items-start gap-2 rounded-md py-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
                                     >
-                                        <SparklesIcon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-teal-500" />
+                                        <SparklesIcon className="mt-0.5 size-3.5 flex-shrink-0 text-teal-500" />
                                         <span className="text-sm leading-tight">{suggestion}</span>
                                     </button>
                                 ))}
@@ -701,7 +701,7 @@ export default function AIAssistantPage() {
                         </Card>
 
                         {/* Chat History */}
-                        <Card className="gap-2 py-3 px-3">
+                        <Card className="gap-2 p-3">
                             <div className="flex items-center justify-between">
                                 <div className="text-sm font-medium">Chat History</div>
                                 <Button
@@ -757,13 +757,13 @@ export default function AIAssistantPage() {
                 <Card className="flex h-full min-h-0 flex-col overflow-hidden">
                     <CardHeader className="shrink-0 border-b py-3">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                                <BotIcon className="h-4 w-4 text-primary" />
+                            <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
+                                <BotIcon className="size-4 text-primary" />
                             </div>
                             <div className="flex-1">
                                 <CardTitle className="text-sm">AI Assistant</CardTitle>
                                 <div className="flex items-center gap-1.5">
-                                    <div className={`h-1.5 w-1.5 rounded-full ${isAIEnabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                    <div className={`size-1.5 rounded-full ${isAIEnabled ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                                     <CardDescription className="text-xs">
                                         {isAIEnabled ? 'Online' : 'Not configured'}
                                     </CardDescription>
@@ -782,8 +782,8 @@ export default function AIAssistantPage() {
                                 <div key={msg.id} className="space-y-2">
                                     <div className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                                         {msg.role === "assistant" && (
-                                            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                                                <BotIcon className="h-3.5 w-3.5 text-primary" />
+                                            <div className="flex size-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                                                <BotIcon className="size-3.5 text-primary" />
                                             </div>
                                         )}
                                         <div className={`max-w-[80%] space-y-0.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
@@ -793,8 +793,8 @@ export default function AIAssistantPage() {
                                             >
                                                 {msg.role === "assistant" && msg.status === "thinking" && !msg.content ? (
                                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                        <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-                                                        Thinking...
+                                                        <Loader2Icon className="size-3.5 animate-spin" />
+                                                        Thinking
                                                     </div>
                                                 ) : (
                                                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
@@ -803,8 +803,8 @@ export default function AIAssistantPage() {
                                             <p className="px-1 text-[10px] text-muted-foreground">{msg.timestamp}</p>
                                         </div>
                                         {msg.role === "user" && (
-                                            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted">
-                                                <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                                            <div className="flex size-7 flex-shrink-0 items-center justify-center rounded-full bg-muted">
+                                                <UserIcon className="size-3.5 text-muted-foreground" />
                                             </div>
                                         )}
                                     </div>
@@ -835,14 +835,14 @@ export default function AIAssistantPage() {
                                                                     disabled={rejectAction.isPending}
                                                                     aria-label={`Reject action ${action.action_type.replace(/_/g, " ")}`}
                                                                 >
-                                                                    <XIcon className="h-4 w-4" />
+                                                                    <XIcon className="size-4" />
                                                                 </Button>
                                                                 <Button
                                                                     size="sm"
                                                                     onClick={() => handleApprove(action.approval_id)}
                                                                     disabled={approveAction.isPending}
                                                                 >
-                                                                    <CheckIcon className="h-4 w-4 mr-1" />
+                                                                    <CheckIcon className="size-4 mr-1" />
                                                                     Approve
                                                                 </Button>
                                                             </div>
@@ -869,7 +869,7 @@ export default function AIAssistantPage() {
                     <CardContent className="shrink-0 border-t bg-background p-3">
                         <div className="flex gap-2">
                             <Input
-                                placeholder="Ask anything..."
+                                placeholder="Ask anything"
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 onKeyDown={(e) => {
@@ -888,7 +888,7 @@ export default function AIAssistantPage() {
                                     variant="outline"
                                     aria-label="Stop generating"
                                 >
-                                    <StopCircleIcon className="h-4 w-4" />
+                                    <StopCircleIcon className="size-4" />
                                 </Button>
                             ) : (
                                 <Button
@@ -897,7 +897,7 @@ export default function AIAssistantPage() {
                                     disabled={!message.trim() || !isAIEnabled}
                                     aria-label="Send message"
                                 >
-                                    <SendIcon className="h-4 w-4" />
+                                    <SendIcon className="size-4" />
                                 </Button>
                             )}
                         </div>

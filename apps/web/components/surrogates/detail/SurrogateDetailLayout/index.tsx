@@ -42,7 +42,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
         return (
             <div className="flex min-h-screen items-center justify-center">
                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Loading surrogate...</span>
+                <span className="ml-2 text-muted-foreground">Loading surrogate</span>
             </div>
         )
     }
@@ -106,7 +106,7 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                             Journey
                         </TabsTrigger>
                         <TabsTrigger value="ai" className="gap-1">
-                            <SparklesIcon className="h-3 w-3" />
+                            <SparklesIcon className="size-3" />
                             AI
                         </TabsTrigger>
                     </TabsList>

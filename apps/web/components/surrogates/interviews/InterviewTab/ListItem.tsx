@@ -59,7 +59,7 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
         >
             <div className="flex items-start gap-3">
                 <div className={cn("p-2 rounded-lg", colorClass)}>
-                    <Icon className="h-4 w-4" />
+                    <Icon className="size-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -76,16 +76,16 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
                     <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                         {interview.duration_minutes && (
                             <span className="flex items-center gap-1">
-                                <ClockIcon className="h-3 w-3" />
+                                <ClockIcon className="size-3" />
                                 {interview.duration_minutes}m
                             </span>
                         )}
                         <span className="flex items-center gap-1">
-                            <MessageSquareIcon className="h-3 w-3" />
+                            <MessageSquareIcon className="size-3" />
                             {interview.notes_count}
                         </span>
                         <span className="flex items-center gap-1">
-                            <PaperclipIcon className="h-3 w-3" />
+                            <PaperclipIcon className="size-3" />
                             {interview.attachments_count}
                         </span>
                     </div>

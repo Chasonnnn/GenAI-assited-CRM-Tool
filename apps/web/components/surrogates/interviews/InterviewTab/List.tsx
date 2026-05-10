@@ -19,7 +19,7 @@ export function List({ className }: ListProps) {
                 <CardTitle className="text-base">Interviews ({interviews.length})</CardTitle>
                 {canEdit && (
                     <Button size="sm" onClick={() => openEditor()}>
-                        <PlusIcon className="h-4 w-4" />
+                        <PlusIcon className="size-4" />
                     </Button>
                 )}
             </CardHeader>

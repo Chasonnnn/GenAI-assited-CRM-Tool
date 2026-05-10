@@ -9,11 +9,6 @@ import { cn } from "@/lib/utils"
 
 export function ThemeToggle({ className }: { className?: string }) {
     const { resolvedTheme, setTheme } = useTheme()
-    const [mounted, setMounted] = React.useState(false)
-
-    React.useEffect(() => {
-        setMounted(true)
-    }, [])
 
     const toggleTheme = () => {
         const newTheme = resolvedTheme === "dark" ? "light" : "dark"
@@ -56,19 +51,6 @@ export function ThemeToggle({ className }: { className?: string }) {
         })
     }
 
-    if (!mounted) {
-        return (
-            <Button
-                variant="ghost"
-                size="icon"
-                className={cn("relative", className)}
-                aria-label="Toggle theme"
-            >
-                <Sun className="h-[1.2rem] w-[1.2rem]" />
-            </Button>
-        )
-    }
-
     return (
         <Button
             variant="ghost"
@@ -77,8 +59,8 @@ export function ThemeToggle({ className }: { className?: string }) {
             className={cn("relative", className)}
             aria-label="Toggle theme"
         >
-            <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all duration-300 dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100" />
+            <Sun className="size-[1.2rem] rotate-0 scale-100 transition-all duration-300 dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute size-[1.2rem] rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100" />
         </Button>
     )
 }

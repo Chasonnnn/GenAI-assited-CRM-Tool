@@ -180,9 +180,10 @@ function TrustAddressField({
     return (
         <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1 text-sm">
+                <label htmlFor="trust-address-line-1" className="space-y-1 text-sm">
                     <span className="text-xs text-muted-foreground">Address line 1</span>
                     <Input
+                        id="trust-address-line-1"
                         ref={firstInputRef}
                         value={draft.trust_address_line1}
                         onChange={(event) => setField("trust_address_line1", event.target.value)}
@@ -190,18 +191,20 @@ function TrustAddressField({
                         disabled={isSaving}
                     />
                 </label>
-                <label className="space-y-1 text-sm">
+                <label htmlFor="trust-address-line-2" className="space-y-1 text-sm">
                     <span className="text-xs text-muted-foreground">Address line 2</span>
                     <Input
+                        id="trust-address-line-2"
                         value={draft.trust_address_line2}
                         onChange={(event) => setField("trust_address_line2", event.target.value)}
                         aria-label="Trust address line 2"
                         disabled={isSaving}
                     />
                 </label>
-                <label className="space-y-1 text-sm">
+                <label htmlFor="trust-city" className="space-y-1 text-sm">
                     <span className="text-xs text-muted-foreground">City</span>
                     <Input
+                        id="trust-city"
                         value={draft.trust_city}
                         onChange={(event) => setField("trust_city", event.target.value)}
                         aria-label="Trust city"
@@ -209,9 +212,10 @@ function TrustAddressField({
                     />
                 </label>
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                    <label className="space-y-1 text-sm">
+                    <label htmlFor="trust-state" className="space-y-1 text-sm">
                         <span className="text-xs text-muted-foreground">State</span>
                         <Input
+                            id="trust-state"
                             value={draft.trust_state}
                             onChange={(event) => setField("trust_state", event.target.value)}
                             aria-label="Trust state"
@@ -219,9 +223,10 @@ function TrustAddressField({
                             maxLength={2}
                         />
                     </label>
-                    <label className="space-y-1 text-sm">
+                    <label htmlFor="trust-zip" className="space-y-1 text-sm">
                         <span className="text-xs text-muted-foreground">ZIP</span>
                         <Input
+                            id="trust-zip"
                             value={draft.trust_postal}
                             onChange={(event) => setField("trust_postal", event.target.value)}
                             aria-label="Trust ZIP"
@@ -235,7 +240,7 @@ function TrustAddressField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="size-6"
                     onClick={handleSave}
                     disabled={isSaving}
                     aria-label="Save Trust address"
@@ -250,7 +255,7 @@ function TrustAddressField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="size-6"
                     onClick={handleCancel}
                     disabled={isSaving}
                     aria-label="Cancel Trust address"
@@ -353,7 +358,7 @@ function TrustNotesField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="size-6"
                     onClick={handleSave}
                     disabled={isSaving}
                     aria-label="Save Trust notes"
@@ -368,7 +373,7 @@ function TrustNotesField({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
+                    className="size-6"
                     onClick={handleCancel}
                     disabled={isSaving}
                     aria-label="Cancel Trust notes"

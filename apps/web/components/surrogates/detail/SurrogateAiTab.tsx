@@ -44,7 +44,7 @@ export function SurrogateAiTab({
             <Card>
                 <CardContent className="pt-6">
                     <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <BrainIcon className="mb-4 h-12 w-12 text-muted-foreground" />
+                        <BrainIcon className="mb-4 size-12 text-muted-foreground" />
                         <h3 className="text-lg font-medium">AI Assistant Not Enabled</h3>
                         <p className="mt-2 max-w-md text-sm text-muted-foreground">
                             Contact your admin to enable AI features and configure an API key in
@@ -61,7 +61,7 @@ export function SurrogateAiTab({
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <SparklesIcon className="h-4 w-4" />
+                        <SparklesIcon className="size-4" />
                         Surrogate Summary
                     </CardTitle>
                 </CardHeader>
@@ -73,11 +73,11 @@ export function SurrogateAiTab({
                     >
                         {isGeneratingSummary ? (
                             <>
-                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" /> Generating...
+                                <Loader2Icon className="mr-2 size-4 animate-spin" /> Generating
                             </>
                         ) : (
                             <>
-                                <SparklesIcon className="mr-2 h-4 w-4" /> Generate Summary
+                                <SparklesIcon className="mr-2 size-4" /> Generate Summary
                             </>
                         )}
                     </Button>
@@ -100,8 +100,8 @@ export function SurrogateAiTab({
                                         Suggested Next Steps
                                     </h4>
                                     <ul className="space-y-1 text-sm text-muted-foreground">
-                                        {aiSummary.suggested_next_steps.map((step, i) => (
-                                            <li key={i} className="flex items-start gap-2">
+                                        {aiSummary.suggested_next_steps.map((step) => (
+                                            <li key={step} className="flex items-start gap-2">
                                                 <span className="text-primary">•</span>
                                                 {step}
                                             </li>
@@ -132,7 +132,7 @@ export function SurrogateAiTab({
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <MailIcon className="h-4 w-4" />
+                        <MailIcon className="size-4" />
                         Draft Email
                     </CardTitle>
                 </CardHeader>
@@ -164,11 +164,11 @@ export function SurrogateAiTab({
                     >
                         {isDraftingEmail ? (
                             <>
-                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" /> Drafting...
+                                <Loader2Icon className="mr-2 size-4 animate-spin" /> Drafting
                             </>
                         ) : (
                             <>
-                                <MailIcon className="mr-2 h-4 w-4" /> Draft Email
+                                <MailIcon className="mr-2 size-4" /> Draft Email
                             </>
                         )}
                     </Button>
@@ -204,7 +204,7 @@ export function SurrogateAiTab({
                                         )
                                     }}
                                 >
-                                    <CopyIcon className="mr-1 h-3 w-3" /> Copy
+                                    <CopyIcon className="mr-1 size-3" /> Copy
                                 </Button>
                                 <Button
                                     size="sm"
@@ -216,7 +216,7 @@ export function SurrogateAiTab({
                                         )
                                     }}
                                 >
-                                    <MailIcon className="mr-1 h-3 w-3" /> Open in Email
+                                    <MailIcon className="mr-1 size-3" /> Open in Email
                                 </Button>
                             </div>
                         </div>

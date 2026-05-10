@@ -407,7 +407,7 @@ export default function AuditLogPage() {
                             <div className="mt-3 grid gap-3 md:grid-cols-2">
                                 {Object.entries(AI_EVENT_LABELS).map(([key, meta]) => (
                                     <div key={key} className="flex items-center gap-2 text-sm">
-                                        <meta.icon className={`h-4 w-4 ${meta.tone}`} />
+                                        <meta.icon className={`size-4 ${meta.tone}`} />
                                         <span className="flex-1 text-muted-foreground">{meta.label}</span>
                                         <span className="font-semibold text-foreground">
                                             {aiActivity?.counts?.[key] ?? 0}
@@ -420,7 +420,7 @@ export default function AuditLogPage() {
                                 <div className="mt-2 space-y-2">
                                     {aiActivityLoading ? (
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <Loader2Icon className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                            <Loader2Icon className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                             Loading AI activity…
                                         </div>
                                     ) : aiActivity?.recent?.length ? (
@@ -436,7 +436,7 @@ export default function AuditLogPage() {
                                                     className="flex items-start gap-2 text-xs w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
                                                     onClick={() => setEventTypeFilter(entry.event_type)}
                                                 >
-                                                    <meta.icon className={`mt-0.5 h-3.5 w-3.5 ${meta.tone}`} />
+                                                    <meta.icon className={`mt-0.5 size-3.5 ${meta.tone}`} />
                                                     <div className="flex-1">
                                                         <div className="font-medium text-foreground">{meta.label}</div>
                                                         <div className="text-[11px] text-muted-foreground">
@@ -534,7 +534,7 @@ export default function AuditLogPage() {
                                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                                 disabled={page <= 1}
                                             >
-                                                <ChevronLeft className="h-4 w-4" />
+                                                <ChevronLeft className="size-4" />
                                                 Previous
                                             </Button>
                                             <Button
@@ -544,7 +544,7 @@ export default function AuditLogPage() {
                                                 disabled={page >= totalPages}
                                             >
                                                 Next
-                                                <ChevronRight className="h-4 w-4" />
+                                                <ChevronRight className="size-4" />
                                             </Button>
                                         </div>
                                     </div>

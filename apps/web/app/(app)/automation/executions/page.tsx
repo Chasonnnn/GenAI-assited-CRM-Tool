@@ -265,7 +265,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Total 24h</p>
                                 {statsLoading ? (
-                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{stats?.total_24h || 0}</p>
                                 )}
@@ -283,7 +283,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Success Rate</p>
                                 {statsLoading ? (
-                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{stats?.success_rate?.toFixed(1) || 0}%</p>
                                 )}
@@ -301,7 +301,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Failed 24h</p>
                                 {statsLoading ? (
-                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{stats?.failed_24h || 0}</p>
                                 )}
@@ -319,7 +319,7 @@ export default function WorkflowExecutionsPage() {
                             <div>
                                 <p className="text-sm text-muted-foreground">Avg Duration</p>
                                 {statsLoading ? (
-                                    <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
+                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
                                 ) : (
                                     <p className="text-2xl font-bold">{formatDuration(stats?.avg_duration_ms || 0)}</p>
                                 )}
@@ -406,14 +406,14 @@ export default function WorkflowExecutionsPage() {
                             {executionsLoading ? (
                                 <TableRow>
                                     <TableCell colSpan={7} className="py-12 text-center">
-                                        <Loader2Icon className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
-                                        <p className="mt-2 text-sm text-muted-foreground">Loading executions...</p>
+                                        <Loader2Icon className="mx-auto size-6 animate-spin text-muted-foreground" />
+                                        <p className="mt-2 text-sm text-muted-foreground">Loading executions</p>
                                     </TableCell>
                                 </TableRow>
                             ) : executions.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} className="py-12 text-center">
-                                        <ActivityIcon className="mx-auto h-8 w-8 text-muted-foreground/50" />
+                                        <ActivityIcon className="mx-auto size-8 text-muted-foreground/50" />
                                         <p className="mt-2 text-sm text-muted-foreground">No executions found</p>
                                     </TableCell>
                                 </TableRow>

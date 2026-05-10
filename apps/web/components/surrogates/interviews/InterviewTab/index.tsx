@@ -70,7 +70,7 @@ function InterviewTabContent() {
             <Card>
                 <CardContent className="flex items-center justify-center py-16">
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                    <span className="ml-2 text-muted-foreground">Loading interviews...</span>
+                    <span className="ml-2 text-muted-foreground">Loading interviews</span>
                 </CardContent>
             </Card>
         )
@@ -81,14 +81,14 @@ function InterviewTabContent() {
         return (
             <Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                    <FileTextIcon className="h-16 w-16 text-muted-foreground mb-4" />
+                    <FileTextIcon className="size-16 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-semibold mb-2">No Interviews</h3>
                     <p className="text-sm text-muted-foreground mb-6 max-w-md">
                         Document phone calls, video interviews, and in-person meetings with this candidate.
                     </p>
                     {canEdit && (
                         <Button onClick={() => openEditor()}>
-                            <PlusIcon className="h-4 w-4 mr-2" />
+                            <PlusIcon className="size-4 mr-2" />
                             Add Interview
                         </Button>
                     )}
@@ -135,7 +135,7 @@ function DesktopLayout() {
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
                         <div className="text-center">
-                            <FileTextIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                            <FileTextIcon className="size-12 mx-auto mb-3 opacity-50" />
                             <p>Select an interview to view details</p>
                         </div>
                     </div>
@@ -170,7 +170,7 @@ function MobileLayout() {
                 <Card className="overflow-hidden">
                     <div className="p-2 border-b flex items-center justify-between">
                         <Button variant="ghost" size="sm" onClick={() => selectInterview(null)}>
-                            <ChevronLeftIcon className="h-4 w-4 mr-1" />
+                            <ChevronLeftIcon className="size-4 mr-1" />
                             Back to list
                         </Button>
                         <MobileHeaderActions />
@@ -194,7 +194,7 @@ function MobileLayout() {
                         <CardTitle className="text-base">Interviews ({interviews.length})</CardTitle>
                         {canEdit && (
                             <Button size="sm" onClick={() => openEditor()}>
-                                <PlusIcon className="h-4 w-4 mr-1" />
+                                <PlusIcon className="size-4 mr-1" />
                                 Add
                             </Button>
                         )}

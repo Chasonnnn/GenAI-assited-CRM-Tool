@@ -35,7 +35,14 @@ vi.mock("@/components/ui/select", () => {
         ...props
     }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
         return (
-            <button id={id} type="button" role="combobox" {...props}>
+            <button
+                id={id}
+                type="button"
+                role="combobox"
+                aria-controls={`${id || "mock-select"}-listbox`}
+                aria-expanded="false"
+                {...props}
+            >
                 {children}
             </button>
         )
@@ -48,7 +55,7 @@ vi.mock("@/components/ui/select", () => {
         placeholder?: string
         children?: ((value: string | null) => React.ReactNode) | React.ReactNode
     }) {
-        const { value } = React.useContext(SelectContext)
+        const { value } = React.use(SelectContext)
         if (!value) return <span>{placeholder}</span>
         if (typeof children === "function") {
             return <span>{children(value)}</span>
@@ -57,7 +64,7 @@ vi.mock("@/components/ui/select", () => {
     }
 
     function SelectContent({ children }: { children: React.ReactNode }) {
-        return <div role="listbox">{children}</div>
+        return <div id="mock-select-listbox" role="listbox">{children}</div>
     }
 
     function SelectItem({
@@ -67,9 +74,14 @@ vi.mock("@/components/ui/select", () => {
         value: string
         children: React.ReactNode
     }) {
-        const { onValueChange } = React.useContext(SelectContext)
+        const { onValueChange, value: selectedValue } = React.use(SelectContext)
         return (
-            <button type="button" role="option" onClick={() => onValueChange(value)}>
+            <button
+                type="button"
+                role="option"
+                aria-selected={selectedValue === value}
+                onClick={() => onValueChange(value)}
+            >
                 {children}
             </button>
         )

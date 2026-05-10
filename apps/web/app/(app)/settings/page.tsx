@@ -264,7 +264,7 @@ function OrganizationBrandingFields({
               id="primaryColor"
               value={brandingForm.primaryColor}
               onChange={(event) => onFieldChange("primaryColor", event.target.value)}
-              className="w-10 h-10 rounded cursor-pointer border"
+              className="size-10 rounded cursor-pointer border"
             />
           </div>
           <Input
@@ -797,7 +797,7 @@ function SocialLinksSection() {
       toast.error("Maximum 6 social links allowed")
       return
     }
-    setLinks([...links, { platform: "", url: "" }])
+    setLinks((currentLinks) => [...currentLinks, { platform: "", url: "" }])
   }
 
   const removeLink = (index: number) => {
@@ -1183,7 +1183,7 @@ function OrganizationBrandingSection() {
 // =============================================================================
 
 function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearchParams }) {
-  const router = useRouter()
+  const { replace } = useRouter()
   const { user } = useAuth()
   const resolvedSearchParams = use(searchParams)
 
@@ -1200,7 +1200,7 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
     }
     const queryString = nextParams.toString()
     const nextUrl = queryString ? `/settings?${queryString}` : "/settings"
-    router.replace(nextUrl, { scroll: false })
+    replace(nextUrl, { scroll: false })
   }
 
   return (

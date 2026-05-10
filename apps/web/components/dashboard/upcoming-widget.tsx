@@ -80,7 +80,7 @@ export function UpcomingThisWeekWidget({
                 </CardHeader>
                 <CardContent className="p-6 pt-0 flex-1">
                     <div className="flex items-center justify-center py-12">
-                        <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                     </div>
                 </CardContent>
             </Card>
@@ -98,7 +98,7 @@ export function UpcomingThisWeekWidget({
                 </CardHeader>
                 <CardContent className="p-6 pt-0 flex-1">
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                        <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" />
                         <p className="text-sm text-muted-foreground">Unable to load upcoming items</p>
                     </div>
                 </CardContent>
@@ -165,7 +165,7 @@ export function UpcomingThisWeekWidget({
                         className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 transition-colors h-8"
                     >
                         View all
-                        <ArrowRightIcon className="h-3 w-3" />
+                        <ArrowRightIcon className="size-3" />
                     </Link>
                 </div>
                 <div className="text-sm text-muted-foreground mb-4">Next 7 days</div>
@@ -173,7 +173,7 @@ export function UpcomingThisWeekWidget({
             <CardContent className="p-6 pt-0 flex-1">
                 {!hasItems ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                        <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" />
                         <p className="text-sm font-medium text-muted-foreground">No tasks with due dates this week</p>
                         <Link
                             href={MY_TASKS_HREF}
@@ -233,7 +233,7 @@ function OverdueSummaryRow({
             className="flex items-center gap-3 rounded-lg border border-border bg-card/50 p-3 hover:bg-accent/50 transition-colors"
         >
             <div className="flex-shrink-0 mt-0.5">
-                <AlertTriangleIcon className="h-4 w-4 text-red-600" />
+                <AlertTriangleIcon className="size-4 text-red-600" />
             </div>
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium leading-tight">Overdue tasks</p>
@@ -242,7 +242,7 @@ function OverdueSummaryRow({
             <Badge variant="secondary" className={`flex-shrink-0 ${COUNT_BADGE_CLASS}`}>
                 {count}
             </Badge>
-            <ArrowRightIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <ArrowRightIcon className="size-4 text-muted-foreground flex-shrink-0" />
         </Link>
     )
 }
@@ -293,7 +293,7 @@ function UpcomingItemRow({
     const content = (
         <>
             <div className="flex-shrink-0 mt-0.5">
-                <Icon className={`h-4 w-4 ${item.type === "meeting" ? "text-blue-500" : "text-muted-foreground"}`} />
+                <Icon className={`size-4 ${item.type === "meeting" ? "text-blue-500" : "text-muted-foreground"}`} />
             </div>
 
             <div className="flex-1 min-w-0 space-y-1">
@@ -318,7 +318,7 @@ function UpcomingItemRow({
                     )}
                 </div>
             </div>
-            <ChevronRightIcon className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
+            <ChevronRightIcon className="size-4 text-muted-foreground flex-shrink-0 mt-1" />
         </>
     )
 

@@ -17,6 +17,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
+import { parseDateInput } from "@/lib/utils/date"
 import {
     useNotifications,
     useUnreadCount,
@@ -29,7 +30,7 @@ import type { Notification } from "@/lib/api/notifications"
 import { getNotificationHref } from "@/lib/utils/notification-routing"
 
 export function NotificationBell() {
-    const router = useRouter()
+    const { push } = useRouter()
 
     // Real-time WebSocket connection
     const { isConnected, lastNotification, unreadCount: wsUnreadCount } = useNotificationSocket()
@@ -82,7 +83,7 @@ export function NotificationBell() {
             markRead.mutate(notification.id)
         }
 
-        router.push(getNotificationHref(notification))
+        push(getNotificationHref(notification))
     }
 
     const handleMarkAllRead = () => {
@@ -90,7 +91,7 @@ export function NotificationBell() {
     }
 
     const handleViewAll = () => {
-        router.push("/notifications")
+        push("/notifications")
     }
 
     return (
@@ -99,11 +100,11 @@ export function NotificationBell() {
                 aria-label={triggerLabel}
                 className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
             >
-                <Bell className="h-5 w-5" aria-hidden="true" />
+                <Bell className="size-5" aria-hidden="true" />
                 {isCountLoading && unreadCount === 0 && (
                     <span
                         aria-hidden="true"
-                        className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-muted-foreground/40 animate-pulse"
+                        className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-muted-foreground/40 animate-pulse"
                     />
                 )}
                 {unreadCount > 0 && (
@@ -135,11 +136,11 @@ export function NotificationBell() {
                 {isNotificationsLoading ? (
                     <div className="py-6 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                         <Spinner aria-label="Loading notifications" />
-                        <span>Loading notifications...</span>
+                        <span>Loading notifications</span>
                     </div>
                 ) : notifications.length === 0 ? (
                     <div className="py-6 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <BellOff className="h-5 w-5" aria-hidden="true" />
+                        <BellOff className="size-5" aria-hidden="true" />
                         <span>No notifications</span>
                     </div>
                 ) : (
@@ -160,7 +161,7 @@ export function NotificationBell() {
                                             <span className="sr-only">Unread</span>
                                             <span
                                                 aria-hidden="true"
-                                                className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1"
+                                                className="size-2 rounded-full bg-blue-500 shrink-0 mt-1"
                                             />
                                         </>
                                     )}
@@ -170,8 +171,8 @@ export function NotificationBell() {
                                         {notification.body}
                                     </span>
                                 )}
-                                <span className="text-xs text-muted-foreground">
-                                    {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                <span className="text-xs text-muted-foreground" suppressHydrationWarning>
+                                    {formatDistanceToNow(parseDateInput(notification.created_at), { addSuffix: true })}
                                 </span>
                             </DropdownMenuItem>
                         ))}

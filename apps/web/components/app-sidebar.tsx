@@ -335,7 +335,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     onClick={openSearch}
                     title="Search (⌘K)"
                 >
-                    <Search className="h-4 w-4" />
+                    <Search className="size-4" />
                     {!isCollapsed && (
                         <span className="flex-1 text-left text-muted-foreground">Search</span>
                     )}
@@ -477,7 +477,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                             />
                         }
                     >
-                        <Avatar className="h-8 w-8 rounded-lg">
+                        <Avatar className="size-8 rounded-lg">
                             <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
                             <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                         </Avatar>
@@ -499,8 +499,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     >
                         <DropdownMenuGroup>
                             <DropdownMenuLabel className="p-0 font-normal">
-                                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                    <Avatar className="h-8 w-8 rounded-lg">
+                                <div className="flex items-center gap-2 p-1.5 text-left text-sm">
+                                    <Avatar className="size-8 rounded-lg">
                                         <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                                     </Avatar>
                                     <div className="grid flex-1 text-left text-sm leading-tight">
@@ -516,27 +516,27 @@ export function AppSidebar({ children }: AppSidebarProps) {
                                 className="flex items-center"
                                 render={<Link href="/settings" prefetch={false} />}
                             >
-                                <User className="mr-2 h-4 w-4" />
+                                <User className="mr-2 size-4" />
                                 Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 className="flex items-center"
                                 render={<Link href="/settings/notifications" prefetch={false} />}
                             >
-                                <Bell className="mr-2 h-4 w-4" />
+                                <Bell className="mr-2 size-4" />
                                 Notifications
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 className="flex items-center"
                                 render={<Link href="/settings" prefetch={false} />}
                             >
-                                <Settings className="mr-2 h-4 w-4" />
+                                <Settings className="mr-2 size-4" />
                                 Settings
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                            <LogOut className="mr-2 h-4 w-4" />
+                            <LogOut className="mr-2 size-4" />
                             Log out
                         </DropdownMenuItem>
                     </DropdownMenuContent>

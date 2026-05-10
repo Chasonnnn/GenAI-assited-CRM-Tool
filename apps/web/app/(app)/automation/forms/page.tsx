@@ -83,7 +83,7 @@ function formatRelativeTime(dateString: string): string {
 }
 
 export default function FormsListPage() {
-    const router = useRouter()
+    const { push } = useRouter()
     const { data: forms, isLoading } = useForms()
     const createFormMutation = useCreateForm()
     const deleteFormMutation = useDeleteForm()
@@ -114,7 +114,7 @@ export default function FormsListPage() {
             setShowCreateModal(false)
             setFormName("")
             setFormDescription("")
-            router.push(`/automation/forms/${newForm.id}`)
+            push(`/automation/forms/${newForm.id}`)
         } catch {
             // Error handling is done by React Query
         }
@@ -128,7 +128,7 @@ export default function FormsListPage() {
                 templateId,
                 payload: { name: templateName },
             })
-            router.push(`/automation/forms/${newForm.id}`)
+            push(`/automation/forms/${newForm.id}`)
         } catch {
             // Error handling is done by React Query
         } finally {
@@ -339,7 +339,7 @@ export default function FormsListPage() {
                             variant="ghost"
                             size="icon"
                             aria-label="Back to automation"
-                            onClick={() => router.push("/automation")}
+                            onClick={() => push("/automation")}
                         >
                             <ArrowLeftIcon className="size-4" aria-hidden="true" />
                         </Button>
@@ -391,8 +391,8 @@ export default function FormsListPage() {
                                 </Card>
                             ) : (
                                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {[...forms]
-                                        .sort((a, b) => {
+                                    {forms
+                                        .toSorted((a, b) => {
                                             // Published first, then draft, then archived
                                             const order = { published: 0, draft: 1, archived: 2 } as const
                                             const isOrderKey = (value: string): value is keyof typeof order =>
@@ -401,13 +401,13 @@ export default function FormsListPage() {
                                             const bOrder = isOrderKey(b.status) ? order[b.status] : 3
                                             if (aOrder !== bOrder) return aOrder - bOrder
                                             // Then by updated_at descending
-                                            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+                                            return parseDateInput(b.updated_at).getTime() - parseDateInput(a.updated_at).getTime()
                                         })
                                         .map((form) => (
                                             <Card
                                                 key={form.id}
                                                 className="cursor-pointer hover:bg-accent/50 transition-colors"
-                                                onClick={() => router.push(`/automation/forms/${form.id}`)}
+                                                onClick={() => push(`/automation/forms/${form.id}`)}
                                             >
                                                 <CardHeader className="pb-3">
                                                     <div className="flex items-start justify-between">
@@ -431,7 +431,7 @@ export default function FormsListPage() {
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="icon"
-                                                                        className="h-8 w-8"
+                                                                        className="size-8"
                                                                         aria-label={`Open menu for ${form.name}`}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                     >
@@ -443,7 +443,7 @@ export default function FormsListPage() {
                                                                 <DropdownMenuItem
                                                                     onClick={(e) => {
                                                                         e.stopPropagation()
-                                                                        router.push(`/automation/forms/${form.id}`)
+                                                                        push(`/automation/forms/${form.id}`)
                                                                     }}
                                                                 >
                                                                     <EditIcon className="mr-2 size-4" />
@@ -549,7 +549,7 @@ export default function FormsListPage() {
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
-                                                                            className="h-8 w-8"
+                                                                            className="size-8"
                                                                             aria-label={`Open menu for template ${template.name}`}
                                                                         >
                                                                             <MoreVerticalIcon className="size-4" />
@@ -713,7 +713,7 @@ export default function FormsListPage() {
                     {isPreparingShare ? (
                         <div className="flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600">
                             <Loader2Icon className="size-4 animate-spin" />
-                            Preparing link and QR code...
+                            Preparing link and QR code
                         </div>
                     ) : shareLink?.intake_url ? (
                         <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-3">

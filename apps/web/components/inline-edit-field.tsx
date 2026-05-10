@@ -154,7 +154,7 @@ export function InlineEditField({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="size-6"
                 onClick={handleSave}
                 disabled={isSaving}
                 aria-label={`Save ${fieldLabel}`}
@@ -169,7 +169,7 @@ export function InlineEditField({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="size-6"
                 onClick={handleCancel}
                 disabled={isSaving}
                 aria-label={`Cancel ${fieldLabel}`}

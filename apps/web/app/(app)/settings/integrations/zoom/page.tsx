@@ -18,7 +18,7 @@ export default function ZoomSettingsPage() {
     if (statusLoading) {
         return (
             <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2Icon className="h-8 w-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
             </div>
         )
     }
@@ -36,7 +36,7 @@ export default function ZoomSettingsPage() {
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="icon" render={<Link href="/settings/integrations" />} aria-label="Back to integrations">
-                    <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
+                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
                 </Button>
                 <div className="flex items-center gap-3">
                     <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
@@ -138,11 +138,11 @@ export default function ZoomSettingsPage() {
                     <CardContent>
                         {meetingsLoading ? (
                             <div className="flex items-center justify-center py-8">
-                                <Loader2Icon className="h-6 w-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
                         ) : meetings.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <CalendarIcon className="h-12 w-12 text-muted-foreground/50 mb-3" aria-hidden="true" />
+                                <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" aria-hidden="true" />
                                 <p className="text-sm font-medium text-muted-foreground">No appointments yet</p>
                                 <p className="text-xs text-muted-foreground/60 mt-1">
                                     Appointments created from surrogates will appear here
@@ -193,7 +193,7 @@ export default function ZoomSettingsPage() {
                                                     href={meeting.join_url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground"
+                                                    className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground"
                                                     aria-label="Open Zoom meeting"
                                                 >
                                                     <ExternalLinkIcon className="size-4" aria-hidden="true" />

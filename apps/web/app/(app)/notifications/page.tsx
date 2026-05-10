@@ -71,7 +71,7 @@ function getNotificationIcon(type: string) {
 }
 
 export default function NotificationsPage() {
-    const router = useRouter()
+    const { push } = useRouter()
     const [typeFilter, setTypeFilter] = useState("all")
     const [isOverdueOpen, setIsOverdueOpen] = useState(true)
     const { isConnected } = useNotificationSocket()
@@ -113,7 +113,7 @@ export default function NotificationsPage() {
         if (!notification.read_at) {
             markRead.mutate(notification.id)
         }
-        router.push(getNotificationHref(notification))
+        push(getNotificationHref(notification))
     }
 
     const handleMarkAllRead = () => {
@@ -233,7 +233,7 @@ export default function NotificationsPage() {
                                         </div>
                                     </div>
                                     <CollapsibleTrigger>
-                                        <span className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                                        <span className="inline-flex items-center justify-center size-9 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
                                             {isOverdueOpen ? <ChevronUpIcon className="size-4" /> : <ChevronDownIcon className="size-4" />}
                                         </span>
                                     </CollapsibleTrigger>
@@ -331,8 +331,8 @@ export default function NotificationsPage() {
                                                         {notification.body && (
                                                             <p className="mt-1 text-sm text-muted-foreground">{notification.body}</p>
                                                         )}
-                                                        <div className="mt-2 text-xs text-muted-foreground">
-                                                            {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                                        <div className="mt-2 text-xs text-muted-foreground" suppressHydrationWarning>
+                                                            {formatDistanceToNow(parseDateInput(notification.created_at), { addSuffix: true })}
                                                         </div>
                                                     </div>
                                                 </div>

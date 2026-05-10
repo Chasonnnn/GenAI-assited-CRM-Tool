@@ -52,7 +52,7 @@ interface SearchCommandDialogProps {
 }
 
 export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogProps) {
-    const router = useRouter()
+    const { push } = useRouter()
     const [query, setQuery] = useState("")
     const debouncedQuery = useDebouncedValue(query, 400)
 
@@ -79,8 +79,8 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
         const config = ENTITY_CONFIG[result.entity_type]
         const url = config.getUrl(result)
         onOpenChange(false)
-        router.push(url)
-    }, [router, onOpenChange])
+        push(url)
+    }, [onOpenChange, push])
 
     return (
         <CommandDialog
@@ -91,15 +91,15 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
         >
             <Command shouldFilter={false}>
             <CommandInput
-                placeholder="Search surrogates, intended parents, notes, files..."
+                placeholder="Search surrogates, intended parents, notes, files"
                 value={query}
                 onValueChange={setQuery}
             />
                 <CommandList>
                     {isLoading && debouncedQuery.length >= 2 && (
                         <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Searching...
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            Searching
                         </div>
                     )}
 
@@ -109,7 +109,7 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
 
                     {!isLoading && debouncedQuery.length < 2 && (
                         <div className="py-6 text-center text-sm text-muted-foreground">
-                            Type at least 2 characters to search...
+                            Type at least 2 characters to search
                         </div>
                     )}
 
@@ -125,7 +125,7 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
                                         value={`${result.entity_type}-${result.entity_id}`}
                                         onSelect={() => handleSelect(result)}
                                     >
-                                        <Icon className="mr-2 h-4 w-4" />
+                                        <Icon className="mr-2 size-4" />
                                         <div className="flex flex-col">
                                             <span>{result.title}</span>
                                             <span className="text-xs text-muted-foreground">

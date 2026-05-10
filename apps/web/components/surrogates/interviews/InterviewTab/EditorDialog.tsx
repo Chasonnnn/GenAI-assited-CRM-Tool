@@ -154,7 +154,7 @@ export function EditorDialog() {
                     <Button onClick={createOrUpdateInterview} disabled={isPending || !form.date}>
                         {isPending ? (
                             <>
-                                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                <Loader2Icon className="size-4 mr-2 animate-spin" />
                                 {isEditing ? "Saving..." : "Creating..."}
                             </>
                         ) : (

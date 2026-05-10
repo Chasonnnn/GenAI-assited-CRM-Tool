@@ -62,7 +62,7 @@ export function RejectMatchDialog({
                         <Label htmlFor="reason">Rejection Reason</Label>
                         <Textarea
                             id="reason"
-                            placeholder="Enter the reason for rejecting this match..."
+                            placeholder="Enter the reason for rejecting this match"
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             rows={4}
@@ -81,8 +81,8 @@ export function RejectMatchDialog({
                     >
                         {isPending ? (
                             <>
-                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                                Rejecting...
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Rejecting
                             </>
                         ) : (
                             "Reject Match"
