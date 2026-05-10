@@ -55,6 +55,13 @@ export function DateRangePicker({
         from: customRange?.from,
         to: customRange?.to,
     })
+    const [calendarDefaultMonth, setCalendarDefaultMonth] = React.useState<Date | undefined>(
+        customRange?.from
+    )
+
+    React.useEffect(() => {
+        setCalendarDefaultMonth(customRange?.from ?? new Date())
+    }, [customRange?.from])
 
     // Reset local range when opening calendar
     const handleShowCalendar = () => {
@@ -117,6 +124,8 @@ export function DateRangePicker({
         }
         return presetLabels[preset]
     }
+
+    const resolvedCalendarDefaultMonth = localRange.from ?? calendarDefaultMonth
 
     return (
         <Popover open={open} onOpenChange={(newOpen, eventDetails) => {
@@ -206,7 +215,9 @@ export function DateRangePicker({
                                     : undefined
                             }
                             numberOfMonths={2}
-                            defaultMonth={localRange.from || new Date()}
+                            {...(resolvedCalendarDefaultMonth
+                                ? { defaultMonth: resolvedCalendarDefaultMonth }
+                                : {})}
                             className="rounded-md border shadow-sm"
                         />
                         <div className="mt-3 flex items-center justify-between border-t pt-3">

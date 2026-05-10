@@ -1317,6 +1317,19 @@ describe("React regression guards (source)", () => {
         expect(dateRangePickerTestSource).not.toMatch(/const shortDateLabel = \(date: Date\) =>\s*new Intl\.DateTimeFormat/)
     })
 
+    it("keeps production timestamp rendering out of JSX-time Date construction", () => {
+        const teamPerformanceSource = readSource("components/reports/TeamPerformanceTable.tsx")
+        const emailTemplatesSource = readSource("app/(app)/automation/email-templates/page.tsx")
+        const ticketDetailSource = readSource("app/(app)/tickets/[ticketId]/page.tsx")
+        const dateRangePickerSource = readSource("components/ui/date-range-picker.tsx")
+
+        expect(teamPerformanceSource).not.toContain("new Date(asOf).toLocaleString()")
+        expect(emailTemplatesSource).not.toContain("new Date(template.updated_at).toLocaleDateString()")
+        expect(ticketDetailSource).not.toContain("new Date(note.created_at).toLocaleString()")
+        expect(ticketDetailSource).not.toContain("new Date(message.date_header).toLocaleString()")
+        expect(dateRangePickerSource).not.toContain("defaultMonth={localRange.from || new Date()}")
+    })
+
     it("keeps the date-range picker URL harness selection in one state update", () => {
         const source = readSource("tests/date-range-picker.test.tsx")
 

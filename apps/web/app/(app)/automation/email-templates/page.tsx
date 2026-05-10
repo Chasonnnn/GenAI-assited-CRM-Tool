@@ -92,6 +92,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
 import { normalizeTemplateHtml } from "@/lib/email-template-html"
+import { formatDate } from "@/lib/formatters"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 
@@ -519,7 +520,7 @@ function TemplateCard({
                         {template.is_active ? "Active" : "Inactive"}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                        Updated {new Date(template.updated_at).toLocaleDateString()}
+                        Updated {formatDate(template.updated_at)}
                     </span>
                 </div>
             </CardContent>

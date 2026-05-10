@@ -18,6 +18,7 @@ import type {
     UnassignedPerformanceData,
     UserPerformanceData,
 } from "@/lib/api/analytics"
+import { formatDateTime } from "@/lib/formatters"
 import { cn } from "@/lib/utils"
 
 interface TeamPerformanceTableProps {
@@ -205,6 +206,7 @@ export function TeamPerformanceTable({
 
     const formatDays = (value: number | null) => (value === null ? "-" : `${value.toFixed(1)}d`)
     const formatPercent = (value: number | null) => (value === null ? "-" : `${value}%`)
+    const asOfLabel = formatDateTime(asOf)
     const conversionBadgeClass = (value: number | null) =>
         cn(
             value === null && "border-border bg-muted text-muted-foreground hover:bg-muted",
@@ -222,9 +224,9 @@ export function TeamPerformanceTable({
                             <UsersIcon className="size-5" />
                             {title}
                         </CardTitle>
-                        {asOf ? (
+                        {asOfLabel ? (
                             <CardDescription>
-                                Data as of {new Date(asOf).toLocaleString()}
+                                Data as of {asOfLabel}
                             </CardDescription>
                         ) : null}
                     </div>

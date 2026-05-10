@@ -22,6 +22,7 @@ import {
     useReplyTicket,
     useTicket,
 } from '@/lib/hooks/use-tickets'
+import { formatDateTime } from '@/lib/formatters'
 
 const STATUS_OPTIONS = ['new', 'open', 'pending', 'resolved', 'closed', 'spam'] as const
 const PRIORITY_OPTIONS = ['low', 'normal', 'high', 'urgent'] as const
@@ -309,7 +310,7 @@ export default function TicketDetailPage() {
                             <div key={note.id} className="rounded border p-2 text-sm">
                                 <p>{note.body_markdown}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                    {new Date(note.created_at).toLocaleString()}
+                                    {formatDateTime(note.created_at)}
                                 </p>
                             </div>
                         ))}
@@ -328,7 +329,7 @@ export default function TicketDetailPage() {
                                 <Badge variant="outline">{message.direction}</Badge>
                                 <span className="text-xs text-muted-foreground">
                                     {message.date_header
-                                        ? new Date(message.date_header).toLocaleString()
+                                        ? formatDateTime(message.date_header)
                                         : 'Unknown time'}
                                 </span>
                             </div>
