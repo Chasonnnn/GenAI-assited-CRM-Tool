@@ -6,13 +6,13 @@ import api from '../api'
 import { getCsrfHeaders } from '@/lib/csrf'
 import type { JsonObject } from '../types/json'
 
-export type FormStatus = 'draft' | 'published' | 'archived'
+type FormStatus = 'draft' | 'published' | 'archived'
 export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_intake' | 'other'
-export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
-export type FormLinkMode = 'shared'
-export type SharedSubmissionOutcome = 'linked' | 'ambiguous_review' | 'lead_created'
-export type EmbedHealthCheckStatus = 'pass' | 'warning' | 'block'
-export type EmbedHealthStatus = 'ready' | 'needs_attention' | 'blocked'
+type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
+type FormLinkMode = 'shared'
+type SharedSubmissionOutcome = 'linked' | 'ambiguous_review' | 'lead_created'
+type EmbedHealthCheckStatus = 'pass' | 'warning' | 'block'
+type EmbedHealthStatus = 'ready' | 'needs_attention' | 'blocked'
 export type FieldSensitivity =
     | 'identity'
     | 'contact'
@@ -61,7 +61,7 @@ export interface FormFieldValidation {
     pattern?: string | null
 }
 
-export type ConditionOperator =
+type ConditionOperator =
     | 'equals'
     | 'not_equals'
     | 'contains'
@@ -75,7 +75,7 @@ export interface FormFieldCondition {
     value?: unknown
 }
 
-export type TableColumnType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'radio'
+type TableColumnType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'radio'
 
 export interface FormFieldColumn {
     key: string
@@ -108,7 +108,7 @@ export interface FormField {
     sensitivity?: FieldSensitivity | null
 }
 
-export interface FormPage {
+interface FormPage {
     title?: string | null
     fields: FormField[]
 }
@@ -264,8 +264,8 @@ export interface FormIntakeLinkRead {
     updated_at: string
 }
 
-export type SharedDraftLookupStatus = 'insufficient_identity' | 'no_match' | 'match_found'
-export type SharedDraftMatchReason = 'name_dob_email' | 'name_dob_phone'
+type SharedDraftLookupStatus = 'insufficient_identity' | 'no_match' | 'match_found'
+type SharedDraftMatchReason = 'name_dob_email' | 'name_dob_phone'
 
 export interface FormIntakeDraftLookupResponse {
     status: SharedDraftLookupStatus
@@ -332,7 +332,7 @@ export interface FormIntakePublicRead {
     event_name?: string | null
 }
 
-export interface FormEmbedConsentRead {
+interface FormEmbedConsentRead {
     text?: string | null
     privacy_policy_url?: string | null
 }
@@ -359,7 +359,7 @@ export interface FormEmbedSubmitPayload {
     attribution?: Record<string, unknown>
 }
 
-export interface FormEmbedHealthCheckRead {
+interface FormEmbedHealthCheckRead {
     key: string
     label: string
     status: EmbedHealthCheckStatus

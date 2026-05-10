@@ -263,6 +263,29 @@ describe("React regression guards (source)", () => {
         expect(analyticsApiSource).not.toContain("exportAnalyticsPDF")
     })
 
+    it("keeps nested form API subtype aliases private", () => {
+        const source = readSource("lib/api/forms.ts")
+        const privateSubtypeNames = [
+            "FormStatus",
+            "FormSubmissionStatus",
+            "FormLinkMode",
+            "SharedSubmissionOutcome",
+            "EmbedHealthCheckStatus",
+            "EmbedHealthStatus",
+            "ConditionOperator",
+            "TableColumnType",
+            "SharedDraftLookupStatus",
+            "SharedDraftMatchReason",
+        ]
+
+        for (const typeName of privateSubtypeNames) {
+            expect(source).not.toContain(`export type ${typeName}`)
+        }
+        expect(source).not.toContain("export interface FormPage")
+        expect(source).not.toContain("export interface FormEmbedConsentRead")
+        expect(source).not.toContain("export interface FormEmbedHealthCheckRead")
+    })
+
     it("keeps form mapping options on a direct endpoint request", () => {
         const source = readSource("lib/api/forms.ts")
 
