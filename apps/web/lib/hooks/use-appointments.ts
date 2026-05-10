@@ -15,9 +15,6 @@ export const appointmentKeys = {
     types: () => [...appointmentKeys.all, 'types'] as const,
     typesList: (activeOnly: boolean) => [...appointmentKeys.types(), { activeOnly }] as const,
     availability: () => [...appointmentKeys.all, 'availability'] as const,
-    overrides: () => [...appointmentKeys.all, 'overrides'] as const,
-    overridesList: (dateStart?: string, dateEnd?: string) =>
-        [...appointmentKeys.overrides(), { dateStart, dateEnd }] as const,
     bookingLink: () => [...appointmentKeys.all, 'bookingLink'] as const,
     lists: () => [...appointmentKeys.all, 'list'] as const,
     list: (params: {
@@ -115,39 +112,6 @@ export function useSetAvailabilityRules() {
         }) => appointmentsApi.setAvailabilityRules(rules, timezone),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: appointmentKeys.availability() });
-        },
-    });
-}
-
-// =============================================================================
-// Availability Overrides
-// =============================================================================
-
-export function useAvailabilityOverrides(dateStart?: string, dateEnd?: string) {
-    return useQuery({
-        queryKey: appointmentKeys.overridesList(dateStart, dateEnd),
-        queryFn: () => appointmentsApi.getAvailabilityOverrides(dateStart, dateEnd),
-    });
-}
-
-export function useCreateAvailabilityOverride() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: appointmentsApi.createAvailabilityOverride,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.overrides() });
-        },
-    });
-}
-
-export function useDeleteAvailabilityOverride() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: appointmentsApi.deleteAvailabilityOverride,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.overrides() });
         },
     });
 }

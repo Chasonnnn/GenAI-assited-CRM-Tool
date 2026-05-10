@@ -91,24 +91,6 @@ export interface AvailabilityRuleInput {
     end_time: string;
 }
 
-export interface AvailabilityOverride {
-    id: string;
-    override_date: string;
-    is_unavailable: boolean;
-    start_time: string | null;
-    end_time: string | null;
-    reason: string | null;
-    created_at: string;
-}
-
-export interface AvailabilityOverrideCreate {
-    override_date: string;
-    is_unavailable: boolean;
-    start_time?: string;
-    end_time?: string;
-    reason?: string;
-}
-
 export interface BookingLink {
     id: string;
     user_id: string;
@@ -277,28 +259,6 @@ export function setAvailabilityRules(
     timezone: string
 ): Promise<AvailabilityRule[]> {
     return api.put<AvailabilityRule[]>('/appointments/availability', { rules, timezone });
-}
-
-// Availability Overrides
-export function getAvailabilityOverrides(
-    dateStart?: string,
-    dateEnd?: string
-): Promise<AvailabilityOverride[]> {
-    const params = new URLSearchParams();
-    if (dateStart) params.append('date_start', dateStart);
-    if (dateEnd) params.append('date_end', dateEnd);
-    const query = params.toString() ? `?${params}` : '';
-    return api.get<AvailabilityOverride[]>(`/appointments/overrides${query}`);
-}
-
-export function createAvailabilityOverride(
-    data: AvailabilityOverrideCreate
-): Promise<AvailabilityOverride> {
-    return api.post<AvailabilityOverride>('/appointments/overrides', data);
-}
-
-export function deleteAvailabilityOverride(overrideId: string): Promise<void> {
-    return api.delete<void>(`/appointments/overrides/${overrideId}`);
 }
 
 // Booking Link

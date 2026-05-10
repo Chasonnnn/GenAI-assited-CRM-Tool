@@ -300,6 +300,20 @@ describe("React regression guards (source)", () => {
         expect(generatedStagesSource).not.toContain("ROLE_STAGE_MUTATION")
     })
 
+    it("keeps unused appointment override web wrappers out of public modules", () => {
+        const appointmentApiSource = readSource("lib/api/appointments.ts")
+        const appointmentHooksSource = readSource("lib/hooks/use-appointments.ts")
+
+        expect(appointmentApiSource).not.toContain("export interface AvailabilityOverride")
+        expect(appointmentApiSource).not.toContain("export interface AvailabilityOverrideCreate")
+        expect(appointmentApiSource).not.toContain("export function getAvailabilityOverrides")
+        expect(appointmentApiSource).not.toContain("export function createAvailabilityOverride")
+        expect(appointmentApiSource).not.toContain("export function deleteAvailabilityOverride")
+        expect(appointmentHooksSource).not.toContain("useAvailabilityOverrides")
+        expect(appointmentHooksSource).not.toContain("useCreateAvailabilityOverride")
+        expect(appointmentHooksSource).not.toContain("useDeleteAvailabilityOverride")
+    })
+
     it("keeps unused public form and analytics API helpers private", () => {
         const formsApiSource = readSource("lib/api/forms.ts")
         const analyticsApiSource = readSource("lib/api/analytics.ts")
