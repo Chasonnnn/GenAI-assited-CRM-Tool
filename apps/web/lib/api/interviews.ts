@@ -2,7 +2,7 @@
  * Interviews API client - typed functions for interview endpoints.
  */
 
-import api from './index';
+import api from '../api';
 import { streamSSE, type StreamEvent } from './stream';
 import type { JsonObject } from '../types/json';
 

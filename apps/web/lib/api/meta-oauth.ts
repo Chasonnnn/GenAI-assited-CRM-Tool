@@ -2,7 +2,7 @@
  * Meta OAuth API client for Facebook Login for Business
  */
 
-import api from './index'
+import api from '../api'
 
 // Types
 

@@ -2,7 +2,7 @@
  * API client for dashboard widgets.
  */
 
-import api from './index'
+import api from '../api'
 
 // =============================================================================
 // Types

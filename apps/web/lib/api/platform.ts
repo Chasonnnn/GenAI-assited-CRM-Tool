@@ -2,7 +2,7 @@
  * Platform admin API client for ops console.
  */
 
-import api from '@/lib/api';
+import api from '../api';
 import type { FormSchema } from '@/lib/api/forms';
 import type { ActionConfig, Condition } from '@/lib/api/workflows';
 import type { JsonObject } from '@/lib/types/json';

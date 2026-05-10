@@ -2,7 +2,7 @@
  * Compliance API client
  */
 
-import api from './index'
+import api from '../api'
 
 export interface RetentionPolicy {
     id: string

@@ -1,9 +1,19 @@
 import { describe, it, expect } from "vitest"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 
 function readSource(pathFromWebRoot: string): string {
     return readFileSync(join(process.cwd(), pathFromWebRoot), "utf8")
+}
+
+function readApiModuleSources(): Array<{ path: string; source: string }> {
+    const apiDir = join(process.cwd(), "lib/api")
+    return readdirSync(apiDir)
+        .filter((fileName) => fileName.endsWith(".ts") && fileName !== "index.ts")
+        .map((fileName) => {
+            const path = `lib/api/${fileName}`
+            return { path, source: readSource(path) }
+        })
 }
 
 describe("React regression guards (source)", () => {
@@ -141,6 +151,13 @@ describe("React regression guards (source)", () => {
         expect(source).toContain('import dynamic from "next/dynamic"')
         expect(source).not.toContain('from "recharts"')
         expect(source).not.toContain("KPICardSkeleton")
+    })
+
+    it("imports the API client directly from leaf API modules", () => {
+        for (const { path, source } of readApiModuleSources()) {
+            expect(source, path).not.toMatch(/from ['"]\.\/index['"]/)
+            expect(source, path).not.toMatch(/from ['"]@\/lib\/api['"]/)
+        }
     })
 
     it("uses stable keys for report chart cells and parser warnings", () => {

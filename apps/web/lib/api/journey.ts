@@ -2,7 +2,7 @@
  * Journey API client - typed functions for surrogate journey timeline endpoints.
  */
 
-import api from './index';
+import api from '../api';
 import { getCsrfHeaders } from '@/lib/csrf';
 
 // ============================================================================

@@ -2,7 +2,7 @@
  * API client for status change request approval workflow.
  */
 
-import api from './index';
+import api from '../api';
 
 // Types
 export interface StatusChangeRequest {

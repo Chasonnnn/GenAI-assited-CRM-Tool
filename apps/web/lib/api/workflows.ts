@@ -2,7 +2,7 @@
  * Workflow API client for automation workflows.
  */
 
-import api from './index'
+import api from '../api'
 import type { JsonObject, JsonValue } from '../types/json'
 
 // =============================================================================

@@ -2,7 +2,7 @@
  * Tasks API client - typed functions for task management endpoints.
  */
 
-import api from './index';
+import api from '../api';
 
 // Task type enum - matches backend apps/api/app/db/enums/*
 export type TaskType =

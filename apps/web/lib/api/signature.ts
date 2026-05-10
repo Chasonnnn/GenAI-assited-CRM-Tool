@@ -5,7 +5,7 @@
  * Admin endpoints: org signature settings
  */
 
-import api from './index'
+import api from '../api'
 
 // =============================================================================
 // User Types (signature overrides + social links + read-only org branding)

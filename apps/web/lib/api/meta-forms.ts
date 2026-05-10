@@ -1,4 +1,4 @@
-import api from './index'
+import api from '../api'
 import type { ColumnMappingItem, ColumnSuggestion } from './import'
 
 export interface MetaFormSummary {

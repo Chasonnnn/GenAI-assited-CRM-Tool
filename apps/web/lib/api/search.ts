@@ -2,7 +2,7 @@
  * Search API client - global search functionality.
  */
 
-import api from './index';
+import api from '../api';
 
 export interface SearchResult {
     entity_type: "surrogate" | "note" | "attachment" | "intended_parent"

@@ -2,7 +2,7 @@
  * Notes API client - typed functions for surrogate notes endpoints.
  */
 
-import api from './index';
+import api from '../api';
 
 // Note response
 export interface NoteRead {

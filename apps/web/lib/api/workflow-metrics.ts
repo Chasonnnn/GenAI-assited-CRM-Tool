@@ -1,4 +1,4 @@
-import api from "./index"
+import api from '../api'
 
 export type WorkflowMetricEventType =
     | "workflow_path_dashboard_viewed"

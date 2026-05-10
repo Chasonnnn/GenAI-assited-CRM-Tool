@@ -2,7 +2,7 @@
  * Forms API client
  */
 
-import api from './index'
+import api from '../api'
 import { getCsrfHeaders } from '@/lib/csrf'
 import type { JsonObject } from '../types/json'
 

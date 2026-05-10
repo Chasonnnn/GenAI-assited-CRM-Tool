@@ -1,4 +1,4 @@
-import api from "./index"
+import api from '../api'
 import type { MatchStatus } from "./matches"
 import type { StageType } from "./pipelines"
 

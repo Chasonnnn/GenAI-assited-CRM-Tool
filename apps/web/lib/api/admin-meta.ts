@@ -2,7 +2,7 @@
  * Admin Meta Ad Accounts API client
  */
 
-import api from './index'
+import api from '../api'
 
 export interface MetaAdAccount {
     id: string

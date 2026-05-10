@@ -2,7 +2,7 @@
  * Profile Card API client
  */
 
-import api from './index'
+import api from '../api'
 import { getCsrfHeaders } from '@/lib/csrf'
 import type { FormSchema } from './forms'
 import type { JsonObject, JsonValue } from '../types/json'

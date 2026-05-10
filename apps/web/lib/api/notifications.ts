@@ -2,7 +2,7 @@
  * Notification API functions
  */
 
-import api from './index'
+import api from '../api'
 
 // Types
 export interface Notification {

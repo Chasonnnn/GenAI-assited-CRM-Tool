@@ -2,7 +2,7 @@
  * Intended Parents API client
  */
 
-import api from './index'
+import api from '../api'
 import type {
     IntendedParent,
     IntendedParentCreate,

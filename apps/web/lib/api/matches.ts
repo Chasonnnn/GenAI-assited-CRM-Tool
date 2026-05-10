@@ -2,7 +2,7 @@
  * API client for match management.
  */
 
-import api from './index'
+import api from '../api'
 
 // =============================================================================
 // Types

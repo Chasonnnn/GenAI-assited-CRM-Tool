@@ -2,7 +2,7 @@
  * Attachments API client
  */
 
-import api from "./index"
+import api from '../api'
 
 export interface Attachment {
     id: string

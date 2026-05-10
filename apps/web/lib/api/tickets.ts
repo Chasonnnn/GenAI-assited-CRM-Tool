@@ -2,7 +2,7 @@
  * Ticketing API client.
  */
 
-import api from './index'
+import api from '../api'
 
 export type TicketStatus = 'new' | 'open' | 'pending' | 'resolved' | 'closed' | 'spam'
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent'

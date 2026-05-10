@@ -2,7 +2,7 @@
  * API client for permissions endpoints.
  */
 
-import api from "@/lib/api"
+import api from '../api'
 
 // Types
 export interface PermissionInfo {

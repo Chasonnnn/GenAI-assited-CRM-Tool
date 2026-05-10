@@ -2,7 +2,7 @@
  * Schedule Parser API client
  */
 
-import api from './index'
+import api from '../api'
 import { streamSSE, type StreamEvent } from './stream'
 
 // Types

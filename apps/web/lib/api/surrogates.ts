@@ -2,7 +2,7 @@
  * Surrogates API client - typed functions for surrogate management endpoints.
  */
 
-import api from './index';
+import api from '../api';
 import { getCsrfHeaders } from '@/lib/csrf';
 import type { JsonObject } from '../types/json';
 import type {

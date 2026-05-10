@@ -2,7 +2,7 @@
  * API client for user integrations (Zoom, Gmail, etc.)
  */
 
-import api from './index'
+import api from '../api'
 
 // ============================================================================
 // Types

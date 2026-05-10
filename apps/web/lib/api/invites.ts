@@ -2,7 +2,7 @@
  * Invitations API client
  */
 
-import api from "./index"
+import api from '../api'
 
 export type InviteRole = "intake_specialist" | "case_manager" | "admin"
 

@@ -2,7 +2,7 @@
  * Surrogate-scoped email/ticket API client.
  */
 
-import api from './index'
+import api from '../api'
 
 export interface SurrogateEmailTicketItem {
     id: string

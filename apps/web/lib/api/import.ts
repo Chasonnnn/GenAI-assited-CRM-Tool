@@ -2,7 +2,7 @@
  * CSV Import API client (enhanced preview + approval flow)
  */
 
-import api from './index'
+import api from '../api'
 import { streamSSE, type StreamEvent } from './stream'
 import type { SurrogateSource } from '@/lib/types/surrogate'
 
