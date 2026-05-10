@@ -30,7 +30,7 @@ const TIMEZONES = [
 ];
 
 export default function NewAgencyPage() {
-    const router = useRouter();
+    const { push } = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [form, setForm] = useState({
         name: '',
@@ -96,7 +96,7 @@ export default function NewAgencyPage() {
                 admin_email: form.admin_email.trim().toLowerCase(),
             });
             toast.success('Agency created successfully');
-            router.push(`/ops/agencies/${org.id}`);
+            push(`/ops/agencies/${org.id}`);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Failed to create agency';
             toast.error(message);
@@ -217,7 +217,7 @@ export default function NewAgencyPage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => router.push('/ops/agencies')}
+                                onClick={() => push('/ops/agencies')}
                             >
                                 Cancel
                             </Button>

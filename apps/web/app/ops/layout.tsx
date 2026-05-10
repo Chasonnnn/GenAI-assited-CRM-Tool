@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from "@/components/app-link";
 import { getPlatformMe, getPlatformStats, type PlatformUser } from '@/lib/api/platform';
@@ -35,11 +35,39 @@ function NavLink({
     );
 }
 
+type OpsLayoutState = {
+    user: PlatformUser | null;
+    isLoading: boolean;
+    openAlertCount: number;
+};
+
+type OpsLayoutAction =
+    | { type: 'loginPageReady' }
+    | { type: 'loaded'; user: PlatformUser; openAlertCount: number }
+    | { type: 'redirecting' };
+
+function opsLayoutReducer(state: OpsLayoutState, action: OpsLayoutAction): OpsLayoutState {
+    switch (action.type) {
+        case 'loginPageReady':
+        case 'redirecting':
+            return { ...state, isLoading: false };
+        case 'loaded':
+            return {
+                user: action.user,
+                isLoading: false,
+                openAlertCount: action.openAlertCount,
+            };
+    }
+}
+
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<PlatformUser | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [openAlertCount, setOpenAlertCount] = useState(0);
-    const router = useRouter();
+    const [opsLayoutState, dispatchOpsLayout] = useReducer(opsLayoutReducer, {
+        user: null,
+        isLoading: true,
+        openAlertCount: 0,
+    });
+    const { user, isLoading, openAlertCount } = opsLayoutState;
+    const { replace } = useRouter();
     const pathname = usePathname();
 
     // Skip auth check for login page
@@ -47,7 +75,7 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (isLoginPage) {
-            setIsLoading(false);
+            dispatchOpsLayout({ type: 'loginPageReady' });
             return;
         }
 
@@ -55,25 +83,28 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
             try {
                 const statsPromise = getPlatformStats().catch(() => null);
                 const data = await getPlatformMe();
-                setUser(data);
                 const stats = await statsPromise;
-                setOpenAlertCount(stats?.open_alerts ?? 0);
+                dispatchOpsLayout({
+                    type: 'loaded',
+                    user: data,
+                    openAlertCount: stats?.open_alerts ?? 0,
+                });
             } catch (error) {
                 if (error instanceof ApiError && error.status === 403) {
                     const message = (error.message || '').toLowerCase();
                     if (message.includes('mfa')) {
-                        router.replace('/mfa');
+                        dispatchOpsLayout({ type: 'redirecting' });
+                        replace('/mfa');
                         return;
                     }
                 }
                 // Not authenticated or not platform admin
-                router.replace('/ops/login');
-            } finally {
-                setIsLoading(false);
+                dispatchOpsLayout({ type: 'redirecting' });
+                replace('/ops/login');
             }
         }
         checkPlatformAdmin();
-    }, [router, isLoginPage]);
+    }, [replace, isLoginPage]);
 
     const handleLogout = async () => {
         try {
