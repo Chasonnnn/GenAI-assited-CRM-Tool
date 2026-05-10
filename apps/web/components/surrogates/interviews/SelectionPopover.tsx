@@ -40,19 +40,26 @@ export function SelectionPopover({
     const isClickingPopover = useRef(false)
     const isMouseDownRef = useRef(false)
     const selectionActiveRef = useRef(false)
+    const disabledRef = useRef(disabled)
+    const containerRefRef = useRef(containerRef)
+    const onSelectionStateChangeRef = useRef(onSelectionStateChange)
+
+    disabledRef.current = disabled
+    containerRefRef.current = containerRef
+    onSelectionStateChangeRef.current = onSelectionStateChange
 
     const setSelectionActive = useCallback((active: boolean) => {
         if (selectionActiveRef.current === active) return
         selectionActiveRef.current = active
-        onSelectionStateChange?.(active)
-    }, [onSelectionStateChange])
+        onSelectionStateChangeRef.current?.(active)
+    }, [])
 
     // Handle text selection within the container
     const handleSelectionChange = useCallback(() => {
         // Don't update if we're clicking the popover or dragging selection
         if (isClickingPopover.current || isMouseDownRef.current) return
 
-        if (disabled) {
+        if (disabledRef.current) {
             setSelectionActive(false)
             return
         }
@@ -76,7 +83,7 @@ export function SelectionPopover({
         }
 
         // Check if selection is within our container
-        const container = containerRef.current
+        const container = containerRefRef.current.current
         if (!container) {
             setPosition({ x: 0, y: 0, visible: false })
             setSelectionActive(false)
@@ -119,15 +126,22 @@ export function SelectionPopover({
         setSelectedText(text)
         setSelectedRange(range.cloneRange())
         setSelectionActive(true)
-    }, [containerRef, disabled, setSelectionActive])
+    }, [setSelectionActive])
+
+    const handleSelectionChangeRef = useRef(handleSelectionChange)
+    handleSelectionChangeRef.current = handleSelectionChange
 
     // Listen for selection changes
     useEffect(() => {
-        document.addEventListener("selectionchange", handleSelectionChange)
-        return () => {
-            document.removeEventListener("selectionchange", handleSelectionChange)
+        const handleDocumentSelectionChange = () => {
+            handleSelectionChangeRef.current()
         }
-    }, [handleSelectionChange])
+
+        document.addEventListener("selectionchange", handleDocumentSelectionChange)
+        return () => {
+            document.removeEventListener("selectionchange", handleDocumentSelectionChange)
+        }
+    }, [])
 
     // Handle keyboard shortcuts
     useEffect(() => {
@@ -160,7 +174,7 @@ export function SelectionPopover({
 
         const handleMouseUp = () => {
             isMouseDownRef.current = false
-            handleSelectionChange()
+            handleSelectionChangeRef.current()
             // Reset after a short delay
             setTimeout(() => {
                 isClickingPopover.current = false
@@ -173,7 +187,7 @@ export function SelectionPopover({
             document.removeEventListener("mousedown", handleMouseDown)
             document.removeEventListener("mouseup", handleMouseUp)
         }
-    }, [handleSelectionChange])
+    }, [])
 
     const handleAddComment = useCallback(() => {
         if (!selectedText || !selectedRange) return
