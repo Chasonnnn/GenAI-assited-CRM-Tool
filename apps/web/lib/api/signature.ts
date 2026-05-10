@@ -58,7 +58,7 @@ export interface SignaturePreview {
 // Admin Types (org signature settings)
 // =============================================================================
 
-export interface SignatureTemplate {
+interface SignatureTemplate {
     id: string
     name: string
     description: string

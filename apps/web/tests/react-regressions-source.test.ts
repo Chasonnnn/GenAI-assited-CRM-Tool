@@ -484,6 +484,7 @@ describe("React regression guards (source)", () => {
         const platformSource = readSource("lib/api/platform.ts")
         const matchStageSource = readSource("lib/match-pipeline-stage-utils.ts")
         const matchStatusSource = readSource("lib/match-status-definitions.ts")
+        const signatureSource = readSource("lib/api/signature.ts")
         const usStatesSource = readSource("lib/constants/us-states.ts")
 
         expect(csrfSource).not.toContain("export function getCsrfToken")
@@ -494,6 +495,7 @@ describe("React regression guards (source)", () => {
         expect(matchStatusSource).not.toContain("export const MATCH_STATUS_BY_VALUE")
         expect(matchStatusSource).not.toContain("export function getMatchStatusDefinition")
         expect(matchStatusSource).not.toContain("export const MATCH_STATUS_OPTIONS")
+        expect(signatureSource).not.toContain("export interface SignatureTemplate")
         expect(usStatesSource).not.toContain("export type USStateCode")
     })
 
