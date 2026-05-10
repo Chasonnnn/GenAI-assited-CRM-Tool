@@ -15,8 +15,8 @@ export type StageCapabilityKey =
     | 'requires_delivery_details'
     | 'tracks_interview_outcome';
 type PauseBehavior = 'none' | 'resume_previous_stage';
-export type TerminalOutcome = 'none' | 'lost' | 'disqualified';
-export type IntegrationBucket = 'none' | 'intake' | 'qualified' | 'converted' | 'lost' | 'not_qualified';
+type TerminalOutcome = 'none' | 'lost' | 'disqualified';
+type IntegrationBucket = 'none' | 'intake' | 'qualified' | 'converted' | 'lost' | 'not_qualified';
 
 export interface StageCapabilities {
     counts_as_contacted: boolean;

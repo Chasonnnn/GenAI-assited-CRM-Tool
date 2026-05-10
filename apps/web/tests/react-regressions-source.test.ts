@@ -394,6 +394,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export function isDueThisWeek")
     })
 
+    it("keeps pipeline response subtype aliases private", () => {
+        const source = readSource("lib/api/pipelines.ts")
+
+        expect(source).not.toContain("export type TerminalOutcome")
+        expect(source).not.toContain("export type IntegrationBucket")
+    })
+
     it("keeps surrogate detail layout context internals private", () => {
         const clientSource = readSource("components/surrogates/detail/SurrogateDetailLayoutClient.tsx")
         const indexSource = readSource("components/surrogates/detail/SurrogateDetailLayout/index.tsx")
