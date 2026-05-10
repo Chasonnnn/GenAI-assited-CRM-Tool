@@ -266,8 +266,10 @@ export function useAutomationFormBuilderPage() {
     const draftPayload = useMemo<FormCreatePayload>(() => {
         const allowedMimeTypes = state.allowedMimeTypesText
             .split(",")
-            .map((entry) => entry.trim())
-            .filter(Boolean)
+            .flatMap((entry) => {
+                const trimmedEntry = entry.trim()
+                return trimmedEntry ? [trimmedEntry] : []
+            })
         return {
             name: state.formName.trim(),
             description: state.formDescription.trim() || null,
