@@ -251,7 +251,9 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const INTEGER_FORMATTER = new Intl.NumberFormat")
         expect(source).toContain("return USD_INTEGER_FORMATTER.format(value)")
         expect(source).toContain("return INTEGER_FORMATTER.format(value)")
+        expect(source).toContain("Loading…")
         expect(source).not.toContain("return new Intl.NumberFormat")
+        expect(source).not.toContain("Loading...")
     })
 
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {

@@ -582,7 +582,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                         <SelectContent>
                             <SelectItem value="">All Ad Accounts</SelectItem>
                             {adAccountsLoading && (
-                                <SelectItem value="__loading__" disabled>Loading...</SelectItem>
+                                <SelectItem value="__loading__" disabled>Loading…</SelectItem>
                             )}
                             {adAccounts?.map(acc => (
                                 <SelectItem key={acc.id} value={acc.id}>
