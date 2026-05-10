@@ -21,8 +21,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import verify_secret
 from app.services import oauth_service
+from app.services.http_service import DEFAULT_RETRY_STATUSES, request_with_retries
 
 logger = logging.getLogger(__name__)
+GOOGLE_CALENDAR_TIMEOUT_SECONDS = 30.0
+GOOGLE_CALENDAR_RETRY_ATTEMPTS = 3
+GOOGLE_CALENDAR_RETRY_BASE_DELAY = 0.5
+GOOGLE_CALENDAR_RETRY_MAX_DELAY = 4.0
 
 # =============================================================================
 # Types
@@ -405,7 +410,7 @@ async def get_google_events(
     page_token: str | None = None
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
             while len(events) < max_total_results:
                 params = {
                     "timeMin": time_min.isoformat(),
@@ -418,10 +423,19 @@ async def get_google_events(
                 if page_token:
                     params["pageToken"] = page_token
 
-                response = await client.get(
-                    _calendar_events_endpoint(calendar_id),
-                    headers={"Authorization": f"Bearer {access_token}"},
-                    params=params,
+                async def request_fn() -> httpx.Response:
+                    return await client.get(
+                        _calendar_events_endpoint(calendar_id),
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        params=params,
+                    )
+
+                response = await request_with_retries(
+                    request_fn,
+                    max_attempts=GOOGLE_CALENDAR_RETRY_ATTEMPTS,
+                    base_delay=GOOGLE_CALENDAR_RETRY_BASE_DELAY,
+                    max_delay=GOOGLE_CALENDAR_RETRY_MAX_DELAY,
+                    retry_statuses=DEFAULT_RETRY_STATUSES,
                 )
 
                 if response.status_code != 200:
@@ -477,8 +491,8 @@ async def get_google_events(
                 if not page_token:
                     break
 
-    except Exception as e:
-        logger.exception(f"Google Calendar events fetch failed for calendar={calendar_id}: {e}")
+    except Exception as exc:
+        logger.warning("Google Calendar events fetch failed error_type=%s", type(exc).__name__)
 
     return events
 

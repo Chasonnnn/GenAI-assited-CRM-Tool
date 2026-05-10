@@ -15,11 +15,16 @@ from app.core.async_utils import run_async
 from app.db.enums import OwnerType, TaskType
 from app.db.models import Task
 from app.services import oauth_service
+from app.services.http_service import DEFAULT_RETRY_STATUSES, request_with_retries
 
 logger = logging.getLogger(__name__)
 
 GOOGLE_TASKS_API_BASE = "https://tasks.googleapis.com/tasks/v1"
 GOOGLE_DEFAULT_TASKLIST_ID = "@default"
+GOOGLE_TASKS_TIMEOUT_SECONDS = 30.0
+GOOGLE_TASKS_RETRY_ATTEMPTS = 3
+GOOGLE_TASKS_RETRY_BASE_DELAY = 0.5
+GOOGLE_TASKS_RETRY_MAX_DELAY = 4.0
 GOOGLE_TASKS_SCOPES = {
     "https://www.googleapis.com/auth/tasks",
     "https://www.googleapis.com/auth/tasks.readonly",
@@ -172,13 +177,23 @@ async def _google_request(
 ) -> tuple[int, dict[str, Any] | None]:
     url = f"{GOOGLE_TASKS_API_BASE}{path}"
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(
-                method,
-                url,
-                headers={"Authorization": f"Bearer {access_token}"},
-                params=params,
-                json=json_body,
+        async with httpx.AsyncClient(timeout=GOOGLE_TASKS_TIMEOUT_SECONDS) as client:
+
+            async def request_fn() -> httpx.Response:
+                return await client.request(
+                    method,
+                    url,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params=params,
+                    json=json_body,
+                )
+
+            response = await request_with_retries(
+                request_fn,
+                max_attempts=GOOGLE_TASKS_RETRY_ATTEMPTS,
+                base_delay=GOOGLE_TASKS_RETRY_BASE_DELAY,
+                max_delay=GOOGLE_TASKS_RETRY_MAX_DELAY,
+                retry_statuses=DEFAULT_RETRY_STATUSES,
             )
     except Exception as exc:
         logger.warning("Google Tasks request failed method=%s path=%s error=%s", method, path, exc)

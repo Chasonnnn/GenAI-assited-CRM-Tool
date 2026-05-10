@@ -4,11 +4,12 @@ from datetime import date, datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from app.db.enums import OwnerType, TaskType
 from app.db.models import Task
-from app.services import calendar_service, google_tasks_sync_service
+from app.services import calendar_service, google_tasks_sync_service, http_service
 
 
 class _FakeResponse:
@@ -161,6 +162,87 @@ async def test_google_request_success_error_and_exception(monkeypatch):
     )
     assert code == 0
     assert payload is None
+
+
+@pytest.mark.asyncio
+async def test_google_request_retries_transient_status_and_preserves_final_status(
+    monkeypatch,
+):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+
+    async def _handler(**kwargs):
+        calls["count"] += 1
+        if kwargs["url"].endswith("/retry") and calls["count"] == 1:
+            return _FakeResponse(500, {"error": {"message": "temporary"}})
+        return _FakeResponse(200, {"items": []})
+
+    monkeypatch.setattr(
+        google_tasks_sync_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    code, payload = await google_tasks_sync_service._google_request(
+        access_token="tok",
+        method="GET",
+        path="/retry",
+    )
+
+    assert calls["count"] == 2
+    assert code == 200
+    assert payload == {"items": []}
+
+    final_calls = {"count": 0}
+
+    async def _final_handler(**_kwargs):
+        final_calls["count"] += 1
+        return _FakeResponse(500, {"error": {"message": "still down"}})
+
+    monkeypatch.setattr(
+        google_tasks_sync_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_final_handler),
+    )
+
+    code, payload = await google_tasks_sync_service._google_request(
+        access_token="tok",
+        method="GET",
+        path="/retry",
+    )
+
+    assert final_calls["count"] == 3
+    assert code == 500
+    assert payload == {"error": {"message": "still down"}}
+
+
+@pytest.mark.asyncio
+async def test_google_request_does_not_retry_non_transient_status(monkeypatch):
+    calls = {"count": 0}
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        return _FakeResponse(403, {"error": {"message": "denied"}})
+
+    monkeypatch.setattr(
+        google_tasks_sync_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    code, payload = await google_tasks_sync_service._google_request(
+        access_token="tok",
+        method="GET",
+        path="/users/@me/lists",
+    )
+
+    assert calls["count"] == 1
+    assert code == 403
+    assert payload == {"error": {"message": "denied"}}
 
 
 @pytest.mark.asyncio
@@ -370,6 +452,89 @@ def test_calendar_verify_watch_token(monkeypatch):
     assert calendar_service.verify_watch_channel_token("enc", "plain:enc") is True
     assert calendar_service.verify_watch_channel_token("enc", "wrong") is False
     assert calendar_service.verify_watch_channel_token(None, "x") is False
+
+
+@pytest.mark.asyncio
+async def test_get_google_events_retries_timeout_then_success(monkeypatch):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+    request = httpx.Request("GET", "https://calendar.example/events")
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ReadTimeout("temporary", request=request)
+        return _FakeResponse(
+            200,
+            {
+                "items": [
+                    {
+                        "id": "evt-1",
+                        "summary": "Retry Event",
+                        "start": {"dateTime": "2026-02-19T18:30:00Z"},
+                        "end": {"dateTime": "2026-02-19T19:30:00Z"},
+                        "htmlLink": "https://calendar.google.com/event?eid=evt-1",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    events = await calendar_service.get_google_events(
+        access_token="token",
+        calendar_id="primary",
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert calls["count"] == 2
+    assert len(events) == 1
+    assert events[0]["summary"] == "Retry Event"
+
+
+@pytest.mark.asyncio
+async def test_get_google_events_returns_empty_after_retry_exhaustion(monkeypatch, caplog):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+    request = httpx.Request("GET", "https://calendar.example/events")
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        raise httpx.ReadTimeout("still down", request=request)
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    events = await calendar_service.get_google_events(
+        access_token="token",
+        calendar_id="person@example.com",
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert calls["count"] == 3
+    assert events == []
+    calendar_records = [
+        record for record in caplog.records if record.name == "app.services.calendar_service"
+    ]
+    assert calendar_records[-1].message == "Google Calendar events fetch failed error_type=ReadTimeout"
+    assert "person@example.com" not in calendar_records[-1].message
 
 
 @pytest.mark.asyncio
