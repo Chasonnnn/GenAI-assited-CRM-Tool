@@ -21,8 +21,10 @@ import {
     useUpdateSubmissionAnswers,
 } from '@/lib/hooks/use-forms'
 import { metaFormsKeys } from '@/lib/hooks/use-meta-forms'
+import { useCreateBulkTasks } from '@/lib/hooks/use-schedule-parser'
 import { surrogateKeys } from '@/lib/hooks/use-surrogates'
-import { useSendZoomInvite } from '@/lib/hooks/use-user-integrations'
+import { taskKeys } from '@/lib/hooks/use-tasks'
+import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useZapierOutboundTest, useZapierTestLead, zapierKeys } from '@/lib/hooks/use-zapier'
 
 type MutationOptions = {
@@ -213,6 +215,93 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ['analytics', 'activity-feed'],
             exact: false,
+        })
+    })
+
+    it('refreshes appointment and task caches after a manual Google sync', () => {
+        useSyncGoogleCalendarNow()
+
+        capturedOptions?.onSuccess?.(
+            {
+                connected: true,
+                outbound_backfilled: 0,
+                appointment_changes: 1,
+                task_changes: 2,
+                last_sync_at: '2026-05-10T06:00:00.000Z',
+                warnings: [],
+            },
+            {}
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: appointmentKeys.lists(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: taskKeys.lists(),
+        })
+    })
+
+    it('refreshes surrogate CRM surfaces after creating bulk AI tasks', () => {
+        useCreateBulkTasks()
+
+        capturedOptions?.onSuccess?.(
+            {
+                success: true,
+                created: [{ task_id: 'task-1', title: 'Follow up' }],
+                error: null,
+            },
+            {
+                request_id: 'request-1',
+                surrogate_id: 'surrogate-1',
+                tasks: [],
+            }
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: taskKeys.lists(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.stats(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.activity('surrogate-1'),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['analytics', 'activity-feed'],
+            exact: false,
+        })
+    })
+
+    it('refreshes meeting, task, note, and surrogate caches after creating a Zoom meeting', () => {
+        useCreateZoomMeeting()
+
+        capturedOptions?.onSuccess?.(
+            {
+                join_url: 'https://zoom.example/j/1',
+                start_url: 'https://zoom.example/s/1',
+                meeting_id: 1,
+                password: null,
+                note_id: 'note-1',
+                task_id: 'task-1',
+            },
+            {
+                entity_type: 'surrogate',
+                entity_id: 'surrogate-1',
+                topic: 'Consultation',
+            }
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['user-integrations', 'zoom-meetings'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['notes'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: taskKeys.lists(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.activity('surrogate-1'),
         })
     })
 

@@ -36,6 +36,32 @@ export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogate
     });
 }
 
+function invalidateSurrogateDirectoryCaches(queryClient: QueryClient) {
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+}
+
+function invalidateSurrogateMutationCaches(queryClient: QueryClient, surrogateId: string, options: { history?: boolean } = {}) {
+    invalidateSurrogateCrmCaches(queryClient, surrogateId);
+    if (options.history) {
+        queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
+    }
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+}
+
+function invalidateSelectedSurrogateMutationCaches(
+    queryClient: QueryClient,
+    surrogateIds: readonly string[],
+    options: { history?: boolean } = {}
+) {
+    invalidateSurrogateDirectoryCaches(queryClient);
+    for (const surrogateId of surrogateIds) {
+        invalidateSurrogateMutationCaches(queryClient, surrogateId, options);
+    }
+}
+
 /**
  * Fetch surrogate statistics for dashboard.
  * Auto-refreshes every 60 seconds for real-time updates.
@@ -156,7 +182,7 @@ export function useUpdateSurrogate() {
             surrogatesApi.updateSurrogate(surrogateId, data),
         onSuccess: (updatedSurrogate) => {
             queryClient.setQueryData(surrogateKeys.detail(updatedSurrogate.id), updatedSurrogate);
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            invalidateSurrogateMutationCaches(queryClient, updatedSurrogate.id);
         },
     });
 }
@@ -216,7 +242,7 @@ export function useAssignSurrogate() {
         }) => surrogatesApi.assignSurrogate(surrogateId, { owner_type, owner_id }),
         onSuccess: (updatedSurrogate) => {
             queryClient.setQueryData(surrogateKeys.detail(updatedSurrogate.id), updatedSurrogate);
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            invalidateSurrogateMutationCaches(queryClient, updatedSurrogate.id);
         },
     });
 }
@@ -251,8 +277,7 @@ export function useArchiveSurrogate() {
         mutationFn: surrogatesApi.archiveSurrogate,
         onSuccess: (updatedSurrogate) => {
             queryClient.setQueryData(surrogateKeys.detail(updatedSurrogate.id), updatedSurrogate);
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            invalidateSurrogateMutationCaches(queryClient, updatedSurrogate.id);
         },
     });
 }
@@ -267,8 +292,7 @@ export function useRestoreSurrogate() {
         mutationFn: surrogatesApi.restoreSurrogate,
         onSuccess: (updatedSurrogate) => {
             queryClient.setQueryData(surrogateKeys.detail(updatedSurrogate.id), updatedSurrogate);
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            invalidateSurrogateMutationCaches(queryClient, updatedSurrogate.id);
         },
     });
 }
@@ -292,9 +316,8 @@ export function useBulkAssign() {
 
     return useMutation({
         mutationFn: surrogatesApi.bulkAssignSurrogates,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+        onSuccess: (_result, variables) => {
+            invalidateSelectedSurrogateMutationCaches(queryClient, variables.surrogate_ids);
         },
     });
 }
@@ -310,6 +333,7 @@ export function useBulkChangeStage() {
         onSuccess: (_result, variables) => {
             queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
             queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
 
             for (const surrogateId of variables.surrogate_ids) {
                 queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
@@ -328,9 +352,8 @@ export function useBulkArchive() {
 
     return useMutation({
         mutationFn: surrogatesApi.bulkArchiveSurrogates,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+        onSuccess: (_result, variables) => {
+            invalidateSelectedSurrogateMutationCaches(queryClient, variables);
         },
     });
 }
@@ -371,8 +394,9 @@ export function useApplySurrogateMassEditStage() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditStage,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
         },
     });
 }
@@ -386,8 +410,8 @@ export function useApplySurrogateMassEditArchive() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditArchive,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
         },
     });
 }

@@ -5,7 +5,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api'
+import { appointmentKeys } from './use-appointments'
 import { invalidateSurrogateCrmCaches } from './use-surrogates'
+import { taskKeys } from './use-tasks'
 import {
     listUserIntegrations,
     getZoomConnectUrl,
@@ -39,6 +41,7 @@ const integrationKeys = {
     list: () => [...integrationKeys.all, 'list'] as const,
     googleCalendarStatus: () => [...integrationKeys.all, 'google-calendar-status'] as const,
     zoomStatus: () => [...integrationKeys.all, 'zoom-status'] as const,
+    zoomMeetingsList: () => [...integrationKeys.all, 'zoom-meetings'] as const,
     zoomMeetings: (params?: { limit?: number }) => [...integrationKeys.all, 'zoom-meetings', params] as const,
 }
 
@@ -177,6 +180,8 @@ export function useSyncGoogleCalendarNow() {
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: integrationKeys.list() })
             queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
+            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
 
             if (result.warnings?.length) {
                 toast.warning('Google sync completed with warnings.')
@@ -251,11 +256,13 @@ export function useCreateZoomMeeting() {
 
     return useMutation({
         mutationFn: (data: CreateMeetingRequest) => createZoomMeeting(data),
-        onSuccess: () => {
-            // Invalidate notes/tasks and meetings list
+        onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['notes'] })
-            queryClient.invalidateQueries({ queryKey: ['tasks'] })
-            queryClient.invalidateQueries({ queryKey: integrationKeys.zoomMeetings() })
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: integrationKeys.zoomMeetingsList() })
+            if (variables.entity_type === 'surrogate') {
+                invalidateSurrogateCrmCaches(queryClient, variables.entity_id)
+            }
         },
     })
 }

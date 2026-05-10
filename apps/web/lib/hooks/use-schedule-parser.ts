@@ -9,6 +9,7 @@ import {
     type ParseScheduleRequest,
     type BulkTaskCreateRequest
 } from '@/lib/api/schedule-parser'
+import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates'
 import { taskKeys } from './use-tasks'
 
 // Hooks
@@ -23,9 +24,12 @@ export function useCreateBulkTasks() {
 
     return useMutation({
         mutationFn: (data: BulkTaskCreateRequest) => createBulkTasks(data),
-        onSuccess: () => {
-            // Invalidate tasks list to show newly created tasks
+        onSuccess: (_result, variables) => {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+            if (variables.surrogate_id) {
+                invalidateSurrogateCrmCaches(queryClient, variables.surrogate_id)
+            }
         },
     })
 }
