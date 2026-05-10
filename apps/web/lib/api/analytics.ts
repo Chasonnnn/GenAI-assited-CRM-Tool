@@ -3,7 +3,6 @@
  */
 
 import { api } from '../api';
-import { getCsrfHeaders } from '@/lib/csrf';
 import type { JsonObject } from '../types/json';
 
 // Types
@@ -297,59 +296,6 @@ export async function getPerformanceByUser(params: PerformanceByUserParams = {})
 
     const query = searchParams.toString();
     return api.get<PerformanceByUserResponse>(`/analytics/performance/by-user${query ? `?${query}` : ''}`);
-}
-
-/**
- * Export analytics as PDF.
- * Uses a hidden iframe to download with cookies.
- */
-export async function exportAnalyticsPDF(params: DateRangeParams = {}): Promise<void> {
-    const searchParams = new URLSearchParams();
-    if (params.from_date) searchParams.set('from_date', params.from_date);
-    if (params.to_date) searchParams.set('to_date', params.to_date);
-
-    const query = searchParams.toString();
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-    const url = `${baseUrl}/analytics/export/pdf${query ? `?${query}` : ''}`;
-
-    const response = await fetch(url, {
-        method: 'GET',
-        credentials: 'include',
-        headers: { ...getCsrfHeaders() },
-    });
-
-    if (!response.ok) {
-        throw new Error(`Export failed (${response.status})`);
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/pdf')) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Export failed (unexpected response)');
-    }
-
-    const filenameDate = (params.to_date || params.from_date || new Date().toISOString().slice(0, 10))
-        .replace(/-/g, '');
-    const filename = `${filenameDate}report.pdf`;
-
-    const buffer = await response.arrayBuffer();
-    const headerBytes = new Uint8Array(buffer.slice(0, 4));
-    const headerText = String.fromCharCode(...headerBytes);
-    if (headerText !== '%PDF') {
-        const errorText = new TextDecoder().decode(buffer);
-        throw new Error(errorText || 'Export failed (invalid PDF)');
-    }
-
-    const blob = new Blob([buffer], { type: 'application/pdf' });
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(blobUrl);
 }
 
 // =============================================================================

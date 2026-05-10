@@ -729,13 +729,6 @@ export function saveSharedPublicFormDraft(
     })
 }
 
-export function deleteSharedPublicFormDraft(
-    slug: string,
-    draftSessionId: string,
-): Promise<void> {
-    return api.delete<void>(`/forms/public/intake/${slug}/draft/${draftSessionId}`)
-}
-
 export function restoreSharedPublicFormDraft(
     slug: string,
     draftSessionId: string,

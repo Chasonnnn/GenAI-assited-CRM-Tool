@@ -11,7 +11,6 @@ const {
     restoreSharedPublicFormDraft,
     saveSharedPublicFormDraft,
     submitSharedPublicForm,
-    deleteSharedPublicFormDraft,
 } = vi.hoisted(() => ({
     getSharedPublicForm: vi.fn(),
     getSharedPublicFormDraft: vi.fn(),
@@ -19,7 +18,6 @@ const {
     restoreSharedPublicFormDraft: vi.fn(),
     saveSharedPublicFormDraft: vi.fn(),
     submitSharedPublicForm: vi.fn(),
-    deleteSharedPublicFormDraft: vi.fn(),
 }))
 
 vi.mock('next/image', () => ({
@@ -36,7 +34,6 @@ vi.mock('@/lib/api/forms', async () => {
         restoreSharedPublicFormDraft,
         saveSharedPublicFormDraft,
         submitSharedPublicForm,
-        deleteSharedPublicFormDraft,
     }
 })
 
@@ -95,7 +92,6 @@ describe('Shared Intake Public Page', () => {
             surrogate_id: null,
             intake_lead_id: 'lead-1',
         })
-        deleteSharedPublicFormDraft.mockResolvedValue(undefined)
     })
 
     it('loads shared intake schema without probing a brand-new draft session', async () => {
@@ -163,7 +159,6 @@ describe('Shared Intake Public Page', () => {
         expect(
             await screen.findByText(/added to intake review/i),
         ).toBeInTheDocument()
-        expect(deleteSharedPublicFormDraft).not.toHaveBeenCalled()
     })
 
     it('clears the local draft session after successful submit', async () => {
@@ -183,7 +178,6 @@ describe('Shared Intake Public Page', () => {
             expect(submitSharedPublicForm).toHaveBeenCalled()
         })
         expect(window.localStorage.getItem('intake-draft-session:event-abc')).toBeNull()
-        expect(deleteSharedPublicFormDraft).not.toHaveBeenCalled()
     })
 
     it('shows resume prompt and restores previous draft when continuing', async () => {

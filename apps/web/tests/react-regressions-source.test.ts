@@ -186,6 +186,14 @@ describe("React regression guards (source)", () => {
         expect(stageContextSource).not.toContain("export function getStageSemanticKey")
     })
 
+    it("keeps unused public form and analytics API helpers private", () => {
+        const formsApiSource = readSource("lib/api/forms.ts")
+        const analyticsApiSource = readSource("lib/api/analytics.ts")
+
+        expect(formsApiSource).not.toContain("deleteSharedPublicFormDraft")
+        expect(analyticsApiSource).not.toContain("exportAnalyticsPDF")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
