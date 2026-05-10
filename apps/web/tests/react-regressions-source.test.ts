@@ -373,6 +373,22 @@ describe("React regression guards (source)", () => {
         expect(aiBuilderSource).not.toContain("flex flex-col items-center text-center space-y-4")
     })
 
+    it("uses warm neutral field-library colors instead of default slate text tokens", () => {
+        const source = readSource("components/forms/builder/FieldLibrarySheet.tsx")
+
+        expect(source).toContain("text-stone-900")
+        expect(source).toContain("text-stone-950")
+        expect(source).toContain("placeholder:text-stone-400")
+        expect(source).toContain("const visibleSections: LibrarySection[] = []")
+        expect(source).toContain("visibleSections.push")
+        expect(source).toContain("searchPattern.test")
+        expect(source).not.toContain("text-slate-")
+        expect(source).not.toContain("placeholder:text-slate-")
+        expect(source).not.toContain(".includes(normalizedSearch)")
+        expect(source).not.toContain(".indexOf(normalizedSearch)")
+        expect(source).not.toContain("return sourceGroups\n            .map")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
