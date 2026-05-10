@@ -118,21 +118,6 @@ export interface EmailLog {
     created_at: string
 }
 
-export interface EmailTemplateVersion {
-    id: string
-    version: number
-    payload: {
-        name: string
-        subject: string
-        from_email: string | null
-        body: string
-        is_active: boolean
-    }
-    comment: string | null
-    created_by_user_id: string | null
-    created_at: string
-}
-
 export interface ListTemplatesParams {
     activeOnly?: boolean
     scope?: EmailTemplateScope | null
@@ -178,19 +163,6 @@ export async function sendTestEmailTemplate(
     payload: EmailTemplateTestSendRequest
 ): Promise<EmailTemplateTestSendResponse> {
     return api.post<EmailTemplateTestSendResponse>(`/email-templates/${id}/test`, payload)
-}
-
-// ============================================================================
-// Version History API
-// ============================================================================
-
-export async function getTemplateVersions(id: string): Promise<EmailTemplateVersion[]> {
-    const response = await api.get<{ versions: EmailTemplateVersion[] }>(`/email-templates/${id}/versions`)
-    return response.versions
-}
-
-export async function rollbackTemplate(id: string, version: number): Promise<EmailTemplate> {
-    return api.post<EmailTemplate>(`/email-templates/${id}/rollback`, { target_version: version })
 }
 
 // ============================================================================

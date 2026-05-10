@@ -210,6 +210,17 @@ describe("React regression guards (source)", () => {
         expect(analyticsApiSource).not.toContain("exportAnalyticsPDF")
     })
 
+    it("keeps unused email template version helpers out of public modules", () => {
+        const apiSource = readSource("lib/api/email-templates.ts")
+        const hookSource = readSource("lib/hooks/use-email-templates.ts")
+
+        expect(apiSource).not.toContain("export interface EmailTemplateVersion")
+        expect(apiSource).not.toContain("export async function getTemplateVersions")
+        expect(apiSource).not.toContain("export async function rollbackTemplate")
+        expect(hookSource).not.toContain("useTemplateVersions")
+        expect(hookSource).not.toContain("useRollbackTemplate")
+    })
+
     it("keeps unused UI subcomponent exports out of public modules", () => {
         const carouselSource = readSource("components/ui/carousel.tsx")
         const chartSource = readSource("components/ui/chart.tsx")

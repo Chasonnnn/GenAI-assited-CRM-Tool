@@ -10,7 +10,6 @@ vi.mock('next/navigation', () => ({
 
 const mockUpdateNotificationSettings = vi.fn()
 const mockRollbackPipeline = vi.fn()
-const mockRollbackTemplate = vi.fn()
 
 const versionModalSpy = vi.fn()
 
@@ -153,22 +152,6 @@ vi.mock('@/lib/hooks/use-email-templates', () => ({
         ],
         isLoading: false,
     }),
-    useTemplateVersions: (id: string | null) => ({
-        data: id
-            ? [
-                {
-                    id: 'tv1',
-                    version: 1,
-                    payload: { name: 'Welcome', subject: 'Hello', body: 'Body', is_active: true },
-                    comment: null,
-                    created_by_user_id: null,
-                    created_at: new Date().toISOString(),
-                },
-            ]
-            : [],
-        isLoading: false,
-    }),
-    useRollbackTemplate: () => ({ mutate: mockRollbackTemplate, isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-system', () => ({
@@ -185,7 +168,6 @@ describe('SettingsPage', () => {
     beforeEach(() => {
         mockUpdateNotificationSettings.mockReset()
         mockRollbackPipeline.mockReset()
-        mockRollbackTemplate.mockReset()
         versionModalSpy.mockClear()
         mockGetOrgSettings.mockResolvedValue({
             name: 'Test Organization',
