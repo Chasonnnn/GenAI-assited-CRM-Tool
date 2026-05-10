@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server"
+
 import { postUnsubscribeToApi } from "../unsubscribe-api"
 
 export const dynamic = "force-dynamic"
@@ -8,5 +10,8 @@ export async function POST(
 ) {
     const { token } = await params
     await postUnsubscribeToApi(token, request.headers)
-    return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } })
+
+    const redirectUrl = new URL(`/email/unsubscribe/${encodeURIComponent(token)}`, request.url)
+    redirectUrl.searchParams.set("status", "unsubscribed")
+    return NextResponse.redirect(redirectUrl, 303)
 }
