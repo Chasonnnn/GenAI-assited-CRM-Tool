@@ -368,6 +368,14 @@ describe("React regression guards (source)", () => {
         expect(noteTypesSource).not.toContain("NoteCreatePayload")
     })
 
+    it("keeps internal presentation and template aliases private", () => {
+        const outcomeSource = readSource("lib/surrogate-outcome-presentation.ts")
+        const templateVariableSource = readSource("lib/types/template-variable.ts")
+
+        expect(outcomeSource).not.toContain("export type OutcomeTone")
+        expect(templateVariableSource).not.toContain("export type TemplateVariableValueType")
+    })
+
     it("keeps public embed field visibility filtering single pass", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
 

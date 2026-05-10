@@ -3,7 +3,7 @@ import { AlertTriangleIcon, CalendarClockIcon, CheckCircleIcon, ClockIcon, Minus
 
 import type { ContactOutcome, InterviewOutcome } from "@/lib/api/surrogates"
 
-export type OutcomeTone = "success" | "follow_up" | "failed" | "neutral" | "upcoming"
+type OutcomeTone = "success" | "follow_up" | "failed" | "neutral" | "upcoming"
 export type SurrogateOutcomeKind = "contact" | "interview"
 type InterviewPresentationOutcome = InterviewOutcome | "upcoming"
 

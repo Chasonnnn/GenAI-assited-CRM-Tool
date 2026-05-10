@@ -1,4 +1,4 @@
-export type TemplateVariableValueType = "text" | "url" | "html"
+type TemplateVariableValueType = "text" | "url" | "html"
 
 export interface TemplateVariableRead {
     name: string
@@ -8,4 +8,3 @@ export interface TemplateVariableRead {
     value_type: TemplateVariableValueType
     html_safe: boolean
 }
-
