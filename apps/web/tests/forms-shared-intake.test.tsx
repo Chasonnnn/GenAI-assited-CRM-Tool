@@ -21,7 +21,8 @@ const {
 }))
 
 vi.mock('next/image', () => ({
-    default: ({ alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => <img alt={alt} {...props} />,
+    default: ({ alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) =>
+        React.createElement('img', { alt, ...props }),
 }))
 
 vi.mock('@/lib/api/forms', async () => {
