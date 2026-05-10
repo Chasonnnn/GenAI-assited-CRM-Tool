@@ -1249,14 +1249,14 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
                             id="email-provider"
                             aria-label="Email provider"
                         >
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="resend" id="provider-resend" />
                                 <Label htmlFor="provider-resend" className="cursor-pointer">
                                     <span className="font-medium">Resend</span>
                                     <span className="ml-2 text-xs text-muted-foreground">(Recommended)</span>
                                 </Label>
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-2">
                                 <RadioGroupItem value="gmail" id="provider-gmail" />
                                 <Label htmlFor="provider-gmail" className="cursor-pointer">
                                     <span className="font-medium">Gmail</span>
@@ -3403,7 +3403,7 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                         </div>
 
                         <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-3">
                                 <div>
                                     <CardTitle className="text-base">Legacy Connections</CardTitle>
                                     <CardDescription className="text-xs">
