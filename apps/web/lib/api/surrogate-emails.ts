@@ -4,7 +4,7 @@
 
 import api from '../api'
 
-export interface SurrogateEmailTicketItem {
+interface SurrogateEmailTicketItem {
     id: string
     ticket_code: string
     subject: string | null
