@@ -632,6 +632,14 @@ describe("React regression guards (source)", () => {
         expect(dateRangePickerTestSource).not.toMatch(/const shortDateLabel = \(date: Date\) =>\s*new Intl\.DateTimeFormat/)
     })
 
+    it("keeps the date-range picker URL harness selection in one state update", () => {
+        const source = readSource("tests/date-range-picker.test.tsx")
+
+        expect(source).toContain("const [selection, setSelection] = useState")
+        expect(source).not.toContain("const [dateRange, setDateRange] = useState")
+        expect(source).not.toContain("const [customRange, setCustomRange] = useState<CustomRange>(initialCustomRange)")
+    })
+
     it("keeps InlineDateField draft state tied to edit lifecycle", () => {
         const source = readSource("components/inline-date-field.tsx")
 

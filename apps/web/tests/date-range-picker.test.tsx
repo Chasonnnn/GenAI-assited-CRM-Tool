@@ -10,6 +10,13 @@ type CustomRange = {
     to: Date | undefined
 }
 
+type DateRangeSelection = {
+    dateRange: DateRangePreset
+    customRange: CustomRange
+}
+
+const EMPTY_CUSTOM_RANGE: CustomRange = { from: undefined, to: undefined }
+
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
@@ -33,10 +40,13 @@ function SurrogatesDateRangeHarness() {
             from: parseDateParam(searchParams.get("from")),
             to: parseDateParam(searchParams.get("to")),
         }
-        : { from: undefined, to: undefined }
+        : EMPTY_CUSTOM_RANGE
 
-    const [dateRange, setDateRange] = useState<DateRangePreset>(initialRange)
-    const [customRange, setCustomRange] = useState<CustomRange>(initialCustomRange)
+    const [selection, setSelection] = useState<DateRangeSelection>({
+        dateRange: initialRange,
+        customRange: initialCustomRange,
+    })
+    const { dateRange, customRange } = selection
 
     const updateUrlParams = useCallback((
         range: DateRangePreset,
@@ -71,40 +81,37 @@ function SurrogatesDateRangeHarness() {
     }, [searchParams])
 
     const handlePresetChange = useCallback((preset: DateRangePreset) => {
-        setDateRange(preset)
-        if (preset !== "custom") {
-            setCustomRange({ from: undefined, to: undefined })
-        }
-        updateUrlParams(
-            preset,
-            preset === "custom" ? customRange : { from: undefined, to: undefined },
-        )
+        const nextCustomRange = preset === "custom" ? customRange : EMPTY_CUSTOM_RANGE
+        setSelection({ dateRange: preset, customRange: nextCustomRange })
+        updateUrlParams(preset, nextCustomRange)
     }, [customRange, updateUrlParams])
 
     const handleCustomRangeChange = useCallback((range: CustomRange) => {
-        setCustomRange(range)
-        if (dateRange !== "custom") {
-            setDateRange("custom")
-        }
+        setSelection({ dateRange: "custom", customRange: range })
         updateUrlParams("custom", range)
-    }, [dateRange, updateUrlParams])
+    }, [updateUrlParams])
 
     useEffect(() => {
         const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
-        if (nextRange !== dateRange) {
-            setDateRange(nextRange)
-        }
-
-        if (nextRange === "custom") {
-            const nextFrom = parseDateParam(searchParams.get("from"))
-            const nextTo = parseDateParam(searchParams.get("to"))
-            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                setCustomRange({ from: nextFrom, to: nextTo })
+        const nextCustomRange = nextRange === "custom"
+            ? {
+                from: parseDateParam(searchParams.get("from")),
+                to: parseDateParam(searchParams.get("to")),
             }
-        } else if (customRange.from || customRange.to) {
-            setCustomRange({ from: undefined, to: undefined })
-        }
-    }, [customRange.from, customRange.to, dateRange, searchParams])
+            : EMPTY_CUSTOM_RANGE
+
+        setSelection((current) => {
+            if (
+                current.dateRange === nextRange
+                && datesEqual(current.customRange.from, nextCustomRange.from)
+                && datesEqual(current.customRange.to, nextCustomRange.to)
+            ) {
+                return current
+            }
+
+            return { dateRange: nextRange, customRange: nextCustomRange }
+        })
+    }, [searchParams])
 
     return (
         <div>
