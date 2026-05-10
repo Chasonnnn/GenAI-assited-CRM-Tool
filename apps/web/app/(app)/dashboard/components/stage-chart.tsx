@@ -1,13 +1,12 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Bar, BarChart, XAxis, YAxis, Cell, Tooltip, CartesianGrid, LabelList } from "recharts"
-import { ChartContainer } from "@/components/ui/chart"
 import {
     PieChartIcon,
     AlertCircleIcon,
@@ -21,9 +20,16 @@ import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { formatLocalDate } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
-import { buildStageChartData } from "./stage-chart-utils"
+import { buildStageChartData, type StageChartBuildResult } from "./stage-chart-utils"
 
 type ViewMode = "count" | "percent"
+type StageChartDatum = StageChartBuildResult["data"][number]
+
+type StageDistributionChartProps = {
+    chartData: StageChartDatum[]
+    viewMode: ViewMode
+    onBarClick: (data: { stage_id: string | null }) => void
+}
 
 const STAGE_CHART_SKELETON_KEYS = [
     "skeleton-stage-1",
@@ -33,6 +39,182 @@ const STAGE_CHART_SKELETON_KEYS = [
     "skeleton-stage-5",
     "skeleton-stage-6",
 ]
+
+const wrapStageLabel = (label: string, maxLength = 20) => {
+    const words = label.split(" ")
+    const lines: string[] = []
+    let current = ""
+    for (const word of words) {
+        const next = current ? `${current} ${word}` : word
+        if (next.length > maxLength && current) {
+            lines.push(current)
+            current = word
+            if (lines.length === 2) break
+        } else {
+            current = next
+        }
+    }
+    if (current && lines.length < 2) {
+        lines.push(current)
+    }
+    return lines
+}
+
+const StageDistributionChart = dynamic<StageDistributionChartProps>(
+    () =>
+        Promise.all([
+            import("recharts"),
+            import("@/components/ui/chart"),
+        ]).then(([{
+            Bar,
+            BarChart,
+            XAxis,
+            YAxis,
+            Cell,
+            Tooltip,
+            CartesianGrid,
+            LabelList,
+        }, { ChartContainer }]) => {
+            function StageDistributionChartComponent({
+                chartData,
+                viewMode,
+                onBarClick,
+            }: StageDistributionChartProps) {
+                return (
+                    <ChartContainer
+                        config={{
+                            count: {
+                                label: "Surrogates",
+                                color: "var(--primary)",
+                            },
+                        }}
+                        className="h-[320px] w-full"
+                    >
+                        <BarChart
+                            data={chartData}
+                            layout="vertical"
+                            barSize={18}
+                            barCategoryGap={10}
+                            margin={{ left: 0, right: 24, top: 8, bottom: 8 }}
+                        >
+                            <CartesianGrid
+                                horizontal={false}
+                                vertical={true}
+                                strokeDasharray="3 3"
+                                stroke="var(--border)"
+                                strokeOpacity={0.15}
+                            />
+                            <XAxis
+                                type="number"
+                                tickLine={false}
+                                axisLine={false}
+                                tick={{ fontSize: 12 }}
+                                tickCount={4}
+                                tickFormatter={(value) =>
+                                    viewMode === "percent" ? `${value}%` : value.toString()
+                                }
+                            />
+                            <YAxis
+                                type="category"
+                                dataKey="status"
+                                tickLine={false}
+                                axisLine={false}
+                                width={140}
+                                tick={({ x, y, payload }: { x: string | number; y: string | number; payload: { value: string } }) => {
+                                    const lines = wrapStageLabel(payload.value)
+                                    return (
+                                        <g transform={`translate(${x},${y})`}>
+                                            <text
+                                                x={0}
+                                                y={0}
+                                                dy={4}
+                                                textAnchor="end"
+                                                fill="currentColor"
+                                                fontSize={12}
+                                                className="fill-muted-foreground"
+                                            >
+                                                {lines.map((line, index) => (
+                                                    <tspan key={line} x={0} dy={index === 0 ? 0 : 12}>
+                                                        {line}
+                                                    </tspan>
+                                                ))}
+                                            </text>
+                                        </g>
+                                    )
+                                }}
+                            />
+                            <Tooltip
+                                cursor={{ fill: "var(--muted)", opacity: 0.3 }}
+                                content={({ active, payload }) => {
+                                    if (!active || !payload?.length) return null
+                                    const data = payload[0].payload
+                                    return (
+                                        <div className="rounded-lg border bg-background p-2 shadow-md">
+                                            <p className="font-medium">
+                                                {data.status}
+                                                {data.groupedCount ? ` (${data.groupedCount} stages)` : ""}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {data.count.toLocaleString()} surrogates ({data.percent}%)
+                                            </p>
+                                            {data.groupedCount ? (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Includes low-volume stages
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    Click to view
+                                                </p>
+                                            )}
+                                        </div>
+                                    )
+                                }}
+                            />
+                            <Bar
+                                dataKey={viewMode === "percent" ? "percent" : "count"}
+                                radius={[0, 4, 4, 0]}
+                                onClick={(data: { payload?: { stage_id: string | null } }) => {
+                                    if (data.payload?.stage_id) {
+                                        onBarClick({ stage_id: data.payload.stage_id })
+                                    }
+                                }}
+                            >
+                                {viewMode === "count" && (
+                                    <LabelList
+                                        dataKey="count"
+                                        position="right"
+                                        formatter={(v) => String(v)}
+                                        className="fill-muted-foreground text-xs"
+                                    />
+                                )}
+                                {viewMode === "percent" && (
+                                    <LabelList
+                                        dataKey="percent"
+                                        position="right"
+                                        formatter={(v) => `${v}%`}
+                                        className="fill-muted-foreground text-xs"
+                                    />
+                                )}
+                                {chartData.map((entry) => (
+                                    <Cell
+                                        key={`${entry.stage_id ?? "grouped"}:${entry.status}`}
+                                        fill={entry.fill}
+                                        className={`hover:opacity-80 transition-opacity ${entry.stage_id ? "cursor-pointer" : "cursor-default"}`}
+                                    />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ChartContainer>
+                )
+            }
+
+            return StageDistributionChartComponent
+        }),
+    {
+        ssr: false,
+        loading: () => <Skeleton className="h-[320px] w-full" />,
+    },
+)
 
 export function StageChart() {
     const { push } = useRouter()
@@ -61,26 +243,6 @@ export function StageChart() {
     const { data: chartData, total: totalCount } = useMemo(() => {
         return buildStageChartData(statusData, stageColorMap)
     }, [statusData, stageColorMap])
-
-    const wrapStageLabel = (label: string, maxLength = 20) => {
-        const words = label.split(" ")
-        const lines: string[] = []
-        let current = ""
-        for (const word of words) {
-            const next = current ? `${current} ${word}` : word
-            if (next.length > maxLength && current) {
-                lines.push(current)
-                current = word
-                if (lines.length === 2) break
-            } else {
-                current = next
-            }
-        }
-        if (current && lines.length < 2) {
-            lines.push(current)
-        }
-        return lines
-    }
 
     const buildStageUrl = (stageId: string) => {
         const params = new URLSearchParams()
@@ -220,130 +382,11 @@ export function StageChart() {
                     </div>
                 ) : (
                     <>
-                        <ChartContainer
-                            config={{
-                                count: {
-                                    label: "Surrogates",
-                                    color: "var(--primary)",
-                                },
-                            }}
-                            className="h-[320px] w-full"
-                        >
-                            <BarChart
-                                data={chartData}
-                                layout="vertical"
-                                barSize={18}
-                                barCategoryGap={10}
-                                margin={{ left: 0, right: 24, top: 8, bottom: 8 }}
-                            >
-                                <CartesianGrid
-                                    horizontal={false}
-                                    vertical={true}
-                                    strokeDasharray="3 3"
-                                    stroke="var(--border)"
-                                    strokeOpacity={0.15}
-                                />
-                                <XAxis
-                                    type="number"
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tick={{ fontSize: 12 }}
-                                    tickCount={4}
-                                    tickFormatter={(value) =>
-                                        viewMode === "percent" ? `${value}%` : value.toString()
-                                    }
-                                />
-                                <YAxis
-                                    type="category"
-                                    dataKey="status"
-                                    tickLine={false}
-                                    axisLine={false}
-                                    width={140}
-                                    tick={({ x, y, payload }: { x: string | number; y: string | number; payload: { value: string } }) => {
-                                        const lines = wrapStageLabel(payload.value)
-                                        return (
-                                            <g transform={`translate(${x},${y})`}>
-                                                <text
-                                                    x={0}
-                                                    y={0}
-                                                    dy={4}
-                                                    textAnchor="end"
-                                                    fill="currentColor"
-                                                    fontSize={12}
-                                                    className="fill-muted-foreground"
-                                                >
-                                                    {lines.map((line, index) => (
-                                                        <tspan key={line} x={0} dy={index === 0 ? 0 : 12}>
-                                                            {line}
-                                                        </tspan>
-                                                    ))}
-                                                </text>
-                                            </g>
-                                        )
-                                    }}
-                                />
-                                <Tooltip
-                                    cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-                                    content={({ active, payload }) => {
-                                        if (!active || !payload?.length) return null
-                                        const data = payload[0].payload
-                                        return (
-                                            <div className="rounded-lg border bg-background p-2 shadow-md">
-                                                <p className="font-medium">
-                                                    {data.status}
-                                                    {data.groupedCount ? ` (${data.groupedCount} stages)` : ""}
-                                                </p>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {data.count.toLocaleString()} surrogates ({data.percent}%)
-                                                </p>
-                                                {data.groupedCount ? (
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        Includes low-volume stages
-                                                    </p>
-                                                ) : (
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        Click to view
-                                                    </p>
-                                                )}
-                                            </div>
-                                        )
-                                    }}
-                                />
-                                <Bar
-                                    dataKey={viewMode === "percent" ? "percent" : "count"}
-                                    radius={[0, 4, 4, 0]}
-                                    onClick={(data: { payload?: { stage_id: string | null } }) => {
-                                        if (data.payload?.stage_id) {
-                                            handleBarClick({ stage_id: data.payload.stage_id })
-                                        }
-                                    }}
-                                >
-                                    {viewMode === "count" && (
-                                        <LabelList
-                                            dataKey="count"
-                                            position="right"
-                                            formatter={(v) => String(v)}
-                                            className="fill-muted-foreground text-xs"
-                                        />
-                                    )}
-                                    {viewMode === "percent" && (
-                                        <LabelList
-                                            dataKey="percent"
-                                            position="right"
-                                            formatter={(v) => `${v}%`}
-                                            className="fill-muted-foreground text-xs"
-                                        />
-                                    )}
-                                    {chartData.map((entry) => (
-                                        <Cell
-                                            key={`${entry.stage_id ?? "grouped"}:${entry.status}`}
-                                            fill={entry.fill}
-                                            className={`hover:opacity-80 transition-opacity ${entry.stage_id ? "cursor-pointer" : "cursor-default"}`}
-                                        />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ChartContainer>
+                        <StageDistributionChart
+                            chartData={chartData}
+                            viewMode={viewMode}
+                            onBarClick={handleBarClick}
+                        />
                         <div className="sr-only" aria-label="Pipeline stage links">
                             <ul>
                                 {stageLinkEntries.map((entry) => (

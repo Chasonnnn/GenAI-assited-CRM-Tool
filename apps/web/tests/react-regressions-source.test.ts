@@ -197,6 +197,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("KPICardSkeleton")
     })
 
+    it("keeps dashboard distribution charts code split from Recharts", () => {
+        const sources = [
+            readSource("app/(app)/dashboard/components/stage-chart.tsx"),
+            readSource("app/(app)/dashboard/components/trend-chart.tsx"),
+        ]
+
+        for (const source of sources) {
+            expect(source).toContain('import dynamic from "next/dynamic"')
+            expect(source).toContain('import("recharts")')
+            expect(source).not.toContain('from "recharts"')
+            expect(source).not.toContain('from "@/components/ui/chart"')
+        }
+    })
+
     it("uses Next Image for journey, AI studio, and platform branding images", () => {
         const sources = [
             readSource("components/surrogates/journey/JourneyPrintView.tsx"),

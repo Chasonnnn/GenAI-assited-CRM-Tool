@@ -1,13 +1,12 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import {
     TrendingUpIcon,
     AlertCircleIcon,
@@ -22,6 +21,14 @@ import { ApiError } from "@/lib/api"
 import { useDashboardFilters } from "../context/dashboard-filters"
 
 type TrendPeriod = "day" | "week" | "month"
+type TrendChartDatum = {
+    date: string
+    surrogates: number
+}
+
+type SurrogatesTrendChartProps = {
+    chartData: TrendChartDatum[]
+}
 
 const periodLabels: Record<TrendPeriod, string> = {
     day: "Daily",
@@ -34,6 +41,92 @@ const trendWindowLabels: Record<TrendPeriod, string> = {
     month: "30 months",
 }
 const MAX_TREND_POINTS = 30
+
+const SurrogatesTrendChart = dynamic<SurrogatesTrendChartProps>(
+    () =>
+        Promise.all([
+            import("recharts"),
+            import("@/components/ui/chart"),
+        ]).then(([{
+            Area,
+            AreaChart,
+            CartesianGrid,
+            XAxis,
+            YAxis,
+        }, { ChartContainer, ChartTooltip, ChartTooltipContent }]) => {
+            function SurrogatesTrendChartComponent({ chartData }: SurrogatesTrendChartProps) {
+                return (
+                    <ChartContainer
+                        config={{
+                            surrogates: {
+                                label: "Surrogates",
+                                color: "var(--primary)",
+                            },
+                        }}
+                        className="h-[320px] w-full"
+                    >
+                        <AreaChart
+                            accessibilityLayer
+                            data={chartData}
+                            margin={{ left: 0, right: 8, top: 12, bottom: 8 }}
+                        >
+                            <defs>
+                                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="var(--color-surrogates)" stopOpacity={0.12} />
+                                    <stop offset="100%" stopColor="var(--color-surrogates)" stopOpacity={0.02} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid
+                                vertical={false}
+                                strokeDasharray="3 3"
+                                stroke="var(--border)"
+                                strokeOpacity={0.15}
+                            />
+                            <XAxis
+                                dataKey="date"
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                                tick={{ fontSize: 11 }}
+                                tickCount={5}
+                                interval="preserveStartEnd"
+                                minTickGap={20}
+                            />
+                            <YAxis
+                                tickLine={false}
+                                axisLine={false}
+                                width={32}
+                                tickMargin={6}
+                                tick={{ fontSize: 12 }}
+                                allowDecimals={false}
+                            />
+                            <ChartTooltip
+                                cursor={{ stroke: "var(--border)" }}
+                                content={<ChartTooltipContent indicator="line" />}
+                            />
+                            <Area
+                                dataKey="surrogates"
+                                type="monotone"
+                                fill="url(#trendGradient)"
+                                stroke="var(--color-surrogates)"
+                                strokeWidth={2}
+                            />
+                        </AreaChart>
+                    </ChartContainer>
+                )
+            }
+
+            return SurrogatesTrendChartComponent
+        }),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="h-[320px] flex items-center justify-center">
+                <Skeleton className="h-[280px] w-full" />
+            </div>
+        ),
+    },
+)
 
 export function TrendChart() {
     const [period, setPeriod] = useState<TrendPeriod>("day")
@@ -235,63 +328,7 @@ export function TrendChart() {
                         )}
                     </div>
                 ) : (
-                    <ChartContainer
-                        config={{
-                            surrogates: {
-                                label: "Surrogates",
-                                color: "var(--primary)",
-                            },
-                        }}
-                        className="h-[320px] w-full"
-                    >
-                        <AreaChart
-                            accessibilityLayer
-                            data={chartData}
-                            margin={{ left: 0, right: 8, top: 12, bottom: 8 }}
-                        >
-                            <defs>
-                                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="var(--color-surrogates)" stopOpacity={0.12} />
-                                    <stop offset="100%" stopColor="var(--color-surrogates)" stopOpacity={0.02} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid
-                                vertical={false}
-                                strokeDasharray="3 3"
-                                stroke="var(--border)"
-                                strokeOpacity={0.15}
-                            />
-                            <XAxis
-                                dataKey="date"
-                                tickLine={false}
-                                axisLine={false}
-                                tickMargin={8}
-                                tick={{ fontSize: 11 }}
-                                tickCount={5}
-                                interval="preserveStartEnd"
-                                minTickGap={20}
-                            />
-                            <YAxis
-                                tickLine={false}
-                                axisLine={false}
-                                width={32}
-                                tickMargin={6}
-                                tick={{ fontSize: 12 }}
-                                allowDecimals={false}
-                            />
-                            <ChartTooltip
-                                cursor={{ stroke: "var(--border)" }}
-                                content={<ChartTooltipContent indicator="line" />}
-                            />
-                            <Area
-                                dataKey="surrogates"
-                                type="monotone"
-                                fill="url(#trendGradient)"
-                                stroke="var(--color-surrogates)"
-                                strokeWidth={2}
-                            />
-                        </AreaChart>
-                    </ChartContainer>
+                    <SurrogatesTrendChart chartData={chartData} />
                 )}
             </CardContent>
         </Card>
