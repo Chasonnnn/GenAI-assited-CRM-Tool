@@ -29,6 +29,7 @@ import {
     EmailTemplateLibraryDetail,
 } from '@/lib/api/email-templates'
 import type { TemplateVariableRead } from '@/lib/types/template-variable'
+import { invalidateSurrogateCrmCaches } from './use-surrogates'
 
 // Query keys
 export const emailTemplateKeys = {
@@ -94,8 +95,15 @@ export function useDeleteEmailTemplate() {
 }
 
 export function useSendEmail() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: (data: EmailSendRequest) => sendEmail(data),
+        onSuccess: (_data, variables) => {
+            if (variables.surrogate_id) {
+                invalidateSurrogateCrmCaches(queryClient, variables.surrogate_id)
+            }
+        },
     })
 }
 

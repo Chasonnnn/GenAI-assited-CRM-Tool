@@ -2,7 +2,7 @@
  * React Query hooks for Surrogates module.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as surrogatesApi from '../api/surrogates';
 import type { SurrogateCreatedDatesParams, SurrogateListParams } from '../api/surrogates';
 
@@ -25,6 +25,16 @@ export const surrogateKeys = {
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
     massEditOptions: () => [...surrogateKeys.all, 'mass-edit-options'] as const,
 };
+
+export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogateId: string) {
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+    queryClient.invalidateQueries({
+        queryKey: ['analytics', 'activity-feed'],
+        exact: false,
+    });
+}
 
 /**
  * Fetch surrogate statistics for dashboard.
@@ -152,8 +162,13 @@ export function useUpdateSurrogate() {
 }
 
 export function useRevealSurrogateSensitiveInfo() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: (surrogateId: string) => surrogatesApi.revealSurrogateSensitiveInfo(surrogateId),
+        onSuccess: (_payload, surrogateId) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+        },
     });
 }
 

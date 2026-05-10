@@ -77,7 +77,14 @@ export function usePurgePreview() {
 }
 
 export function useExecutePurge() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: () => executePurge(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: complianceKeys.purgePreview() })
+            queryClient.invalidateQueries({ queryKey: complianceKeys.policies() })
+            queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
+        },
     })
 }

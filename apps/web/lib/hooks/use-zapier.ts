@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as zapierApi from '../api/zapier';
+import { metaFormsKeys } from './use-meta-forms';
+import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates';
 
 export const zapierKeys = {
     all: ['zapier'] as const,
@@ -81,14 +83,37 @@ export function useUpdateZapierOutboundSettings() {
 }
 
 export function useZapierTestLead() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: zapierApi.sendZapierTestLead,
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() });
+            queryClient.invalidateQueries({ queryKey: metaFormsKeys.all });
+            if (result.surrogate_id) {
+                invalidateSurrogateCrmCaches(queryClient, result.surrogate_id);
+            }
+        },
     });
 }
 
 export function useZapierOutboundTest() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: zapierApi.sendZapierOutboundTest,
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: [...zapierKeys.all, 'outbound-events'],
+                exact: false,
+            });
+            queryClient.invalidateQueries({
+                queryKey: [...zapierKeys.all, 'outbound-events-summary'],
+                exact: false,
+            });
+        },
     });
 }
 

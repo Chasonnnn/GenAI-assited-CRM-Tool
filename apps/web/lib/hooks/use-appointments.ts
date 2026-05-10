@@ -363,6 +363,8 @@ export function useAvailableSlots(
 }
 
 export function useCreateBooking() {
+    const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: ({
             publicSlug,
@@ -371,6 +373,14 @@ export function useCreateBooking() {
             publicSlug: string;
             data: appointmentsApi.BookingCreate;
         }) => appointmentsApi.createBooking(publicSlug, data),
+        onSuccess: (_createdBooking, { publicSlug }) => {
+            queryClient.invalidateQueries({ queryKey: bookingKeys.page(publicSlug) });
+            queryClient.invalidateQueries({
+                queryKey: [...bookingKeys.all, 'slots'],
+                exact: false,
+            });
+            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+        },
     });
 }
 
@@ -383,6 +393,8 @@ export function useAppointmentForManage(orgId: string, token: string, enabled = 
 }
 
 export function useRescheduleByManageToken() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: ({
             orgId,
@@ -393,10 +405,20 @@ export function useRescheduleByManageToken() {
             token: string;
             scheduledStart: string;
         }) => appointmentsApi.rescheduleByManageToken(orgId, token, scheduledStart),
+        onSuccess: (_updatedAppointment, { orgId, token }) => {
+            queryClient.invalidateQueries({ queryKey: bookingKeys.manage(orgId, token) })
+            queryClient.invalidateQueries({
+                queryKey: [...bookingKeys.all, 'slots'],
+                exact: false,
+            })
+            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+        },
     })
 }
 
 export function useCancelByManageToken() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: ({
             orgId,
@@ -407,6 +429,14 @@ export function useCancelByManageToken() {
             token: string;
             reason?: string;
         }) => appointmentsApi.cancelByManageToken(orgId, token, reason),
+        onSuccess: (_updatedAppointment, { orgId, token }) => {
+            queryClient.invalidateQueries({ queryKey: bookingKeys.manage(orgId, token) })
+            queryClient.invalidateQueries({
+                queryKey: [...bookingKeys.all, 'slots'],
+                exact: false,
+            })
+            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+        },
     })
 }
 

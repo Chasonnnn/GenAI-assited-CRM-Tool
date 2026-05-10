@@ -7,6 +7,7 @@ import {
     useChangeSurrogateStatus,
     useCreateContactAttempt,
     useLogInterviewOutcome,
+    useRevealSurrogateSensitiveInfo,
 } from "@/lib/hooks/use-surrogates"
 
 type MutationOptions = {
@@ -110,6 +111,19 @@ describe("surrogate mutation hooks", () => {
         })
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: surrogateKeys.lists(),
+        })
+    })
+
+    it("invalidates activity after revealing sensitive surrogate info", () => {
+        useRevealSurrogateSensitiveInfo()
+
+        capturedOptions?.onSuccess?.(
+            { ssn: "123-45-6789", partner_ssn: null },
+            "surrogate-1"
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.activity("surrogate-1"),
         })
     })
 })

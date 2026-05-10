@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api'
+import { invalidateSurrogateCrmCaches } from './use-surrogates'
 import {
     listUserIntegrations,
     getZoomConnectUrl,
@@ -263,8 +264,15 @@ export function useCreateZoomMeeting() {
  * Send a Zoom meeting invite email.
  */
 export function useSendZoomInvite() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: (data: SendZoomInviteRequest) => sendZoomInvite(data),
+        onSuccess: (_data, variables) => {
+            if (variables.surrogate_id) {
+                invalidateSurrogateCrmCaches(queryClient, variables.surrogate_id)
+            }
+        },
     })
 }
 
