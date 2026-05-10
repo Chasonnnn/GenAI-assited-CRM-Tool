@@ -102,4 +102,50 @@ describe("EmailAttachmentsPanel", () => {
             )
         })
     })
+
+    it("starts valid batch uploads without waiting for earlier files to finish", async () => {
+        mockUseAttachments.mockReturnValue({
+            data: [],
+            isLoading: false,
+        })
+
+        let resolveFirstUpload: ((value: { id: string }) => void) | null = null
+        const firstUpload = new Promise<{ id: string }>((resolve) => {
+            resolveFirstUpload = resolve
+        })
+        const mutateAsync = vi
+            .fn()
+            .mockReturnValueOnce(firstUpload)
+            .mockResolvedValueOnce({ id: "att-two" })
+        mockUseUploadAttachment.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+        })
+
+        const onSelectionChange = vi.fn()
+        render(<EmailAttachmentsPanel surrogateId="sur-1" onSelectionChange={onSelectionChange} />)
+
+        fireEvent.change(screen.getByLabelText("Attachments"), {
+            target: {
+                files: [
+                    new File(["one"], "one.pdf", { type: "application/pdf" }),
+                    new File(["two"], "two.pdf", { type: "application/pdf" }),
+                ],
+            },
+        })
+
+        await waitFor(() => {
+            expect(mutateAsync).toHaveBeenCalledTimes(2)
+        })
+
+        resolveFirstUpload?.({ id: "att-one" })
+
+        await waitFor(() => {
+            expect(onSelectionChange).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    selectedAttachmentIds: ["att-one", "att-two"],
+                })
+            )
+        })
+    })
 })

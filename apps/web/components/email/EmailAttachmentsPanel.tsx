@@ -10,11 +10,11 @@ import { Label } from "@/components/ui/label"
 import type { Attachment } from "@/lib/api/attachments"
 import { useAttachments, useUploadAttachment } from "@/lib/hooks/use-attachments"
 
-export const EMAIL_ATTACHMENTS_MAX_COUNT = 10
-export const EMAIL_ATTACHMENTS_MAX_TOTAL_BYTES = 18 * 1024 * 1024
+const EMAIL_ATTACHMENTS_MAX_COUNT = 10
+const EMAIL_ATTACHMENTS_MAX_TOTAL_BYTES = 18 * 1024 * 1024
 
 const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024
-const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "doc", "docx", "xls", "xlsx"]
+const ALLOWED_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg", "doc", "docx", "xls", "xlsx"])
 
 const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
     "application/pdf": [".pdf"],
@@ -37,6 +37,7 @@ interface EmailAttachmentsPanelProps {
     surrogateId: string
     onSelectionChange: (state: EmailAttachmentSelectionState) => void
     hideUI?: boolean
+    ref?: React.Ref<EmailAttachmentsPanelHandle>
 }
 
 export interface EmailAttachmentsPanelHandle {
@@ -76,8 +77,12 @@ function getScanBadge(attachment: Attachment) {
     )
 }
 
-export const EmailAttachmentsPanel = React.forwardRef<EmailAttachmentsPanelHandle, EmailAttachmentsPanelProps>(
-function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false }: EmailAttachmentsPanelProps, ref) {
+export function EmailAttachmentsPanel({
+    surrogateId,
+    onSelectionChange,
+    hideUI = false,
+    ref,
+}: EmailAttachmentsPanelProps) {
     const { data: attachments = [], isLoading } = useAttachments(surrogateId)
     const uploadMutation = useUploadAttachment()
     const fileInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -85,16 +90,17 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
 
     const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<string[]>([])
     const [uploadError, setUploadError] = React.useState<string | null>(null)
+    const onSelectionChangeRef = React.useRef(onSelectionChange)
+    onSelectionChangeRef.current = onSelectionChange
 
-    React.useEffect(() => {
-        setSelectedAttachmentIds((current) =>
-            current.filter((attachmentId) => attachments.some((attachment) => attachment.id === attachmentId))
-        )
-    }, [attachments])
+    const selectedAttachmentIdSet = React.useMemo(
+        () => new Set(selectedAttachmentIds),
+        [selectedAttachmentIds],
+    )
 
     const selectedAttachments = React.useMemo(
-        () => attachments.filter((attachment) => selectedAttachmentIds.includes(attachment.id)),
-        [attachments, selectedAttachmentIds]
+        () => attachments.filter((attachment) => selectedAttachmentIdSet.has(attachment.id)),
+        [attachments, selectedAttachmentIdSet]
     )
 
     const totalBytes = React.useMemo(
@@ -130,13 +136,13 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
     const visibleError = uploadError || constraintError
 
     React.useEffect(() => {
-        onSelectionChange({
+        onSelectionChangeRef.current({
             selectedAttachmentIds,
             hasBlockingAttachments,
             totalBytes,
             errorMessage: visibleError,
         })
-    }, [selectedAttachmentIds, hasBlockingAttachments, totalBytes, visibleError, onSelectionChange])
+    }, [selectedAttachmentIds, hasBlockingAttachments, totalBytes, visibleError])
 
     const toggleSelection = React.useCallback((attachmentId: string, checked: boolean) => {
         setSelectedAttachmentIds((current) => {
@@ -150,25 +156,46 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
     const uploadFiles = React.useCallback(
         async (incomingFiles: File[]) => {
             setUploadError(null)
-            const uploadedIds: string[] = []
+            const validFiles: File[] = []
+            const validationErrors: string[] = []
 
             for (const file of incomingFiles) {
                 const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-                if (!ALLOWED_EXTENSIONS.includes(ext)) {
-                    setUploadError(`File type .${ext || "unknown"} is not allowed.`)
+                if (!ALLOWED_EXTENSIONS.has(ext)) {
+                    validationErrors.push(`File type .${ext || "unknown"} is not allowed.`)
                     continue
                 }
                 if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-                    setUploadError("File exceeds 25 MB limit.")
+                    validationErrors.push("File exceeds 25 MB limit.")
                     continue
                 }
 
-                try {
-                    const uploaded = await uploadMutation.mutateAsync({ surrogateId, file })
-                    uploadedIds.push(uploaded.id)
-                } catch (error) {
-                    setUploadError(error instanceof Error ? error.message : "Upload failed.")
-                }
+                validFiles.push(file)
+            }
+
+            if (validationErrors.length > 0) {
+                setUploadError(validationErrors[0] ?? "One or more files could not be uploaded.")
+            }
+
+            const uploadResults = await Promise.all(
+                validFiles.map(async (file) => {
+                    try {
+                        const uploaded = await uploadMutation.mutateAsync({ surrogateId, file })
+                        return { id: uploaded.id, error: null }
+                    } catch (error) {
+                        return {
+                            id: null,
+                            error: error instanceof Error ? error.message : "Upload failed.",
+                        }
+                    }
+                }),
+            )
+
+            const uploadedIds = uploadResults.flatMap((result) => result.id ? [result.id] : [])
+            const firstUploadError = uploadResults.find((result) => result.error)?.error
+
+            if (firstUploadError) {
+                setUploadError(firstUploadError)
             }
 
             if (uploadedIds.length > 0) {
@@ -249,7 +276,7 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
                         <span>&#8226;</span>
                         <span className="inline-flex items-center gap-1">
                             <Loader2Icon className="size-3 animate-spin" />
-                            Uploading...
+                            Uploading&hellip;
                         </span>
                     </>
                 )}
@@ -265,14 +292,14 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
             {isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2Icon className="size-4 animate-spin" />
-                    Loading attachments...
+                    Loading attachments&hellip;
                 </div>
             ) : attachments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No attachments yet.</p>
             ) : (
                 <div className="max-h-44 overflow-y-auto rounded-md border">
                     {attachments.map((attachment) => {
-                        const checked = selectedAttachmentIds.includes(attachment.id)
+                        const checked = selectedAttachmentIdSet.has(attachment.id)
                         const inputId = `email-attachment-${attachment.id}`
                         return (
                             <div
@@ -300,4 +327,3 @@ function EmailAttachmentsPanel({ surrogateId, onSelectionChange, hideUI = false 
         </div>
     )
 }
-)
