@@ -10,6 +10,7 @@ from app.routers import (
     ai_focus,
     ai_schedule,
     ai_settings,
+    ai_studio,
     ai_tasks,
     ai_usage,
     ai_workflows,
@@ -24,6 +25,7 @@ router.include_router(ai_conversations.router)
 router.include_router(ai_actions.router)
 router.include_router(ai_usage.router)
 router.include_router(ai_focus.router)
+router.include_router(ai_studio.router)
 router.include_router(ai_workflows.router)
 router.include_router(ai_schedule.router)
 router.include_router(ai_tasks.router)

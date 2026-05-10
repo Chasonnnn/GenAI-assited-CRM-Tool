@@ -281,3 +281,84 @@ class AIUsageLog(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     __table_args__ = (Index("ix_ai_usage_log_org_date", "organization_id", "created_at"),)
+
+
+class AIStudioSettings(Base):
+    """Org-level AI Studio configuration, isolated from AI Assistant settings."""
+
+    __tablename__ = "ai_studio_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    openai_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agents_md: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    skills_md: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    organization: Mapped["Organization"] = relationship()
+
+
+class AIStudioDraft(Base):
+    """Generated social content draft produced by AI Studio."""
+
+    __tablename__ = "ai_studio_drafts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="preview", server_default=text("'preview'"))
+    platform: Mapped[str] = mapped_column(String(30), nullable=False)
+    format: Mapped[str] = mapped_column(String(30), nullable=False)
+    tone: Mapped[str] = mapped_column(String(30), nullable=False)
+    audience: Mapped[str] = mapped_column(String(200), default="", server_default=text("''"))
+    brief: Mapped[str] = mapped_column(Text, nullable=False)
+    caption: Mapped[str] = mapped_column(Text, nullable=False)
+    hashtags: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
+    image_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    image_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    image_mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    image_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_revised_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_size: Mapped[str] = mapped_column(
+        String(30), default="auto", server_default=text("'auto'")
+    )
+    image_quality: Mapped[str] = mapped_column(
+        String(20), default="auto", server_default=text("'auto'")
+    )
+    reasoning_model: Mapped[str] = mapped_column(
+        String(50), default="gpt-5.5", server_default=text("'gpt-5.5'")
+    )
+    image_model: Mapped[str] = mapped_column(
+        String(50), default="gpt-image-2", server_default=text("'gpt-image-2'")
+    )
+    generation_metadata: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+    organization: Mapped["Organization"] = relationship()
+    created_by: Mapped["User"] = relationship()
+
+    __table_args__ = (
+        Index("ix_ai_studio_drafts_org_created", "organization_id", "created_at"),
+        Index("ix_ai_studio_drafts_org_status_created", "organization_id", "status", "created_at"),
+    )

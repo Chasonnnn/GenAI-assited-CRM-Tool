@@ -7,6 +7,8 @@ from app.db.models.ai import (
     AIEntitySummary,
     AIMessage,
     AISettings,
+    AIStudioDraft,
+    AIStudioSettings,
     AIUsageLog,
 )
 from app.db.models.analytics import AnalyticsSnapshot, RequestMetricsRollup
@@ -153,6 +155,8 @@ __all__ = [
     "AIEntitySummary",
     "AIMessage",
     "AISettings",
+    "AIStudioDraft",
+    "AIStudioSettings",
     "AIUsageLog",
     "AdminActionLog",
     "AnalyticsSnapshot",
