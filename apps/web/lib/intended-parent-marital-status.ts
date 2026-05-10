@@ -1,4 +1,4 @@
-export const MARITAL_STATUS_VALUES = [
+const MARITAL_STATUS_VALUES = [
     "Single",
     "Married",
     "Partnered",
@@ -10,12 +10,12 @@ export const MARITAL_STATUS_VALUES = [
 
 export type MaritalStatus = (typeof MARITAL_STATUS_VALUES)[number]
 
-export type MaritalStatusOption = {
+type MaritalStatusOption = {
     value: string
     label: string
 }
 
-export const DEFAULT_MARITAL_STATUS_OPTIONS: MaritalStatusOption[] = MARITAL_STATUS_VALUES.map((value) => ({
+const DEFAULT_MARITAL_STATUS_OPTIONS: MaritalStatusOption[] = MARITAL_STATUS_VALUES.map((value) => ({
     value,
     label: value,
 }))

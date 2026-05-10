@@ -1,18 +1,15 @@
-export const TRUST_FUNDING_STATUS_VALUES = [
-    "pending_funding",
-    "funded",
-    "needs_replenishment",
-    "closed",
-] as const
+export type TrustFundingStatus =
+    | "pending_funding"
+    | "funded"
+    | "needs_replenishment"
+    | "closed"
 
-export type TrustFundingStatus = (typeof TRUST_FUNDING_STATUS_VALUES)[number]
-
-export type TrustFundingStatusOption = {
+type TrustFundingStatusOption = {
     value: TrustFundingStatus
     label: string
 }
 
-export const DEFAULT_TRUST_FUNDING_STATUS_OPTIONS: TrustFundingStatusOption[] = [
+const DEFAULT_TRUST_FUNDING_STATUS_OPTIONS: TrustFundingStatusOption[] = [
     { value: "pending_funding", label: "Pending Funding" },
     { value: "funded", label: "Funded" },
     { value: "needs_replenishment", label: "Needs Replenishment" },
