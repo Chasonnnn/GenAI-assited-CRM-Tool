@@ -170,7 +170,7 @@ function AddOverrideDialog({
 
 export default function MemberDetailPage() {
     const params = useParams()
-    const router = useRouter()
+    const { push } = useRouter()
     const rawMemberId = params.id
     const memberId =
         typeof rawMemberId === "string"
@@ -245,7 +245,7 @@ export default function MemberDetailPage() {
         try {
             await removeMember.mutateAsync(memberId)
             toast.success("Member removed")
-            router.push("/settings/team")
+            push("/settings/team")
         } catch (error) {
             toast.error("Failed to remove member", {
                 description: error instanceof Error ? error.message : "Unknown error"

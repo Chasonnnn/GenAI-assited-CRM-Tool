@@ -25,7 +25,7 @@ export const isSourceFilter = (value: string | null): value is SourceFilter =>
 
 export function useMatchDetailTabState(matchId: string) {
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { replace } = useRouter()
 
     const [activeTab, setActiveTab] = useState<TabType>(() => {
         const tab = searchParams.get("tab")
@@ -62,9 +62,9 @@ export function useMatchDetailTabState(matchId: string) {
                 : `/intended-parents/matches/${matchId}`
             if (nextUrl === currentUrl) return
 
-            router.replace(nextUrl, { scroll: false })
+            replace(nextUrl, { scroll: false })
         },
-        [matchId, router, searchParams]
+        [matchId, replace, searchParams]
     )
 
     const handleTabChange = useCallback(

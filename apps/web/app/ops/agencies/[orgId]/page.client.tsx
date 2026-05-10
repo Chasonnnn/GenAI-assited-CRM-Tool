@@ -74,7 +74,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 export default function AgencyDetailPage() {
     const params = useParams();
     const orgId = params.orgId as string;
-    const router = useRouter();
+    const { push } = useRouter();
 
     const [org, setOrg] = useState<OrganizationDetail | null>(null);
     const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
@@ -246,7 +246,7 @@ export default function AgencyDetailPage() {
             } else {
                 toast.success('Deletion scheduled; org removed from ops list');
             }
-            router.push('/ops/agencies');
+            push('/ops/agencies');
         } catch (error) {
             console.error('Failed to purge organization:', error);
             toast.error(getErrorMessage(error, 'Failed to delete organization'));

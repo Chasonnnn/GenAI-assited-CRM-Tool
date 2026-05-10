@@ -1161,6 +1161,32 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("destructures remaining router navigation methods", () => {
+        const opsAgencySource = readSource("app/ops/agencies/[orgId]/page.client.tsx")
+        const opsWorkflowSource = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+        const aiBuilderSource = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+        const teamMemberSource = readSource("app/(app)/settings/team/members/[id]/page.client.tsx")
+        const matchTabSource = readSource("app/(app)/intended-parents/matches/[id]/hooks/useMatchDetailTabState.ts")
+
+        expect(opsAgencySource).toContain("const { push } = useRouter()")
+        expect(opsWorkflowSource).toContain("const { push, replace } = useRouter()")
+        expect(aiBuilderSource).toContain("const { push } = useRouter()")
+        expect(teamMemberSource).toContain("const { push } = useRouter()")
+        expect(matchTabSource).toContain("const { replace } = useRouter()")
+
+        for (const source of [
+            opsAgencySource,
+            opsWorkflowSource,
+            aiBuilderSource,
+            teamMemberSource,
+            matchTabSource,
+        ]) {
+            expect(source).not.toContain("const router = useRouter()")
+            expect(source).not.toContain("router.push(")
+            expect(source).not.toContain("router.replace(")
+        }
+    })
+
     it("keeps Tasks page focus coordination out of render state", () => {
         const source = readSource("app/(app)/tasks/page.client.tsx")
 
@@ -1190,6 +1216,31 @@ describe("React regression guards (source)", () => {
         expect(aiAssistantSource).toContain("for (const msg of rawMessages) {")
         expect(aiAssistantSource).not.toContain("return parsed\n            .filter")
         expect(aiAssistantSource).not.toContain("const messages: Message[] = rawMessages\n                    .filter")
+    })
+
+    it("keeps pipeline, surrogate, and intended-parent derived lists single pass", () => {
+        const pipelinesSource = readSource("app/(app)/settings/pipelines/page.tsx")
+        const surrogatesSource = readSource("app/(app)/surrogates/page.client.tsx")
+        const intendedParentTimelineSource = readSource("components/intended-parents/IntendedParentActivityTimeline.tsx")
+
+        expect(pipelinesSource).toContain("const remapped: string[] = []")
+        expect(pipelinesSource).toContain("const neighborColors = new Set<string>()")
+        expect(pipelinesSource).toContain("const mappedLabels: string[] = []")
+        expect(pipelinesSource).toContain("const selectedLabels: string[] = []")
+        expect(pipelinesSource).toContain("const nextStages: EditableStage[] = []")
+        expect(pipelinesSource).not.toContain(".map((value) => (value === removedStageKey ? targetStageKey ?? null : value))")
+        expect(pipelinesSource).not.toContain(".filter((stage) => milestone.mapped_stage_keys.includes(stage.stageKey))")
+        expect(pipelinesSource).not.toContain(".map((activeStage) => activeStage.stage_key)\n                                        .filter")
+        expect(pipelinesSource).not.toContain("current.stages\n                .filter")
+
+        expect(surrogatesSource).toContain("key !== \"intelligent_any\" &&")
+        expect(surrogatesSource).not.toContain(".filter(([key]) => key !== \"intelligent_any\")\n        .filter")
+
+        expect(intendedParentTimelineSource).toContain("const overdue: PendingTaskEntry[] = []")
+        expect(intendedParentTimelineSource).toContain("const upcoming: PendingTaskEntry[] = []")
+        expect(intendedParentTimelineSource).not.toContain("const pending = tasks\n            .filter")
+        expect(intendedParentTimelineSource).not.toContain("const overdue = pending.filter")
+        expect(intendedParentTimelineSource).not.toContain("const upcoming = pending.filter")
     })
 
     it("uses stable content-derived keys in the AI builder", () => {

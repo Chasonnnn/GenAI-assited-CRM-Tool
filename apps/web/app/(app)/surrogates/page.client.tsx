@@ -919,8 +919,10 @@ export function SurrogatesPageClient() {
     const intelligentSuggestionCount = intelligentSummary?.total ?? 0
     const hasIntelligentSuggestions = intelligentSuggestionCount > 0
     const availableSmartFilters = (Object.entries(DYNAMIC_FILTER_LABELS) as Array<[DynamicSurrogateFilter, string]>)
-        .filter(([key]) => key !== "intelligent_any")
-        .filter(([key]) => hasIntelligentSuggestions || !key.startsWith("intelligent_"))
+        .filter(([key]) =>
+            key !== "intelligent_any" &&
+            (hasIntelligentSuggestions || !key.startsWith("intelligent_"))
+        )
 
     const createdDateFilters = {
         ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),

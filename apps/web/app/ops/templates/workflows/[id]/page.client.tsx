@@ -1970,7 +1970,7 @@ function WorkflowTemplateSidebar({
 }
 
 function useWorkflowTemplatePageState() {
-    const router = useRouter()
+    const { push, replace } = useRouter()
     const params = useParams()
     const id = params?.id as string
     const isNew = id === "new"
@@ -2291,7 +2291,7 @@ function useWorkflowTemplatePageState() {
 
             if (isNew) {
                 const created = await createTemplate.mutateAsync(payload)
-                router.replace(`/ops/templates/workflows/${created.id}`)
+                replace(`/ops/templates/workflows/${created.id}`)
                 return created
             }
 
@@ -2315,7 +2315,7 @@ function useWorkflowTemplatePageState() {
             id,
             isNew,
             name,
-            router,
+            replace,
             templateData?.published_version,
             triggerType,
             updateTemplate,
@@ -2376,7 +2376,7 @@ function useWorkflowTemplatePageState() {
             await deleteTemplate.mutateAsync({ id })
             toast.success("Template deleted")
             setShowDeleteDialog(false)
-            router.push("/ops/templates?tab=workflows")
+            push("/ops/templates?tab=workflows")
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Failed to delete template")
         }
@@ -2433,7 +2433,7 @@ function useWorkflowTemplatePageState() {
         handlePublish,
         confirmPublish,
         handleDelete,
-        handleBack: () => router.push("/ops/templates?tab=workflows"),
+        handleBack: () => push("/ops/templates?tab=workflows"),
         openDeleteDialog: () => setShowDeleteDialog(true),
     }
 }

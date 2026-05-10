@@ -669,10 +669,14 @@ function getPresetOptions(
 }
 
 function remapStageKeys(values: string[], removedStageKey: string, targetStageKey?: string): string[] {
-    const replaced = values
-        .map((value) => (value === removedStageKey ? targetStageKey ?? null : value))
-        .filter((value): value is string => Boolean(value))
-    return Array.from(new Set(replaced))
+    const remapped: string[] = []
+    for (const value of values) {
+        const nextValue = value === removedStageKey ? targetStageKey : value
+        if (nextValue) {
+            remapped.push(nextValue)
+        }
+    }
+    return Array.from(new Set(remapped))
 }
 
 function applyLocalFeatureConfigRemap(
@@ -730,14 +734,19 @@ function buildNewStage(
             ? "post_approval"
             : "intake"
     const presetPalette = CUSTOM_STAGE_COLOR_PRESETS[category]
-    const presetIndex =
-        draft.stages.slice(0, insertIndex).filter((stage) => stage.stage_type === category).length
-        % presetPalette.length
-    const neighborColors = new Set(
-        [previousStage?.color, nextStage?.color]
-            .filter((color): color is string => Boolean(color))
-            .map((color) => color.toLowerCase()),
-    )
+    let categoryStageCount = 0
+    for (let index = 0; index < insertIndex; index += 1) {
+        if (draft.stages[index]?.stage_type === category) {
+            categoryStageCount += 1
+        }
+    }
+    const presetIndex = categoryStageCount % presetPalette.length
+    const neighborColors = new Set<string>()
+    for (const color of [previousStage?.color, nextStage?.color]) {
+        if (color) {
+            neighborColors.add(color.toLowerCase())
+        }
+    }
     const presetColor =
         presetPalette.find(
             (color, offset) =>
@@ -1665,9 +1674,13 @@ function JourneyMilestonesEditor({
         <div className="space-y-4">
             {featureConfig.journey.milestones.map((milestone, milestoneIndex) => {
                 const isExpanded = expandedMilestones[milestone.slug] ?? false
-                const mappedLabels = stageOptions
-                    .filter((stage) => milestone.mapped_stage_keys.includes(stage.stageKey))
-                    .map((stage) => stage.label)
+                const mappedStageKeys = new Set(milestone.mapped_stage_keys)
+                const mappedLabels: string[] = []
+                for (const stage of stageOptions) {
+                    if (mappedStageKeys.has(stage.stageKey)) {
+                        mappedLabels.push(stage.label)
+                    }
+                }
 
                 return (
                     <div key={milestone.slug} className="rounded-xl border p-4">
@@ -1767,11 +1780,16 @@ function AnalyticsFunnelEditor({
     onChange: (featureConfig: PipelineFeatureConfig) => void
 }) {
     const [isExpanded, setIsExpanded] = useState(false)
-    const activeStages = stages.filter((stage) => stage.is_active)
     const funnelStageKeys = new Set(featureConfig.analytics.funnel_stage_keys)
-    const selectedLabels = activeStages
-        .filter((stage) => funnelStageKeys.has(stage.stage_key))
-        .map((stage) => stage.label)
+    const activeStages: EditableStage[] = []
+    const selectedLabels: string[] = []
+    for (const stage of stages) {
+        if (!stage.is_active) continue
+        activeStages.push(stage)
+        if (funnelStageKeys.has(stage.stage_key)) {
+            selectedLabels.push(stage.label)
+        }
+    }
 
     return (
         <div className="rounded-xl border p-4">
@@ -1827,9 +1845,13 @@ function AnalyticsFunnelEditor({
                                     } else {
                                         nextKeys.delete(stage.stage_key)
                                     }
-                                    next.analytics.funnel_stage_keys = activeStages
-                                        .map((activeStage) => activeStage.stage_key)
-                                        .filter((stageKey) => nextKeys.has(stageKey))
+                                    const nextFunnelStageKeys: string[] = []
+                                    for (const activeStage of activeStages) {
+                                        if (nextKeys.has(activeStage.stage_key)) {
+                                            nextFunnelStageKeys.push(activeStage.stage_key)
+                                        }
+                                    }
+                                    next.analytics.funnel_stage_keys = nextFunnelStageKeys
                                     onChange(next)
                                 }}
                                 aria-label={`Include ${stage.label} in analytics funnel`}
@@ -2444,28 +2466,34 @@ function usePipelineSettingsEditor() {
         if (!deleteStageState) return
         const removedStageKey = deleteStageState.stageKey
         const targetStageKey = deleteStageState.targetStageKey || undefined
-        updateDraft((current) => ({
-            ...current,
-            stages: current.stages
-                .filter((stage) => stage.stage_key !== removedStageKey)
-                .map((stage, index) => ({ ...stage, order: index + 1 })),
-            featureConfig: applyLocalFeatureConfigRemap(
-                current.featureConfig,
-                removedStageKey,
-                targetStageKey,
-            ),
-            remaps: [
-                ...current.remaps.filter((item) => item.removed_stage_key !== removedStageKey),
-                ...(targetStageKey
-                    ? [
-                          {
-                              removed_stage_key: removedStageKey,
-                              target_stage_key: targetStageKey,
-                          },
-                      ]
-                    : []),
-            ],
-        }))
+        updateDraft((current) => {
+            const nextStages: EditableStage[] = []
+            for (const stage of current.stages) {
+                if (stage.stage_key === removedStageKey) continue
+                nextStages.push({ ...stage, order: nextStages.length + 1 })
+            }
+
+            return {
+                ...current,
+                stages: nextStages,
+                featureConfig: applyLocalFeatureConfigRemap(
+                    current.featureConfig,
+                    removedStageKey,
+                    targetStageKey,
+                ),
+                remaps: [
+                    ...current.remaps.filter((item) => item.removed_stage_key !== removedStageKey),
+                    ...(targetStageKey
+                        ? [
+                              {
+                                  removed_stage_key: removedStageKey,
+                                  target_stage_key: targetStageKey,
+                              },
+                          ]
+                        : []),
+                ],
+            }
+        })
         setScopedDeleteStageState(null)
     }
 

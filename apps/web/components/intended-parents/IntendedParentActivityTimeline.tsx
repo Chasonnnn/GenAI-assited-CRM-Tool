@@ -24,6 +24,11 @@ import type { LucideIcon } from "lucide-react"
 const VISIBLE_STAGE_RANGE = 2
 const MAX_PER_STAGE = 3
 
+type PendingTaskEntry = {
+    task: TaskListItem
+    dueDate: Date
+}
+
 interface StageGroup {
     id: string
     label: string
@@ -356,13 +361,20 @@ export function IntendedParentActivityTimeline({
 
     const { overdueTasks, upcomingTasks } = useMemo(() => {
         const today = startOfToday()
-        const pending = tasks
-            .filter((task) => !task.is_completed && task.due_date)
-            .map((task) => ({ task, dueDate: parseISO(task.due_date as string) }))
-            .filter((entry) => !Number.isNaN(entry.dueDate.getTime()))
+        const overdue: PendingTaskEntry[] = []
+        const upcoming: PendingTaskEntry[] = []
 
-        const overdue = pending.filter((entry) => isBefore(entry.dueDate, today))
-        const upcoming = pending.filter((entry) => !isBefore(entry.dueDate, today))
+        for (const task of tasks) {
+            if (task.is_completed || !task.due_date) continue
+            const dueDate = parseISO(task.due_date)
+            if (Number.isNaN(dueDate.getTime())) continue
+            const entry = { task, dueDate }
+            if (isBefore(dueDate, today)) {
+                overdue.push(entry)
+            } else {
+                upcoming.push(entry)
+            }
+        }
 
         const sortByDueDate = (a: { dueDate: Date }, b: { dueDate: Date }) =>
             a.dueDate.getTime() - b.dueDate.getTime()

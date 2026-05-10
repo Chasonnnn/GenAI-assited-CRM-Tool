@@ -129,7 +129,7 @@ function getStableKeyedItems<T>(
 }
 
 export default function AIWorkflowBuilderPage() {
-    const router = useRouter()
+    const { push } = useRouter()
     const searchParams = useSearchParams()
     const { user } = useAuth()
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
@@ -331,7 +331,7 @@ export default function AIWorkflowBuilderPage() {
 
             if (result.success && result.workflow_id) {
                 toast.success("Workflow saved! It's currently disabled for your review.")
-                router.push(`/automation?tab=workflows&scope=${workflowScope}`)
+                push(`/automation?tab=workflows&scope=${workflowScope}`)
             } else {
                 toast.error(result.error || "Failed to save workflow")
             }
@@ -365,7 +365,7 @@ export default function AIWorkflowBuilderPage() {
                 scope: "personal",
             })
             toast.success("Template saved to My Email Templates.")
-            router.push("/automation/email-templates")
+            push("/automation/email-templates")
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to save template"
             toast.error(message)
