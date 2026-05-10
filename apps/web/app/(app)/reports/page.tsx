@@ -370,7 +370,7 @@ export default function ReportsPage() {
                                 <SelectItem value="">All</SelectItem>
                                 {campaignsLoading && (
                                     <SelectItem value="__loading__" disabled>
-                                        Loading campaigns...
+                                        Loading campaigns…
                                     </SelectItem>
                                 )}
                                 {campaignsError && (
@@ -392,7 +392,7 @@ export default function ReportsPage() {
                             {isExporting ? (
                                 <>
                                     <Loader2Icon className="size-4 animate-spin" />
-                                    Exporting...
+                                    Exporting…
                                 </>
                             ) : (
                                 'Export PDF'
@@ -407,7 +407,7 @@ export default function ReportsPage() {
                 {/* Quick Stats Row */}
                 <div className="grid gap-4 md:grid-cols-4">
                     <Card className="animate-in fade-in-50 duration-500">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Surrogates</CardTitle>
                             <TrendingUpIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
@@ -429,7 +429,7 @@ export default function ReportsPage() {
                     </Card>
 
                     <Card className="animate-in fade-in-50 duration-500 delay-100">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">New This Period</CardTitle>
                             <UsersIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
@@ -451,7 +451,7 @@ export default function ReportsPage() {
                     </Card>
 
                     <Card className="animate-in fade-in-50 duration-500 delay-200">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Qualification Rate</CardTitle>
                             <CheckCircle2Icon className="size-4 text-muted-foreground" />
                         </CardHeader>
@@ -473,7 +473,7 @@ export default function ReportsPage() {
                     </Card>
 
                     <Card className="animate-in fade-in-50 duration-500 delay-300">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
                             <FacebookIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
@@ -504,7 +504,7 @@ export default function ReportsPage() {
                     </Card>
 
                     <Card className="animate-in fade-in-50 duration-500 delay-400">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
                             <DollarSignIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
@@ -537,7 +537,7 @@ export default function ReportsPage() {
                     {/* AI Usage Card - only show if AI is enabled */}
                     {aiEnabled && (
                         <Card className="animate-in fade-in-50 duration-500 delay-500">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">AI Usage</CardTitle>
                                 <SparklesIcon className="size-4 text-muted-foreground" />
                             </CardHeader>
