@@ -113,6 +113,34 @@ const TERRITORY_CODES = new Set(["PR", "GU", "VI", "AS", "MP"])
 const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.value))
 const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
 
+type CampaignStageOption = {
+    id: string
+    label: string
+    color: string
+    stage_key: string
+    category?: string | null
+    stage_type?: string | null
+    semantics?: {
+        capabilities?: {
+            shows_pregnancy_tracking?: boolean
+            requires_delivery_details?: boolean
+        } | undefined
+        pause_behavior?: string | null
+        terminal_outcome?: string | null
+    } | null | undefined
+}
+
+function getStageIdsByPredicate(
+    stages: readonly CampaignStageOption[],
+    predicate: (stage: CampaignStageOption) => boolean,
+): string[] {
+    const stageIds: string[] = []
+    for (const stage of stages) {
+        if (predicate(stage)) stageIds.push(stage.id)
+    }
+    return stageIds
+}
+
 export default function CampaignsPage() {
     const { push } = useRouter()
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
@@ -190,16 +218,6 @@ export default function CampaignsPage() {
             ? intendedParentStageOptions
             : pipelineStages.filter(stage => stage.is_active)
 
-    function getStageIdsByPredicate(
-        predicate: (stage: (typeof stageOptions)[number]) => boolean,
-    ): string[] {
-        const stageIds: string[] = []
-        for (const stage of stageOptions) {
-            if (predicate(stage)) stageIds.push(stage.id)
-        }
-        return stageIds
-    }
-
     const normalizedStateSearch = stateSearch.trim().toLowerCase()
     const filteredStates = STATE_OPTIONS.filter((state) =>
         normalizedStateSearch
@@ -222,7 +240,7 @@ export default function CampaignsPage() {
                   {
                       key: "ip-new-ready",
                       label: "New + Ready",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           ["new", "ready_to_match"].includes(stage.stage_key)
                       ),
@@ -230,7 +248,7 @@ export default function CampaignsPage() {
                   {
                       key: "ip-active",
                       label: "Active",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           ["new", "ready_to_match", "matched"].includes(stage.stage_key)
                       ),
@@ -238,7 +256,7 @@ export default function CampaignsPage() {
                   {
                       key: "ip-delivered",
                       label: "Delivered",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage && stage.stage_key === "delivered"
                       ),
                   },
@@ -247,7 +265,7 @@ export default function CampaignsPage() {
                   {
                       key: "surrogate-intake",
                       label: "Intake",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           (stage.category ?? stage.stage_type) === "intake"
                       ),
@@ -255,27 +273,27 @@ export default function CampaignsPage() {
                   {
                       key: "surrogate-post-approval",
                       label: "Post-Approval",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           (stage.category ?? stage.stage_type) === "post_approval" &&
-                          !stage.semantics?.capabilities.shows_pregnancy_tracking
+                          !stage.semantics?.capabilities?.shows_pregnancy_tracking
                       ),
                   },
                   {
                       key: "surrogate-pregnancy",
                       label: "Pregnancy",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           Boolean(
-                              stage.semantics?.capabilities.shows_pregnancy_tracking ||
-                                  stage.semantics?.capabilities.requires_delivery_details,
+                              stage.semantics?.capabilities?.shows_pregnancy_tracking ||
+                                  stage.semantics?.capabilities?.requires_delivery_details,
                           )
                       ),
                   },
                   {
                       key: "surrogate-paused",
                       label: "Paused",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           stage.semantics?.pause_behavior === "resume_previous_stage"
                       ),
@@ -283,7 +301,7 @@ export default function CampaignsPage() {
                   {
                       key: "surrogate-terminal",
                       label: "Terminal",
-                      stageIds: getStageIdsByPredicate((stage) =>
+                      stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
                           "stage_key" in stage &&
                           Boolean(
                               stage.semantics?.terminal_outcome &&
@@ -1034,14 +1052,14 @@ export default function CampaignsPage() {
                                                     {recipientType === "intended_parent"
                                                         ? "Filtered by Status:"
                                                         : "Filtered by Stage:"}
-                                                 </span>
-                                             <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                                                 {selectedStages.map((stageId) => {
-                                                     const stage = stageById.get(stageId)
-                                                     return stage ? (
-                                                         <Badge key={stageId} variant="secondary" className="text-xs">
-                                                             <span className="inline-block size-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
-                                                             {stage.label}
+                                                </span>
+                                                <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                                                    {selectedStages.map((stageId) => {
+                                                        const stage = stageById.get(stageId)
+                                                        return stage ? (
+                                                            <Badge key={stageId} variant="secondary" className="text-xs">
+                                                                <span className="inline-block size-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
+                                                                {stage.label}
                                                             </Badge>
                                                         ) : null
                                                     })}
@@ -1050,16 +1068,16 @@ export default function CampaignsPage() {
                                         )}
                                         {selectedStates.length > 0 && (
                                             <div className="flex justify-between items-start">
-                                                 <span className="text-muted-foreground">Filtered by State:</span>
-                                                 <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                                                     {selectedStates.map((stateCode) => {
-                                                         const label = stateLabelByCode.get(stateCode)
-                                                         return label ? (
-                                                             <Badge key={stateCode} variant="secondary" className="text-xs">
-                                                                 {label}
-                                                             </Badge>
-                                                         ) : null
-                                                     })}
+                                                <span className="text-muted-foreground">Filtered by State:</span>
+                                                <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+                                                    {selectedStates.map((stateCode) => {
+                                                        const label = stateLabelByCode.get(stateCode)
+                                                        return label ? (
+                                                            <Badge key={stateCode} variant="secondary" className="text-xs">
+                                                                {label}
+                                                            </Badge>
+                                                        ) : null
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
