@@ -246,7 +246,7 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
 }
 
 function SurrogateDetailLayoutProviderContent({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
-    const router = useRouter()
+    const { push, replace } = useRouter()
     const searchParams = useSearchParams()
     const segment = useSelectedLayoutSegment()
     const { user } = useAuth()
@@ -278,9 +278,9 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
             const basePath = `/surrogates/${surrogateId}`
             const nextPath = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
             const nextUrl = appendSearchToPath(nextPath, detailSearch)
-            router.replace(nextUrl, { scroll: false })
+            replace(nextUrl, { scroll: false })
         },
-        [detailSearch, surrogateId, router, isTabValue]
+        [detailSearch, surrogateId, replace, isTabValue]
     )
 
     useEffect(() => {
@@ -514,8 +514,8 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
 
     const archiveSurrogate = useCallback(async () => {
         await archiveMutation.mutateAsync(surrogateId)
-        router.push(returnTo)
-    }, [archiveMutation, surrogateId, router, returnTo])
+        push(returnTo)
+    }, [archiveMutation, surrogateId, push, returnTo])
 
     const restoreSurrogate = useCallback(async () => {
         await restoreMutation.mutateAsync(surrogateId)
@@ -616,8 +616,8 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     }, [surrogateData, zoomForm, sendZoomInviteMutation, surrogateId, closeDialog, setZoomLastMeetingResult])
 
     const navigateToList = useCallback(() => {
-        router.push(returnTo)
-    }, [router, returnTo])
+        push(returnTo)
+    }, [push, returnTo])
 
     const dataValue: SurrogateDetailDataContextValue = useMemo(() => ({
         surrogateId,
