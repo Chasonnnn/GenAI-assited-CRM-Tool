@@ -303,6 +303,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/tasks\s*\.filter\(\(task\) => task\.due_date\)\s*\.map/)
     })
 
+    it("uses single-pass intended-parent clinic section derivation", () => {
+        const source = readSource("components/intended-parents/IntendedParentClinicCard.tsx")
+
+        expect(source).toContain("const sectionsWithData: MedicalSectionKey[] = []")
+        expect(source).toContain("const visibleSections: SectionConfig[] = []")
+        expect(source).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*\)\.map\(\(section\) => section\.key\)/)
+        expect(source).not.toMatch(/SECTION_CONFIGS\.filter\(\(section\) => visibleKeys\.has\(section\.key\)\)\.filter/)
+    })
+
     it("uses single-pass filtered display lists for dashboard and campaign details", () => {
         const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
         const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
@@ -396,6 +405,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain(".includes(normalizedSearch)")
         expect(source).not.toContain(".indexOf(normalizedSearch)")
         expect(source).not.toContain("return sourceGroups\n            .map")
+    })
+
+    it("documents the generic label accessibility lint boundary", () => {
+        const source = readSource("components/ui/label.tsx")
+
+        expect(source).toContain("return React.createElement(")
+        expect(source).toContain('"label",')
+        expect(source).toContain("forwards htmlFor and children from call sites")
     })
 
     it("uses plain punctuation for Meta asset detail labels", () => {
