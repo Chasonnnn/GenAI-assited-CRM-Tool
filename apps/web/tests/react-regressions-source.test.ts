@@ -572,9 +572,13 @@ describe("React regression guards (source)", () => {
     it("keeps API payload subtype aliases private", () => {
         const aiStudioSource = readSource("lib/api/ai-studio.ts")
         const workflowMetricsSource = readSource("lib/api/workflow-metrics.ts")
+        const surrogatesApiSource = readSource("lib/api/surrogates.ts")
 
         expect(aiStudioSource).not.toContain("export type AIStudioDraftStatus")
         expect(workflowMetricsSource).not.toContain("export type WorkflowMetricEventType")
+        expect(surrogatesApiSource).not.toContain("export interface SurrogateMassEditStagePreviewItem")
+        expect(surrogatesApiSource).not.toContain("export interface SurrogateMassEditStageApplyFailure")
+        expect(surrogatesApiSource).not.toContain("export interface SurrogateMassEditArchiveApplyFailure")
     })
 
     it("keeps ticket API response subtypes private", () => {

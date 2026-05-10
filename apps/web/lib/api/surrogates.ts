@@ -567,7 +567,7 @@ export interface SurrogateMassEditStagePreviewRequest {
     filters: SurrogateMassEditStageFilters;
 }
 
-export interface SurrogateMassEditStagePreviewItem {
+interface SurrogateMassEditStagePreviewItem {
     id: string;
     surrogate_number: string;
     full_name: string;
@@ -602,7 +602,7 @@ export interface SurrogateMassEditStageApplyRequest {
     reason?: string;
 }
 
-export interface SurrogateMassEditStageApplyFailure {
+interface SurrogateMassEditStageApplyFailure {
     surrogate_id: string;
     reason: string;
 }
@@ -626,7 +626,7 @@ export interface SurrogateMassEditArchiveApplyRequest {
     reason?: string;
 }
 
-export interface SurrogateMassEditArchiveApplyFailure {
+interface SurrogateMassEditArchiveApplyFailure {
     surrogate_id: string;
     reason: string;
 }
