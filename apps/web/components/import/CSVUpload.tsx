@@ -1008,7 +1008,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                                             className="w-[180px]"
                                                         />
                                                     ) : (
-                                                        <span className="text-xs text-muted-foreground">—</span>
+                                                        <span className="text-xs text-muted-foreground">No custom field</span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
@@ -1065,7 +1065,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             <TableRow key={rowIdx}>
                                                 {Object.keys(preview.sample_rows[0] || {}).map((header) => (
                                                     <TableCell key={header}>
-                                                        {row[header] || <span className="text-muted-foreground">—</span>}
+                                                        {row[header] || <span className="text-muted-foreground">Empty</span>}
                                                     </TableCell>
                                                 ))}
                                             </TableRow>

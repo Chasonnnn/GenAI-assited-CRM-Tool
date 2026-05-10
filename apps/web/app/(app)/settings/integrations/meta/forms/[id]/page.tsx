@@ -458,7 +458,7 @@ export default function MetaFormMappingPage() {
                                                         aria-label={`Custom field key for ${mapping.csv_column}`}
                                                     />
                                                 ) : (
-                                                    <span className="text-xs text-muted-foreground">—</span>
+                                                    <span className="text-xs text-muted-foreground">No custom field</span>
                                                 )}
                                             </TableCell>
                                             <TableCell>
@@ -520,7 +520,7 @@ export default function MetaFormMappingPage() {
                                         <TableRow key={rowIdx}>
                                             {(data.columns || []).map((col) => (
                                                 <TableCell key={col.key}>
-                                                    {row[col.key] || <span className="text-muted-foreground">—</span>}
+                                                    {row[col.key] || <span className="text-muted-foreground">Empty</span>}
                                                 </TableCell>
                                             ))}
                                         </TableRow>

@@ -25,6 +25,15 @@ import { buildStageChartData } from "./stage-chart-utils"
 
 type ViewMode = "count" | "percent"
 
+const STAGE_CHART_SKELETON_KEYS = [
+    "skeleton-stage-1",
+    "skeleton-stage-2",
+    "skeleton-stage-3",
+    "skeleton-stage-4",
+    "skeleton-stage-5",
+    "skeleton-stage-6",
+]
+
 export function StageChart() {
     const router = useRouter()
     const { filters, getDateParams, resetFilters, hasActiveFilters } = useDashboardFilters()
@@ -130,8 +139,8 @@ export function StageChart() {
             <CardContent className="px-4 pb-6 pt-0 flex-1">
                 {isLoading ? (
                     <div className="h-[320px] space-y-3">
-                        {Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="flex items-center gap-3">
+                        {STAGE_CHART_SKELETON_KEYS.map((rowKey) => (
+                            <div key={rowKey} className="flex items-center gap-3">
                                 <Skeleton className="h-6 w-20" />
                                 <Skeleton className="h-6 flex-1" />
                             </div>
@@ -259,7 +268,7 @@ export function StageChart() {
                                                     className="fill-muted-foreground"
                                                 >
                                                     {lines.map((line, index) => (
-                                                        <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? 0 : 12}>
+                                                        <tspan key={line} x={0} dy={index === 0 ? 0 : 12}>
                                                             {line}
                                                         </tspan>
                                                     ))}
@@ -320,9 +329,9 @@ export function StageChart() {
                                             className="fill-muted-foreground text-xs"
                                         />
                                     )}
-                                    {chartData.map((entry, index) => (
+                                    {chartData.map((entry) => (
                                         <Cell
-                                            key={`cell-${index}`}
+                                            key={`${entry.stage_id ?? "grouped"}:${entry.status}`}
                                             fill={entry.fill}
                                             className={`hover:opacity-80 transition-opacity ${entry.stage_id ? "cursor-pointer" : "cursor-default"}`}
                                         />

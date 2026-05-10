@@ -320,6 +320,26 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("{conflict.id} — connected by")
     })
 
+    it("uses named empty-state labels instead of dash placeholders in form tables", () => {
+        const matchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+        const metaFormsSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
+        const intakeSource = readSource("app/intake/[slug]/page.client.tsx")
+        const csvSource = readSource("components/import/CSVUpload.tsx")
+
+        expect(matchesSource).toContain('<span className="text-muted-foreground">No stage</span>')
+        expect(metaFormsSource).toContain('<span className="text-xs text-muted-foreground">No custom field</span>')
+        expect(metaFormsSource).toContain('<span className="text-muted-foreground">Empty</span>')
+        expect(intakeSource).toContain('<span className="text-stone-400">No answer</span>')
+        expect(csvSource).toContain('<span className="text-xs text-muted-foreground">No custom field</span>')
+        expect(csvSource).toContain('<span className="text-muted-foreground">Empty</span>')
+        expect(matchesSource).not.toContain('<span className="text-muted-foreground">—</span>')
+        expect(metaFormsSource).not.toContain('<span className="text-xs text-muted-foreground">—</span>')
+        expect(metaFormsSource).not.toContain('<span className="text-muted-foreground">—</span>')
+        expect(intakeSource).not.toContain('<span className="text-stone-400">—</span>')
+        expect(csvSource).not.toContain('<span className="text-xs text-muted-foreground">—</span>')
+        expect(csvSource).not.toContain('<span className="text-muted-foreground">—</span>')
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
@@ -357,6 +377,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={getWorkflowActionKey(action)}")
         expect(source).not.toContain("key={i}")
         expect(source).not.toContain("key={index}")
+    })
+
+    it("uses stable keys in the dashboard stage chart", () => {
+        const source = readSource("app/(app)/dashboard/components/stage-chart.tsx")
+
+        expect(source).toContain("const STAGE_CHART_SKELETON_KEYS")
+        expect(source).toContain("key={rowKey}")
+        expect(source).toContain("key={line}")
+        expect(source).toContain('key={`${entry.stage_id ?? "grouped"}:${entry.status}`}')
+        expect(source).not.toContain("key={i}")
+        expect(source).not.toContain("key={index}")
+        expect(source).not.toContain("key={`${line}-${index}`}")
+        expect(source).not.toContain("key={`cell-${index}`}")
     })
 
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {

@@ -323,7 +323,7 @@ export default function MatchesPage() {
                                                         {match.surrogate_stage_label}
                                                     </Badge>
                                                 ) : (
-                                                    <span className="text-muted-foreground">—</span>
+                                                    <span className="text-muted-foreground">No stage</span>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">

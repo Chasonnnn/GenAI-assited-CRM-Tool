@@ -1129,7 +1129,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         value: AnswerValue,
     ) => {
         if (value === null || value === undefined || value === "") {
-            return <span className="text-stone-400">—</span>
+            return <span className="text-stone-400">No answer</span>
         }
         if (field.type === "date" && typeof value === "string") {
             return <span className="font-medium">{formatDate(value)}</span>
