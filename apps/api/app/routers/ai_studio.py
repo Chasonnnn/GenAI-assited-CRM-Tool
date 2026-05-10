@@ -42,6 +42,14 @@ class AIStudioSettingsUpdate(BaseModel):
     skills_md: str | None = Field(default=None, max_length=12000)
 
 
+class AIStudioReferenceImageResponse(BaseModel):
+    """Safe metadata for reference images used during generation."""
+
+    filename: str
+    mime_type: str
+    size_bytes: int
+
+
 class AIStudioDraftResponse(BaseModel):
     """Persisted AI Studio draft."""
 
@@ -59,6 +67,7 @@ class AIStudioDraftResponse(BaseModel):
     image_revised_prompt: str | None
     image_size: str
     image_quality: str
+    reference_images: list[AIStudioReferenceImageResponse] = Field(default_factory=list)
     reasoning_model: str
     image_model: str
     created_at: datetime
@@ -98,6 +107,7 @@ def _draft_response(draft) -> AIStudioDraftResponse:  # noqa: ANN001
         image_revised_prompt=draft.image_revised_prompt,
         image_size=draft.image_size,
         image_quality=draft.image_quality,
+        reference_images=ai_studio_service.get_draft_reference_images(draft),
         reasoning_model=draft.reasoning_model,
         image_model=draft.image_model,
         created_at=draft.created_at,
@@ -247,11 +257,17 @@ def get_studio_asset(
 
     draft = ai_studio_service.get_draft_by_storage_key(db, session.org_id, storage_key)
     if not draft:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI Studio asset not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="AI Studio asset not found"
+        )
     try:
         asset_path = ai_studio_service.resolve_local_asset_path(storage_key)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI Studio asset not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="AI Studio asset not found"
+        ) from exc
     if not os.path.exists(asset_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI Studio asset not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="AI Studio asset not found"
+        )
     return FileResponse(asset_path, media_type=draft.image_mime_type or "image/png")

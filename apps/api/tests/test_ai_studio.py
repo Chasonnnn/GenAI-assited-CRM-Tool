@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import uuid
@@ -13,7 +14,14 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import AISettings, AIStudioDraft, AIStudioSettings, Membership, Organization, User
+from app.db.models import (
+    AISettings,
+    AIStudioDraft,
+    AIStudioSettings,
+    Membership,
+    Organization,
+    User,
+)
 from app.main import app
 from app.services import ai_settings_service, ai_studio_service, session_service
 
@@ -167,12 +175,18 @@ async def test_ai_studio_generation_uses_isolated_agents_and_skills(
         captured["agents_md"] = studio_settings.agents_md
         captured["skills_md"] = studio_settings.skills_md
         captured["brief"] = request.brief
+        captured["audience"] = request.audience
+        captured["reference_images"] = [
+            {"filename": image.filename, "mime_type": image.mime_type}
+            for image in request.reference_images
+        ]
         return ai_studio_service.AIStudioGeneratedAsset(
+            audience="clinic partners",
             caption="Caption",
             hashtags=["#SurrogacyForce"],
-        image_prompt="Image prompt",
-        image_bytes=b"fake-image",
-        image_mime_type="image/png",
+            image_prompt="Image prompt",
+            image_bytes=b"fake-image",
+            image_mime_type="image/png",
             revised_prompt="Revised image prompt",
             metadata={"stub": True},
         )
@@ -188,7 +202,14 @@ async def test_ai_studio_generation_uses_isolated_agents_and_skills(
             platform="linkedin",
             format="feed",
             tone="professional",
-            audience="clinic partners",
+            audience="",
+            reference_images=[
+                ai_studio_service.AIStudioReferenceImage(
+                    filename="clinic-sample.png",
+                    mime_type="image/png",
+                    data_base64=base64.b64encode(b"reference-image").decode("ascii"),
+                )
+            ],
         ),
     )
 
@@ -197,11 +218,21 @@ async def test_ai_studio_generation_uses_isolated_agents_and_skills(
         "agents_md": "Studio-only AGENTS.md",
         "skills_md": "Studio-only SKILLS.md",
         "brief": "Draft a post",
+        "audience": "",
+        "reference_images": [
+            {"filename": "clinic-sample.png", "mime_type": "image/png"},
+        ],
     }
+    assert draft.audience == "clinic partners"
     assert draft.reasoning_model == "gpt-5.5"
     assert draft.image_model == "gpt-image-2"
     assert draft.image_size == "auto"
     assert draft.image_quality == "auto"
+    assert draft.generation_metadata["reference_image_count"] == 1
+    assert draft.generation_metadata["reference_images"] == [
+        {"filename": "clinic-sample.png", "mime_type": "image/png", "size_bytes": 15}
+    ]
+    assert "data_base64" not in str(draft.generation_metadata)
     assert draft.status == "preview"
 
 
@@ -231,7 +262,16 @@ async def test_ai_studio_drafts_are_saved_and_org_scoped(
         image_quality="high",
         reasoning_model="gpt-5.5",
         image_model="gpt-image-2",
-        generation_metadata={},
+        generation_metadata={
+            "reference_images": [
+                {
+                    "filename": "brand-reference.webp",
+                    "mime_type": "image/webp",
+                    "size_bytes": 42,
+                }
+            ],
+            "reference_image_count": 1,
+        },
     )
     db.add(draft)
     db.flush()
@@ -241,6 +281,9 @@ async def test_ai_studio_drafts_are_saved_and_org_scoped(
     assert response.json()["status"] == "saved"
     assert response.json()["image_size"] == "1536x1024"
     assert response.json()["image_quality"] == "high"
+    assert response.json()["reference_images"] == [
+        {"filename": "brand-reference.webp", "mime_type": "image/webp", "size_bytes": 42}
+    ]
 
     response = await authed_client.get("/ai/studio/drafts")
     assert response.status_code == 200

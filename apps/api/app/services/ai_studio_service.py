@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import os
 import re
@@ -12,19 +13,28 @@ from io import BytesIO
 from typing import Literal
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import AIStudioDraft, AIStudioSettings, Organization
-from app.services import ai_settings_service, attachment_service, storage_client, storage_url_service
+from app.services import (
+    ai_settings_service,
+    attachment_service,
+    storage_client,
+    storage_url_service,
+)
 
 
 AI_STUDIO_REASONING_MODEL = "gpt-5.5"
 AI_STUDIO_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_REASONING_EFFORT = "medium"
 DEFAULT_IMAGE_MIME_TYPE = "image/png"
+MAX_REFERENCE_IMAGES = 4
+MAX_REFERENCE_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_REFERENCE_IMAGE_BASE64_LENGTH = 12_000_000
+REFERENCE_IMAGE_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 Platform = Literal["instagram", "facebook", "linkedin", "x", "tiktok"]
 PostFormat = Literal["feed", "story", "reel", "carousel", "ad"]
@@ -55,6 +65,65 @@ class AIStudioGenerationError(RuntimeError):
     """Raised when OpenAI generation does not return usable content."""
 
 
+class AIStudioReferenceImage(BaseModel):
+    filename: str = Field(min_length=1, max_length=180)
+    mime_type: str = Field(min_length=1, max_length=100)
+    data_base64: str = Field(
+        min_length=1,
+        max_length=MAX_REFERENCE_IMAGE_BASE64_LENGTH,
+        repr=False,
+    )
+
+    @field_validator("filename")
+    @classmethod
+    def normalize_filename(cls, value: str) -> str:
+        clean = os.path.basename(value.replace("\\", "/")).strip()
+        return clean[:180] or "reference-image"
+
+    @field_validator("mime_type")
+    @classmethod
+    def validate_mime_type(cls, value: str) -> str:
+        clean = value.strip().lower()
+        if clean not in REFERENCE_IMAGE_MIME_TYPES:
+            raise ValueError("Reference images must be PNG, JPEG, or WebP")
+        return clean
+
+    @field_validator("data_base64")
+    @classmethod
+    def normalize_data_base64(cls, value: str) -> str:
+        clean = value.strip()
+        if clean.lower().startswith("data:") and "," in clean:
+            clean = clean.split(",", 1)[1]
+        return clean
+
+    @model_validator(mode="after")
+    def validate_decoded_size(self) -> "AIStudioReferenceImage":
+        size_bytes = self.size_bytes
+        if size_bytes > MAX_REFERENCE_IMAGE_BYTES:
+            raise ValueError("Reference images must be 8 MB or smaller")
+        return self
+
+    @property
+    def size_bytes(self) -> int:
+        return len(self.decoded_bytes())
+
+    def decoded_bytes(self) -> bytes:
+        try:
+            return base64.b64decode(self.data_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Reference image data must be valid base64") from exc
+
+    def data_url(self) -> str:
+        return f"data:{self.mime_type};base64,{self.data_base64}"
+
+    def metadata(self) -> dict:
+        return {
+            "filename": self.filename,
+            "mime_type": self.mime_type,
+            "size_bytes": self.size_bytes,
+        }
+
+
 class AIStudioGenerateRequest(BaseModel):
     brief: str = Field(min_length=8, max_length=2000)
     platform: Platform
@@ -63,15 +132,21 @@ class AIStudioGenerateRequest(BaseModel):
     audience: str = Field(default="", max_length=200)
     image_size: ImageSize = "auto"
     image_quality: ImageQuality = "auto"
+    reference_images: list[AIStudioReferenceImage] = Field(
+        default_factory=list,
+        max_length=MAX_REFERENCE_IMAGES,
+    )
 
 
 class AIStudioStructuredDraft(BaseModel):
+    audience: str = Field(min_length=1, max_length=200)
     caption: str = Field(min_length=1, max_length=2200)
     hashtags: list[str] = Field(default_factory=list, max_length=12)
     image_prompt: str = Field(min_length=10, max_length=1400)
 
 
 class AIStudioGeneratedAsset(BaseModel):
+    audience: str
     caption: str
     hashtags: list[str]
     image_prompt: str
@@ -166,16 +241,56 @@ def _build_system_prompt(studio_settings: AIStudioSettings) -> str:
 
 
 def _build_user_prompt(request: AIStudioGenerateRequest) -> str:
-    audience = request.audience.strip() or "general CRM audience"
+    audience = (
+        request.audience.strip()
+        or "Detect the most likely audience from the brief and reference images"
+    )
+    reference_lines = ""
+    if request.reference_images:
+        references = "\n".join(
+            f"  Image {index}: {image.filename} ({image.mime_type})"
+            for index, image in enumerate(request.reference_images, start=1)
+        )
+        reference_lines = f"\n- Reference images:\n{references}"
     return (
         "Create one social media draft as JSON for these inputs:\n"
         f"- Platform: {request.platform}\n"
         f"- Format: {request.format}\n"
         f"- Tone: {request.tone}\n"
         f"- Audience: {audience}\n"
-        f"- Brief: {request.brief.strip()}\n\n"
-        "The JSON must include caption, hashtags, and image_prompt. "
-        "The image_prompt must describe a polished social media visual with no text overlay."
+        f"- Brief: {request.brief.strip()}"
+        f"{reference_lines}\n\n"
+        "The JSON must include audience, caption, hashtags, and image_prompt. "
+        "If the audience was not provided, infer a concise audience label from the brief "
+        "and any reference images. The image_prompt must describe a polished social media "
+        "visual with no text overlay. If reference images are attached, refer to them by "
+        "Image 1, Image 2, and so on as visual guidance."
+    )
+
+
+def _build_user_content(request: AIStudioGenerateRequest) -> str | list[dict[str, str]]:
+    prompt = _build_user_prompt(request)
+    if not request.reference_images:
+        return prompt
+    content: list[dict[str, str]] = [{"type": "input_text", "text": prompt}]
+    for image in request.reference_images:
+        content.append({"type": "input_image", "image_url": image.data_url()})
+    return content
+
+
+def _build_image_prompt(image_prompt: str, request: AIStudioGenerateRequest) -> str:
+    if not request.reference_images:
+        return image_prompt
+    reference_lines = "\n".join(
+        f"Image {index}: {image.filename} ({image.mime_type})"
+        for index, image in enumerate(request.reference_images, start=1)
+    )
+    return (
+        f"{image_prompt.strip()}\n\n"
+        "Use the attached reference images as visual context for composition, audience, "
+        "style, or subject matter. Do not copy private details, faces, logos, or text exactly. "
+        "Reference images:\n"
+        f"{reference_lines}"
     )
 
 
@@ -220,6 +335,18 @@ def _image_size_for_request(request: AIStudioGenerateRequest) -> str:
     return request.image_size
 
 
+def _reference_image_files(
+    reference_images: list[AIStudioReferenceImage],
+) -> list[tuple[str, bytes, str]]:
+    return [(image.filename, image.decoded_bytes(), image.mime_type) for image in reference_images]
+
+
+def _reference_image_metadata(
+    reference_images: list[AIStudioReferenceImage],
+) -> list[dict]:
+    return [image.metadata() for image in reference_images]
+
+
 def _normalize_hashtags(hashtags: list[str]) -> list[str]:
     normalized: list[str] = []
     for tag in hashtags:
@@ -245,20 +372,33 @@ async def _generate_with_openai(
             model=AI_STUDIO_REASONING_MODEL,
             input=[
                 {"role": "system", "content": _build_system_prompt(studio_settings)},
-                {"role": "user", "content": _build_user_prompt(request)},
+                {"role": "user", "content": _build_user_content(request)},
             ],
             text_format=AIStudioStructuredDraft,
             reasoning={"effort": DEFAULT_REASONING_EFFORT},
         )
         structured = _extract_parsed_draft(text_response)
+        image_prompt = _build_image_prompt(structured.image_prompt, request)
 
-        image_response = await client.images.generate(
-            model=AI_STUDIO_IMAGE_MODEL,
-            prompt=structured.image_prompt,
-            size=_image_size_for_request(request),
-            quality=request.image_quality,
-            output_format="png",
-        )
+        if request.reference_images:
+            image_response = await client.images.edit(
+                model=AI_STUDIO_IMAGE_MODEL,
+                image=_reference_image_files(request.reference_images),
+                prompt=image_prompt,
+                size=_image_size_for_request(request),
+                quality=request.image_quality,
+                output_format="png",
+                response_format="b64_json",
+            )
+        else:
+            image_response = await client.images.generate(
+                model=AI_STUDIO_IMAGE_MODEL,
+                prompt=image_prompt,
+                size=_image_size_for_request(request),
+                quality=request.image_quality,
+                output_format="png",
+                response_format="b64_json",
+            )
     except AIStudioGenerationError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -277,11 +417,14 @@ async def _generate_with_openai(
         "reasoning_usage": _usage_to_dict(getattr(text_response, "usage", None)),
         "image_size": _image_size_for_request(request),
         "image_quality": request.image_quality,
+        "requested_audience": request.audience.strip() or None,
+        "resolved_audience": structured.audience.strip(),
     }
     return AIStudioGeneratedAsset(
+        audience=structured.audience.strip(),
         caption=structured.caption.strip(),
         hashtags=_normalize_hashtags(structured.hashtags),
-        image_prompt=structured.image_prompt.strip(),
+        image_prompt=image_prompt,
         image_bytes=base64.b64decode(image_base64),
         image_mime_type=DEFAULT_IMAGE_MIME_TYPE,
         revised_prompt=getattr(first_image, "revised_prompt", None),
@@ -326,6 +469,32 @@ def build_image_url(storage_key: str | None) -> str | None:
     return f"{base}{path}" if base else path
 
 
+def get_draft_reference_images(draft: AIStudioDraft) -> list[dict]:
+    metadata = draft.generation_metadata if isinstance(draft.generation_metadata, dict) else {}
+    raw_items = metadata.get("reference_images")
+    if not isinstance(raw_items, list):
+        return []
+    reference_images: list[dict] = []
+    for item in raw_items[:MAX_REFERENCE_IMAGES]:
+        if not isinstance(item, dict):
+            continue
+        filename = str(item.get("filename") or "").strip()
+        mime_type = str(item.get("mime_type") or "").strip()
+        size_bytes = item.get("size_bytes")
+        if not filename or mime_type not in REFERENCE_IMAGE_MIME_TYPES:
+            continue
+        if not isinstance(size_bytes, int) or size_bytes < 0:
+            continue
+        reference_images.append(
+            {
+                "filename": filename[:180],
+                "mime_type": mime_type,
+                "size_bytes": size_bytes,
+            }
+        )
+    return reference_images
+
+
 async def generate_preview(
     *,
     db: Session,
@@ -346,6 +515,16 @@ async def generate_preview(
         image_bytes=generated.image_bytes,
         content_type=generated.image_mime_type,
     )
+    generation_metadata = dict(generated.metadata)
+    reference_metadata = _reference_image_metadata(request.reference_images)
+    generation_metadata.update(
+        {
+            "reference_images": reference_metadata,
+            "reference_image_count": len(reference_metadata),
+            "requested_audience": request.audience.strip() or None,
+            "resolved_audience": generated.audience.strip(),
+        }
+    )
     draft = AIStudioDraft(
         organization_id=organization_id,
         created_by_user_id=user_id,
@@ -353,7 +532,7 @@ async def generate_preview(
         platform=request.platform,
         format=request.format,
         tone=request.tone,
-        audience=request.audience.strip(),
+        audience=generated.audience.strip(),
         brief=request.brief.strip(),
         caption=generated.caption,
         hashtags=generated.hashtags,
@@ -366,7 +545,7 @@ async def generate_preview(
         image_quality=request.image_quality,
         reasoning_model=AI_STUDIO_REASONING_MODEL,
         image_model=AI_STUDIO_IMAGE_MODEL,
-        generation_metadata=generated.metadata,
+        generation_metadata=generation_metadata,
     )
     db.add(draft)
     db.commit()
@@ -424,8 +603,10 @@ def resolve_local_asset_path(storage_key: str) -> str:
     if "\\" in storage_key:
         raise ValueError("Invalid image path")
     normalized = os.path.normpath(storage_key)
-    if normalized.startswith("..") or normalized.startswith("/") or not normalized.startswith(
-        "ai-studio/"
+    if (
+        normalized.startswith("..")
+        or normalized.startswith("/")
+        or not normalized.startswith("ai-studio/")
     ):
         raise ValueError("Invalid image path")
     return attachment_service.resolve_local_storage_path(normalized)
