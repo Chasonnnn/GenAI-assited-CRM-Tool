@@ -430,6 +430,31 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={`cell-${index}`}")
     })
 
+    it("builds dashboard and campaign display lists in a single pass", () => {
+        const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
+        const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
+
+        expect(stageChartSource).toContain("const stageLinkEntries = chartData.flatMap(")
+        expect(campaignDetailSource).toContain("function toSelectedStringSet")
+        expect(campaignDetailSource).toContain("function getSelectedLabels")
+        expect(campaignDetailSource).toContain("return options.flatMap(")
+        expect(stageChartSource).not.toMatch(/chartData\s*\.filter\(\(entry\) => entry\.stage_id\)\s*\.map/)
+        expect(campaignDetailSource).not.toMatch(/\.filter\(\(stage\) => rawStageFilters\.includes\(stage\.id\)\)\s*\.map/)
+        expect(campaignDetailSource).not.toMatch(/US_STATES\.filter\(\(state\) => stateFilters\.includes\(state\.value\)\)\s*\.map/)
+    })
+
+    it("uses subtle calendar accents and descriptive event handlers", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+
+        expect(source).toContain("shadow-[inset_3px_0_0_rgb(168_85_247)]")
+        expect(source).toContain("const openGoogleCalendarEvent = () =>")
+        expect(source).toContain("onClick={openGoogleCalendarEvent}")
+        expect(source).not.toContain("border-l-4 border-purple-500")
+        expect(source).not.toContain("border-l-4 border-slate-400")
+        expect(source).not.toContain("const handleClick = () =>")
+        expect(source).not.toContain("onClick={handleClick}")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

@@ -89,7 +89,7 @@ const STATUS_COLORS = {
 const TASK_COLOR = "bg-purple-500"
 
 // Google Calendar event color
-const GOOGLE_EVENT_COLOR = "bg-slate-400"
+const GOOGLE_EVENT_COLOR = "bg-neutral-400"
 const EMPTY_GOOGLE_EVENTS: GoogleCalendarEvent[] = []
 
 // Meeting mode icons
@@ -175,7 +175,7 @@ const TaskItem = memo(function TaskItem({
             <button
                 type="button"
                 onClick={handleTaskClick}
-                className="w-full rounded-lg border-l-4 border-purple-500 bg-muted/50 p-2 text-left hover:bg-muted"
+                className="w-full rounded-lg border border-purple-500/20 bg-muted/50 p-2 text-left shadow-[inset_3px_0_0_rgb(168_85_247)] hover:bg-muted"
             >
                 {fullContent}
             </button>
@@ -183,7 +183,7 @@ const TaskItem = memo(function TaskItem({
     }
 
     return (
-        <div className="w-full rounded-lg border-l-4 border-purple-500 bg-muted/50 p-2 text-left">
+        <div className="w-full rounded-lg border border-purple-500/20 bg-muted/50 p-2 text-left shadow-[inset_3px_0_0_rgb(168_85_247)]">
             {fullContent}
         </div>
     )
@@ -204,7 +204,7 @@ const GoogleEventItem = memo(function GoogleEventItem({
         ? "All day"
         : format(parseISO(event.start), "h:mm a")
 
-    const handleClick = () => {
+    const openGoogleCalendarEvent = () => {
         if (event.html_link) {
             window.open(event.html_link, "_blank", "noopener,noreferrer")
         }
@@ -213,11 +213,11 @@ const GoogleEventItem = memo(function GoogleEventItem({
     if (compact) {
         return (
             <div
-                onClick={handleClick}
-                onKeyDown={(e) => activateWithKeyboard(e, handleClick)}
+                onClick={openGoogleCalendarEvent}
+                onKeyDown={(e) => activateWithKeyboard(e, openGoogleCalendarEvent)}
                 role="button"
                 tabIndex={0}
-                className="flex w-full items-center gap-1.5 rounded-md border border-slate-400/20 bg-slate-400/12 px-2 py-1 text-left text-[11px] font-medium text-slate-900 dark:text-slate-100 cursor-pointer hover:opacity-90"
+                className="flex w-full cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/70 px-2 py-1 text-left text-[11px] font-medium text-foreground hover:bg-muted"
                 title="Click to open in Google Calendar"
             >
                 <CalendarIcon className="size-3 shrink-0" />
@@ -228,11 +228,11 @@ const GoogleEventItem = memo(function GoogleEventItem({
 
     return (
         <div
-            onClick={handleClick}
-            onKeyDown={(e) => activateWithKeyboard(e, handleClick)}
+            onClick={openGoogleCalendarEvent}
+            onKeyDown={(e) => activateWithKeyboard(e, openGoogleCalendarEvent)}
             role="button"
             tabIndex={0}
-            className={`w-full text-left p-2 rounded-lg border-l-4 border-slate-400 bg-muted/50 cursor-pointer hover:bg-muted`}
+            className="w-full cursor-pointer rounded-lg border border-border bg-muted/50 p-2 text-left hover:bg-muted"
             title="Click to open in Google Calendar"
         >
             <p className="font-medium text-sm truncate flex items-center gap-1">
