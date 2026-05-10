@@ -212,7 +212,7 @@ export async function getSurrogatesByStateCompare(params: CompareParams = {}): P
 }
 
 // Activity Feed types
-export interface ActivityFeedItem {
+interface ActivityFeedItem {
     id: string;
     activity_type: string;
     surrogate_id: string;
@@ -310,7 +310,7 @@ export interface MetaAdAccount {
     spend_synced_at: string | null;
 }
 
-export interface SpendSyncStatus {
+interface SpendSyncStatus {
     sync_status: 'synced' | 'pending' | 'never';
     last_synced_at: string | null;
     ad_accounts_configured: number;

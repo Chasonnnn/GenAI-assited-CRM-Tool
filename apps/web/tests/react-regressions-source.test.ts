@@ -263,6 +263,8 @@ describe("React regression guards (source)", () => {
 
         expect(formsApiSource).not.toContain("deleteSharedPublicFormDraft")
         expect(analyticsApiSource).not.toContain("exportAnalyticsPDF")
+        expect(analyticsApiSource).not.toContain("export interface ActivityFeedItem")
+        expect(analyticsApiSource).not.toContain("export interface SpendSyncStatus")
     })
 
     it("keeps nested form API subtype aliases private", () => {
