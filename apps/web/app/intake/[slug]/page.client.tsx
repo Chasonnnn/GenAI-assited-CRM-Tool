@@ -109,6 +109,43 @@ function formatSavedTime(value: string | null): string {
     return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
 }
 
+function ReviewValue({
+    field,
+    value,
+}: {
+    field: FormField
+    value: AnswerValue
+}) {
+    if (value === null || value === undefined || value === "") {
+        return <span className="text-stone-400">No answer</span>
+    }
+    if (field.type === "date" && typeof value === "string") {
+        return <span className="font-medium">{formatDate(value)}</span>
+    }
+    if ((field.type === "repeatable_table" || field.type === "table") && Array.isArray(value)) {
+        return (
+            <span className="font-medium">
+                {value.length} row{value.length === 1 ? "" : "s"}
+            </span>
+        )
+    }
+    if (typeof value === "boolean") {
+        return value ? (
+            <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                Yes
+            </span>
+        ) : (
+            <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
+                No
+            </span>
+        )
+    }
+    if (Array.isArray(value)) {
+        return <span className="font-medium">{value.join(", ") || "—"}</span>
+    }
+    return <span className="font-medium">{String(value)}</span>
+}
+
 const publicFormPageClassName =
     "public-form-light min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 text-stone-900"
 
@@ -1157,40 +1194,6 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         ? getVisibleFieldGroups(currentPage.fields, answers, isFieldVisible)
         : { standardFields: [], fileFields: [] }
 
-    const renderReviewValue = (
-        field: FormSchema["pages"][number]["fields"][number],
-        value: AnswerValue,
-    ) => {
-        if (value === null || value === undefined || value === "") {
-            return <span className="text-stone-400">No answer</span>
-        }
-        if (field.type === "date" && typeof value === "string") {
-            return <span className="font-medium">{formatDate(value)}</span>
-        }
-        if ((field.type === "repeatable_table" || field.type === "table") && Array.isArray(value)) {
-            return (
-                <span className="font-medium">
-                    {value.length} row{value.length === 1 ? "" : "s"}
-                </span>
-            )
-        }
-        if (typeof value === "boolean") {
-            return value ? (
-                <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    Yes
-                </span>
-            ) : (
-                <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
-                    No
-                </span>
-            )
-        }
-        if (Array.isArray(value)) {
-            return <span className="font-medium">{value.join(", ") || "—"}</span>
-        }
-        return <span className="font-medium">{String(value)}</span>
-    }
-
     const renderFieldInput = (field: FormSchema["pages"][number]["fields"][number]) => {
         const value = answers[field.key]
 
@@ -1515,7 +1518,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                             {fieldGroups.standardFields.map((field) => (
                                                 <div key={field.key} className="flex justify-between">
                                                     <span className="text-stone-500">{field.label}</span>
-                                                    {renderReviewValue(field, answers[field.key] ?? null)}
+                                                    <ReviewValue field={field} value={answers[field.key] ?? null} />
                                                 </div>
                                             ))}
                                             {fieldGroups.fileFields.map((field) => {

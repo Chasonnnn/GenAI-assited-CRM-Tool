@@ -1142,6 +1142,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const renderSection =")
     })
 
+    it("uses a named intake review value component instead of a render function", () => {
+        const source = readSource("app/intake/[slug]/page.client.tsx")
+
+        expect(source).toContain("function ReviewValue(")
+        expect(source).not.toContain("const renderReviewValue =")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
