@@ -144,6 +144,16 @@ describe("React regression guards (source)", () => {
         expect(scheduleParserSource).not.toContain("key={i}")
     })
 
+    it("keeps parser success actions and team chart legend polished", () => {
+        const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
+        const scheduleParserSource = readSource("components/ai/ScheduleParserDialog.tsx")
+
+        expect(teamChartSource).not.toContain("bg-slate-400")
+        expect(scheduleParserSource).not.toContain("py-8 space-y-4")
+        expect(scheduleParserSource).not.toContain(">Done</Button>")
+        expect(scheduleParserSource).toContain(">Close task creator</Button>")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")

@@ -381,7 +381,7 @@ Medication Schedule:
                 )}
 
                 {step === "success" && (
-                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                    <div className="flex flex-col items-center justify-center gap-y-4 py-8">
                         <CheckCircle2Icon className="size-16 text-green-600" />
                         <h3 className="text-xl font-semibold">Tasks Created Successfully!</h3>
                         <p className="text-muted-foreground">
@@ -422,7 +422,7 @@ Medication Schedule:
                     )}
 
                     {step === "success" && (
-                        <Button onClick={handleClose}>Done</Button>
+                        <Button onClick={handleClose}>Close task creator</Button>
                     )}
                 </DialogFooter>
             </DialogContent>

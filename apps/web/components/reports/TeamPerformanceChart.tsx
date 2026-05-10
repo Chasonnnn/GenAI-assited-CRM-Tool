@@ -187,7 +187,7 @@ export function TeamPerformanceChart({
                         <span className="text-muted-foreground">10-20%</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="size-3 rounded-sm bg-slate-400" />
+                        <div className="size-3 rounded-sm bg-muted-foreground/60" />
                         <span className="text-muted-foreground">&lt;10%</span>
                     </div>
                 </div>

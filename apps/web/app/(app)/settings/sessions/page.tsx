@@ -247,7 +247,7 @@ export default function SessionsPage() {
 
             {/* Other Sessions */}
             <Card>
-                <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                <CardHeader className="flex flex-row items-start justify-between gap-y-0">
                     <div>
                         <CardTitle className="text-lg">Other Sessions</CardTitle>
                         <CardDescription>
