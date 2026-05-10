@@ -343,7 +343,7 @@ function InlineSelectField({
                         disabled={isSaving}
                         aria-label={`Save ${label}`}
                     >
-                        <CheckIcon className="size-3 text-green-600" />
+                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                     </Button>
                 )}
                 <Button
@@ -355,7 +355,7 @@ function InlineSelectField({
                     disabled={isSaving}
                     aria-label={`Cancel ${label}`}
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -524,7 +524,7 @@ function InlineHeightField({
                     disabled={isSaving}
                     aria-label="Save Height"
                 >
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -535,7 +535,7 @@ function InlineHeightField({
                     disabled={isSaving}
                     aria-label="Cancel Height"
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -658,7 +658,7 @@ function InlineRaceField({
                     disabled={isSaving}
                     aria-label={`Save ${fieldLabel}`}
                 >
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -669,7 +669,7 @@ function InlineRaceField({
                     disabled={isSaving}
                     aria-label={`Cancel ${fieldLabel}`}
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -794,7 +794,7 @@ function InlineWeightField({
                     disabled={isSaving}
                     aria-label="Save Weight"
                 >
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -805,7 +805,7 @@ function InlineWeightField({
                     disabled={isSaving}
                     aria-label="Cancel Weight"
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -863,8 +863,8 @@ function ChecklistStatusButton({
             disabled={isSaving}
             aria-label={`${label}: ${statusLabel}. Click to change.`}
         >
-            {value === true && <CheckIcon className="size-4 text-green-500" />}
-            {value === false && <XIcon className="size-4 text-red-500" />}
+            {value === true && <CheckIcon className="size-4 text-green-500" aria-hidden="true" />}
+            {value === false && <XIcon className="size-4 text-red-500" aria-hidden="true" />}
             {(value === null || value === undefined) && (
                 <span className="text-sm leading-none text-muted-foreground">-</span>
             )}
@@ -956,8 +956,8 @@ function SsnField({
                     placeholder="XXX-XX-XXXX"
                     className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
                 />
-                <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => void save()} disabled={isSaving}>
-                    <CheckIcon className="size-3.5" />
+                <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => void save()} disabled={isSaving} aria-label={`Save ${label}`}>
+                    <CheckIcon className="size-3.5" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -969,8 +969,9 @@ function SsnField({
                         setIsEditing(false)
                     }}
                     disabled={isSaving}
+                    aria-label={`Cancel ${label}`}
                 >
-                    <XIcon className="size-3.5" />
+                    <XIcon className="size-3.5" aria-hidden="true" />
                 </Button>
             </div>
         )
@@ -1215,9 +1216,9 @@ export function SurrogateOverviewTab() {
                                 aria-label="Copy email"
                             >
                                 {copiedEmail ? (
-                                    <CheckIcon className="size-3" />
+                                    <CheckIcon className="size-3" aria-hidden="true" />
                                 ) : (
-                                    <CopyIcon className="size-3" />
+                                    <CopyIcon className="size-3" aria-hidden="true" />
                                 )}
                             </Button>
                         </div>

@@ -246,9 +246,9 @@ function TrustAddressField({
                     aria-label="Save Trust address"
                 >
                     {isSaving ? (
-                        <Loader2Icon className="size-3 animate-spin" />
+                        <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
                     ) : (
-                        <CheckIcon className="size-3 text-green-600" />
+                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                     )}
                 </Button>
                 <Button
@@ -260,7 +260,7 @@ function TrustAddressField({
                     disabled={isSaving}
                     aria-label="Cancel Trust address"
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -364,9 +364,9 @@ function TrustNotesField({
                     aria-label="Save Trust notes"
                 >
                     {isSaving ? (
-                        <Loader2Icon className="size-3 animate-spin" />
+                        <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
                     ) : (
-                        <CheckIcon className="size-3 text-green-600" />
+                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                     )}
                 </Button>
                 <Button
@@ -378,7 +378,7 @@ function TrustNotesField({
                     disabled={isSaving}
                     aria-label="Cancel Trust notes"
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
