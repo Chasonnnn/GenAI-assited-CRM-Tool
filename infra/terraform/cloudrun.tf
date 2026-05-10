@@ -8,10 +8,6 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [google_secret_manager_secret_iam_member.api_secret_access]
 
   template {
-    annotations = {
-      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.crm.connection_name
-    }
-
     service_account = google_service_account.api.email
 
     scaling {
@@ -103,7 +99,9 @@ resource "google_cloud_run_v2_service" "api" {
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].image
+      client,
+      client_version,
+      template[0].containers[0].image,
     ]
   }
 }
@@ -171,7 +169,9 @@ resource "google_cloud_run_v2_service" "web" {
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].image
+      client,
+      client_version,
+      template[0].containers[0].image,
     ]
   }
 }
@@ -202,10 +202,6 @@ resource "google_cloud_run_v2_service" "worker" {
   depends_on = [google_secret_manager_secret_iam_member.worker_secret_access]
 
   template {
-    annotations = {
-      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.crm.connection_name
-    }
-
     service_account = google_service_account.worker.email
 
     scaling {
@@ -219,6 +215,7 @@ resource "google_cloud_run_v2_service" "worker" {
     }
 
     containers {
+      name  = "worker-1"
       image = local.worker_image
 
       resources {
@@ -275,8 +272,10 @@ resource "google_cloud_run_v2_service" "worker" {
 
   lifecycle {
     ignore_changes = [
+      client,
+      client_version,
       template[0].containers[0].image,
-      template[0].scaling[0].min_instance_count
+      template[0].scaling[0].min_instance_count,
     ]
   }
 }
@@ -339,7 +338,9 @@ resource "google_cloud_run_v2_job" "migrate" {
 
   lifecycle {
     ignore_changes = [
-      template[0].template[0].containers[0].image
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
     ]
   }
 }

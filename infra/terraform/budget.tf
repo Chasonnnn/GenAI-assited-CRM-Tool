@@ -23,8 +23,11 @@ resource "google_billing_budget" "monthly" {
     }
   }
 
-  all_updates_rule {
-    monitoring_notification_channels = var.billing_budget_notification_channel_ids
-    disable_default_iam_recipients   = length(var.billing_budget_notification_channel_ids) > 0
+  dynamic "all_updates_rule" {
+    for_each = length(var.billing_budget_notification_channel_ids) > 0 ? [1] : []
+    content {
+      monitoring_notification_channels = var.billing_budget_notification_channel_ids
+      disable_default_iam_recipients   = true
+    }
   }
 }

@@ -64,19 +64,46 @@ def test_api_and_worker_mount_cloudsql_socket() -> None:
     assert 'resource "google_cloud_run_v2_service" "worker"' in content
     assert 'mount_path = "/cloudsql"' in content
     assert "cloud_sql_instance {" in content
+    assert "run.googleapis.com/cloudsql-instances" not in content
+
+
+def test_worker_memory_default_matches_production_footprint() -> None:
+    content = _read("infra/terraform/variables.tf")
+    worker_cpu_block = _slice_block(
+        content,
+        'variable "worker_cpu" {',
+        'variable "worker_memory" {',
+    )
+    worker_memory_block = _slice_block(
+        content,
+        'variable "worker_memory" {',
+        'variable "worker_cpu_idle" {',
+    )
+    assert 'default     = "1000m"' in worker_cpu_block
+    assert 'default     = "512Mi"' in worker_memory_block
+
+
+def test_cloudrun_ignores_gcloud_client_metadata() -> None:
+    for rel_path in (
+        "infra/terraform/cloudrun.tf",
+        "infra/terraform/clamav.tf",
+        "infra/terraform/billing-weekly.tf",
+    ):
+        content = _read(rel_path)
+        assert "client," in content
+        assert "client_version," in content
 
 
 def test_billing_budget_uses_email_specific_channels_or_default_recipients() -> None:
     content = _read("infra/terraform/budget.tf")
     vars_content = _read("infra/terraform/variables.tf")
     assert "billing_budget_notification_channel_ids" in vars_content
+    assert 'dynamic "all_updates_rule"' in content
+    assert "length(var.billing_budget_notification_channel_ids) > 0 ? [1] : []" in content
     assert (
         "monitoring_notification_channels = var.billing_budget_notification_channel_ids" in content
     )
-    assert (
-        "disable_default_iam_recipients   = length(var.billing_budget_notification_channel_ids) > 0"
-        in content
-    )
+    assert "disable_default_iam_recipients   = true" in content
     assert 'projects = ["projects/${data.google_project.current.number}"]' in content
 
 

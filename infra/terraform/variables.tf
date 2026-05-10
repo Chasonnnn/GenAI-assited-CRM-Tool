@@ -109,7 +109,7 @@ variable "worker_max_instances" {
 variable "worker_cpu" {
   description = "CPU allocation for the worker service."
   type        = string
-  default     = "1"
+  default     = "1000m"
 
   validation {
     condition     = contains(["0.5", "500m", "1", "1000m"], var.worker_cpu)
@@ -120,7 +120,7 @@ variable "worker_cpu" {
 variable "worker_memory" {
   description = "Memory allocation for the worker service."
   type        = string
-  default     = "1Gi"
+  default     = "512Mi"
 }
 
 variable "worker_cpu_idle" {

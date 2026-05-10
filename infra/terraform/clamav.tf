@@ -56,7 +56,9 @@ resource "google_cloud_run_v2_job" "clamav_update" {
 
   lifecycle {
     ignore_changes = [
-      template[0].template[0].containers[0].image
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
     ]
   }
 }
@@ -127,7 +129,9 @@ resource "google_cloud_run_v2_job" "attachment_scan" {
 
   lifecycle {
     ignore_changes = [
-      template[0].template[0].containers[0].image
+      client,
+      client_version,
+      template[0].template[0].containers[0].image,
     ]
   }
 }

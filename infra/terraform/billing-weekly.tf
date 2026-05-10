@@ -101,6 +101,13 @@ resource "google_cloud_run_v2_job" "billing_weekly" {
       }
     }
   }
+
+  lifecycle {
+    ignore_changes = [
+      client,
+      client_version,
+    ]
+  }
 }
 
 resource "google_cloud_scheduler_job" "billing_weekly" {
