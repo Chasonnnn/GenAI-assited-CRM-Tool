@@ -788,6 +788,54 @@ def test_status_change_dedupes_meta_capi_qualified_stage_updates(
     assert jobs[0].payload["meta_lead_id"] == lead.meta_lead_id
 
 
+def test_status_change_duplicate_meta_capi_job_leaves_session_usable(
+    monkeypatch, db, test_org, test_user
+):
+    lead = _create_meta_lead(db, test_org.id)
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, source=SurrogateSource.META)
+    surrogate.meta_lead_id = lead.id
+    db.commit()
+
+    existing = Job(
+        organization_id=test_org.id,
+        job_type=JobType.META_CAPI_EVENT.value,
+        payload={"meta_lead_id": lead.meta_lead_id, "surrogate_status": "contacted"},
+        idempotency_key=f"meta_capi:{lead.meta_lead_id}:contacted",
+    )
+    db.add(existing)
+    db.commit()
+
+    contacted = _get_stage(db, test_org.id, "contacted")
+
+    from app.services import notification_facade, workflow_triggers
+
+    monkeypatch.setattr(
+        notification_facade, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
+
+    event_kwargs = _event_kwargs(
+        surrogate,
+        contacted,
+        old_stage=_get_stage(db, test_org.id, "new_unread"),
+        user_id=test_user.id,
+    )
+    event_kwargs["db"] = db
+    surrogate_events.handle_status_changed(**event_kwargs)
+
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CAPI_EVENT.value,
+        )
+        .all()
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].idempotency_key == f"meta_capi:{lead.meta_lead_id}:contacted"
+
+
 def test_status_change_dedupes_converted_stage_updates(monkeypatch, db, test_org, test_user):
     from app.services import zapier_settings_service
 

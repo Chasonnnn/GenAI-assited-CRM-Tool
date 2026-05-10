@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import logging
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.enums import JobType, OwnerType, SurrogateSource
@@ -210,8 +211,15 @@ def _maybe_send_capi_event(
     if not meta_lead:
         return
 
+    idempotency_key = f"meta_capi:{meta_lead.meta_lead_id}:{new_status}"
+    if job_service.get_job_by_idempotency_key(
+        db,
+        org_id=surrogate.organization_id,
+        idempotency_key=idempotency_key,
+    ):
+        return
+
     try:
-        idempotency_key = f"meta_capi:{meta_lead.meta_lead_id}:{new_status}"
         job_service.schedule_job(
             db=db,
             org_id=surrogate.organization_id,
@@ -226,6 +234,10 @@ def _maybe_send_capi_event(
             },
             idempotency_key=idempotency_key,
         )
+    except IntegrityError:
+        db.rollback()
+        logger.info("Skipping duplicate Meta CAPI event for key=%s", idempotency_key)
+        return
     except Exception:
         return
 

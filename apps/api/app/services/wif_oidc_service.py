@@ -26,6 +26,10 @@ def _normalize_issuer(issuer: str) -> str:
     return issuer.rstrip("/")
 
 
+def is_configured() -> bool:
+    return bool(settings.WIF_OIDC_PRIVATE_KEY.strip())
+
+
 @lru_cache(maxsize=1)
 def _load_private_key() -> rsa.RSAPrivateKey:
     if not settings.WIF_OIDC_PRIVATE_KEY:
