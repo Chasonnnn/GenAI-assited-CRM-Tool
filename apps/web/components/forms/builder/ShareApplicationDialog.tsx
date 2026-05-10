@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { formatUtcDateLabel } from "@/components/ui/time-display"
 import type { FormEmbedHealthRead, FormIntakeLinkRead, TrackingMode } from "@/lib/api/forms"
 
 type ShareApplicationDialogProps = {
@@ -52,6 +53,20 @@ type ShareApplicationDialogProps = {
     onRefreshEmbedHealth?: () => void
 }
 
+type EmbedSettingsState = {
+    embedEnabled: boolean
+    originText: string
+    trackingMode: TrackingMode
+    consentText: string
+}
+
+const DEFAULT_EMBED_SETTINGS: EmbedSettingsState = {
+    embedEnabled: false,
+    originText: "",
+    trackingMode: "enhanced_match_lead",
+    consentText: "",
+}
+
 export function ShareApplicationDialog({
     open,
     selectedQrLink,
@@ -65,17 +80,20 @@ export function ShareApplicationDialog({
     isEmbedHealthFetching = false,
     onRefreshEmbedHealth,
 }: ShareApplicationDialogProps) {
-    const [embedEnabled, setEmbedEnabled] = React.useState(false)
-    const [originText, setOriginText] = React.useState("")
-    const [trackingMode, setTrackingMode] = React.useState<TrackingMode>("enhanced_match_lead")
-    const [consentText, setConsentText] = React.useState("")
+    const [embedSettings, setEmbedSettings] = React.useState<EmbedSettingsState>(DEFAULT_EMBED_SETTINGS)
+    const { embedEnabled, originText, trackingMode, consentText } = embedSettings
 
     React.useEffect(() => {
-        if (!selectedQrLink) return
-        setEmbedEnabled(selectedQrLink.embed_enabled)
-        setOriginText((selectedQrLink.allowed_embed_origins || []).join("\n"))
-        setTrackingMode(selectedQrLink.tracking_mode || "enhanced_match_lead")
-        setConsentText(selectedQrLink.consent_text || "")
+        if (!selectedQrLink) {
+            setEmbedSettings(DEFAULT_EMBED_SETTINGS)
+            return
+        }
+        setEmbedSettings({
+            embedEnabled: selectedQrLink.embed_enabled,
+            originText: (selectedQrLink.allowed_embed_origins || []).join("\n"),
+            trackingMode: selectedQrLink.tracking_mode || "enhanced_match_lead",
+            consentText: selectedQrLink.consent_text || "",
+        })
     }, [selectedQrLink])
 
     const embedSnippet = selectedQrLink ? buildEmbedSnippet(selectedQrLink) : ""
@@ -92,8 +110,10 @@ export function ShareApplicationDialog({
         if (!selectedQrLink) return
         const allowedOrigins = originText
             .split(/[\n,]+/)
-            .map((value) => value.trim())
-            .filter(Boolean)
+            .flatMap((value) => {
+                const origin = value.trim()
+                return origin ? [origin] : []
+            })
         if (embedEnabled && allowedOrigins.length === 0) {
             toast.error("Add at least one allowed website origin")
             return
@@ -148,7 +168,7 @@ export function ShareApplicationDialog({
                                             <EmbedHealthStatusBadge health={embedHealth} />
                                             {embedHealth?.updated_at ? (
                                                 <span className="text-xs text-stone-500">
-                                                    Checked {new Date(embedHealth.updated_at).toLocaleTimeString()}
+                                                    Checked {formatUtcDateLabel(embedHealth.updated_at, { month: "long" })}
                                                 </span>
                                             ) : null}
                                         </div>
@@ -187,7 +207,9 @@ export function ShareApplicationDialog({
                                         <Switch
                                             id="sf-embed-enabled"
                                             checked={embedEnabled}
-                                            onCheckedChange={setEmbedEnabled}
+                                            onCheckedChange={(checked) =>
+                                                setEmbedSettings((current) => ({ ...current, embedEnabled: checked }))
+                                            }
                                             disabled={isEmbedSettingsPending}
                                         />
                                     </div>
@@ -196,7 +218,12 @@ export function ShareApplicationDialog({
                                         <Textarea
                                             id="sf-embed-origins"
                                             value={originText}
-                                            onChange={(event) => setOriginText(event.target.value)}
+                                            onChange={(event) =>
+                                                setEmbedSettings((current) => ({
+                                                    ...current,
+                                                    originText: event.target.value,
+                                                }))
+                                            }
                                             placeholder="https://www.clientsite.com"
                                             rows={3}
                                             disabled={isEmbedSettingsPending}
@@ -206,7 +233,12 @@ export function ShareApplicationDialog({
                                         <Label htmlFor="sf-embed-tracking">Tracking mode</Label>
                                         <Select
                                             value={trackingMode}
-                                            onValueChange={(value) => setTrackingMode(value as TrackingMode)}
+                                            onValueChange={(value) =>
+                                                setEmbedSettings((current) => ({
+                                                    ...current,
+                                                    trackingMode: value as TrackingMode,
+                                                }))
+                                            }
                                             disabled={isEmbedSettingsPending}
                                         >
                                             <SelectTrigger id="sf-embed-tracking">
@@ -229,7 +261,12 @@ export function ShareApplicationDialog({
                                         <Textarea
                                             id="sf-embed-consent"
                                             value={consentText}
-                                            onChange={(event) => setConsentText(event.target.value)}
+                                            onChange={(event) =>
+                                                setEmbedSettings((current) => ({
+                                                    ...current,
+                                                    consentText: event.target.value,
+                                                }))
+                                            }
                                             placeholder="I agree to be contacted about my inquiry."
                                             rows={3}
                                             disabled={isEmbedSettingsPending}

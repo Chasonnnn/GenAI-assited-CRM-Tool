@@ -48,6 +48,26 @@ const health: FormEmbedHealthRead = {
 }
 
 describe("ShareApplicationDialog", () => {
+    it("renders embed health check time as a stable calendar date", () => {
+        render(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={link}
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={vi.fn()}
+                embedHealth={health}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "Embed" }))
+
+        expect(screen.getByText("May 8, 2026", { exact: false })).toBeInTheDocument()
+        expect(screen.queryByText("12:00:00 PM", { exact: false })).not.toBeInTheDocument()
+    })
+
     it("shows embed setup health and lets admins refresh diagnostics", () => {
         const onRefreshEmbedHealth = vi.fn()
 
@@ -74,5 +94,37 @@ describe("ShareApplicationDialog", () => {
         fireEvent.click(screen.getByRole("button", { name: /check setup/i }))
 
         expect(onRefreshEmbedHealth).toHaveBeenCalledTimes(1)
+    })
+
+    it("trims pasted embed origins before saving settings", () => {
+        const onUpdateEmbedSettings = vi.fn().mockResolvedValue(undefined)
+
+        render(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={link}
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={onUpdateEmbedSettings}
+                embedHealth={health}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "Embed" }))
+        fireEvent.change(screen.getByLabelText("Allowed origins"), {
+            target: { value: " https://www.ewisurrogacy.com,\n\n https://ewiapply.com " },
+        })
+        fireEvent.change(screen.getByLabelText("Consent text"), { target: { value: "   " } })
+        fireEvent.click(screen.getByRole("button", { name: "Save Embed Settings" }))
+
+        expect(onUpdateEmbedSettings).toHaveBeenCalledWith({
+            link,
+            embedEnabled: true,
+            allowedOrigins: ["https://www.ewisurrogacy.com", "https://ewiapply.com"],
+            trackingMode: "enhanced_match_lead",
+            consentText: null,
+        })
     })
 })
