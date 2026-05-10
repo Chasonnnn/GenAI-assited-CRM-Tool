@@ -324,9 +324,9 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         inches = Decimal(match.group(2))
         return _height_transform_result(feet, inches, warnings)
 
-    # Pattern: 5ft 6 / 5 feet 4 inches / 5 foot 4 / 5ft 2 1/2 inches
+    # Pattern: 5ft 6 / 5ft 6" / 5 feet 4 inches / 5 foot 4 / 5ft 2 1/2 inches
     match = re.match(
-        r"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?(\d+(?:\s*(?:1/2|\.5))?)?\s*(?:in|inch|inches)?\.?\s*$",
+        r"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?(\d+(?:\s*(?:1/2|\.5))?)?\s*(?:\"|in|inch|inches)?\.?\s*$",
         lowered,
         re.IGNORECASE,
     )
@@ -363,15 +363,16 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             warnings=warnings,
         )
 
-    # Pattern: 5' (feet only with apostrophe)
-    match = re.match(r"^(\d+)\s*['\u2019]\s*$", value)
+    # Pattern: 5' / 5" (feet only with quote; double quote appears in lead-form typos)
+    match = re.match(r"^(\d+)\s*['\"]\s*$", value)
     if match:
         feet = int(match.group(1))
-        return TransformOutput(
-            value=Decimal(str(feet)),
-            success=True,
-            warnings=warnings,
-        )
+        if 3 <= feet <= 8:
+            return TransformOutput(
+                value=Decimal(str(feet)),
+                success=True,
+                warnings=warnings,
+            )
 
     # Pattern: 67 inches (total inches with explicit unit)
     match = re.match(r"^(\d+(?:\.\d+)?)\s*(?:in|inch|inches)\.?\s*$", lowered, re.IGNORECASE)

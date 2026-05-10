@@ -45,6 +45,16 @@ def test_transform_height_flexible_interprets_feet_only_integer_with_trailing_sp
     assert result.value == Decimal("5.0")
 
 
+def test_transform_height_flexible_interprets_label_prefixed_lone_double_quote_as_feet() -> None:
+    result = transform_height_flexible('Height: 5"')
+    assert result.success is True
+    assert result.value == Decimal("5")
+
+    curly_result = transform_height_flexible("Height: 5”")
+    assert curly_result.success is True
+    assert curly_result.value == Decimal("5")
+
+
 def test_transform_height_flexible_interprets_spelled_out_feet_inches() -> None:
     result = transform_height_flexible("5 feet 4 inches")
     assert result.success is True
@@ -61,6 +71,12 @@ def test_transform_height_flexible_interprets_feet_units_without_inches_units() 
     result = transform_height_flexible("5ft 6")
     assert result.success is True
     assert result.value == Decimal("5.5")
+
+
+def test_transform_height_flexible_interprets_label_prefixed_ft_with_trailing_inch_quote() -> None:
+    result = transform_height_flexible("Height: 5ft 11”")
+    assert result.success is True
+    assert result.value == Decimal("5.92")
 
 
 def test_transform_height_flexible_interprets_quote_before_feet_unit() -> None:
