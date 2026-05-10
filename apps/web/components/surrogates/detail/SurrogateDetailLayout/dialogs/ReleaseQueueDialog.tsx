@@ -12,7 +12,7 @@ import {
 } from "../context"
 
 function formatQueueLabel(value: string | null, queues: { id: string; name: string }[]) {
-    if (!value) return "Select a queue..."
+    if (!value) return "Select a queue\u2026"
     return queues.find((queue) => queue.id === value)?.name ?? value
 }
 
@@ -52,7 +52,7 @@ export function ReleaseQueueDialog() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="">Select a queue...</SelectItem>
+                                <SelectItem value="">Select a queue&hellip;</SelectItem>
                                 {queues.map((queue) => (
                                     <SelectItem key={queue.id} value={queue.id}>
                                         {queue.name}
@@ -68,7 +68,7 @@ export function ReleaseQueueDialog() {
                         onClick={releaseSurrogate}
                         disabled={!selectedQueueId || isReleasePending}
                     >
-                        {isReleasePending ? "Releasing..." : "Release"}
+                        {isReleasePending ? "Releasing\u2026" : "Release"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

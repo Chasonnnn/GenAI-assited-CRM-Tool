@@ -33,7 +33,7 @@ export function TemplateFormBuilderScreen({
             <div className="flex h-screen items-center justify-center bg-background">
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2Icon className="size-5 animate-spin" />
-                    <span>Loading template...</span>
+                    <span>Loading template&hellip;</span>
                 </div>
             </div>
         )

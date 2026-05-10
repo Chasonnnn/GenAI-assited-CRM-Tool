@@ -188,7 +188,7 @@ function FixedTableFieldInput({
                                                 value={normalizedValue}
                                                 onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
                                             >
-                                                <option value="">Select...</option>
+                                                <option value="">Select&hellip;</option>
                                                 {options.map((option) => (
                                                     <option key={option.value} value={option.value}>
                                                         {option.label}

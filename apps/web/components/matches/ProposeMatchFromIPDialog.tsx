@@ -107,7 +107,7 @@ export function ProposeMatchFromIPDialog({
                         {surrogatesLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
-                                Loading available surrogates...
+                                Loading available surrogates&hellip;
                             </div>
                         ) : eligibleSurrogates.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/30">

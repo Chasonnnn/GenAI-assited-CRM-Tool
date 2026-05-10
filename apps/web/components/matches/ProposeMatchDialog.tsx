@@ -86,7 +86,7 @@ export function ProposeMatchDialog({
                         {ipsLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
-                                Loading...
+                                Loading&hellip;
                             </div>
                         ) : (
                             <Select value={selectedIpId} onValueChange={(v) => setSelectedIpId(v || "")}>

@@ -40,7 +40,7 @@ function BookingLinkButton() {
         return (
             <Button variant="outline" disabled>
                 <Loader2Icon className="size-4 mr-2 animate-spin" />
-                Loading...
+                Loading&hellip;
             </Button>
         )
     }

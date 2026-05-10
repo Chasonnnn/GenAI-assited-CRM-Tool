@@ -34,7 +34,7 @@ export function AutomationFormBuilderScreen({
             <div className="flex h-screen items-center justify-center bg-background">
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2Icon className="size-5 animate-spin" />
-                    <span>Loading form...</span>
+                    <span>Loading form&hellip;</span>
                 </div>
             </div>
         )
