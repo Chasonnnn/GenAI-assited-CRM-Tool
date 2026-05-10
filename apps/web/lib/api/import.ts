@@ -23,7 +23,7 @@ export interface ColumnSuggestion {
     needs_inversion: boolean
 }
 
-export interface MatchingTemplate {
+interface MatchingTemplate {
     id: string
     name: string
     match_score: number
@@ -104,7 +104,7 @@ export interface ImportActionResponse {
     job_id?: string | null
 }
 
-export interface DeduplicationStats {
+interface DeduplicationStats {
     total?: number
     new_records?: number
     duplicate_emails_db?: number

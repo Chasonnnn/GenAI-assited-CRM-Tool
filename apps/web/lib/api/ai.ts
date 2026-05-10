@@ -21,7 +21,7 @@ export interface AISettings {
     consent_required: boolean;
 }
 
-export interface VertexWIFConfig {
+interface VertexWIFConfig {
     project_id: string | null;
     location: string | null;
     audience: string | null;
@@ -65,14 +65,14 @@ export interface ProposedAction {
     status: string;
 }
 
-export interface ActionApproval {
+interface ActionApproval {
     id: string;
     action_index: number;
     action_type: string;
     status: string;
 }
 
-export interface AIMessage {
+interface AIMessage {
     id: string;
     role: 'user' | 'assistant';
     content: string;
@@ -194,10 +194,6 @@ export async function rejectAction(approvalId: string): Promise<ActionApprovalRe
 
 export type EmailType = 'follow_up' | 'status_update' | 'meeting_request' | 'document_request' | 'introduction';
 
-export interface SummarizeSurrogateRequest {
-    surrogate_id: string;
-}
-
 export interface SummarizeSurrogateResponse {
     surrogate_number: string;
     full_name: string;
@@ -309,22 +305,12 @@ export interface GeneratedWorkflow {
     actions: Array<{ action_type: string;[key: string]: unknown }>;
 }
 
-export interface GenerateWorkflowRequest {
-    description: string;
-    scope?: 'personal' | 'org';
-}
-
 export interface GenerateWorkflowResponse {
     success: boolean;
     workflow: GeneratedWorkflow | null;
     explanation: string | null;
     validation_errors: string[];
     warnings: string[];
-}
-
-export interface SaveWorkflowRequest {
-    workflow: GeneratedWorkflow;
-    scope?: 'personal' | 'org';
 }
 
 export interface SaveWorkflowResponse {
