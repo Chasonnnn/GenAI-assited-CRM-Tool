@@ -20,7 +20,10 @@ function formatDateOrDash(value: string | null | undefined): string {
 }
 
 function formatAddress(parts: Array<string | null | undefined>): string {
-    const tokens = parts.map((part) => (part || "").trim()).filter(Boolean)
+    const tokens = parts.flatMap((part) => {
+        const token = (part || "").trim()
+        return token ? [token] : []
+    })
     return tokens.length > 0 ? tokens.join(", ") : "-"
 }
 
@@ -32,25 +35,24 @@ function humanizeActivityType(value: string): string {
 
 function taskGroups(tasks: TaskListItem[]) {
     const today = startOfToday()
-    const pending = tasks
-        .filter((task) => !task.is_completed && task.due_date)
-        .map((task) => ({
-            task,
-            dueDate: parseISO(task.due_date as string),
-        }))
-        .filter((entry) => !Number.isNaN(entry.dueDate.getTime()))
+    const pending: Array<{ task: TaskListItem; dueDate: Date }> = []
+    for (const task of tasks) {
+        if (task.is_completed || !task.due_date) continue
+        const dueDate = parseISO(task.due_date)
+        if (!Number.isNaN(dueDate.getTime())) {
+            pending.push({ task, dueDate })
+        }
+    }
 
-    const overdue = pending
-        .filter((entry) => isBefore(entry.dueDate, today))
-        .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-        .map((entry) => entry.task)
-        .slice(0, 3)
-
-    const upcoming = pending
-        .filter((entry) => !isBefore(entry.dueDate, today))
-        .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-        .map((entry) => entry.task)
-        .slice(0, 3)
+    const overdue: TaskListItem[] = []
+    const upcoming: TaskListItem[] = []
+    for (const entry of pending.toSorted((a, b) => a.dueDate.getTime() - b.dueDate.getTime())) {
+        if (isBefore(entry.dueDate, today)) {
+            if (overdue.length < 3) overdue.push(entry.task)
+        } else if (upcoming.length < 3) {
+            upcoming.push(entry.task)
+        }
+    }
 
     return { overdue, upcoming }
 }
@@ -98,7 +100,7 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                     <h1 className="text-2xl font-semibold tracking-tight">Case Details</h1>
                     <p className="mt-1 text-base">{display(surrogate.full_name)}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                        Generated {format(new Date(), "MMMM d, yyyy")}
+                        Generated from current case data
                     </p>
                 </header>
 

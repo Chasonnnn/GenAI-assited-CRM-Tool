@@ -4,6 +4,37 @@ import { describe, expect, it } from "vitest"
 import { CaseDetailsPrintView } from "@/components/surrogates/detail/print/CaseDetailsPrintView"
 
 describe("CaseDetailsPrintView", () => {
+    it("renders a deterministic generated header", () => {
+        render(
+            <CaseDetailsPrintView
+                data={
+                    {
+                        surrogate: {
+                            id: "sur-1",
+                            surrogate_number: "S10001",
+                            full_name: "Taylor Example",
+                            email: "taylor@example.com",
+                            phone: null,
+                            state: null,
+                            created_at: "2026-03-15T12:00:00Z",
+                            date_of_birth: null,
+                            race: null,
+                            height_ft: null,
+                            weight_lb: null,
+                            bmi: null,
+                            source: "manual",
+                        },
+                        activities: [],
+                        tasks: [],
+                        show_pregnancy: false,
+                    } as never
+                }
+            />,
+        )
+
+        expect(screen.getByText("Generated from current case data")).toBeInTheDocument()
+    })
+
     it("shows medical information even when the old stage gate flag is absent", () => {
         render(
             <CaseDetailsPrintView
