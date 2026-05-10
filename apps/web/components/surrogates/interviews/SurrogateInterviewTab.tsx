@@ -4,8 +4,4 @@
  */
 export {
     SurrogateInterviewTab,
-    useInterviewTab,
-    type DialogState,
-    type UploadState,
-    type FormState,
 } from "./InterviewTab"

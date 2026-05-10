@@ -171,6 +171,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export default SurrogatesPageClient")
     })
 
+    it("keeps test-only factories and interview internals private", () => {
+        const handlersSource = readSource("tests/mocks/handlers.ts")
+        const interviewWrapperSource = readSource("components/surrogates/interviews/SurrogateInterviewTab.tsx")
+
+        expect(handlersSource).not.toContain("export const mockSurrogate")
+        expect(handlersSource).not.toContain("export const mockUser")
+        expect(handlersSource).not.toContain("export const mockPermission")
+        expect(interviewWrapperSource).not.toContain("useInterviewTab,")
+        expect(interviewWrapperSource).not.toContain("type DialogState")
+        expect(interviewWrapperSource).not.toContain("type UploadState")
+        expect(interviewWrapperSource).not.toContain("type FormState")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

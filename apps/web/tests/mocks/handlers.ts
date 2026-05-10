@@ -10,7 +10,7 @@ import { http, HttpResponse } from 'msw'
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
 
 // Sample data factories
-export const mockSurrogate = (overrides = {}) => ({
+const mockSurrogate = (overrides = {}) => ({
     id: '550e8400-e29b-41d4-a716-446655440001',
     surrogate_number: 'S10001',
     full_name: 'Jane Doe',
@@ -29,7 +29,7 @@ export const mockSurrogate = (overrides = {}) => ({
     ...overrides,
 })
 
-export const mockUser = (overrides = {}) => ({
+const mockUser = (overrides = {}) => ({
     user_id: '550e8400-e29b-41d4-a716-446655440020',
     email: 'test@example.com',
     display_name: 'Test User',
@@ -47,7 +47,7 @@ export const mockUser = (overrides = {}) => ({
     ...overrides,
 })
 
-export const mockPermission = (overrides = {}) => ({
+const mockPermission = (overrides = {}) => ({
     key: 'view_surrogates',
     label: 'View Surrogates',
     description: 'View surrogate list and details',
