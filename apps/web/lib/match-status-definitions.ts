@@ -53,7 +53,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
     },
 ]
 
-export const MATCH_STATUS_BY_VALUE = Object.fromEntries(
+const MATCH_STATUS_BY_VALUE = Object.fromEntries(
     MATCH_STATUS_DEFINITIONS.map((definition) => [definition.value, definition]),
 ) as Record<MatchStatus, MatchStatusDefinition>
 
@@ -61,7 +61,7 @@ export function isMatchStatus(value: string | null | undefined): value is MatchS
     return typeof value === "string" && value in MATCH_STATUS_BY_VALUE
 }
 
-export function getMatchStatusDefinition(value: string | null | undefined): MatchStatusDefinition {
+function getMatchStatusDefinition(value: string | null | undefined): MatchStatusDefinition {
     if (isMatchStatus(value)) {
         return MATCH_STATUS_BY_VALUE[value]
     }
@@ -75,5 +75,3 @@ export function getMatchStatusLabel(value: string | null | undefined): string {
 export function getMatchStatusBadgeClassName(value: string | null | undefined): string {
     return getMatchStatusDefinition(value).badgeClassName
 }
-
-export const MATCH_STATUS_OPTIONS = MATCH_STATUS_DEFINITIONS.map((definition) => definition.value)

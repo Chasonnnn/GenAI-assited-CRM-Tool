@@ -63,8 +63,6 @@ export const US_STATES = [
     { value: "MP", label: "Northern Mariana Islands" },
 ] as const
 
-export type USStateCode = (typeof US_STATES)[number]["value"]
-
 /**
  * Get state label from code
  */

@@ -20,7 +20,7 @@ function findPipelineStageForCandidate(
     })
 }
 
-export function getEligibleForMatchingStages(stages: PipelineStage[] | undefined | null): PipelineStage[] {
+function getEligibleForMatchingStages(stages: PipelineStage[] | undefined | null): PipelineStage[] {
     return (stages ?? []).filter((stage) => getStageSemantics(stage).capabilities.eligible_for_matching)
 }
 

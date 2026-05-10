@@ -256,6 +256,28 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("export interface SurrogateDetailQueueContextValue")
         expect(contextSource).not.toContain("export interface SurrogateDetailZoomContextValue")
         expect(contextSource).not.toContain("export interface SurrogateDetailActionsContextValue")
+        expect(contextSource).toContain("const { push, replace } = useRouter()")
+        expect(contextSource).not.toContain("const router = useRouter()")
+        expect(contextSource).not.toContain("router.push")
+        expect(contextSource).not.toContain("router.replace")
+    })
+
+    it("keeps narrow utility API internals private", () => {
+        const csrfSource = readSource("lib/csrf.ts")
+        const platformSource = readSource("lib/api/platform.ts")
+        const matchStageSource = readSource("lib/match-pipeline-stage-utils.ts")
+        const matchStatusSource = readSource("lib/match-status-definitions.ts")
+        const usStatesSource = readSource("lib/constants/us-states.ts")
+
+        expect(csrfSource).not.toContain("export function getCsrfToken")
+        expect(csrfSource).not.toContain("export { CSRF_HEADER }")
+        expect(platformSource).not.toContain("revokeSupportSession")
+        expect(platformSource).not.toContain("updateOrganization")
+        expect(matchStageSource).not.toContain("export function getEligibleForMatchingStages")
+        expect(matchStatusSource).not.toContain("export const MATCH_STATUS_BY_VALUE")
+        expect(matchStatusSource).not.toContain("export function getMatchStatusDefinition")
+        expect(matchStatusSource).not.toContain("export const MATCH_STATUS_OPTIONS")
+        expect(usStatesSource).not.toContain("export type USStateCode")
     })
 
     it("uses stable keys for report chart cells and parser warnings", () => {
