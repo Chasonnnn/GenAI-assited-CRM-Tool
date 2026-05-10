@@ -347,16 +347,6 @@ export function getUnassignedQueue(params: UnassignedQueueParams = {}): Promise<
 }
 
 /**
- * Claim a surrogate from a queue.
- *
- * - Intake specialists: only from Unassigned queue.
- * - Case managers/admin/developer: from any queue (subject to membership rules).
- */
-export function claimSurrogate(surrogateId: string): Promise<{ message: string; surrogate_id: string }> {
-    return api.post<{ message: string; surrogate_id: string }>(`/surrogates/${surrogateId}/claim`);
-}
-
-/**
  * Get single surrogate by ID.
  */
 export function getSurrogate(surrogateId: string): Promise<SurrogateRead> {
@@ -426,13 +416,6 @@ export function archiveSurrogate(surrogateId: string): Promise<SurrogateRead> {
  */
 export function restoreSurrogate(surrogateId: string): Promise<SurrogateRead> {
     return api.post<SurrogateRead>(`/surrogates/${surrogateId}/restore`);
-}
-
-/**
- * Permanently delete a surrogate (must be archived first).
- */
-export function deleteSurrogate(surrogateId: string): Promise<void> {
-    return api.delete(`/surrogates/${surrogateId}`);
 }
 
 /**
