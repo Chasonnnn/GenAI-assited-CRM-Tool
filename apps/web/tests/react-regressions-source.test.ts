@@ -100,6 +100,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("for (const file of acceptedFiles)")
     })
 
+    it("keeps palette search and stage keyword matching efficient", () => {
+        const paletteSource = readSource("components/forms/FormBuilderPalette.tsx")
+        const stageColorSource = readSource("lib/pipeline-stage-colors.ts")
+
+        expect(paletteSource).toContain("escapeRegExp")
+        expect(paletteSource).toContain("searchPattern.test")
+        expect(paletteSource).not.toContain(".toLowerCase().indexOf(normalizedSearch)")
+        expect(stageColorSource).toContain("text.includes(keyword)")
+        expect(stageColorSource).not.toContain("text.indexOf(keyword)")
+    })
+
     it("batches support-session popup styles", () => {
         const source = readSource("components/ops/agencies/SupportSessionDialog.tsx")
 
