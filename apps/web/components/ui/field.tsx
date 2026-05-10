@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import type * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from '@/lib/utils'
@@ -170,32 +170,18 @@ function FieldError({
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string } | undefined>
 }) {
-  const content = useMemo(() => {
-    if (children) {
-      return children
-    }
-
-    if (!errors?.length) {
-      return null
-    }
-
-    const uniqueErrors = [
-      ...new Map(errors.map((error) => [error?.message, error])).values(),
-    ]
-
-    if (uniqueErrors?.length == 1) {
-      return uniqueErrors[0]?.message
-    }
-
-    return (
+  const uniqueErrors = children ? [] : getUniqueErrors(errors)
+  const content =
+    children ??
+    (uniqueErrors.length === 1 ? (
+      uniqueErrors[0]?.message
+    ) : uniqueErrors.length > 1 ? (
       <ul className="ml-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map(
-          (error) =>
-            error?.message && <li key={error.message}>{error.message}</li>
-        )}
+        {uniqueErrors.map((error) => (
+          <li key={error.message}>{error.message}</li>
+        ))}
       </ul>
-    )
-  }, [children, errors])
+    ) : null)
 
   if (!content) {
     return null
@@ -211,6 +197,17 @@ function FieldError({
       {content}
     </div>
   )
+}
+
+function getUniqueErrors(errors: Array<{ message?: string } | undefined> | undefined) {
+  if (!errors?.length) return []
+  const uniqueErrors = new Map<string, { message: string }>()
+  for (const error of errors) {
+    if (error?.message && !uniqueErrors.has(error.message)) {
+      uniqueErrors.set(error.message, { message: error.message })
+    }
+  }
+  return Array.from(uniqueErrors.values())
 }
 
 export {
