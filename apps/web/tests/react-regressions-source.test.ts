@@ -190,6 +190,13 @@ describe("React regression guards (source)", () => {
         const taskTypesSource = readSource("lib/types/task.ts")
         const stageContextSource = readSource("lib/surrogate-stage-context.ts")
 
+        expect(taskTypesSource).toContain("export type { TaskListItem }")
+        expect(taskTypesSource).not.toContain("export type TaskType")
+        expect(taskTypesSource).not.toContain("TaskRead")
+        expect(taskTypesSource).not.toContain("TaskListResponse")
+        expect(taskTypesSource).not.toContain("TaskListParams")
+        expect(taskTypesSource).not.toContain("TaskCreatePayload")
+        expect(taskTypesSource).not.toContain("TaskUpdatePayload")
         expect(taskTypesSource).not.toContain("TASK_TYPE_CONFIG")
         expect(stageContextSource).not.toContain("export function roleRuleMatchesStage")
         expect(stageContextSource).not.toContain("export function getStageSemanticKey")
