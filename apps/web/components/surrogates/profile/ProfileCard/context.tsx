@@ -368,13 +368,15 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
                 ...hiddenFields.filter(field => !previousHidden.has(field)),
             ])
 
-            for (const fieldKey of hiddenDiff) {
-                await toggleHiddenMutation.mutateAsync({
-                    surrogateId,
-                    fieldKey,
-                    hidden: currentHidden.has(fieldKey),
-                })
-            }
+            await Promise.all(
+                Array.from(hiddenDiff, (fieldKey) =>
+                    toggleHiddenMutation.mutateAsync({
+                        surrogateId,
+                        fieldKey,
+                        hidden: currentHidden.has(fieldKey),
+                    })
+                )
+            )
             toast.success("Profile saved")
             setStagedChanges([])
             setLatestSubmissionId(null)

@@ -695,6 +695,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/visibleFields\s*\.filter\(\(field\) => field\.type !== "file"\)\s*\.map/)
     })
 
+    it("batches independent profile hidden-field saves", () => {
+        const source = readSource("components/surrogates/profile/ProfileCard/context.tsx")
+
+        expect(source).toContain("await Promise.all(")
+        expect(source).not.toMatch(/for \(const fieldKey of hiddenDiff\)[\s\S]*await toggleHiddenMutation\.mutateAsync/)
+    })
+
     it("keeps hosted intake field visibility filtering single pass", () => {
         const source = readSource("app/intake/[slug]/page.client.tsx")
 
