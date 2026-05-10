@@ -34,24 +34,6 @@ export type BuilderPaletteGroup = {
 
 export type BuilderLibraryCategory = "all" | string
 
-const sharedFieldIcons: Record<FieldType, LucideIcon> = {
-    text: TypeIcon,
-    textarea: TypeIcon,
-    email: MailIcon,
-    phone: PhoneIcon,
-    number: HashIcon,
-    date: CalendarIcon,
-    select: ListIcon,
-    multiselect: CheckSquareIcon,
-    radio: CheckSquareIcon,
-    checkbox: CheckSquareIcon,
-    file: FileIcon,
-    address: HomeIcon,
-    repeatable_table: ListIcon,
-    table: ListIcon,
-    height: RulerIcon,
-}
-
 export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
     {
         id: "contacts",
@@ -281,10 +263,6 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
     repeatable_table: "Repeating table",
     table: "Table",
     height: "Height",
-}
-
-export function getBuilderFieldIcon(type: string): LucideIcon {
-    return sharedFieldIcons[type as FieldType] || TypeIcon
 }
 
 export function getBuilderFieldTypeLabel(type: FieldType): string {

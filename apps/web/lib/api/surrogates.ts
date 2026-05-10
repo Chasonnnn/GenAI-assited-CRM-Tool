@@ -23,7 +23,7 @@ export type {
 
 export type EmbryoStage = 'day_3' | 'day_5' | 'day_6' | 'unknown';
 
-export const DYNAMIC_SURROGATE_FILTERS = [
+const DYNAMIC_SURROGATE_FILTERS = [
     'intelligent_any',
     'intelligent_new_unread_stale',
     'intelligent_meeting_outcome_missing',

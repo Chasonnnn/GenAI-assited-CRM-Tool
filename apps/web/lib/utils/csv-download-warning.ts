@@ -5,11 +5,11 @@ function _extension(filename: string): string {
     return parts.length > 1 ? parts[parts.length - 1] || "" : ""
 }
 
-export function isSpreadsheetTextFile(filename: string): boolean {
+function isSpreadsheetTextFile(filename: string): boolean {
     return SPREADSHEET_TEXT_EXTENSIONS.has(_extension(filename))
 }
 
-export function confirmSpreadsheetTextDownload(filename: string): boolean {
+function confirmSpreadsheetTextDownload(filename: string): boolean {
     if (!isSpreadsheetTextFile(filename)) return true
     if (typeof window === "undefined") return true
 
