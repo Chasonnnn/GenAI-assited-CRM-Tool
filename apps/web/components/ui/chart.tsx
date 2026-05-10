@@ -141,6 +141,8 @@ ${colorConfig
   return <style>{css}</style>
 }
 
+const ChartTooltip = RechartsPrimitive.Tooltip
+
 // Types for tooltip content following recharts 3 patterns
 interface ChartTooltipContentProps {
   active?: boolean
@@ -164,8 +166,6 @@ interface ChartTooltipContentProps {
   nameKey?: string
   labelKey?: string
 }
-
-const ChartTooltip = RechartsPrimitive.Tooltip
 
 function ChartTooltipContent({
   active,
@@ -403,5 +403,4 @@ export {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
-  ChartStyle,
 }
