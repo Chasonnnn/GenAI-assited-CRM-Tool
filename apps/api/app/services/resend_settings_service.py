@@ -68,6 +68,16 @@ def get_resend_settings(db: Session, organization_id: uuid.UUID) -> ResendSettin
     )
 
 
+def is_resend_sender_configured(settings: ResendSettings | None) -> bool:
+    """Return true when org-level Resend has enough config to send email."""
+    return bool(
+        settings
+        and settings.email_provider == "resend"
+        and settings.api_key_encrypted
+        and settings.from_email
+    )
+
+
 def get_settings_by_webhook_id(db: Session, webhook_id: str) -> ResendSettings | None:
     """Get Resend settings by webhook ID (for webhook routing)."""
     return db.query(ResendSettings).filter(ResendSettings.webhook_id == webhook_id).first()

@@ -13,6 +13,21 @@ from app.schemas.surrogate import SurrogateCreate
 from app.services import attachment_service, surrogate_service
 
 
+def _configure_org_resend(db, test_org, test_user) -> None:
+    from app.services import resend_settings_service
+
+    resend_settings_service.update_resend_settings(
+        db,
+        test_org.id,
+        test_user.id,
+        email_provider="resend",
+        api_key="re_test_key",
+        from_email="no-reply@example.com",
+        from_name="Test Org",
+        verified_domain="example.com",
+    )
+
+
 @pytest.mark.asyncio
 async def test_send_email_async_passes_linked_attachments_to_resend(
     db, test_org, test_user, monkeypatch
@@ -64,12 +79,13 @@ async def test_send_email_async_passes_linked_attachments_to_resend(
     db.commit()
     db.refresh(email_log)
 
-    monkeypatch.setattr(email_job_handler, "RESEND_API_KEY", "re_test_key")
-    monkeypatch.setattr(email_job_handler, "EMAIL_FROM", "noreply@test.com")
+    _configure_org_resend(db, test_org, test_user)
 
     captured: dict[str, object] = {}
 
     async def fake_send_email_direct(**kwargs):
+        captured["api_key"] = kwargs.get("api_key")
+        captured["from_email"] = kwargs.get("from_email")
         captured["attachments"] = kwargs.get("attachments") or []
         return True, None, "resend-msg-1"
 
@@ -80,9 +96,32 @@ async def test_send_email_async_passes_linked_attachments_to_resend(
     result = await email_job_handler.send_email_async(email_log, db=db)
 
     assert result == "sent"
+    assert captured["api_key"] == "re_test_key"
+    assert captured["from_email"] == "no-reply@example.com"
     sent_attachments = captured["attachments"]
     assert isinstance(sent_attachments, list)
     assert len(sent_attachments) == 1
     assert sent_attachments[0]["filename"] == "worker.pdf"
     assert sent_attachments[0]["content_type"] == "application/pdf"
     assert sent_attachments[0]["content_bytes"] == file_bytes
+
+
+@pytest.mark.asyncio
+async def test_send_email_async_requires_org_resend_for_direct_email(db, test_org):
+    email_log = EmailLog(
+        organization_id=test_org.id,
+        template_id=None,
+        surrogate_id=None,
+        recipient_email="direct-missing-resend@test.com",
+        subject="Direct Subject",
+        body="<p>Direct Body</p>",
+        status=EmailStatus.PENDING.value,
+    )
+    db.add(email_log)
+    db.commit()
+    db.refresh(email_log)
+
+    with pytest.raises(Exception) as exc:
+        await email_job_handler.send_email_async(email_log, db=db)
+
+    assert str(exc.value) == "Org Resend is not configured for direct email sending."

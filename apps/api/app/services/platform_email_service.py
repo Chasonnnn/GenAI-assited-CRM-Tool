@@ -1,8 +1,8 @@
 """Platform/system email sender.
 
 This module is intentionally scoped to *platform/system* emails (invites, etc).
-It uses PLATFORM_RESEND_API_KEY to avoid accidentally enabling Resend for campaign
-or user-level email flows that rely on RESEND_API_KEY.
+It uses PLATFORM_RESEND_API_KEY and remains separate from org-level campaign,
+workflow, and direct email provider settings.
 
 We intentionally *do not* require a global From address in infra. Instead, each
 system template can provide its own `from_email` (recommended). PLATFORM_EMAIL_FROM

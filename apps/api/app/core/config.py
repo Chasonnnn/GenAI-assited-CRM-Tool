@@ -148,7 +148,7 @@ class Settings(BaseSettings):
     PLATFORM_ADMIN_EMAILS: str = ""
 
     # Platform/system email sender (Resend)
-    # Intentionally separate from RESEND_API_KEY/EMAIL_FROM (used by campaign/user email paths).
+    # Intentionally separate from org-level campaign/workflow/direct email provider settings.
     PLATFORM_RESEND_API_KEY: str = ""
     PLATFORM_RESEND_WEBHOOK_SECRET: str = ""
     # Optional fallback From header. Recommended: set per-template `from_email` in ops/system templates.

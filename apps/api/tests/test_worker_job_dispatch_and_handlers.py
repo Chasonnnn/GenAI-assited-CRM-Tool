@@ -73,21 +73,6 @@ def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
     assert JobType.SEND_EMAIL.value in claimed
 
 
-def test_worker_global_resend_warning_is_specific(monkeypatch, caplog):
-    monkeypatch.setattr(worker, "RESEND_API_KEY", "")
-
-    with caplog.at_level(logging.WARNING):
-        worker._log_global_email_sender_status()
-
-    assert (
-        "Global RESEND_API_KEY not set; legacy non-campaign SEND_EMAIL jobs will be "
-        "logged but not sent." in caplog.text
-    )
-    assert (
-        "Org workflow Resend and platform/system email use separate configuration." in caplog.text
-    )
-
-
 def test_worker_logs_retryable_job_failures_at_warning(caplog):
     job = _job(
         job_type=JobType.TICKET_OUTBOUND_SEND.value,

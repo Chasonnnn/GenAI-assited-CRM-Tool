@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from uuid import UUID
 
 from app.db.models import EmailLog
@@ -12,9 +11,7 @@ from app.services import email_service
 
 logger = logging.getLogger(__name__)
 
-# Email sending configuration
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@example.com")
+DIRECT_RESEND_NOT_CONFIGURED_ERROR = "Org Resend is not configured for direct email sending."
 
 
 async def send_email_async(email_log: EmailLog, db=None) -> str:
@@ -22,7 +19,7 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
     Send an email using the appropriate provider.
 
     For campaign emails: uses the org's configured provider (Resend only).
-    For other emails: uses the global RESEND_API_KEY if available.
+    For other queued emails: uses the org's configured Resend provider.
     """
     # Check if this is a campaign email and get the provider
     campaign_provider = None
@@ -97,57 +94,18 @@ async def send_email_async(email_log: EmailLog, db=None) -> str:
             email_log_id=email_log.id,
         )
 
-    # Fallback to global RESEND_API_KEY for non-campaign emails
-    if not RESEND_API_KEY:
-        logger.info("[DRY RUN] Email send skipped for email_log=%s", email_log.id)
-        return "sent"
+    if not db:
+        raise Exception(DIRECT_RESEND_NOT_CONFIGURED_ERROR)
 
-    try:
-        from app.services import resend_email_service, unsubscribe_service, org_service
-
-        portal_base_url = None
-        if db:
-            org = org_service.get_org_by_id(db, email_log.organization_id)
-            portal_base_url = org_service.get_org_portal_base_url(org)
-
-        unsubscribe_url = unsubscribe_service.build_list_unsubscribe_url(
-            org_id=email_log.organization_id,
-            email=email_log.recipient_email,
-            base_url=portal_base_url,
-        )
-
-        success, error, message_id = await resend_email_service.send_email_direct(
-            api_key=RESEND_API_KEY,
-            to_email=email_log.recipient_email,
-            subject=email_log.subject,
-            body=email_log.body,
-            from_email=EMAIL_FROM,
-            idempotency_key=f"email-log/{email_log.id}",
-            unsubscribe_url=unsubscribe_url,
-            attachments=provider_attachments,
-        )
-        if not success:
-            raise Exception(f"Resend send failed: {error}")
-
-        if db:
-            email_log.external_id = message_id
-            email_log.resend_status = "sent"
-            db.commit()
-
-        logger.info(
-            "Email sent for email_log=%s recipient=%s message_id=%s",
-            email_log.id,
-            mask_email(email_log.recipient_email),
-            message_id,
-        )
-        return "sent"
-    except Exception as e:
-        logger.error(
-            "Email send failed for email_log=%s error_class=%s",
-            email_log.id,
-            e.__class__.__name__,
-        )
-        raise
+    await _send_via_org_provider(
+        db,
+        email_log,
+        "resend",
+        email_log.organization_id,
+        attachments=provider_attachments,
+        missing_config_error=DIRECT_RESEND_NOT_CONFIGURED_ERROR,
+    )
+    return "sent"
 
 
 async def _send_via_org_provider(
@@ -156,6 +114,7 @@ async def _send_via_org_provider(
     provider: str,
     org_id,
     attachments: list[dict[str, object]] | None = None,
+    missing_config_error: str = "Resend not configured for organization",
 ) -> None:
     """Send email using org-level provider configuration."""
     from app.services import resend_settings_service, org_service
@@ -165,8 +124,8 @@ async def _send_via_org_provider(
 
     if provider == "resend":
         settings = resend_settings_service.get_resend_settings(db, org_id)
-        if not settings or not settings.api_key_encrypted:
-            raise Exception("Resend not configured for organization")
+        if not resend_settings_service.is_resend_sender_configured(settings):
+            raise Exception(missing_config_error)
 
         api_key = resend_settings_service.decrypt_api_key(settings.api_key_encrypted)
 

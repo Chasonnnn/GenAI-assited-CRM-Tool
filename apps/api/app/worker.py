@@ -26,7 +26,7 @@ from app.db.enums import JobStatus, JobType
 from app.db.models import EmailLog
 from app.db.session import SessionLocal
 from app.jobs.handlers.ai import process_ai_chat  # noqa: F401
-from app.jobs.handlers.email import RESEND_API_KEY, process_workflow_email  # noqa: F401
+from app.jobs.handlers.email import process_workflow_email  # noqa: F401
 from app.jobs.handlers.exports import process_admin_export  # noqa: F401
 from app.jobs.handlers.imports import process_csv_import  # noqa: F401
 from app.jobs.handlers.interviews import process_interview_transcription  # noqa: F401
@@ -123,17 +123,6 @@ def _claimed_job_types() -> list[str] | None:
         ]
 
     return [job_type for job_type in WORKER_JOB_TYPES if job_type not in REMOTE_SCAN_JOB_TYPES]
-
-
-def _log_global_email_sender_status() -> None:
-    """Warn only about the legacy global Resend fallback path."""
-    if RESEND_API_KEY:
-        return
-    logger.warning(
-        "Global RESEND_API_KEY not set; legacy non-campaign SEND_EMAIL jobs will be "
-        "logged but not sent. Org workflow Resend and platform/system email use "
-        "separate configuration."
-    )
 
 
 def _log_job_failure(job, exception: Exception) -> None:
@@ -564,7 +553,6 @@ async def worker_loop() -> None:
         BATCH_SIZE,
         job_types_display,
     )
-    _log_global_email_sender_status()
 
     last_session_cleanup = datetime.min.replace(tzinfo=timezone.utc)
     last_google_sync_schedule: datetime | None = None
