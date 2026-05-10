@@ -294,6 +294,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/upcoming\.sort\(sortByDueDate\)\.map/)
     })
 
+    it("uses single-pass task calendar event derivation", () => {
+        const source = readSource("components/tasks/TasksCalendar.tsx")
+
+        expect(source).toContain("const events: EventInput[] = []")
+        expect(source).toContain("for (const task of tasks)")
+        expect(source).toContain("const taskColor = getTaskColor(task)")
+        expect(source).not.toMatch(/tasks\s*\.filter\(\(task\) => task\.due_date\)\s*\.map/)
+    })
+
     it("uses single-pass filtered display lists for dashboard and campaign details", () => {
         const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
         const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")

@@ -5,7 +5,7 @@ import FullCalendar from "@fullcalendar/react"
 import dayGridPlugin from "@fullcalendar/daygrid"
 import timeGridPlugin from "@fullcalendar/timegrid"
 import interactionPlugin from "@fullcalendar/interaction"
-import type { EventDropArg, EventClickArg } from "@fullcalendar/core"
+import type { EventDropArg, EventClickArg, EventInput } from "@fullcalendar/core"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatLocalDate } from "@/lib/utils/date"
@@ -53,25 +53,26 @@ export function TasksCalendar({
     className,
 }: TasksCalendarProps) {
     // Convert tasks to FullCalendar events
-    const events = tasks
-        .filter((task) => task.due_date) // Only show tasks with due dates
-        .map((task) => {
-            const hasTime = !!task.due_time
-            const start = hasTime
-                ? `${task.due_date}T${task.due_time}`
-                : task.due_date!
+    const events: EventInput[] = []
 
-            return {
-                id: task.id,
-                title: task.title,
-                start,
-                allDay: !hasTime,
-                backgroundColor: getTaskColor(task),
-                borderColor: getTaskColor(task),
-                extendedProps: { task },
-                classNames: task.is_completed ? ["opacity-50", "line-through"] : [],
-            }
+    for (const task of tasks) {
+        if (!task.due_date) continue
+
+        const hasTime = !!task.due_time
+        const start = hasTime ? `${task.due_date}T${task.due_time}` : task.due_date
+        const taskColor = getTaskColor(task)
+
+        events.push({
+            id: task.id,
+            title: task.title,
+            start,
+            allDay: !hasTime,
+            backgroundColor: taskColor,
+            borderColor: taskColor,
+            extendedProps: { task },
+            classNames: task.is_completed ? ["opacity-50", "line-through"] : [],
         })
+    }
 
     const handleEventClick = useCallback(
         (info: EventClickArg) => {
