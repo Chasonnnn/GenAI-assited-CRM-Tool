@@ -876,7 +876,7 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
                                 <div>
                                     <h3 className="text-sm font-medium">Vertex AI (WIF)</h3>
                                     <p className="text-xs text-muted-foreground">
-                                        Uses Workload Identity Federation—no long-lived keys stored.
+                                        Uses Workload Identity Federation, no long-lived keys stored.
                                     </p>
                                 </div>
                                 {gcpIntegration ? (
@@ -2237,7 +2237,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                             {secret ? (
                                                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
                                                     <p className="mb-2 font-medium">
-                                                        New Webhook Secret (copy now — shown once):
+                                                        New Webhook Secret (copy now, shown once):
                                                     </p>
                                                     <div className="flex items-center gap-2">
                                                         <code className="flex-1 break-all">

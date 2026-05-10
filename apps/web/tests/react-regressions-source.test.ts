@@ -265,6 +265,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("flex flex-row items-center justify-between space-y-0 pb-3")
     })
 
+    it("uses plain punctuation in integrations setup copy", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+
+        expect(source).toContain("Uses Workload Identity Federation, no long-lived keys stored.")
+        expect(source).toContain("New Webhook Secret (copy now, shown once):")
+        expect(source).not.toContain("Uses Workload Identity Federation—no long-lived keys stored.")
+        expect(source).not.toContain("New Webhook Secret (copy now — shown once):")
+    })
+
     it("uses gap spacing for report summary card headers", () => {
         const source = readSource("app/(app)/reports/page.tsx")
 
@@ -326,6 +335,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("follow-up task for next week...")
         expect(source).not.toContain("just submitted their form...")
         expect(source).not.toContain('suggestion.slice(0, 50) + "..."')
+    })
+
+    it("uses stable content-derived keys in the AI builder", () => {
+        const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+
+        expect(source).toContain("function getWorkflowMessageKey")
+        expect(source).toContain("function getWorkflowConditionKey")
+        expect(source).toContain("function getWorkflowActionKey")
+        expect(source).toContain("key={suggestion}")
+        expect(source).toContain("key={getWorkflowMessageKey(error)}")
+        expect(source).toContain("key={getWorkflowMessageKey(warning)}")
+        expect(source).toContain("key={getWorkflowConditionKey(cond)}")
+        expect(source).toContain("key={getWorkflowActionKey(action)}")
+        expect(source).not.toContain("key={i}")
+        expect(source).not.toContain("key={index}")
     })
 
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
