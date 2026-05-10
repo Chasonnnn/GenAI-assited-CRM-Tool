@@ -186,6 +186,14 @@ describe("React regression guards (source)", () => {
         expect(recipientPreviewSource).not.toContain("key={i}")
     })
 
+    it("uses stable calendar cell keys for public booking dates", () => {
+        const source = readSource("components/appointments/PublicBookingPage.tsx")
+
+        expect(source).toContain("cellKey")
+        expect(source).toContain("key={day.cellKey}")
+        expect(source).not.toContain("key={i}")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

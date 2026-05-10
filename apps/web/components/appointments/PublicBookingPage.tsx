@@ -362,8 +362,10 @@ function CalendarView({
         const start = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
         const startDay = start.getDay() // 0 = Sunday
         const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate()
+        const monthKey = format(viewMonth, "yyyy-MM")
 
         const result: Array<{
+            cellKey: string
             date: Date | null
             dateKey: string | null
             isToday: boolean
@@ -372,7 +374,13 @@ function CalendarView({
 
         // Padding for days before month starts
         for (let i = 0; i < startDay; i++) {
-            result.push({ date: null, dateKey: null, isToday: false, hasSlots: false })
+            result.push({
+                cellKey: `${monthKey}-padding-${i}`,
+                date: null,
+                dateKey: null,
+                isToday: false,
+                hasSlots: false,
+            })
         }
 
         const todayKey = getTodayDateKeyInTimeZone(timezone)
@@ -380,6 +388,7 @@ function CalendarView({
             const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d)
             const dateKey = formatPlainDateKey(date)
             result.push({
+                cellKey: dateKey,
                 date,
                 dateKey,
                 isToday: dateKey === todayKey,
@@ -420,16 +429,16 @@ function CalendarView({
 
                     {/* Days Grid */}
                     <div className="grid grid-cols-7 gap-1">
-                        {days.map((day, i) => {
+                        {days.map((day) => {
                             if (!day.date) {
-                                return <div key={i} className="h-10" />
+                                return <div key={day.cellKey} className="h-10" />
                             }
 
                             const isSelected = selectedDate && day.dateKey === formatPlainDateKey(selectedDate)
 
                             return (
                                 <Button
-                                    key={i}
+                                    key={day.cellKey}
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => day.hasSlots && onSelect(day.date!)}
