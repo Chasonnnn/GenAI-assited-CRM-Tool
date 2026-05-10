@@ -108,12 +108,11 @@ export function ShareApplicationDialog({
     }
     const saveEmbedSettings = async () => {
         if (!selectedQrLink) return
-        const allowedOrigins = originText
-            .split(/[\n,]+/)
-            .flatMap((value) => {
-                const origin = value.trim()
-                return origin ? [origin] : []
-            })
+        const allowedOrigins: string[] = []
+        for (const value of originText.split(/[\n,]+/)) {
+            const origin = value.trim()
+            if (origin) allowedOrigins.push(origin)
+        }
         if (embedEnabled && allowedOrigins.length === 0) {
             toast.error("Add at least one allowed website origin")
             return

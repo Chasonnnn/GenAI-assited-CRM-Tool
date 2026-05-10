@@ -483,6 +483,16 @@ describe("React regression guards (source)", () => {
         expect(metaOAuthSource).not.toContain("export type ErrorCategory")
     })
 
+    it("keeps unused Meta OAuth single-connection helpers out of public modules", () => {
+        const apiSource = readSource("lib/api/meta-oauth.ts")
+        const hookSource = readSource("lib/hooks/use-meta-oauth.ts")
+
+        expect(apiSource).not.toContain("export async function getMetaConnection(")
+        expect(apiSource).not.toContain("export function connectionNeedsReauth(")
+        expect(hookSource).not.toContain("export function useMetaConnection(")
+        expect(hookSource).not.toContain("export function useMetaAvailableAssets(")
+    })
+
     it("keeps Meta CRM dataset response subtypes private", () => {
         const source = readSource("lib/api/meta-crm-dataset.ts")
         const privateDatasetTypes = [
@@ -573,6 +583,25 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
 
         expect(source).not.toContain("pages.flatMap((page) => page.fields).filter")
+    })
+
+    it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
+        const formsApiSource = readSource("lib/api/forms.ts")
+        const shareDialogSource = readSource("components/forms/builder/ShareApplicationDialog.tsx")
+        const templateBuilderSource = readSource("lib/forms/use-template-form-builder-page.ts")
+        const automationBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")
+        const campaignSource = readSource("app/(app)/automation/campaigns/page.tsx")
+        const attachmentsSource = readSource("components/email/EmailAttachmentsPanel.tsx")
+        const embedSource = readSource("app/embed/forms/[slug]/page.client.tsx")
+
+        expect(formsApiSource).not.toContain("rawOptions.flatMap((raw) => {")
+        expect(shareDialogSource).not.toContain(".flatMap((value) => {")
+        expect(templateBuilderSource).not.toContain(".flatMap((entry) => {")
+        expect(automationBuilderSource).not.toContain(".flatMap((entry) => {")
+        expect(campaignSource).not.toContain("selectedStages.flatMap((stageId) => {")
+        expect(campaignSource).not.toContain("selectedStates.flatMap((stateCode) => {")
+        expect(attachmentsSource).not.toContain("uploadResults.flatMap(")
+        expect(embedSource).not.toContain("pages.flatMap((page) => page.fields.filter")
     })
 
     it("uses stable keys for report chart cells and parser warnings", () => {

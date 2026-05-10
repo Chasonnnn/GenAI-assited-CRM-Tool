@@ -12,7 +12,6 @@ import {
     connectAssets,
     disconnectMetaConnection,
     getMetaConnectUrl,
-    getMetaConnection,
     listAvailableAssets,
     listMetaConnections,
     type ConnectAssetsRequest,
@@ -24,7 +23,6 @@ const metaOAuthKeys = {
     all: ['meta-oauth'] as const,
     connections: () => [...metaOAuthKeys.all, 'connections'] as const,
     connectionsList: () => [...metaOAuthKeys.connections(), 'list'] as const,
-    connection: (id: string) => [...metaOAuthKeys.connections(), id] as const,
     availableAssets: (connectionId: string) =>
         [...metaOAuthKeys.all, 'available-assets', connectionId] as const,
     availableAssetsSearch: (connectionId: string, search: string) =>
@@ -56,17 +54,6 @@ export function useMetaConnections() {
 }
 
 /**
- * Get a specific OAuth connection
- */
-export function useMetaConnection(connectionId: string | null) {
-    return useQuery({
-        queryKey: metaOAuthKeys.connection(connectionId || ''),
-        queryFn: () => getMetaConnection(connectionId!),
-        enabled: !!connectionId,
-    })
-}
-
-/**
  * Disconnect an OAuth connection
  */
 export function useDisconnectMetaConnection() {
@@ -79,18 +66,6 @@ export function useDisconnectMetaConnection() {
             queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
             queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
-    })
-}
-
-/**
- * List available assets for a connection (with pagination)
- */
-export function useMetaAvailableAssets(connectionId: string | null, search?: string) {
-    return useQuery({
-        queryKey: metaOAuthKeys.availableAssetsSearch(connectionId || '', search || ''),
-        queryFn: () =>
-            listAvailableAssets(connectionId!, search ? { search } : undefined),
-        enabled: !!connectionId,
     })
 }
 

@@ -191,7 +191,10 @@ export function EmailAttachmentsPanel({
                 }),
             )
 
-            const uploadedIds = uploadResults.flatMap((result) => result.id ? [result.id] : [])
+            const uploadedIds: string[] = []
+            for (const result of uploadResults) {
+                if (result.id) uploadedIds.push(result.id)
+            }
             const firstUploadError = uploadResults.find((result) => result.error)?.error
 
             if (firstUploadError) {

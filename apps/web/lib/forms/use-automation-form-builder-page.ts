@@ -275,12 +275,11 @@ export function useAutomationFormBuilderPage() {
     }, [orgLogoPath, patchState, state.customLogoUrl, state.hasHydrated, state.logoUrl])
 
     const draftPayload = useMemo<FormCreatePayload>(() => {
-        const allowedMimeTypes = state.allowedMimeTypesText
-            .split(",")
-            .flatMap((entry) => {
-                const trimmedEntry = entry.trim()
-                return trimmedEntry ? [trimmedEntry] : []
-            })
+        const allowedMimeTypes: string[] = []
+        for (const entry of state.allowedMimeTypesText.split(",")) {
+            const trimmedEntry = entry.trim()
+            if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
+        }
         return {
             name: state.formName.trim(),
             description: state.formDescription.trim() || null,

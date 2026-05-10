@@ -135,12 +135,11 @@ export function useTemplateFormBuilderPage() {
     }, [templateData?.current_version])
 
     const draftPayload = useMemo(() => {
-        const allowedMimeTypes = state.allowedMimeTypesText
-            .split(",")
-            .flatMap((entry) => {
-                const trimmedEntry = entry.trim()
-                return trimmedEntry ? [trimmedEntry] : []
-            })
+        const allowedMimeTypes: string[] = []
+        for (const entry of state.allowedMimeTypesText.split(",")) {
+            const trimmedEntry = entry.trim()
+            if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
+        }
         const mappings = buildMappings(pages)
         const settingsJson: Record<string, unknown> = {
             max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),

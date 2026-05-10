@@ -519,11 +519,13 @@ function normalizeFormMappingOptions(payload: unknown): FormSurrogateFieldOption
             ? (payload as { options: unknown[] }).options
             : []
 
-    const normalized = rawOptions.flatMap((raw) => {
-        if (!raw || typeof raw !== "object") return []
+    const normalized: FormSurrogateFieldOption[] = []
+
+    for (const raw of rawOptions) {
+        if (!raw || typeof raw !== "object") continue
         const option = raw as RawFormMappingOption
         const value = typeof option.value === "string" ? option.value : option.key
-        if (!value) return []
+        if (!value) continue
 
         const label =
             typeof option.label === "string"
@@ -538,8 +540,8 @@ function normalizeFormMappingOptions(payload: unknown): FormSurrogateFieldOption
                     ? option.required
                     : undefined
 
-        return [{ value, label, ...(isCritical !== undefined ? { is_critical: isCritical } : {}) }]
-    })
+        normalized.push({ value, label, ...(isCritical !== undefined ? { is_critical: isCritical } : {}) })
+    }
 
     return normalized
 }

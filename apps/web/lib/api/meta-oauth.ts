@@ -90,13 +90,6 @@ export async function listMetaConnections(): Promise<MetaConnectionsListResponse
 }
 
 /**
- * Get a specific OAuth connection
- */
-export async function getMetaConnection(connectionId: string): Promise<MetaOAuthConnection> {
-    return api.get<MetaOAuthConnection>(`/integrations/meta/connections/${connectionId}`)
-}
-
-/**
  * Disconnect an OAuth connection (unlinks all assets)
  */
 export async function disconnectMetaConnection(connectionId: string): Promise<DisconnectResponse> {
@@ -155,13 +148,6 @@ export function getConnectionHealthStatus(
         default:
             return 'error'
     }
-}
-
-/**
- * Check if a connection needs reauthorization
- */
-export function connectionNeedsReauth(connection: MetaOAuthConnection): boolean {
-    return connection.last_error_code === 'auth'
 }
 
 /**

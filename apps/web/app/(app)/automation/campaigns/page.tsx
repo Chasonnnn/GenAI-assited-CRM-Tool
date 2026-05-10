@@ -296,14 +296,16 @@ export default function CampaignsPage() {
               ]
 
     const stagePresetsAvailable = stagePresets.filter((preset) => preset.stageIds.length > 0)
-    const selectedStageLabels = selectedStages.flatMap((stageId) => {
+    const selectedStageLabels: string[] = []
+    for (const stageId of selectedStages) {
         const label = stageOptions.find((stage) => stage.id === stageId)?.label
-        return label ? [label] : []
-    })
-    const selectedStateLabels = selectedStates.flatMap((stateCode) => {
+        if (label) selectedStageLabels.push(label)
+    }
+    const selectedStateLabels: string[] = []
+    for (const stateCode of selectedStates) {
         const label = US_STATES.find((state) => state.value === stateCode)?.label
-        return label ? [label] : []
-    })
+        if (label) selectedStateLabels.push(label)
+    }
 
     // Filtered campaigns
     const filteredCampaigns = campaigns || []
