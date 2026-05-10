@@ -25,7 +25,7 @@ export interface ParseScheduleRequest {
     user_timezone?: string
 }
 
-export interface ParseScheduleResponse {
+interface ParseScheduleResponse {
     proposed_tasks: ProposedTask[]
     warnings: string[]
     assumed_timezone: string
@@ -50,7 +50,7 @@ export interface BulkTaskCreateRequest {
     tasks: BulkTaskItem[]
 }
 
-export interface BulkTaskCreateResponse {
+interface BulkTaskCreateResponse {
     success: boolean
     created: Array<{ task_id: string; title: string }>
     error?: string | null
@@ -61,7 +61,7 @@ export async function parseSchedule(data: ParseScheduleRequest): Promise<ParseSc
     return streamParseSchedule(data)
 }
 
-export async function streamParseSchedule(
+async function streamParseSchedule(
     data: ParseScheduleRequest,
     onEvent?: (event: StreamEvent<ParseScheduleResponse>) => void,
     options?: { signal?: AbortSignal }

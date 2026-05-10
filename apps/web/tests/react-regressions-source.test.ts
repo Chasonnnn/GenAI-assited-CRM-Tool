@@ -320,6 +320,14 @@ describe("React regression guards (source)", () => {
         expect(maritalStatusSource).not.toContain("export const DEFAULT_MARITAL_STATUS_OPTIONS")
     })
 
+    it("keeps schedule parser stream internals private", () => {
+        const source = readSource("lib/api/schedule-parser.ts")
+
+        expect(source).not.toContain("export interface ParseScheduleResponse")
+        expect(source).not.toContain("export interface BulkTaskCreateResponse")
+        expect(source).not.toContain("export async function streamParseSchedule")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

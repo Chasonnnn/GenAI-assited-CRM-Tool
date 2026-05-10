@@ -6,8 +6,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     parseSchedule,
     createBulkTasks,
-    ParseScheduleRequest,
-    BulkTaskCreateRequest
+    type ParseScheduleRequest,
+    type BulkTaskCreateRequest
 } from '@/lib/api/schedule-parser'
 import { taskKeys } from './use-tasks'
 
