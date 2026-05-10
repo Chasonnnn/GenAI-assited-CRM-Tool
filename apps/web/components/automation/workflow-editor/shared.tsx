@@ -119,15 +119,26 @@ function stripActionClientId(action: EditableAction): ActionConfig {
     return rest
 }
 
+function toTrimmedList(values: readonly unknown[]): string[] {
+    return values.flatMap((item) => {
+        const trimmed = String(item).trim()
+        return trimmed ? [trimmed] : []
+    })
+}
+
+function splitCommaList(value: string): string[] {
+    return value.split(",").flatMap((item) => {
+        const trimmed = item.trim()
+        return trimmed ? [trimmed] : []
+    })
+}
+
 export function toListArray(value: JsonValue): string[] {
     if (Array.isArray(value)) {
-        return value.map((item) => String(item).trim()).filter(Boolean)
+        return toTrimmedList(value)
     }
     if (typeof value === "string") {
-        return value
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean)
+        return splitCommaList(value)
     }
     if (value === null || value === undefined) {
         return []
@@ -177,10 +188,7 @@ export function normalizeEditableConditionsForUi(conditions: Condition[]): Edita
             if (typeof conditionWithId.value === "string") {
                 return {
                     ...conditionWithId,
-                    value: conditionWithId.value
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean),
+                    value: splitCommaList(conditionWithId.value),
                 }
             }
             return { ...conditionWithId, value: [] }
@@ -206,10 +214,7 @@ export function normalizeEditableConditionsForSave(conditions: EditableCondition
                         : ""
             return stripConditionClientId({
                 ...condition,
-                value: raw
-                    .split(",")
-                    .map((value) => value.trim())
-                    .filter(Boolean),
+                value: splitCommaList(raw),
             })
         }
         return stripConditionClientId(condition)
@@ -265,9 +270,9 @@ export function WorkflowMultiSelect({
     placeholder?: string
 }) {
     const selectedValues = new Set(value)
-    const selectedLabels = options
-        .filter((option) => selectedValues.has(option.value))
-        .map((option) => option.label)
+    const selectedLabels = options.flatMap((option) =>
+        selectedValues.has(option.value) ? [option.label] : []
+    )
     const label = selectedLabels.length > 0 ? `${selectedLabels.length} selected` : placeholder
 
     return (

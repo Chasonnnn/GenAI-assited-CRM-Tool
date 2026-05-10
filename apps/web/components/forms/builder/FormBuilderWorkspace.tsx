@@ -888,8 +888,10 @@ function FieldInspector({
                                                         onUpdateColumn(selectedFieldData.id, column.id, {
                                                             options: event.target.value
                                                                 .split(",")
-                                                                .map((entry) => entry.trim())
-                                                                .filter(Boolean),
+                                                                .flatMap((entry) => {
+                                                                    const trimmed = entry.trim()
+                                                                    return trimmed ? [trimmed] : []
+                                                                }),
                                                         })
                                                     }
                                                     placeholder="Options (comma separated)"

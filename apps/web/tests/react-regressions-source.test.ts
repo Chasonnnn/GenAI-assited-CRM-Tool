@@ -264,6 +264,24 @@ describe("React regression guards (source)", () => {
         expect(intendedParentActivitySource).not.toContain("[...stageHistory].sort(")
     })
 
+    it("uses single-pass list normalization for workflow and form option lists", () => {
+        const workflowSharedSource = readSource("components/automation/workflow-editor/shared.tsx")
+        const formBuilderSource = readSource("components/forms/builder/FormBuilderWorkspace.tsx")
+
+        expect(workflowSharedSource).toContain("function toTrimmedList")
+        expect(workflowSharedSource).toContain("function splitCommaList")
+        expect(workflowSharedSource).toContain("return values.flatMap(")
+        expect(workflowSharedSource).toContain("return value.split(\",\").flatMap(")
+        expect(workflowSharedSource).toContain("const selectedLabels = options.flatMap(")
+        expect(formBuilderSource).toContain(".split(\",\")")
+        expect(formBuilderSource).toContain(".flatMap((entry) => {")
+        expect(workflowSharedSource).not.toMatch(/\.map\(\(item\) => String\(item\)\.trim\(\)\)\.filter\(Boolean\)/)
+        expect(workflowSharedSource).not.toMatch(/\.map\(\(item\) => item\.trim\(\)\)\s*\.filter\(Boolean\)/)
+        expect(workflowSharedSource).not.toMatch(/\.map\(\(value\) => value\.trim\(\)\)\s*\.filter\(Boolean\)/)
+        expect(workflowSharedSource).not.toMatch(/\.filter\(\(option\) => selectedValues\.has\(option\.value\)\)\s*\.map/)
+        expect(formBuilderSource).not.toMatch(/\.map\(\(entry\) => entry\.trim\(\)\)\s*\.filter\(Boolean\)/)
+    })
+
     it("hoists Meta spend dashboard number formatters", () => {
         const source = readSource("components/reports/MetaSpendDashboard.tsx")
 
