@@ -49,6 +49,13 @@ function normalizeStageText(...parts: Array<string | null | undefined>) {
         .trim()
 }
 
+function matchesKeyword(text: string, keywords: string[]) {
+    for (const keyword of keywords) {
+        if (text.indexOf(keyword) !== -1) return true
+    }
+    return false
+}
+
 function getFallbackPaletteColor(stageType: StageType | string | null | undefined, stageKey: string | null | undefined, order?: number | null) {
     const palette = CUSTOM_STAGE_COLOR_PRESETS[(stageType as StageType) ?? "intake"] ?? [DEFAULT_CUSTOM_STAGE_COLOR]
     if (order && order > 0) {
@@ -62,7 +69,7 @@ function getFallbackPaletteColor(stageType: StageType | string | null | undefine
 export function suggestStageColor(stage: StageColorInput) {
     const normalizedText = normalizeStageText(stage.label, stage.slug, stage.stage_key)
     for (const rule of KEYWORD_STAGE_COLOR_RULES) {
-        if (rule.keywords.some((keyword) => normalizedText.includes(keyword))) {
+        if (matchesKeyword(normalizedText, rule.keywords)) {
             return rule.color
         }
     }
