@@ -17,7 +17,7 @@ import { format } from "date-fns"
 import { useState } from "react"
 import { parseDateInput } from "@/lib/utils/date"
 
-export interface VersionItem {
+interface VersionItem {
     id: string
     version: number
     payload: Record<string, unknown>

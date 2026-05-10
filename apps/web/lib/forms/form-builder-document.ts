@@ -40,8 +40,6 @@ export type BuilderFormField = {
     maxRows?: number | null
 }
 
-export type BuilderShowIfOperator = NonNullable<BuilderFormField["showIf"]>["operator"]
-
 export type BuilderFormPage = {
     id: number
     name: string

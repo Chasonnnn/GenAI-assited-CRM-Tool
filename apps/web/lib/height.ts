@@ -1,4 +1,4 @@
-export function parseHeightFt(value: number | string | null | undefined): number | null {
+function parseHeightFt(value: number | string | null | undefined): number | null {
     if (value === null || value === undefined) return null
 
     const numericValue =

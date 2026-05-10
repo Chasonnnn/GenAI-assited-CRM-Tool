@@ -283,6 +283,26 @@ describe("React regression guards (source)", () => {
         expect(usStatesSource).not.toContain("export type USStateCode")
     })
 
+    it("keeps integration test wrapper internals private", () => {
+        const source = readSource("tests/utils/integration-wrapper.tsx")
+
+        expect(source).not.toContain("export function createTestQueryClient")
+        expect(source).not.toContain("export function IntegrationWrapper")
+        expect(source).not.toContain("export { renderWithProviders as render }")
+    })
+
+    it("keeps component-local and form utility types private", () => {
+        const heightSource = readSource("lib/height.ts")
+        const builderDocumentSource = readSource("lib/forms/form-builder-document.ts")
+        const appLinkSource = readSource("components/app-link.tsx")
+        const versionHistorySource = readSource("components/version-history-modal.tsx")
+
+        expect(heightSource).not.toContain("export function parseHeightFt")
+        expect(builderDocumentSource).not.toContain("export type BuilderShowIfOperator")
+        expect(appLinkSource).not.toContain("export type AppLinkProps")
+        expect(versionHistorySource).not.toContain("export interface VersionItem")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

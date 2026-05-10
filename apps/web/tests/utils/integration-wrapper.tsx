@@ -5,7 +5,8 @@
  * Use this instead of the global mock when testing data flow.
  */
 
-import React, { ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
+import { render, type RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 interface WrapperProps {
@@ -15,7 +16,7 @@ interface WrapperProps {
 /**
  * Creates a fresh QueryClient for each test to prevent state leakage.
  */
-export function createTestQueryClient() {
+function createTestQueryClient() {
     return new QueryClient({
         defaultOptions: {
             queries: {
@@ -43,7 +44,7 @@ export function createTestQueryClient() {
  * })
  * ```
  */
-export function IntegrationWrapper({ children }: WrapperProps) {
+function IntegrationWrapper({ children }: WrapperProps) {
     const queryClient = createTestQueryClient()
 
     return (
@@ -57,8 +58,6 @@ export function IntegrationWrapper({ children }: WrapperProps) {
  * Custom render function for integration tests.
  * Wraps component with real QueryClientProvider.
  */
-import { render, RenderOptions } from '@testing-library/react'
-
 export function renderWithProviders(
     ui: React.ReactElement,
     options?: Omit<RenderOptions, 'wrapper'>
@@ -71,4 +70,3 @@ export function renderWithProviders(
 
 // Re-export everything from testing-library
 export * from '@testing-library/react'
-export { renderWithProviders as render }

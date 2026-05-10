@@ -43,7 +43,7 @@ function resolveHref(href: LinkProps["href"]) {
   return `${pathname}${queryString}${hashString}`
 }
 
-export type AppLinkProps = LinkProps &
+type AppLinkProps = LinkProps &
   React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     fallbackMode?: "router" | "reload" | "none"
     ref?: React.Ref<HTMLAnchorElement>
