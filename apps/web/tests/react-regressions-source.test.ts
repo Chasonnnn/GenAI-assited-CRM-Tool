@@ -282,6 +282,20 @@ describe("React regression guards (source)", () => {
         expect(formBuilderSource).not.toMatch(/\.map\(\(entry\) => entry\.trim\(\)\)\s*\.filter\(Boolean\)/)
     })
 
+    it("uses single-pass filtered display lists for dashboard and campaign details", () => {
+        const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
+        const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
+
+        expect(stageChartSource).toContain("const stageLinkEntries = chartData.flatMap(")
+        expect(stageChartSource).toContain("stageLinkEntries.map((entry) => (")
+        expect(campaignDetailSource).toContain("function toSelectedStringSet")
+        expect(campaignDetailSource).toContain("function getSelectedLabels")
+        expect(campaignDetailSource).toContain("options.flatMap((option) => (")
+        expect(stageChartSource).not.toMatch(/chartData\s*\.filter\(\(entry\) => entry\.stage_id\)\s*\.map/)
+        expect(campaignDetailSource).not.toMatch(/\.filter\([^)]*rawStageFilters\.includes[\s\S]*?\.map/)
+        expect(campaignDetailSource).not.toMatch(/US_STATES\.filter\([^)]*stateFilters\.includes[\s\S]*?\.map/)
+    })
+
     it("hoists Meta spend dashboard number formatters", () => {
         const source = readSource("components/reports/MetaSpendDashboard.tsx")
 

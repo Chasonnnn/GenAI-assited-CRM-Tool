@@ -109,6 +109,11 @@ export function StageChart() {
         router.push(buildStageUrl(data.stage_id))
     }
 
+    const stageLinkEntries = chartData.flatMap((entry) => {
+        if (!entry.stage_id) return []
+        return [{ ...entry, stage_id: entry.stage_id }]
+    })
+
     return (
         <Card className="h-full flex flex-col gap-0 p-0">
             <CardHeader className="p-6 pb-0 gap-0">
@@ -341,15 +346,13 @@ export function StageChart() {
                         </ChartContainer>
                         <div className="sr-only" aria-label="Pipeline stage links">
                             <ul>
-                                {chartData
-                                    .filter((entry) => entry.stage_id)
-                                    .map((entry) => (
-                                        <li key={entry.stage_id}>
-                                            <Link href={buildStageUrl(entry.stage_id as string)}>
-                                                View {entry.status} surrogates
-                                            </Link>
-                                        </li>
-                                    ))}
+                                {stageLinkEntries.map((entry) => (
+                                    <li key={entry.stage_id}>
+                                        <Link href={buildStageUrl(entry.stage_id)}>
+                                            View {entry.status} surrogates
+                                        </Link>
+                                    </li>
+                                ))}
                             </ul>
                         </div>
                     </>

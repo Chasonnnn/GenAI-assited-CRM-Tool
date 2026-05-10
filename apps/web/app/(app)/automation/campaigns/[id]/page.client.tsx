@@ -114,6 +114,28 @@ const toLocalDateTimeInput = (date: Date) => {
     return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
+function toSelectedStringSet(values: readonly unknown[]): Set<string> {
+    const selected = new Set<string>()
+    for (const value of values) {
+        if (typeof value !== "string") continue
+        const trimmed = value.trim()
+        if (trimmed) {
+            selected.add(trimmed)
+        }
+    }
+    return selected
+}
+
+function getSelectedLabels<T extends { label: string }>(
+    options: readonly T[],
+    selectedValues: ReadonlySet<string>,
+    getValue: (option: T) => string,
+): string[] {
+    return options.flatMap((option) => (
+        selectedValues.has(getValue(option)) ? [option.label] : []
+    ))
+}
+
 export default function CampaignDetailPage() {
     const params = useParams()
     const { push } = useRouter()
@@ -349,13 +371,13 @@ export default function CampaignDetailPage() {
     const rawStageFilters = campaign.recipient_type === "intended_parent"
         ? (Array.isArray(filterCriteria.stage_slugs) ? filterCriteria.stage_slugs : [])
         : (Array.isArray(filterCriteria.stage_ids) ? filterCriteria.stage_ids : [])
+    const selectedStageFilters = toSelectedStringSet(rawStageFilters)
     const stageLabelsForFilter = campaign.recipient_type === "intended_parent"
-        ? intendedParentStageOptions
-            .filter((stage) => rawStageFilters.includes(stage.id))
-            .map((stage) => stage.label)
-        : pipelineStages.filter(stage => rawStageFilters.includes(stage.id)).map(stage => stage.label)
+        ? getSelectedLabels(intendedParentStageOptions, selectedStageFilters, (stage) => stage.id)
+        : getSelectedLabels(pipelineStages, selectedStageFilters, (stage) => stage.id)
     const stateFilters = Array.isArray(filterCriteria.states) ? filterCriteria.states : []
-    const stateLabelsForFilter = US_STATES.filter(state => stateFilters.includes(state.value)).map(state => state.label)
+    const selectedStateFilters = toSelectedStringSet(stateFilters)
+    const stateLabelsForFilter = getSelectedLabels(US_STATES, selectedStateFilters, (state) => state.value)
     const createdAfter = filterCriteria.created_after ? new Date(filterCriteria.created_after) : null
     const createdBefore = filterCriteria.created_before ? new Date(filterCriteria.created_before) : null
 
