@@ -11,7 +11,7 @@ import {
 } from '@/lib/api/profile'
 import type { JsonObject } from '@/lib/types/json'
 
-export const profileKeys = {
+const profileKeys = {
     all: ['profile'] as const,
     detail: (surrogateId: string) => [...profileKeys.all, surrogateId] as const,
 }

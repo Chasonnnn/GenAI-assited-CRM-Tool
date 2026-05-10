@@ -7,7 +7,7 @@ import * as notesApi from '../api/notes';
 import { surrogateKeys } from './use-surrogates';
 
 // Query keys
-export const noteKeys = {
+const noteKeys = {
     all: ['notes'] as const,
     lists: () => [...noteKeys.all, 'list'] as const,
     forSurrogate: (surrogateId: string) => [...noteKeys.lists(), surrogateId] as const,

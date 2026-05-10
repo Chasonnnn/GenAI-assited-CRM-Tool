@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as journeyApi from '../api/journey';
 
 // Query keys
-export const journeyKeys = {
+const journeyKeys = {
     all: ['journey'] as const,
     surrogates: () => [...journeyKeys.all, 'surrogates'] as const,
     surrogate: (id: string) => [...journeyKeys.surrogates(), id] as const,

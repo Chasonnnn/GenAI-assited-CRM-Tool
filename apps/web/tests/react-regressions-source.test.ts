@@ -336,6 +336,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export const api =")
     })
 
+    it("keeps hook query key factories private", () => {
+        const notesSource = readSource("lib/hooks/use-notes.ts")
+        const journeySource = readSource("lib/hooks/use-journey.ts")
+        const profileSource = readSource("lib/hooks/use-profile.ts")
+
+        expect(notesSource).not.toContain("export const noteKeys")
+        expect(journeySource).not.toContain("export const journeyKeys")
+        expect(profileSource).not.toContain("export const profileKeys")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
