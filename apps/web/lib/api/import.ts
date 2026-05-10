@@ -197,7 +197,7 @@ export async function aiMapColumns(payload: AiMapRequest): Promise<AiMapResponse
     return streamAiMapColumns(payload)
 }
 
-export async function streamAiMapColumns(
+async function streamAiMapColumns(
     payload: AiMapRequest,
     onEvent?: (event: StreamEvent<AiMapResponse>) => void,
     options?: { signal?: AbortSignal }

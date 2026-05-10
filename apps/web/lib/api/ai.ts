@@ -249,7 +249,7 @@ export async function analyzeDashboard(): Promise<AnalyzeDashboardResponse> {
     return streamAnalyzeDashboard();
 }
 
-export async function streamSummarizeSurrogate(
+async function streamSummarizeSurrogate(
     surrogateId: string,
     onEvent?: (event: StreamEvent<SummarizeSurrogateResponse>) => void,
     options?: { signal?: AbortSignal }
@@ -262,7 +262,7 @@ export async function streamSummarizeSurrogate(
     );
 }
 
-export async function streamDraftEmail(
+async function streamDraftEmail(
     request: DraftEmailRequest,
     onEvent?: (event: StreamEvent<DraftEmailResponse>) => void,
     options?: { signal?: AbortSignal }
@@ -270,7 +270,7 @@ export async function streamDraftEmail(
     return streamSSE<DraftEmailResponse>('/ai/draft-email/stream', request, onEvent, options);
 }
 
-export async function streamAnalyzeDashboard(
+async function streamAnalyzeDashboard(
     onEvent?: (event: StreamEvent<AnalyzeDashboardResponse>) => void,
     options?: { signal?: AbortSignal }
 ): Promise<AnalyzeDashboardResponse> {
@@ -322,17 +322,6 @@ export interface GenerateWorkflowResponse {
     warnings: string[];
 }
 
-export interface ValidateWorkflowRequest {
-    workflow: GeneratedWorkflow;
-    scope?: 'personal' | 'org';
-}
-
-export interface ValidateWorkflowResponse {
-    valid: boolean;
-    errors: string[];
-    warnings: string[];
-}
-
 export interface SaveWorkflowRequest {
     workflow: GeneratedWorkflow;
     scope?: 'personal' | 'org';
@@ -349,13 +338,6 @@ export async function generateWorkflow(
     scope: 'personal' | 'org' = 'personal'
 ): Promise<GenerateWorkflowResponse> {
     return streamGenerateWorkflow(description, scope);
-}
-
-export async function validateWorkflow(
-    workflow: GeneratedWorkflow,
-    scope: 'personal' | 'org' = 'personal'
-): Promise<ValidateWorkflowResponse> {
-    return api.post<ValidateWorkflowResponse>('/ai/workflows/validate', { workflow, scope });
 }
 
 export async function saveAIWorkflow(
@@ -388,7 +370,7 @@ export async function generateEmailTemplate(description: string): Promise<Genera
     return streamGenerateEmailTemplate(description);
 }
 
-export async function streamGenerateWorkflow(
+async function streamGenerateWorkflow(
     description: string,
     scope: 'personal' | 'org' = 'personal',
     onEvent?: (event: StreamEvent<GenerateWorkflowResponse>) => void,
@@ -402,7 +384,7 @@ export async function streamGenerateWorkflow(
     );
 }
 
-export async function streamGenerateEmailTemplate(
+async function streamGenerateEmailTemplate(
     description: string,
     onEvent?: (event: StreamEvent<GenerateEmailTemplateResponse>) => void,
     options?: { signal?: AbortSignal }
