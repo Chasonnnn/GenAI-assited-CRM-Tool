@@ -298,8 +298,9 @@ export function useRotateFormIntakeLink() {
 
     return useMutation({
         mutationFn: ({ linkId }: { formId: string; linkId: string }) => rotateFormIntakeLink(linkId),
-        onSuccess: (_result, { formId }) => {
+        onSuccess: (_result, { formId, linkId }) => {
             queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+            queryClient.invalidateQueries({ queryKey: formKeys.embedHealth(linkId) })
         },
     })
 }

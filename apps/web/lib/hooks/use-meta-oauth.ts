@@ -61,9 +61,10 @@ export function useDisconnectMetaConnection() {
 
     return useMutation({
         mutationFn: (connectionId: string) => disconnectMetaConnection(connectionId),
-        onSuccess: () => {
+        onSuccess: (_result, connectionId) => {
             // Invalidate connections and assets lists
             queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
+            queryClient.invalidateQueries({ queryKey: metaOAuthKeys.availableAssets(connectionId) })
             queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
     })

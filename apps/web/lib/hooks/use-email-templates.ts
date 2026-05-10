@@ -88,8 +88,9 @@ export function useDeleteEmailTemplate() {
 
     return useMutation({
         mutationFn: (id: string) => deleteTemplate(id),
-        onSuccess: () => {
+        onSuccess: (_result, id) => {
             queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            queryClient.removeQueries({ queryKey: emailTemplateKeys.detail(id) })
         },
     })
 }

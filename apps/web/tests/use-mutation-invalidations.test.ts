@@ -9,7 +9,7 @@ import {
     useRescheduleByManageToken,
 } from '@/lib/hooks/use-appointments'
 import { complianceKeys, useExecutePurge } from '@/lib/hooks/use-compliance'
-import { useSendEmail } from '@/lib/hooks/use-email-templates'
+import { useDeleteEmailTemplate, useSendEmail } from '@/lib/hooks/use-email-templates'
 import {
     formKeys,
     useApproveFormSubmission,
@@ -17,14 +17,17 @@ import {
     useRejectFormSubmission,
     useResolveSubmissionMatch,
     useRetrySubmissionMatch,
+    useRotateFormIntakeLink,
     useSendFormIntakeLink,
     useUpdateSubmissionAnswers,
 } from '@/lib/hooks/use-forms'
+import { useDisconnectMetaConnection } from '@/lib/hooks/use-meta-oauth'
 import { metaFormsKeys } from '@/lib/hooks/use-meta-forms'
 import { useCreateBulkTasks } from '@/lib/hooks/use-schedule-parser'
 import { surrogateKeys } from '@/lib/hooks/use-surrogates'
 import { taskKeys } from '@/lib/hooks/use-tasks'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
+import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
 import { useZapierOutboundTest, useZapierTestLead, zapierKeys } from '@/lib/hooks/use-zapier'
 
 type MutationOptions = {
@@ -34,13 +37,19 @@ type MutationOptions = {
 describe('mutation invalidation contracts', () => {
     let capturedOptions: MutationOptions | null = null
     const invalidateQueries = vi.fn()
+    const removeQueries = vi.fn()
+    const setQueryData = vi.fn()
 
     beforeEach(() => {
         capturedOptions = null
         invalidateQueries.mockReset()
+        removeQueries.mockReset()
+        setQueryData.mockReset()
 
         vi.mocked(useQueryClient).mockReturnValue({
             invalidateQueries,
+            removeQueries,
+            setQueryData,
         } as unknown as ReturnType<typeof useQueryClient>)
 
         vi.mocked(useMutation).mockImplementation((options: unknown) => {
@@ -165,6 +174,19 @@ describe('mutation invalidation contracts', () => {
         })
     })
 
+    it('removes deleted email template detail cache after deletion', () => {
+        useDeleteEmailTemplate()
+
+        capturedOptions?.onSuccess?.({}, 'template-1')
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['email-templates', 'list'],
+        })
+        expect(removeQueries).toHaveBeenCalledWith({
+            queryKey: ['email-templates', 'detail', 'template-1'],
+        })
+    })
+
     it('refreshes surrogate CRM surfaces after sending a shared intake link', () => {
         useSendFormIntakeLink()
 
@@ -189,6 +211,72 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ['analytics', 'activity-feed'],
             exact: false,
+        })
+    })
+
+    it('refreshes embed health after rotating an intake link token', () => {
+        useRotateFormIntakeLink()
+
+        capturedOptions?.onSuccess?.(
+            {},
+            {
+                formId: 'form-1',
+                linkId: 'link-1',
+            }
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: formKeys.intakeLinks('form-1'),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: formKeys.embedHealth('link-1'),
+        })
+    })
+
+    it('refreshes workflow list, detail, and stats caches after workflow mutations', () => {
+        useUpdateWorkflow()
+        capturedOptions?.onSuccess?.(
+            { id: 'workflow-1', name: 'Updated workflow' },
+            { id: 'workflow-1', data: { name: 'Updated workflow' } }
+        )
+
+        useToggleWorkflow()
+        capturedOptions?.onSuccess?.({ id: 'workflow-1', enabled: false }, 'workflow-1')
+
+        useDuplicateWorkflow()
+        capturedOptions?.onSuccess?.({ id: 'workflow-2', name: 'Copy' }, 'workflow-1')
+
+        useDeleteWorkflow()
+        capturedOptions?.onSuccess?.({}, 'workflow-1')
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['workflows', 'list'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['workflows', 'detail', 'workflow-1'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['workflows', 'stats'],
+        })
+        expect(setQueryData).toHaveBeenCalledWith(
+            ['workflows', 'detail', 'workflow-2'],
+            { id: 'workflow-2', name: 'Copy' }
+        )
+        expect(removeQueries).toHaveBeenCalledWith({
+            queryKey: ['workflows', 'detail', 'workflow-1'],
+        })
+    })
+
+    it('refreshes available Meta assets when disconnecting a Meta connection', () => {
+        useDisconnectMetaConnection()
+
+        capturedOptions?.onSuccess?.({}, 'connection-1')
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['meta-oauth', 'connections'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['meta-oauth', 'available-assets', 'connection-1'],
         })
     })
 
