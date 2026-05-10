@@ -42,7 +42,7 @@ export function TeamPerformanceChart({
         if (!data) return []
         return data
             .filter((user) => user.total_surrogates > 0)
-            .sort((a, b) => b.conversion_rate - a.conversion_rate)
+            .toSorted((a, b) => b.conversion_rate - a.conversion_rate)
             .slice(0, 10)
             .map((user) => ({
                 userId: user.user_id,

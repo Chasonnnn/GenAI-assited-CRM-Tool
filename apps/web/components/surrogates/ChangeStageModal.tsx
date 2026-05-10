@@ -314,7 +314,7 @@ export function ChangeStageModal({
 
     // Filter active stages and sort by order
     const sortedStages = useMemo(
-        () => [...stages].filter(s => s.is_active).sort((a, b) => a.order - b.order),
+        () => stages.filter(s => s.is_active).toSorted((a, b) => a.order - b.order),
         [stages]
     )
 

@@ -43,14 +43,14 @@ export function BulkChangeStageModal({
 
     const immediateStages = React.useMemo(
         () =>
-            [...stages]
+            stages
                 .filter(
                     (stage) =>
                         stage.is_active &&
                         !stageUsesPauseBehavior(stage) &&
                         !stageHasCapability(stage, "requires_delivery_details"),
                 )
-                .sort((a, b) => a.order - b.order),
+                .toSorted((a, b) => a.order - b.order),
         [stages],
     )
 

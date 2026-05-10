@@ -141,7 +141,7 @@ export function MassEditStageModal({
     const [preview, setPreview] = React.useState<SurrogateMassEditStagePreviewResponse | null>(null)
 
     const activeStages = React.useMemo(
-        () => [...stages].filter((s) => s.is_active).sort((a, b) => a.order - b.order),
+        () => stages.filter((s) => s.is_active).toSorted((a, b) => a.order - b.order),
         [stages]
     )
     const defaultTargetStageId = React.useMemo(

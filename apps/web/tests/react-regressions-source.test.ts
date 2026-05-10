@@ -737,6 +737,22 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("[...data].sort(")
     })
 
+    it("uses immutable sorting in report chart and stage modals", () => {
+        const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
+        const massEditSource = readSource("components/surrogates/MassEditStageModal.tsx")
+        const bulkChangeSource = readSource("components/surrogates/BulkChangeStageModal.tsx")
+        const changeStageSource = readSource("components/surrogates/ChangeStageModal.tsx")
+
+        expect(teamChartSource).toContain(".toSorted((a, b) => b.conversion_rate - a.conversion_rate)")
+        expect(massEditSource).toContain(".toSorted((a, b) => a.order - b.order)")
+        expect(bulkChangeSource).toContain(".toSorted((a, b) => a.order - b.order)")
+        expect(changeStageSource).toContain(".toSorted((a, b) => a.order - b.order)")
+        expect(teamChartSource).not.toContain(".sort((a, b) => b.conversion_rate - a.conversion_rate)")
+        expect(massEditSource).not.toContain(".sort((a, b) => a.order - b.order)")
+        expect(bulkChangeSource).not.toContain(".sort((a, b) => a.order - b.order)")
+        expect(changeStageSource).not.toContain(".sort((a, b) => a.order - b.order)")
+    })
+
     it("uses immutable sorting for stage and intake link ordering", () => {
         const intendedParentStageSource = readSource("lib/intended-parent-stage-utils.ts")
         const formBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")
