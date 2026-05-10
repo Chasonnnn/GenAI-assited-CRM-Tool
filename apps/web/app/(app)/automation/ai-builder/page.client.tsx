@@ -109,6 +109,25 @@ function getWorkflowActionKey(action: GeneratedWorkflow["actions"][number]): str
         .join("|")
 }
 
+function getStableKeyedItems<T>(
+    items: readonly T[],
+    getBaseKey: (item: T) => string,
+): Array<{ item: T; key: string; position: number }> {
+    const seen = new Map<string, number>()
+
+    return items.map((item, position) => {
+        const baseKey = getBaseKey(item) || "item"
+        const occurrence = seen.get(baseKey) ?? 0
+        seen.set(baseKey, occurrence + 1)
+
+        return {
+            item,
+            key: occurrence === 0 ? baseKey : `${baseKey}#${occurrence + 1}`,
+            position,
+        }
+    })
+}
+
 export default function AIWorkflowBuilderPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -512,8 +531,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Validation Errors</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {workflowErrors.map((error) => (
-                                    <li key={getWorkflowMessageKey(error)}>{error}</li>
+                                {getStableKeyedItems(workflowErrors, getWorkflowMessageKey).map(({ item: error, key }) => (
+                                    <li key={key}>{error}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
@@ -527,8 +546,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Warnings</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {workflowWarnings.map((warning) => (
-                                    <li key={getWorkflowMessageKey(warning)}>{warning}</li>
+                                {getStableKeyedItems(workflowWarnings, getWorkflowMessageKey).map(({ item: warning, key }) => (
+                                    <li key={key}>{warning}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
@@ -580,8 +599,8 @@ export default function AIWorkflowBuilderPage() {
                                         Conditions ({generatedWorkflow.condition_logic})
                                     </p>
                                     <ul className="space-y-1">
-                                        {generatedWorkflow.conditions.map((cond) => (
-                                            <li key={getWorkflowConditionKey(cond)} className="text-sm">
+                                        {getStableKeyedItems(generatedWorkflow.conditions, getWorkflowConditionKey).map(({ item: cond, key }) => (
+                                            <li key={key} className="text-sm">
                                                 <span className="font-mono bg-background px-1 rounded">{cond.field}</span>
                                                 {" "}{cond.operator}{" "}
                                                 <span className="font-mono bg-background px-1 rounded">
@@ -597,10 +616,10 @@ export default function AIWorkflowBuilderPage() {
                             <div className="bg-muted/50 rounded-lg p-4">
                                 <p className="text-sm font-medium text-muted-foreground mb-2">Actions</p>
                                 <ul className="space-y-2">
-                                    {generatedWorkflow.actions.map((action, i) => (
-                                        <li key={getWorkflowActionKey(action)} className="flex items-start gap-2">
+                                    {getStableKeyedItems(generatedWorkflow.actions, getWorkflowActionKey).map(({ item: action, key, position }) => (
+                                        <li key={key} className="flex items-start gap-2">
                                             <Badge variant="secondary" className="shrink-0">
-                                                {i + 1}
+                                                {position + 1}
                                             </Badge>
                                             <div>
                                                 <p className="font-medium">
@@ -660,8 +679,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Validation Errors</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {templateErrors.map((error) => (
-                                    <li key={getWorkflowMessageKey(error)}>{error}</li>
+                                {getStableKeyedItems(templateErrors, getWorkflowMessageKey).map(({ item: error, key }) => (
+                                    <li key={key}>{error}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
@@ -674,8 +693,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Warnings</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {templateWarnings.map((warning) => (
-                                    <li key={getWorkflowMessageKey(warning)}>{warning}</li>
+                                {getStableKeyedItems(templateWarnings, getWorkflowMessageKey).map(({ item: warning, key }) => (
+                                    <li key={key}>{warning}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
