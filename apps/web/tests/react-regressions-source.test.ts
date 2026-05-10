@@ -600,6 +600,22 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("ImportApprovalResponse")
     })
 
+    it("keeps unused user integration hook response type re-exports private", () => {
+        const source = readSource("lib/hooks/use-user-integrations.ts")
+        const unusedResponseTypes = [
+            "IntegrationStatus",
+            "ZoomStatusResponse",
+            "CreateMeetingResponse",
+            "SendZoomInviteResponse",
+            "GoogleCalendarStatusResponse",
+            "GoogleCalendarSyncResponse",
+        ]
+
+        for (const typeName of unusedResponseTypes) {
+            expect(source).not.toContain(typeName)
+        }
+    })
+
     it("keeps label map internals private", () => {
         const surrogateFieldLabelsSource = readSource("lib/constants/surrogate-field-labels.ts")
         const usStatesSource = readSource("lib/constants/us-states.ts")

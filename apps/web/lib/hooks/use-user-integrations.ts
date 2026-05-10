@@ -22,14 +22,8 @@ import {
     createZoomMeeting,
     sendZoomInvite,
     type CreateMeetingRequest,
-    type CreateMeetingResponse,
-    type IntegrationStatus,
-    type ZoomStatusResponse,
     type ZoomMeetingRead,
     type SendZoomInviteRequest,
-    type SendZoomInviteResponse,
-    type GoogleCalendarStatusResponse,
-    type GoogleCalendarSyncResponse,
 } from '@/lib/api/integrations'
 
 // ============================================================================
@@ -285,13 +279,7 @@ export function useSendZoomInvite() {
 
 // Re-export types for convenience
 export type {
-    IntegrationStatus,
-    ZoomStatusResponse,
     ZoomMeetingRead,
     CreateMeetingRequest,
-    CreateMeetingResponse,
     SendZoomInviteRequest,
-    SendZoomInviteResponse,
-    GoogleCalendarStatusResponse,
-    GoogleCalendarSyncResponse,
 }
