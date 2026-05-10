@@ -205,6 +205,7 @@ describe("React regression guards (source)", () => {
         const tableSource = readSource("components/ui/table.tsx")
         const scrollAreaSource = readSource("components/ui/scroll-area.tsx")
         const avatarSource = readSource("components/ui/avatar.tsx")
+        const dropdownSource = readSource("components/ui/dropdown-menu.tsx")
 
         expect(carouselSource).not.toContain("CarouselContent")
         expect(carouselSource).not.toContain("CarouselItem")
@@ -229,6 +230,11 @@ describe("React regression guards (source)", () => {
         expect(avatarSource).not.toContain("AvatarGroup")
         expect(avatarSource).not.toContain("AvatarGroupCount")
         expect(avatarSource).not.toContain("AvatarBadge")
+        expect(dropdownSource).not.toContain("DropdownMenuPortal")
+        expect(dropdownSource).not.toContain("DropdownMenuCheckboxItem")
+        expect(dropdownSource).not.toContain("DropdownMenuRadioGroup")
+        expect(dropdownSource).not.toContain("DropdownMenuRadioItem")
+        expect(dropdownSource).not.toContain("DropdownMenuShortcut")
     })
 
     it("keeps task due category internals private", () => {
