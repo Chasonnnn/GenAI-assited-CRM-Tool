@@ -8,6 +8,7 @@ import {
     useCreateBooking,
     useRescheduleByManageToken,
 } from '@/lib/hooks/use-appointments'
+import { useCancelCampaign, useSendCampaign } from '@/lib/hooks/use-campaigns'
 import { complianceKeys, useExecutePurge } from '@/lib/hooks/use-compliance'
 import { useDeleteEmailTemplate, useSendEmail } from '@/lib/hooks/use-email-templates'
 import {
@@ -23,6 +24,14 @@ import {
 } from '@/lib/hooks/use-forms'
 import { useDisconnectMetaConnection } from '@/lib/hooks/use-meta-oauth'
 import { metaFormsKeys } from '@/lib/hooks/use-meta-forms'
+import {
+    useApproveImport,
+    useCancelImport,
+    usePreviewImport,
+    useRetryImport,
+    useRunImportInline,
+    useSubmitImport,
+} from '@/lib/hooks/use-import'
 import { useCreateBulkTasks } from '@/lib/hooks/use-schedule-parser'
 import { surrogateKeys } from '@/lib/hooks/use-surrogates'
 import { taskKeys } from '@/lib/hooks/use-tasks'
@@ -277,6 +286,96 @@ describe('mutation invalidation contracts', () => {
         })
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ['meta-oauth', 'available-assets', 'connection-1'],
+        })
+    })
+
+    it('refreshes import history and detail caches after import lifecycle mutations', () => {
+        usePreviewImport()
+        capturedOptions?.onSuccess?.(
+            {
+                import_id: 'import-1',
+                total_rows: 10,
+            },
+            {}
+        )
+
+        useSubmitImport()
+        capturedOptions?.onSuccess?.(
+            { import_id: 'import-1', status: 'pending_approval' },
+            {
+                importId: 'import-1',
+                payload: { column_mappings: [] },
+            }
+        )
+
+        useCancelImport()
+        capturedOptions?.onSuccess?.(
+            { import_id: 'import-1', status: 'cancelled' },
+            'import-1'
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['imports', 'list'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['imports', 'pending'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['imports', 'detail', 'import-1'],
+        })
+    })
+
+    it('refreshes import details and surrogate lists after import execution paths', () => {
+        useApproveImport()
+        capturedOptions?.onSuccess?.(
+            { import_id: 'import-1', status: 'approved' },
+            'import-1'
+        )
+
+        useRetryImport()
+        capturedOptions?.onSuccess?.(
+            { import_id: 'import-1', status: 'completed' },
+            { importId: 'import-1' }
+        )
+
+        useRunImportInline()
+        capturedOptions?.onSuccess?.(
+            { import_id: 'import-1', status: 'completed' },
+            'import-1'
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['imports', 'detail', 'import-1'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.lists(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.stats(),
+        })
+    })
+
+    it('refreshes campaign run caches after send and cancel mutations', () => {
+        useSendCampaign()
+        capturedOptions?.onSuccess?.(
+            { message: 'sent', run_id: 'run-1', scheduled_at: null },
+            { id: 'campaign-1', sendNow: true }
+        )
+
+        useCancelCampaign()
+        capturedOptions?.onSuccess?.(
+            { message: 'cancelled' },
+            'campaign-1'
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['campaigns', 'detail', 'campaign-1', 'runs'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['campaigns', 'detail', 'campaign-1', 'runs', 'run-1'],
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['campaigns', 'detail', 'campaign-1', 'runs', 'run-1', 'recipients'],
         })
     })
 

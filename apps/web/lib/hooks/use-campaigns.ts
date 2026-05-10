@@ -45,6 +45,18 @@ const campaignKeys = {
     suppressions: ["suppressions"] as const,
 };
 
+function invalidateCampaignRunCaches(
+    queryClient: ReturnType<typeof useQueryClient>,
+    campaignId: string,
+    runId?: string | null
+) {
+    queryClient.invalidateQueries({ queryKey: campaignKeys.runs(campaignId) });
+    if (runId) {
+        queryClient.invalidateQueries({ queryKey: campaignKeys.run(campaignId, runId) });
+        queryClient.invalidateQueries({ queryKey: campaignKeys.runRecipients(campaignId, runId) });
+    }
+}
+
 // =============================================================================
 // List Campaigns
 // =============================================================================
@@ -189,9 +201,10 @@ export function useSendCampaign() {
     return useMutation({
         mutationFn: ({ id, sendNow = true }: { id: string; sendNow?: boolean }) =>
             sendCampaign(id, sendNow),
-        onSuccess: (_, { id }) => {
+        onSuccess: (result, { id }) => {
             queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
             queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            invalidateCampaignRunCaches(queryClient, id, result.run_id);
         },
     });
 }
@@ -204,6 +217,7 @@ export function useCancelCampaign() {
         onSuccess: (_, id) => {
             queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
             queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            invalidateCampaignRunCaches(queryClient, id);
         },
     });
 }

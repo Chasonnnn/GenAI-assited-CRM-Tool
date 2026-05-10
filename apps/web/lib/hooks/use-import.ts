@@ -25,6 +25,7 @@ import {
     type ImportActionResponse,
 } from '@/lib/api/import'
 import type { SurrogateSource } from '@/lib/types/surrogate'
+import { surrogateKeys } from './use-surrogates'
 
 // Re-export types for convenience
 export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportSubmitResponse, ImportApprovalResponse, ImportActionResponse }
@@ -37,6 +38,23 @@ const importKeys = {
     pending: () => [...importKeys.all, 'pending'] as const,
     details: () => [...importKeys.all, 'detail'] as const,
     detail: (id: string) => [...importKeys.details(), id] as const,
+}
+
+function invalidateImportCaches(
+    queryClient: ReturnType<typeof useQueryClient>,
+    importId?: string | null,
+    options: { refreshSurrogates?: boolean } = {}
+) {
+    queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+    queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+    if (importId) {
+        queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
+    }
+    if (options.refreshSurrogates) {
+        queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+        queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+        queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
+    }
 }
 
 // Hooks
@@ -64,6 +82,8 @@ export function usePendingImportApprovals(enabled = true) {
 }
 
 export function usePreviewImport() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: (params: { file: File; applyTemplate?: boolean; enableAi?: boolean }) => {
             const options: { applyTemplate?: boolean; enableAi?: boolean } = {}
@@ -74,6 +94,9 @@ export function usePreviewImport() {
                 options.enableAi = params.enableAi
             }
             return previewImport(params.file, Object.keys(options).length > 0 ? options : undefined)
+        },
+        onSuccess: (preview) => {
+            invalidateImportCaches(queryClient, preview.import_id)
         },
     })
 }
@@ -94,9 +117,8 @@ export function useSubmitImport() {
             }
         }) =>
             submitImport(params.importId, params.payload),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        onSuccess: (result, variables) => {
+            invalidateImportCaches(queryClient, result.import_id || variables.importId)
         },
     })
 }
@@ -106,9 +128,8 @@ export function useApproveImport() {
 
     return useMutation({
         mutationFn: (importId: string) => approveImport(importId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        onSuccess: (result, importId) => {
+            invalidateImportCaches(queryClient, result.import_id || importId, { refreshSurrogates: true })
         },
     })
 }
@@ -119,9 +140,8 @@ export function useRejectImport() {
     return useMutation({
         mutationFn: (params: { importId: string; reason: string }) =>
             rejectImport(params.importId, params.reason),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        onSuccess: (result, variables) => {
+            invalidateImportCaches(queryClient, result.import_id || variables.importId)
         },
     })
 }
@@ -135,9 +155,8 @@ export function useRetryImport() {
                 params.importId,
                 params.validation_mode ? { validation_mode: params.validation_mode } : undefined
             ),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        onSuccess: (result, variables) => {
+            invalidateImportCaches(queryClient, result.import_id || variables.importId, { refreshSurrogates: true })
         },
     })
 }
@@ -147,9 +166,8 @@ export function useRunImportInline() {
 
     return useMutation({
         mutationFn: (importId: string) => runImportInline(importId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        onSuccess: (result, importId) => {
+            invalidateImportCaches(queryClient, result.import_id || importId, { refreshSurrogates: true })
         },
     })
 }
@@ -159,9 +177,8 @@ export function useCancelImport() {
 
     return useMutation({
         mutationFn: (importId: string) => cancelImport(importId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+        onSuccess: (result, importId) => {
+            invalidateImportCaches(queryClient, result.import_id || importId)
         },
     })
 }
