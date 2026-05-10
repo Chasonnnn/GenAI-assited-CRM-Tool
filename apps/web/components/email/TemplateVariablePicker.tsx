@@ -16,6 +16,10 @@ interface TemplateVariablePickerProps {
     align?: "start" | "center" | "end"
 }
 
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 export function TemplateVariablePicker({
     variables,
     onSelect,
@@ -50,15 +54,17 @@ export function TemplateVariablePicker({
     const filteredGroups = useMemo(() => {
         const q = query.trim().toLowerCase()
         if (!q) return grouped
-        return grouped
-            .map((group) => ({
-                ...group,
-                items: group.items.filter((v) => {
-                    const haystack = `${v.name} ${v.description} ${v.category}`.toLowerCase()
-                    return haystack.includes(q)
-                }),
-            }))
-            .filter((group) => group.items.length > 0)
+        const searchPattern = new RegExp(escapeRegExp(q), "i")
+        const nextGroups: typeof grouped = []
+        for (const group of grouped) {
+            const items = group.items.filter((variable) => {
+                return searchPattern.test(`${variable.name} ${variable.description} ${variable.category}`)
+            })
+            if (items.length > 0) {
+                nextGroups.push({ ...group, items })
+            }
+        }
+        return nextGroups
     }, [grouped, query])
 
     const totalFiltered = useMemo(
@@ -140,4 +146,3 @@ export function TemplateVariablePicker({
         </Popover>
     )
 }
-
