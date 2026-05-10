@@ -49,6 +49,8 @@ type AnswerValue = string | number | boolean | string[] | TableRow[] | null
 type Answers = Record<string, AnswerValue>
 type UnknownRecord = Record<string, unknown>
 type FileUploads = Record<string, File[]>
+type FormPage = FormSchema["pages"][number]
+type FormField = FormPage["fields"][number]
 
 const PER_FILE_FIELD_MAX = 5
 
@@ -60,6 +62,26 @@ function getPageKey(page: FormSchema["pages"][number]): string {
     const title = page.title?.trim() || "untitled"
     const fieldKeys = page.fields.map((field) => field.key).join("|")
     return `${title}:${fieldKeys}`
+}
+
+function getVisibleFieldGroups(
+    fields: FormField[],
+    answers: Answers,
+    isFieldVisible: (field: FormField, values: Answers) => boolean,
+) {
+    const standardFields: FormField[] = []
+    const fileFields: FormField[] = []
+
+    for (const field of fields) {
+        if (!isFieldVisible(field, answers)) continue
+        if (field.type === "file") {
+            fileFields.push(field)
+        } else {
+            standardFields.push(field)
+        }
+    }
+
+    return { standardFields, fileFields }
 }
 
 const isIntakePublicRead = (value: unknown): value is FormIntakePublicRead => {
@@ -178,11 +200,14 @@ function filterDraftAnswersForSchema(schema: FormSchema, rawAnswers: unknown): A
     if (!rawAnswers || typeof rawAnswers !== "object" || Array.isArray(rawAnswers)) {
         return {}
     }
-    const allowedKeys = new Set(
-        schema.pages.flatMap((page) =>
-            page.fields.filter((field) => field.type !== "file").map((field) => field.key),
-        ),
-    )
+    const allowedKeys = new Set<string>()
+    for (const page of schema.pages) {
+        for (const field of page.fields) {
+            if (field.type !== "file") {
+                allowedKeys.add(field.key)
+            }
+        }
+    }
     const restored: Answers = {}
     for (const [key, value] of Object.entries(rawAnswers as Record<string, unknown>)) {
         if (!allowedKeys.has(key)) continue
@@ -889,9 +914,14 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         return evaluateCondition(field.show_if, controllingValue)
     }
 
-    const fileFields = pages.flatMap((page) =>
-        page.fields.filter((field) => field.type === "file" && isFieldVisible(field, answers)),
-    )
+    const visibleReviewPages = pages.map((page) => ({
+        page,
+        fieldGroups: getVisibleFieldGroups(page.fields, answers, isFieldVisible),
+    }))
+    const fileFields: FormField[] = []
+    for (const reviewPage of visibleReviewPages) {
+        fileFields.push(...reviewPage.fieldGroups.fileFields)
+    }
 
     const getFieldValidationError = (
         field: FormSchema["pages"][number]["fields"][number],
@@ -1123,6 +1153,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
 
     const isReviewStep = currentStep === steps.length
     const currentPage = pages[currentStep - 1]
+    const currentVisibleFields = currentPage
+        ? getVisibleFieldGroups(currentPage.fields, answers, isFieldVisible)
+        : { standardFields: [], fileFields: [] }
 
     const renderReviewValue = (
         field: FormSchema["pages"][number]["fields"][number],
@@ -1462,7 +1495,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                     No form pages available for review.
                                 </div>
                             ) : (
-                                pages.map((page, index) => (
+                                visibleReviewPages.map(({ page, fieldGroups }, index) => (
                                     <div key={getPageKey(page)} className="rounded-xl border border-stone-200 p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <h3 className="font-semibold text-stone-900">
@@ -1479,35 +1512,23 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                             </Button>
                                         </div>
                                         <div className="grid gap-2 text-sm">
-                                            {page.fields
-                                                .filter(
-                                                    (field) =>
-                                                        field.type !== "file" &&
-                                                        isFieldVisible(field, answers),
-                                                )
-                                                .map((field) => (
+                                            {fieldGroups.standardFields.map((field) => (
                                                 <div key={field.key} className="flex justify-between">
                                                     <span className="text-stone-500">{field.label}</span>
                                                     {renderReviewValue(field, answers[field.key] ?? null)}
                                                 </div>
                                             ))}
-                                            {page.fields
-                                                .filter(
-                                                    (field) =>
-                                                        field.type === "file" &&
-                                                        isFieldVisible(field, answers),
+                                            {fieldGroups.fileFields.map((field) => {
+                                                const count = fileUploads[field.key]?.length ?? 0
+                                                return (
+                                                    <div key={field.key} className="flex justify-between">
+                                                        <span className="text-stone-500">{field.label}</span>
+                                                        <span className="font-medium">
+                                                            {count ? `${count} file(s)` : "—"}
+                                                        </span>
+                                                    </div>
                                                 )
-                                                .map((field) => {
-                                                    const count = fileUploads[field.key]?.length ?? 0
-                                                    return (
-                                                        <div key={field.key} className="flex justify-between">
-                                                            <span className="text-stone-500">{field.label}</span>
-                                                            <span className="font-medium">
-                                                                {count ? `${count} file(s)` : "—"}
-                                                            </span>
-                                                        </div>
-                                                    )
-                                                })}
+                                            })}
                                         </div>
                                     </div>
                                 ))
@@ -1541,44 +1562,31 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6 pt-4">
-                            {currentPage.fields.filter(
-                                (field) =>
-                                    field.type !== "file" && isFieldVisible(field, answers),
-                            ).length === 0 ? (
+                            {currentVisibleFields.standardFields.length === 0 ? (
                                 <div className="rounded-xl border border-stone-200 p-4 text-sm text-stone-500">
                                     No fields on this page.
                                 </div>
                             ) : (
-                                currentPage.fields
-                                    .filter(
-                                        (field) =>
-                                            field.type !== "file" && isFieldVisible(field, answers),
-                                    )
-                                    .map((field) => renderFieldInput(field))
+                                currentVisibleFields.standardFields.map((field) => renderFieldInput(field))
                             )}
 
-                            {currentPage.fields
-                                .filter(
-                                    (field) =>
-                                        field.type === "file" && isFieldVisible(field, answers),
-                                )
-                                .map((field) => (
-                                    <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                                        <Label className="text-sm font-medium">
-                                            {field.label} {field.required && <span className="text-red-500">*</span>}
-                                        </Label>
-                                        <FileUploadZone
-                                            files={fileUploads[field.key] || []}
-                                            onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
-                                            maxFiles={getMaxFilesForField(field.key)}
-                                            maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                            allowedMimeTypes={formConfig.allowed_mime_types ?? null}
-                                        />
-                                        {field.help_text && (
-                                            <p className="text-xs text-stone-500">{field.help_text}</p>
-                                        )}
-                                    </div>
-                                ))}
+                            {currentVisibleFields.fileFields.map((field) => (
+                                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                                    <Label className="text-sm font-medium">
+                                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                                    </Label>
+                                    <FileUploadZone
+                                        files={fileUploads[field.key] || []}
+                                        onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
+                                        maxFiles={getMaxFilesForField(field.key)}
+                                        maxFileSizeBytes={formConfig.max_file_size_bytes}
+                                        allowedMimeTypes={formConfig.allowed_mime_types ?? null}
+                                    />
+                                    {field.help_text && (
+                                        <p className="text-xs text-stone-500">{field.help_text}</p>
+                                    )}
+                                </div>
+                            ))}
 
                             <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>

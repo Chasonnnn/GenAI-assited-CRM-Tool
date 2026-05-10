@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useState, type Dispatch, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -239,6 +239,8 @@ type WorkflowTemplateEditorState = {
     isPublished: boolean
 }
 
+type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>
+
 type WorkflowTemplateEditorAction =
     | { type: "hydrateDraft"; templateData: PlatformWorkflowTemplate; statusOptions: { id?: string; value: string; label: string }[] }
     | { type: "loadZapierSample" }
@@ -248,7 +250,7 @@ type WorkflowTemplateEditorAction =
     | { type: "setIcon"; value: string }
     | { type: "setCategory"; value: string }
     | { type: "setTriggerType"; value: string }
-    | { type: "setTriggerConfig"; value: JsonObject }
+    | { type: "setTriggerConfig"; value: SetStateAction<JsonObject> }
     | { type: "setConditionLogic"; value: "AND" | "OR" }
     | { type: "setIsPublished"; value: boolean }
     | { type: "addCondition" }
@@ -350,8 +352,11 @@ function workflowTemplateEditorReducer(
             return { ...state, category: action.value }
         case "setTriggerType":
             return { ...state, triggerType: action.value }
-        case "setTriggerConfig":
-            return { ...state, triggerConfig: action.value }
+        case "setTriggerConfig": {
+            const triggerConfig =
+                typeof action.value === "function" ? action.value(state.triggerConfig) : action.value
+            return { ...state, triggerConfig }
+        }
         case "setConditionLogic":
             return { ...state, conditionLogic: action.value }
         case "setIsPublished":
@@ -621,7 +626,7 @@ function WorkflowTemplateDetailsSection({
 
 type WorkflowTemplateStageTriggerFieldsProps = {
     triggerConfig: JsonObject
-    setTriggerConfig: (value: JsonObject) => void
+    setTriggerConfig: TriggerConfigSetter
     stageIdOptions: SelectOption[]
 }
 
@@ -636,7 +641,10 @@ function WorkflowTemplateStageTriggerFields({
                 <Label>To Stage (Optional)</Label>
                 <Select
                     value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
-                    onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_stage_id: value })}
+                    onValueChange={(value) => setTriggerConfig((current) => ({
+                        ...current,
+                        to_stage_id: value,
+                    }))}
                 >
                     <SelectTrigger className="mt-1.5">
                         <SelectValue placeholder="Any stage" />
@@ -655,7 +663,10 @@ function WorkflowTemplateStageTriggerFields({
                 <Label>From Stage (Optional)</Label>
                 <Select
                     value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
-                    onValueChange={(value) => setTriggerConfig({ ...triggerConfig, from_stage_id: value })}
+                    onValueChange={(value) => setTriggerConfig((current) => ({
+                        ...current,
+                        from_stage_id: value,
+                    }))}
                 >
                     <SelectTrigger className="mt-1.5">
                         <SelectValue placeholder="Any stage" />
@@ -676,7 +687,7 @@ function WorkflowTemplateStageTriggerFields({
 
 type WorkflowTemplateScheduledTriggerFieldsProps = {
     triggerConfig: JsonObject
-    setTriggerConfig: (value: JsonObject) => void
+    setTriggerConfig: TriggerConfigSetter
 }
 
 function WorkflowTemplateScheduledTriggerFields({
@@ -691,7 +702,13 @@ function WorkflowTemplateScheduledTriggerFields({
                     placeholder="0 9 * * 1"
                     className="mt-1.5"
                     value={typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""}
-                    onChange={(event) => setTriggerConfig({ ...triggerConfig, cron: event.target.value })}
+                    onChange={(event) => {
+                        const cron = event.target.value
+                        setTriggerConfig((current) => ({
+                            ...current,
+                            cron,
+                        }))
+                    }}
                 />
             </div>
             <div>
@@ -700,7 +717,13 @@ function WorkflowTemplateScheduledTriggerFields({
                     placeholder="America/Los_Angeles"
                     className="mt-1.5"
                     value={typeof triggerConfig.timezone === "string" ? triggerConfig.timezone : "America/Los_Angeles"}
-                    onChange={(event) => setTriggerConfig({ ...triggerConfig, timezone: event.target.value })}
+                    onChange={(event) => {
+                        const timezone = event.target.value
+                        setTriggerConfig((current) => ({
+                            ...current,
+                            timezone,
+                        }))
+                    }}
                 />
             </div>
         </div>
@@ -761,7 +784,7 @@ function WorkflowTemplateFormTriggerField({
 
 type WorkflowTemplateSurrogateUpdatedTriggerFieldsProps = {
     triggerConfig: JsonObject
-    setTriggerConfig: (value: JsonObject) => void
+    setTriggerConfig: TriggerConfigSetter
     conditionFields: string[]
 }
 
@@ -781,7 +804,13 @@ function WorkflowTemplateSurrogateUpdatedTriggerFields({
                 value=""
                 onValueChange={(value) => {
                     if (!value || selectedTriggerFields.includes(value)) return
-                    setTriggerConfig({ ...triggerConfig, fields: [...selectedTriggerFields, value] })
+                    setTriggerConfig((current) => {
+                        const currentFields = Array.isArray(current.fields)
+                            ? current.fields.filter((field): field is string => typeof field === "string")
+                            : []
+                        if (currentFields.includes(value)) return current
+                        return { ...current, fields: [...currentFields, value] }
+                    })
                 }}
             >
                 <SelectTrigger className="flex-1">
@@ -805,9 +834,14 @@ function WorkflowTemplateSurrogateUpdatedTriggerFields({
                                 className="ml-1 text-xs"
                                 aria-label="Remove field"
                                 onClick={() =>
-                                    setTriggerConfig({
-                                        ...triggerConfig,
-                                        fields: selectedTriggerFields.filter((currentField) => currentField !== field),
+                                    setTriggerConfig((current) => {
+                                        const currentFields = Array.isArray(current.fields)
+                                            ? current.fields.filter((item): item is string => typeof item === "string")
+                                            : []
+                                        return {
+                                            ...current,
+                                            fields: currentFields.filter((currentField) => currentField !== field),
+                                        }
                                     })
                                 }
                             >
@@ -823,7 +857,7 @@ function WorkflowTemplateSurrogateUpdatedTriggerFields({
 
 type WorkflowTemplateAssignedTriggerFieldsProps = {
     triggerConfig: JsonObject
-    setTriggerConfig: (value: JsonObject) => void
+    setTriggerConfig: TriggerConfigSetter
     userOptions: TemplateUserOption[]
 }
 
@@ -837,7 +871,9 @@ function WorkflowTemplateAssignedTriggerFields({
             <Label>Assigned To (Optional)</Label>
             <Select
                 value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
-                onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || null })}
+                onValueChange={(value) =>
+                    setTriggerConfig((current) => ({ ...current, to_user_id: value || null }))
+                }
             >
                 <SelectTrigger className="mt-1.5">
                     <SelectValue placeholder="Any user" />
@@ -858,7 +894,7 @@ function WorkflowTemplateAssignedTriggerFields({
 type WorkflowTemplateTriggerConfigFieldsProps = {
     triggerType: string
     triggerConfig: JsonObject
-    setTriggerConfig: (value: JsonObject) => void
+    setTriggerConfig: TriggerConfigSetter
     stageIdOptions: SelectOption[]
     formOptions: SelectOption[]
     conditionFields: string[]
@@ -898,7 +934,9 @@ function WorkflowTemplateTriggerConfigFields({
                     max={90}
                     className="mt-1.5"
                     value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
-                    onChange={(event) => setTriggerConfig({ ...triggerConfig, days: Number(event.target.value) })}
+                    onChange={(event) =>
+                        setTriggerConfig((current) => ({ ...current, days: Number(event.target.value) }))
+                    }
                 />
             </div>
         )
@@ -913,7 +951,9 @@ function WorkflowTemplateTriggerConfigFields({
                 allowAnyForm={false}
                 formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                 formOptions={formOptions}
-                onChange={(value) => value && setTriggerConfig({ ...triggerConfig, form_id: value })}
+                onChange={(value) =>
+                    value && setTriggerConfig((current) => ({ ...current, form_id: value }))
+                }
             />
         )
     }
@@ -927,7 +967,7 @@ function WorkflowTemplateTriggerConfigFields({
                 allowAnyForm
                 formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                 formOptions={formOptions}
-                onChange={(value) => setTriggerConfig({ ...triggerConfig, form_id: value })}
+                onChange={(value) => setTriggerConfig((current) => ({ ...current, form_id: value }))}
             />
         )
     }
@@ -941,7 +981,7 @@ function WorkflowTemplateTriggerConfigFields({
                 allowAnyForm
                 formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                 formOptions={formOptions}
-                onChange={(value) => setTriggerConfig({ ...triggerConfig, form_id: value })}
+                onChange={(value) => setTriggerConfig((current) => ({ ...current, form_id: value }))}
             />
         )
     }
@@ -956,7 +996,9 @@ function WorkflowTemplateTriggerConfigFields({
                     max={168}
                     className="mt-1.5"
                     value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
-                    onChange={(event) => setTriggerConfig({ ...triggerConfig, hours_before: Number(event.target.value) })}
+                    onChange={(event) =>
+                        setTriggerConfig((current) => ({ ...current, hours_before: Number(event.target.value) }))
+                    }
                 />
             </div>
         )
@@ -990,7 +1032,7 @@ type WorkflowTemplateTriggerSectionProps = {
     setTriggerType: (value: string) => void
     triggerTypeOptions: SelectOption[]
     triggerConfig: JsonObject
-    setTriggerConfig: (value: JsonObject) => void
+    setTriggerConfig: TriggerConfigSetter
     stageIdOptions: SelectOption[]
     formOptions: SelectOption[]
     conditionFields: string[]
@@ -2010,7 +2052,9 @@ function useWorkflowTemplatePageState() {
     const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
     const setCategory = (value: string) => dispatchEditor({ type: "setCategory", value })
     const setTriggerType = (value: string) => dispatchEditor({ type: "setTriggerType", value })
-    const setTriggerConfig = (value: JsonObject) => dispatchEditor({ type: "setTriggerConfig", value })
+    const setTriggerConfig: TriggerConfigSetter = useCallback((value) => {
+        dispatchEditor({ type: "setTriggerConfig", value })
+    }, [])
     const setConditionLogic = (value: "AND" | "OR") =>
         dispatchEditor({ type: "setConditionLogic", value })
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
@@ -2075,39 +2119,40 @@ function useWorkflowTemplatePageState() {
 
     useEffect(() => {
         if (!triggerType) return
-        const next = { ...triggerConfig }
-        if (triggerType === "status_changed") {
-            if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
-            if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
-        }
-        if (triggerType === "scheduled") {
-            if (typeof next.cron !== "string") next.cron = ""
-            if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
-        }
-        if (triggerType === "inactivity") {
-            if (typeof next.days !== "number") next.days = 7
-        }
-        if (triggerType === "task_due") {
-            if (typeof next.hours_before !== "number") next.hours_before = 24
-        }
-        if (triggerType === "surrogate_updated") {
-            if (!Array.isArray(next.fields)) next.fields = []
-        }
-        if (triggerType === "surrogate_assigned") {
-            if (typeof next.to_user_id !== "string") delete next.to_user_id
-        }
-        if (triggerType === "form_started") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "form_submitted") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (triggerType === "intake_lead_created") {
-            if (typeof next.form_id !== "string") next.form_id = ""
-        }
-        if (areJsonObjectsEqual(next, triggerConfig)) return
-        setTriggerConfig(next)
-    }, [triggerConfig, triggerType])
+        setTriggerConfig((current) => {
+            const next = { ...current }
+            if (triggerType === "status_changed") {
+                if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+                if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
+            }
+            if (triggerType === "scheduled") {
+                if (typeof next.cron !== "string") next.cron = ""
+                if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+            }
+            if (triggerType === "inactivity") {
+                if (typeof next.days !== "number") next.days = 7
+            }
+            if (triggerType === "task_due") {
+                if (typeof next.hours_before !== "number") next.hours_before = 24
+            }
+            if (triggerType === "surrogate_updated") {
+                if (!Array.isArray(next.fields)) next.fields = []
+            }
+            if (triggerType === "surrogate_assigned") {
+                if (typeof next.to_user_id !== "string") delete next.to_user_id
+            }
+            if (triggerType === "form_started") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
+            if (triggerType === "form_submitted") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
+            if (triggerType === "intake_lead_created") {
+                if (typeof next.form_id !== "string") next.form_id = ""
+            }
+            return areJsonObjectsEqual(next, current) ? current : next
+        })
+    }, [setTriggerConfig, triggerConfig, triggerType])
 
     const addCondition = () => {
         dispatchEditor({ type: "addCondition" })

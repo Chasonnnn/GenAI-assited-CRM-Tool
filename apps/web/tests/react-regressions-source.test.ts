@@ -617,6 +617,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/visibleFields\s*\.filter\(\(field\) => field\.type !== "file"\)\s*\.map/)
     })
 
+    it("keeps hosted intake field visibility filtering single pass", () => {
+        const source = readSource("app/intake/[slug]/page.client.tsx")
+
+        expect(source).toContain("function getVisibleFieldGroups")
+        expect(source).toContain("const standardFields: FormField[] = []")
+        expect(source).toContain("const visibleReviewPages = pages.map")
+        expect(source).toContain("const currentVisibleFields = currentPage")
+        expect(source).not.toContain("page.fields.filter((field) => field.type !== \"file\").map")
+        expect(source).not.toContain("page.fields\n                                                .filter")
+        expect(source).not.toContain("currentPage.fields.filter")
+        expect(source).not.toContain("currentPage.fields\n                                    .filter")
+    })
+
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
         const formsApiSource = readSource("lib/api/forms.ts")
         const shareDialogSource = readSource("components/forms/builder/ShareApplicationDialog.tsx")
