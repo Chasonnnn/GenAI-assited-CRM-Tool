@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { describe, expect, it, vi } from "vitest"
 
@@ -19,5 +19,13 @@ describe("ThemeToggle", () => {
 
         expect(await screen.findByRole("button", { name: "Toggle theme" })).toBeInTheDocument()
         expect(container.querySelector(".sr-only")).toBeNull()
+    })
+
+    it("toggles the theme directly", async () => {
+        render(<ThemeToggle />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Toggle theme" }))
+
+        expect(mockSetTheme).toHaveBeenCalledWith("light")
     })
 })

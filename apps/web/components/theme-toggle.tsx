@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 
@@ -11,44 +10,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     const { resolvedTheme, setTheme } = useTheme()
 
     const toggleTheme = () => {
-        const newTheme = resolvedTheme === "dark" ? "light" : "dark"
-
-        // Check if View Transitions API is supported
-        if (
-            typeof document === 'undefined' ||
-            !('startViewTransition' in document) ||
-            window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ) {
-            setTheme(newTheme)
-            return
-        }
-
-        // Start from top-left corner
-        const x = 40
-        const y = 40
-
-        // Calculate radius to cover entire screen
-        const endRadius = Math.hypot(
-            Math.max(x, window.innerWidth - x),
-            Math.max(y, window.innerHeight - y)
-        )
-
-        // Set CSS custom properties for the animation
-        document.documentElement.style.setProperty('--x', `${x}px`)
-        document.documentElement.style.setProperty('--y', `${y}px`)
-        document.documentElement.style.setProperty('--r', `${endRadius}px`)
-
-        // For light->dark, we need different animation
-        if (resolvedTheme === 'light') {
-            document.documentElement.classList.add('dark-transition')
-        }
-
-        // Start the view transition
-        document.startViewTransition(() => {
-            setTheme(newTheme)
-        }).finished.then(() => {
-            document.documentElement.classList.remove('dark-transition')
-        })
+        setTheme(resolvedTheme === "dark" ? "light" : "dark")
     }
 
     return (

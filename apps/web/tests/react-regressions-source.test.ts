@@ -66,6 +66,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("defaultMonth={draftDate || new Date()}")
     })
 
+    it("keeps ThemeToggle out of document-driven view transitions", () => {
+        const source = readSource("components/theme-toggle.tsx")
+
+        expect(source).not.toContain("document.startViewTransition")
+        expect(source).not.toContain("document.documentElement.style.setProperty")
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 
