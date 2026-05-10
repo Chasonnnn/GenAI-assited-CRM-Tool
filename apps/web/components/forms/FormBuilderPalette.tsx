@@ -38,6 +38,10 @@ function buildTileTestId(field: BuilderPaletteField) {
     return `form-builder-palette-tile-${field.key}`
 }
 
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 function PaletteFieldTile({
     field,
     isPreset,
@@ -106,6 +110,9 @@ export function FormBuilderPalette({
     )
 
     const visibleSections = useMemo<VisibleSection[]>(() => {
+        const searchPattern = normalizedSearch
+            ? new RegExp(escapeRegExp(normalizedSearch), "i")
+            : null
         const sourceGroups =
             normalizedSearch
                 ? ALL_BUILDER_FIELD_GROUPS
@@ -120,8 +127,8 @@ export function FormBuilderPalette({
                 label: group.label,
                 isPreset: PRESET_FIELD_GROUP_IDS.has(group.id),
                 fields: group.fields.filter((field) => {
-                    if (!normalizedSearch) return true
-                    return `${field.label} ${field.key}`.toLowerCase().indexOf(normalizedSearch) !== -1
+                    if (!searchPattern) return true
+                    return searchPattern.test(`${field.label} ${field.key}`)
                 }),
             }
             if (section.fields.length > 0) sections.push(section)

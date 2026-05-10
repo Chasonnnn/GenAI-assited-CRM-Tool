@@ -51,7 +51,7 @@ function normalizeStageText(...parts: Array<string | null | undefined>) {
 
 function matchesKeyword(text: string, keywords: string[]) {
     for (const keyword of keywords) {
-        if (text.indexOf(keyword) !== -1) return true
+        if (text.includes(keyword)) return true
     }
     return false
 }
