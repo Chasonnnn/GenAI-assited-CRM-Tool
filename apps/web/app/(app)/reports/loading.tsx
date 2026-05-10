@@ -1,6 +1,20 @@
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
+const REPORTS_CHART_SKELETON_IDS = [
+    "pipeline-chart",
+    "conversion-chart",
+    "source-chart",
+    "activity-chart",
+] as const
+
+const REPORTS_METRIC_SKELETON_IDS = [
+    "lead-volume",
+    "conversion-rate",
+    "cycle-time",
+    "team-output",
+] as const
+
 export default function ReportsLoading() {
     return (
         <div className="flex min-h-screen flex-col">
@@ -13,8 +27,8 @@ export default function ReportsLoading() {
 
             <div className="flex-1 space-y-6 p-6">
                 <div className="grid gap-6 md:grid-cols-2">
-                    {[...Array(4)].map((_, i) => (
-                        <Card key={i}>
+                    {REPORTS_CHART_SKELETON_IDS.map((skeletonId) => (
+                        <Card key={skeletonId}>
                             <CardHeader>
                                 <Skeleton className="h-6 w-32" />
                             </CardHeader>
@@ -29,9 +43,9 @@ export default function ReportsLoading() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-4">
-                    {[...Array(4)].map((_, i) => (
-                        <Card key={i}>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    {REPORTS_METRIC_SKELETON_IDS.map((skeletonId) => (
+                        <Card key={skeletonId}>
+                            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                                 <Skeleton className="h-4 w-24" />
                                 <Skeleton className="size-4" />
                             </CardHeader>

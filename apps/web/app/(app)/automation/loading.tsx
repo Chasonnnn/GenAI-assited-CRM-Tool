@@ -1,6 +1,15 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
+const AUTOMATION_LOADING_CARD_IDS = [
+    "workflow-library",
+    "active-campaigns",
+    "email-templates",
+    "form-builder",
+    "execution-health",
+    "recent-runs",
+] as const
+
 export default function AutomationLoading() {
     return (
         <div className="flex min-h-screen flex-col">
@@ -13,8 +22,8 @@ export default function AutomationLoading() {
 
             <div className="flex-1 space-y-4 p-6">
                 <Skeleton className="h-10 w-64" />
-                {[...Array(6)].map((_, i) => (
-                    <Card key={i}>
+                {AUTOMATION_LOADING_CARD_IDS.map((skeletonId) => (
+                    <Card key={skeletonId}>
                         <CardContent className="flex items-center justify-between p-6">
                             <div className="flex items-start gap-4">
                                 <Skeleton className="size-12" />

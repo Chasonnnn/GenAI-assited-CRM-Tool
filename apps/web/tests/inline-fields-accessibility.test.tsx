@@ -37,6 +37,30 @@ describe("Inline field accessibility", () => {
         expect(screen.getByRole("textbox", { name: "Email" })).toBeInTheDocument()
     })
 
+    it("keeps InlineEditField draft edits stable while parent data refreshes", () => {
+        const { rerender } = render(
+            <InlineEditField
+                value="old@example.com"
+                label="Email"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Edit Email" }))
+        const input = screen.getByRole("textbox", { name: "Email" })
+        fireEvent.change(input, { target: { value: "draft@example.com" } })
+
+        rerender(
+            <InlineEditField
+                value="fresh@example.com"
+                label="Email"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        expect(screen.getByRole("textbox", { name: "Email" })).toHaveValue("draft@example.com")
+    })
+
     it("provides aria-label on InlineDateField display mode", () => {
         render(
             <InlineDateField

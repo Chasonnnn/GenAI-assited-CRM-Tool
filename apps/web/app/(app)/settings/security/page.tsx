@@ -80,8 +80,8 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                 </Alert>
 
                 <div className="grid grid-cols-2 gap-2 p-4 bg-muted rounded-lg font-mono text-sm">
-                    {codes.map((code, i) => (
-                        <div key={i} className="p-2 bg-background rounded text-center">
+                    {codes.map((code) => (
+                        <div key={code} className="p-2 bg-background rounded text-center">
                             {code}
                         </div>
                     ))}

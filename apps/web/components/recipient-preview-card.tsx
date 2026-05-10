@@ -15,6 +15,12 @@ interface RecipientPreviewCardProps {
     maxVisible?: number
 }
 
+const RECIPIENT_PREVIEW_SKELETON_IDS = [
+    "primary-recipient",
+    "secondary-recipient",
+    "tertiary-recipient",
+] as const
+
 function getInitials(name: string | null, email: string): string {
     if (name) {
         const parts = name.split(" ")
@@ -136,8 +142,8 @@ export function RecipientPreviewCard({
                     <div className="space-y-2">
                         <Skeleton className="h-4 w-28" />
                         <div className="flex gap-2">
-                            {[...Array(3)].map((_, i) => (
-                                <Skeleton key={i} className="h-14 w-44 rounded-lg" />
+                            {RECIPIENT_PREVIEW_SKELETON_IDS.map((skeletonId) => (
+                                <Skeleton key={skeletonId} className="h-14 w-44 rounded-lg" />
                             ))}
                         </div>
                     </div>

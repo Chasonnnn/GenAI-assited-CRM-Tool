@@ -121,6 +121,24 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={index}")
     })
 
+    it("uses stable keys for static loading and recovery-code lists", () => {
+        const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
+        const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")
+        const securitySource = readSource("app/(app)/settings/security/page.tsx")
+        const recipientPreviewSource = readSource("components/recipient-preview-card.tsx")
+
+        expect(reportsLoadingSource).toContain("REPORTS_CHART_SKELETON_IDS")
+        expect(reportsLoadingSource).toContain("REPORTS_METRIC_SKELETON_IDS")
+        expect(reportsLoadingSource).not.toContain("key={i}")
+        expect(reportsLoadingSource).not.toContain("space-y-0")
+        expect(automationLoadingSource).toContain("AUTOMATION_LOADING_CARD_IDS")
+        expect(automationLoadingSource).not.toContain("key={i}")
+        expect(securitySource).toContain("key={code}")
+        expect(securitySource).not.toContain("key={i}")
+        expect(recipientPreviewSource).toContain("RECIPIENT_PREVIEW_SKELETON_IDS")
+        expect(recipientPreviewSource).not.toContain("key={i}")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 
@@ -148,6 +166,14 @@ describe("React regression guards (source)", () => {
         const source = readSource("components/inline-date-field.tsx")
 
         expect(source).toContain("inlineDateFieldReducer")
+        expect(source).toContain('type: "startEdit"')
+        expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
+    })
+
+    it("keeps InlineEditField draft state tied to edit lifecycle", () => {
+        const source = readSource("components/inline-edit-field.tsx")
+
+        expect(source).toContain("inlineEditFieldReducer")
         expect(source).toContain('type: "startEdit"')
         expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
     })

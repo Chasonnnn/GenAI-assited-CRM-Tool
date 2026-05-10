@@ -17,6 +17,54 @@ interface InlineEditFieldProps {
     label?: string
 }
 
+type InlineEditFieldState = {
+    isEditing: boolean
+    editValue: string
+    isSaving: boolean
+    error: string | null
+}
+
+type InlineEditFieldAction =
+    | { type: "startEdit"; value: string }
+    | { type: "cancel"; value: string }
+    | { type: "closeWithoutSave" }
+    | { type: "setEditValue"; value: string }
+    | { type: "setError"; error: string | null }
+    | { type: "startSaving" }
+    | { type: "saveSuccess" }
+    | { type: "saveError"; error: string }
+
+const INITIAL_INLINE_EDIT_FIELD_STATE: InlineEditFieldState = {
+    isEditing: false,
+    editValue: "",
+    isSaving: false,
+    error: null,
+}
+
+function inlineEditFieldReducer(
+    state: InlineEditFieldState,
+    action: InlineEditFieldAction,
+): InlineEditFieldState {
+    switch (action.type) {
+        case "startEdit":
+            return { ...state, isEditing: true, editValue: action.value, error: null }
+        case "cancel":
+            return { ...state, isEditing: false, editValue: action.value, error: null }
+        case "closeWithoutSave":
+            return { ...state, isEditing: false }
+        case "setEditValue":
+            return { ...state, editValue: action.value }
+        case "setError":
+            return { ...state, error: action.error }
+        case "startSaving":
+            return { ...state, isSaving: true }
+        case "saveSuccess":
+            return { ...state, isEditing: false, isSaving: false, error: null }
+        case "saveError":
+            return { ...state, isSaving: false, error: action.error }
+    }
+}
+
 export function InlineEditField({
     value,
     onSave,
@@ -27,16 +75,12 @@ export function InlineEditField({
     validate,
     label,
 }: InlineEditFieldProps) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState(value || "")
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
+    const [state, dispatch] = React.useReducer(
+        inlineEditFieldReducer,
+        INITIAL_INLINE_EDIT_FIELD_STATE,
+    )
+    const { isEditing, editValue, isSaving, error } = state
     const inputRef = React.useRef<HTMLInputElement>(null)
-
-    // Reset edit value when prop value changes
-    React.useEffect(() => {
-        setEditValue(value || "")
-    }, [value])
 
     // Focus input when editing starts
     React.useEffect(() => {
@@ -47,14 +91,11 @@ export function InlineEditField({
     }, [isEditing])
 
     const handleStartEdit = () => {
-        setIsEditing(true)
-        setError(null)
+        dispatch({ type: "startEdit", value: value || "" })
     }
 
     const handleCancel = () => {
-        setEditValue(value || "")
-        setIsEditing(false)
-        setError(null)
+        dispatch({ type: "cancel", value: value || "" })
     }
 
     const handleSave = async () => {
@@ -62,26 +103,26 @@ export function InlineEditField({
         if (validate) {
             const validationError = validate(editValue)
             if (validationError) {
-                setError(validationError)
+                dispatch({ type: "setError", error: validationError })
                 return
             }
         }
 
         // Only save if value changed
         if (editValue === (value || "")) {
-            setIsEditing(false)
+            dispatch({ type: "closeWithoutSave" })
             return
         }
 
-        setIsSaving(true)
+        dispatch({ type: "startSaving" })
         try {
             await onSave(editValue)
-            setIsEditing(false)
-            setError(null)
+            dispatch({ type: "saveSuccess" })
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save")
-        } finally {
-            setIsSaving(false)
+            dispatch({
+                type: "saveError",
+                error: err instanceof Error ? err.message : "Failed to save",
+            })
         }
     }
 
@@ -134,7 +175,7 @@ export function InlineEditField({
                     ref={inputRef}
                     type={type}
                     value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    onChange={(e) => dispatch({ type: "setEditValue", value: e.target.value })}
                     onKeyDown={handleKeyDown}
                     onBlur={() => {
                         // Delay to allow button clicks
