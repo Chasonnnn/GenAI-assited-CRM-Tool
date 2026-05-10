@@ -389,7 +389,7 @@ export function summarizeAllInterviews(surrogateId: string): Promise<AllIntervie
     return streamSummarizeAllInterviews(surrogateId);
 }
 
-export function streamSummarizeInterview(
+function streamSummarizeInterview(
     interviewId: string,
     onEvent?: (event: StreamEvent<InterviewSummaryResponse>) => void,
     options?: { signal?: AbortSignal }
@@ -402,7 +402,7 @@ export function streamSummarizeInterview(
     );
 }
 
-export function streamSummarizeAllInterviews(
+function streamSummarizeAllInterviews(
     surrogateId: string,
     onEvent?: (event: StreamEvent<AllInterviewsSummaryResponse>) => void,
     options?: { signal?: AbortSignal }
