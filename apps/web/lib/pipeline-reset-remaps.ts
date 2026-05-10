@@ -100,20 +100,22 @@ function pickRemapTarget(
     source: ResettableStage,
     candidates: ResettableStage[],
 ): string | null {
-    const ranked = candidates
-        .filter((candidate) => candidate.stage_key)
-        .map((candidate) => ({
+    const ranked: Array<{ stage_key: string; score: number; orderDistance: number }> = []
+    for (const candidate of candidates) {
+        if (!candidate.stage_key) continue
+        ranked.push({
             stage_key: candidate.stage_key,
             score: getRemapCandidateScore(source, candidate),
             orderDistance: Math.abs((source.order ?? 0) - (candidate.order ?? 0)),
-        }))
-        .sort((left, right) => {
-            if (right.score !== left.score) return right.score - left.score
-            if (left.orderDistance !== right.orderDistance) {
-                return left.orderDistance - right.orderDistance
-            }
-            return left.stage_key.localeCompare(right.stage_key)
         })
+    }
+    ranked.sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score
+        if (left.orderDistance !== right.orderDistance) {
+            return left.orderDistance - right.orderDistance
+        }
+        return left.stage_key.localeCompare(right.stage_key)
+    })
 
     const best = ranked[0]
     return best && best.score > 0 ? best.stage_key : null
