@@ -324,6 +324,7 @@ describe("React regression guards (source)", () => {
         const source = readSource("lib/api/schedule-parser.ts")
 
         expect(source).not.toContain("export interface ParseScheduleResponse")
+        expect(source).not.toContain("export interface BulkTaskItem")
         expect(source).not.toContain("export interface BulkTaskCreateResponse")
         expect(source).not.toContain("export async function streamParseSchedule")
     })
