@@ -240,6 +240,24 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export function isDueThisWeek")
     })
 
+    it("keeps surrogate detail layout context internals private", () => {
+        const clientSource = readSource("components/surrogates/detail/SurrogateDetailLayoutClient.tsx")
+        const indexSource = readSource("components/surrogates/detail/SurrogateDetailLayout/index.tsx")
+        const contextSource = readSource("components/surrogates/detail/SurrogateDetailLayout/context.tsx")
+
+        expect(clientSource).not.toContain("useSurrogateDetailLayout")
+        expect(indexSource).not.toContain("useSurrogateDetailLayout")
+        expect(indexSource).not.toContain("SurrogateDetailLayoutContextValue")
+        expect(contextSource).not.toContain("export function useSurrogateDetailLayout")
+        expect(contextSource).not.toContain("export type SurrogateDetailLayoutContextValue")
+        expect(contextSource).not.toContain("export interface SurrogateDetailDataContextValue")
+        expect(contextSource).not.toContain("export interface SurrogateDetailTabsContextValue")
+        expect(contextSource).not.toContain("export interface SurrogateDetailDialogContextValue")
+        expect(contextSource).not.toContain("export interface SurrogateDetailQueueContextValue")
+        expect(contextSource).not.toContain("export interface SurrogateDetailZoomContextValue")
+        expect(contextSource).not.toContain("export interface SurrogateDetailActionsContextValue")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

@@ -143,23 +143,10 @@ export function SurrogateDetailLayout({ children }: SurrogateDetailLayoutProps) 
 
 // Re-export types and context hook
 export {
-    useSurrogateDetailLayout,
     useSurrogateDetailData,
     useSurrogateDetailTabs,
     useSurrogateDetailDialogs,
     useSurrogateDetailQueue,
     useSurrogateDetailZoom,
     useSurrogateDetailActions,
-    type TabValue,
-} from "./context"
-export type {
-    ActiveDialog,
-    ZoomFormState,
-    SurrogateDetailLayoutContextValue,
-    SurrogateDetailDataContextValue,
-    SurrogateDetailTabsContextValue,
-    SurrogateDetailDialogContextValue,
-    SurrogateDetailQueueContextValue,
-    SurrogateDetailZoomContextValue,
-    SurrogateDetailActionsContextValue,
 } from "./context"

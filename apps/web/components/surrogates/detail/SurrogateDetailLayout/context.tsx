@@ -42,7 +42,7 @@ import type { Queue } from "@/lib/hooks/use-queues"
 // Types
 // ============================================================================
 
-export const TAB_VALUES = [
+const TAB_VALUES = [
     "overview",
     "emails",
     "notes",
@@ -54,9 +54,9 @@ export const TAB_VALUES = [
     "journey",
     "ai",
 ] as const
-export type TabValue = (typeof TAB_VALUES)[number]
+type TabValue = (typeof TAB_VALUES)[number]
 
-export type ActiveDialog =
+type ActiveDialog =
     | { type: "none" }
     | { type: "edit_surrogate" }
     | { type: "release_queue" }
@@ -67,7 +67,7 @@ export type ActiveDialog =
     | { type: "log_interview_outcome" }
     | { type: "change_stage" }
 
-export interface ZoomFormState {
+interface ZoomFormState {
     topic: string
     duration: number
     startAt: Date | undefined
@@ -79,7 +79,7 @@ export interface ZoomFormState {
     } | null
 }
 
-export interface SurrogateDetailDataContextValue {
+interface SurrogateDetailDataContextValue {
     // Core data
     surrogateId: string
     surrogate: SurrogateRead | null
@@ -114,24 +114,24 @@ export interface SurrogateDetailDataContextValue {
     zoomConnected: boolean
 }
 
-export interface SurrogateDetailTabsContextValue {
+interface SurrogateDetailTabsContextValue {
     currentTab: TabValue
     allowedTabs: TabValue[]
     setTab: (tab: TabValue) => void
 }
 
-export interface SurrogateDetailDialogContextValue {
+interface SurrogateDetailDialogContextValue {
     activeDialog: ActiveDialog
     openDialog: (dialog: ActiveDialog) => void
     closeDialog: () => void
 }
 
-export interface SurrogateDetailQueueContextValue {
+interface SurrogateDetailQueueContextValue {
     selectedQueueId: string
     setSelectedQueueId: (id: string) => void
 }
 
-export interface SurrogateDetailZoomContextValue {
+interface SurrogateDetailZoomContextValue {
     zoomForm: ZoomFormState
     setZoomTopic: (topic: string) => void
     setZoomDuration: (duration: number) => void
@@ -144,7 +144,7 @@ export interface SurrogateDetailZoomContextValue {
     isSendZoomInvitePending: boolean
 }
 
-export interface SurrogateDetailActionsContextValue {
+interface SurrogateDetailActionsContextValue {
     changeStatus: (data: {
         stage_id: string
         reason?: string
@@ -170,14 +170,6 @@ export interface SurrogateDetailActionsContextValue {
     isReleasePending: boolean
     isAssignPending: boolean
 }
-
-export type SurrogateDetailLayoutContextValue =
-    SurrogateDetailDataContextValue &
-    SurrogateDetailTabsContextValue &
-    SurrogateDetailDialogContextValue &
-    SurrogateDetailQueueContextValue &
-    SurrogateDetailZoomContextValue &
-    SurrogateDetailActionsContextValue
 
 const DEFAULT_SURROGATES_LIST_PATH = "/surrogates"
 
@@ -232,18 +224,6 @@ export function useSurrogateDetailZoom() {
 
 export function useSurrogateDetailActions() {
     return useRequiredContext(SurrogateDetailActionsContext, "useSurrogateDetailActions")
-}
-
-// Legacy combined hook for compatibility with existing imports/tests.
-export function useSurrogateDetailLayout(): SurrogateDetailLayoutContextValue {
-    return {
-        ...useSurrogateDetailData(),
-        ...useSurrogateDetailTabs(),
-        ...useSurrogateDetailDialogs(),
-        ...useSurrogateDetailQueue(),
-        ...useSurrogateDetailZoom(),
-        ...useSurrogateDetailActions(),
-    }
 }
 
 // ============================================================================
