@@ -225,6 +225,15 @@ describe("React regression guards (source)", () => {
         expect(tableSource).not.toContain("TableCaption")
     })
 
+    it("keeps task due category internals private", () => {
+        const source = readSource("lib/utils/task-due.ts")
+
+        expect(source).not.toContain("export function isOverdue")
+        expect(source).not.toContain("export function isDueToday")
+        expect(source).not.toContain("export function isDueTomorrow")
+        expect(source).not.toContain("export function isDueThisWeek")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

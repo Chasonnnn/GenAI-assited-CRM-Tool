@@ -2,19 +2,19 @@ import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 
 export type DueCategory = "overdue" | "today" | "tomorrow" | "this-week" | "later" | "no-date"
 
-export function isOverdue(dueDate: string | null): boolean {
+function isOverdue(dueDate: string | null): boolean {
     if (!dueDate) return false
     return parseDateInput(dueDate) < startOfLocalDay()
 }
 
-export function isDueToday(dueDate: string | null): boolean {
+function isDueToday(dueDate: string | null): boolean {
     if (!dueDate) return false
     const due = parseDateInput(dueDate)
     const today = startOfLocalDay()
     return due.getTime() === today.getTime()
 }
 
-export function isDueTomorrow(dueDate: string | null): boolean {
+function isDueTomorrow(dueDate: string | null): boolean {
     if (!dueDate) return false
     const due = parseDateInput(dueDate)
     const tomorrow = startOfLocalDay()
@@ -22,7 +22,7 @@ export function isDueTomorrow(dueDate: string | null): boolean {
     return due.getTime() === tomorrow.getTime()
 }
 
-export function isDueThisWeek(dueDate: string | null): boolean {
+function isDueThisWeek(dueDate: string | null): boolean {
     if (!dueDate) return false
     const due = parseDateInput(dueDate)
     const today = startOfLocalDay()
