@@ -13,7 +13,7 @@ export interface ZapierEventMappingItem {
     bucket?: ZapierStageBucket | null;
 }
 
-export interface ZapierSettings {
+interface ZapierSettings {
     webhook_url: string;
     is_active: boolean;
     secret_configured: boolean;
@@ -25,7 +25,7 @@ export interface ZapierSettings {
     event_mapping: ZapierEventMappingItem[];
 }
 
-export interface ZapierInboundWebhook {
+interface ZapierInboundWebhook {
     webhook_id: string;
     webhook_url: string;
     label?: string | null;
@@ -34,13 +34,13 @@ export interface ZapierInboundWebhook {
     created_at: string;
 }
 
-export interface RotateZapierSecretResponse {
+interface RotateZapierSecretResponse {
     webhook_url: string;
     webhook_secret: string;
     webhook_id?: string | null;
 }
 
-export interface ZapierOutboundSettingsRequest {
+interface ZapierOutboundSettingsRequest {
     outbound_webhook_url?: string | null;
     outbound_webhook_secret?: string | null;
     outbound_enabled?: boolean;
@@ -48,12 +48,12 @@ export interface ZapierOutboundSettingsRequest {
     event_mapping?: ZapierEventMappingItem[];
 }
 
-export interface ZapierTestLeadRequest {
+interface ZapierTestLeadRequest {
     form_id?: string;
     fields?: Record<string, unknown>;
 }
 
-export interface ZapierTestLeadResponse {
+interface ZapierTestLeadResponse {
     status: string;
     duplicate: boolean;
     meta_lead_id: string;
@@ -61,11 +61,11 @@ export interface ZapierTestLeadResponse {
     message?: string | null;
 }
 
-export interface ZapierInboundWebhookCreateRequest {
+interface ZapierInboundWebhookCreateRequest {
     label?: string | null;
 }
 
-export interface ZapierInboundWebhookCreateResponse {
+interface ZapierInboundWebhookCreateResponse {
     webhook_id: string;
     webhook_url: string;
     webhook_secret: string;
@@ -78,19 +78,19 @@ export interface ZapierInboundWebhookUpdateRequest {
     is_active?: boolean | null;
 }
 
-export interface ZapierOutboundTestRequest {
+interface ZapierOutboundTestRequest {
     stage_key?: string;
     lead_id?: string;
 }
 
-export interface ZapierOutboundTestResponse {
+interface ZapierOutboundTestResponse {
     status: string;
     event_name: string;
     event_id: string;
     lead_id: string;
 }
 
-export type ZapierOutboundEventStatus = 'queued' | 'delivered' | 'failed' | 'skipped';
+type ZapierOutboundEventStatus = 'queued' | 'delivered' | 'failed' | 'skipped';
 
 export interface ZapierOutboundEvent {
     id: string;
@@ -113,12 +113,12 @@ export interface ZapierOutboundEvent {
     can_retry: boolean;
 }
 
-export interface ZapierOutboundEventsResponse {
+interface ZapierOutboundEventsResponse {
     items: ZapierOutboundEvent[];
     total: number;
 }
 
-export interface ZapierOutboundEventsSummary {
+interface ZapierOutboundEventsSummary {
     window_hours: number;
     total_count: number;
     queued_count: number;
@@ -143,7 +143,7 @@ export interface RetryZapierOutboundEventRequest {
     reason?: string | null;
 }
 
-export interface ZapierFieldPasteRequest {
+interface ZapierFieldPasteRequest {
     paste: string;
     webhook_id?: string;
     form_id?: string;

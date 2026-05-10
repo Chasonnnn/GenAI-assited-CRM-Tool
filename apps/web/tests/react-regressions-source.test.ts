@@ -10,6 +10,11 @@ function sourceExists(pathFromWebRoot: string): boolean {
     return existsSync(join(process.cwd(), pathFromWebRoot))
 }
 
+function expectTypeOrInterfaceNotExported(source: string, typeName: string): void {
+    expect(source, typeName).not.toContain(`export interface ${typeName} {`)
+    expect(source, typeName).not.toContain(`export type ${typeName} =`)
+}
+
 function readApiModuleSources(): Array<{ path: string; source: string }> {
     const apiDir = join(process.cwd(), "lib/api")
     const sources: Array<{ path: string; source: string }> = []
@@ -466,7 +471,7 @@ describe("React regression guards (source)", () => {
         ]
 
         for (const typeName of privateTicketTypes) {
-            expect(source, typeName).not.toMatch(new RegExp(`export (interface|type) ${typeName}\\b`))
+            expectTypeOrInterfaceNotExported(source, typeName)
         }
     })
 
@@ -492,7 +497,31 @@ describe("React regression guards (source)", () => {
         ]
 
         for (const typeName of privateDatasetTypes) {
-            expect(source, typeName).not.toMatch(new RegExp(`export (interface|type) ${typeName}\\b`))
+            expectTypeOrInterfaceNotExported(source, typeName)
+        }
+    })
+
+    it("keeps Zapier API response subtypes private", () => {
+        const source = readSource("lib/api/zapier.ts")
+        const privateZapierTypes = [
+            "ZapierSettings",
+            "ZapierInboundWebhook",
+            "RotateZapierSecretResponse",
+            "ZapierOutboundSettingsRequest",
+            "ZapierTestLeadRequest",
+            "ZapierTestLeadResponse",
+            "ZapierInboundWebhookCreateRequest",
+            "ZapierInboundWebhookCreateResponse",
+            "ZapierOutboundTestRequest",
+            "ZapierOutboundTestResponse",
+            "ZapierOutboundEventStatus",
+            "ZapierOutboundEventsResponse",
+            "ZapierOutboundEventsSummary",
+            "ZapierFieldPasteRequest",
+        ]
+
+        for (const typeName of privateZapierTypes) {
+            expectTypeOrInterfaceNotExported(source, typeName)
         }
     })
 
