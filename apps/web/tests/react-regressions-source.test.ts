@@ -203,6 +203,8 @@ describe("React regression guards (source)", () => {
         const badgeSource = readSource("components/ui/badge.tsx")
         const dialogSource = readSource("components/ui/dialog.tsx")
         const tableSource = readSource("components/ui/table.tsx")
+        const scrollAreaSource = readSource("components/ui/scroll-area.tsx")
+        const avatarSource = readSource("components/ui/avatar.tsx")
 
         expect(carouselSource).not.toContain("CarouselContent")
         expect(carouselSource).not.toContain("CarouselItem")
@@ -223,6 +225,10 @@ describe("React regression guards (source)", () => {
         expect(dialogSource).not.toMatch(/export \{[\s\S]*DialogPortal/)
         expect(tableSource).not.toContain("TableFooter")
         expect(tableSource).not.toContain("TableCaption")
+        expect(scrollAreaSource).not.toMatch(/export \{[\s\S]*ScrollBar/)
+        expect(avatarSource).not.toContain("AvatarGroup")
+        expect(avatarSource).not.toContain("AvatarGroupCount")
+        expect(avatarSource).not.toContain("AvatarBadge")
     })
 
     it("keeps task due category internals private", () => {
