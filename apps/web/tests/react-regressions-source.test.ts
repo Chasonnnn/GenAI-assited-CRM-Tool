@@ -121,6 +121,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={index}")
     })
 
+    it("keeps dashboard KPI chart code split and private", () => {
+        const source = readSource("app/(app)/dashboard/components/kpi-card.tsx")
+
+        expect(source).toContain('import dynamic from "next/dynamic"')
+        expect(source).not.toContain('from "recharts"')
+        expect(source).not.toContain("KPICardSkeleton")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")

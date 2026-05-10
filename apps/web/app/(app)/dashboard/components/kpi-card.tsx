@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,6 @@ import {
     AlertCircleIcon,
     ChevronRightIcon,
 } from "lucide-react"
-import { Area, AreaChart, ResponsiveContainer } from "recharts"
 import { cn } from "@/lib/utils"
 
 // =============================================================================
@@ -39,6 +39,63 @@ interface KPICardProps {
     className?: string | undefined
     icon?: React.ReactNode | undefined
 }
+
+type SparklineChartDataPoint = {
+    index: number
+    value: number
+}
+
+type SparklineChartSize = {
+    width: number
+    height: number
+}
+
+type SparklineChartProps = {
+    chartData: SparklineChartDataPoint[]
+    size: SparklineChartSize
+    hasVariance: boolean
+    minValue: number
+}
+
+const SparklineChart = dynamic<SparklineChartProps>(
+    () =>
+        import("recharts").then(({ Area, AreaChart, ResponsiveContainer }) => {
+            function SparklineChartComponent({
+                chartData,
+                size,
+                hasVariance,
+                minValue,
+            }: SparklineChartProps) {
+                return (
+                    <ResponsiveContainer width={size.width} height={size.height} minWidth={1} minHeight={1}>
+                        <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
+                            <defs>
+                                <linearGradient id="sparklineGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
+                                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.05} />
+                                </linearGradient>
+                            </defs>
+                            <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke="var(--primary)"
+                                strokeWidth={1.5}
+                                fill="url(#sparklineGradient)"
+                                isAnimationActive={false}
+                                dot={false}
+                                // If no variance, show a flat line in the middle
+                                baseValue={hasVariance ? "dataMin" : (minValue - 1)}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                )
+            }
+
+            SparklineChartComponent.displayName = "SparklineChart"
+            return SparklineChartComponent
+        }),
+    { ssr: false, loading: () => null }
+)
 
 // =============================================================================
 // Helpers
@@ -151,27 +208,12 @@ function Sparkline({ data }: { data: number[] }) {
     return (
         <div ref={containerRef} className="h-8 w-full">
             {size ? (
-                <ResponsiveContainer width={size.width} height={size.height} minWidth={1} minHeight={1}>
-                    <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
-                        <defs>
-                            <linearGradient id="sparklineGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
-                                <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.05} />
-                            </linearGradient>
-                        </defs>
-                        <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke="var(--primary)"
-                            strokeWidth={1.5}
-                            fill="url(#sparklineGradient)"
-                            isAnimationActive={false}
-                            dot={false}
-                            // If no variance, show a flat line in the middle
-                            baseValue={hasVariance ? "dataMin" : (minValue - 1)}
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
+                <SparklineChart
+                    chartData={chartData}
+                    size={size}
+                    hasVariance={hasVariance}
+                    minValue={minValue}
+                />
             ) : null}
         </div>
     )
@@ -275,27 +317,4 @@ export function KPICard({
     }
 
     return content
-}
-
-// =============================================================================
-// Loading Skeleton
-// =============================================================================
-
-export function KPICardSkeleton() {
-    return (
-        <Card className="gap-0 p-0">
-            <CardHeader className="p-6 pb-0 gap-0">
-                <div className="flex items-center justify-between mb-1">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-4 w-12" />
-                </div>
-                <div className="mb-4 h-0" aria-hidden="true" />
-            </CardHeader>
-            <CardContent className="p-6 pt-0 space-y-2">
-                <Skeleton className="h-8 w-20" />
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-8 w-full" />
-            </CardContent>
-        </Card>
-    )
 }
