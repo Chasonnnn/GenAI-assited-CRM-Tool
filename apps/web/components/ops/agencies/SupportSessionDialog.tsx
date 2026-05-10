@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useReducer } from "react"
 import { toast } from "sonner"
 import { ArrowUpRight, Eye, Loader2 } from "lucide-react"
 
@@ -59,19 +59,73 @@ type SupportSessionDialogProps = {
     disabled?: boolean
 }
 
+type SupportSessionState = {
+    open: boolean
+    role: SupportSessionRole
+    mode: SupportSessionMode
+    reasonCode: SupportSessionReasonCode
+    reasonText: string
+    submitting: boolean
+    readOnlySupported: boolean | null
+}
+
+type SupportSessionAction =
+    | { type: "setOpen"; open: boolean }
+    | { type: "setRole"; role: SupportSessionRole }
+    | { type: "setMode"; mode: SupportSessionMode }
+    | { type: "setReasonCode"; reasonCode: SupportSessionReasonCode }
+    | { type: "setReasonText"; reasonText: string }
+    | { type: "setSubmitting"; submitting: boolean }
+    | { type: "setReadOnlySupported"; readOnlySupported: boolean }
+
+const INITIAL_SUPPORT_SESSION_STATE: SupportSessionState = {
+    open: false,
+    role: "admin",
+    mode: "write",
+    reasonCode: "bug_repro",
+    reasonText: "",
+    submitting: false,
+    readOnlySupported: null,
+}
+
+function supportSessionReducer(
+    state: SupportSessionState,
+    action: SupportSessionAction,
+): SupportSessionState {
+    switch (action.type) {
+        case "setOpen":
+            return { ...state, open: action.open }
+        case "setRole":
+            return { ...state, role: action.role }
+        case "setMode":
+            return { ...state, mode: action.mode }
+        case "setReasonCode":
+            return { ...state, reasonCode: action.reasonCode }
+        case "setReasonText":
+            return { ...state, reasonText: action.reasonText }
+        case "setSubmitting":
+            return { ...state, submitting: action.submitting }
+        case "setReadOnlySupported":
+            return {
+                ...state,
+                readOnlySupported: action.readOnlySupported,
+                mode: !action.readOnlySupported && state.mode === "read_only" ? "write" : state.mode,
+            }
+    }
+}
+
+function applyPopupStyles(element: HTMLElement, cssText: string) {
+    element.style.cssText = cssText
+}
+
 export function SupportSessionDialog({
     orgId,
     orgName,
     portalBaseUrl,
     disabled = false,
 }: SupportSessionDialogProps) {
-    const [open, setOpen] = useState(false)
-    const [role, setRole] = useState<SupportSessionRole>("admin")
-    const [mode, setMode] = useState<SupportSessionMode>("write")
-    const [reasonCode, setReasonCode] = useState<SupportSessionReasonCode>("bug_repro")
-    const [reasonText, setReasonText] = useState("")
-    const [submitting, setSubmitting] = useState(false)
-    const [readOnlySupported, setReadOnlySupported] = useState<boolean | null>(null)
+    const [state, dispatch] = useReducer(supportSessionReducer, INITIAL_SUPPORT_SESSION_STATE)
+    const { open, role, mode, reasonCode, reasonText, submitting, readOnlySupported } = state
 
     const reasonTextTrimmed = reasonText.trim()
     const reasonTextLength = reasonTextTrimmed.length
@@ -105,15 +159,12 @@ export function SupportSessionDialog({
         if (readOnlySupported !== null) return
 
         void getPlatformMe()
-            .then((me) => setReadOnlySupported(me.support_session_allow_read_only === true))
-            .catch(() => setReadOnlySupported(false))
+            .then((me) => dispatch({
+                type: "setReadOnlySupported",
+                readOnlySupported: me.support_session_allow_read_only === true,
+            }))
+            .catch(() => dispatch({ type: "setReadOnlySupported", readOnlySupported: false }))
     }, [open, readOnlySupported])
-
-    useEffect(() => {
-        if (mode === "read_only" && readOnlySupported === false) {
-            setMode("write")
-        }
-    }, [mode, readOnlySupported])
 
     const handleStartAndOpen = async () => {
         if (disabled) {
@@ -137,23 +188,19 @@ export function SupportSessionDialog({
                 popup.document.title = `Opening ${orgName}...`
                 const body = popup.document.body
                 body.innerHTML = ""
-                body.style.fontFamily = "ui-sans-serif, system-ui, -apple-system"
-                body.style.padding = "24px"
+                applyPopupStyles(body, "font-family: ui-sans-serif, system-ui, -apple-system; padding: 24px;")
 
                 const meta = popup.document.createElement("div")
                 meta.textContent = "Ops Console"
-                meta.style.fontSize = "14px"
-                meta.style.opacity = "0.7"
+                applyPopupStyles(meta, "font-size: 14px; opacity: 0.7;")
 
                 const title = popup.document.createElement("h1")
                 title.textContent = "Starting support session..."
-                title.style.fontSize = "18px"
-                title.style.margin = "12px 0 4px"
+                applyPopupStyles(title, "font-size: 18px; margin: 12px 0 4px;")
 
                 const org = popup.document.createElement("div")
                 org.textContent = orgName
-                org.style.fontSize = "14px"
-                org.style.opacity = "0.85"
+                applyPopupStyles(org, "font-size: 14px; opacity: 0.85;")
 
                 body.appendChild(meta)
                 body.appendChild(title)
@@ -163,7 +210,7 @@ export function SupportSessionDialog({
             }
         }
 
-        setSubmitting(true)
+        dispatch({ type: "setSubmitting", submitting: true })
         try {
             const session = await createSupportSession({
                 org_id: orgId,
@@ -176,7 +223,7 @@ export function SupportSessionDialog({
             toast.success(
                 `Support session started: ${ROLE_LABELS[session.role]} (${MODE_LABELS[session.mode]})`
             )
-            setOpen(false)
+            dispatch({ type: "setOpen", open: false })
 
             if (popup && !popup.closed) {
                 popup.location.href = normalizedPortalUrl
@@ -191,7 +238,7 @@ export function SupportSessionDialog({
             const message = error instanceof Error ? error.message : "Failed to start support session"
             toast.error(message)
         } finally {
-            setSubmitting(false)
+            dispatch({ type: "setSubmitting", submitting: false })
         }
     }
 
@@ -200,7 +247,7 @@ export function SupportSessionDialog({
             open={open}
             onOpenChange={(nextOpen) => {
                 if (submitting) return
-                setOpen(nextOpen)
+                dispatch({ type: "setOpen", open: nextOpen })
             }}
         >
             <DialogTrigger
@@ -229,7 +276,10 @@ export function SupportSessionDialog({
 
                     <div className="grid gap-2">
                         <Label htmlFor="support-role">Role</Label>
-                        <Select value={role} onValueChange={(v) => setRole(v as SupportSessionRole)}>
+                        <Select
+                            value={role}
+                            onValueChange={(v) => dispatch({ type: "setRole", role: v as SupportSessionRole })}
+                        >
                             <SelectTrigger id="support-role">
                                 <SelectValue />
                             </SelectTrigger>
@@ -245,7 +295,10 @@ export function SupportSessionDialog({
 
                     <div className="grid gap-2">
                         <Label htmlFor="support-mode">Access mode</Label>
-                        <Select value={mode} onValueChange={(v) => setMode(v as SupportSessionMode)}>
+                        <Select
+                            value={mode}
+                            onValueChange={(v) => dispatch({ type: "setMode", mode: v as SupportSessionMode })}
+                        >
                             <SelectTrigger id="support-mode">
                                 <SelectValue />
                             </SelectTrigger>
@@ -275,7 +328,10 @@ export function SupportSessionDialog({
                         <Label htmlFor="support-reason">Reason</Label>
                         <Select
                             value={reasonCode}
-                            onValueChange={(v) => setReasonCode(v as SupportSessionReasonCode)}
+                            onValueChange={(v) => dispatch({
+                                type: "setReasonCode",
+                                reasonCode: v as SupportSessionReasonCode,
+                            })}
                         >
                             <SelectTrigger id="support-reason">
                                 <SelectValue />
@@ -295,7 +351,7 @@ export function SupportSessionDialog({
                         <Textarea
                             id="support-notes"
                             value={reasonText}
-                            onChange={(e) => setReasonText(e.target.value)}
+                            onChange={(e) => dispatch({ type: "setReasonText", reasonText: e.target.value })}
                             placeholder="Add context for the audit trail (max 500 chars)."
                         />
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -313,7 +369,7 @@ export function SupportSessionDialog({
                 <DialogFooter>
                     <Button
                         variant="outline"
-                        onClick={() => setOpen(false)}
+                        onClick={() => dispatch({ type: "setOpen", open: false })}
                         disabled={submitting}
                     >
                         Cancel

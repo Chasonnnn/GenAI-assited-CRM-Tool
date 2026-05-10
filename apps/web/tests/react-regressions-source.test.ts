@@ -100,6 +100,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("for (const file of acceptedFiles)")
     })
 
+    it("batches support-session popup styles", () => {
+        const source = readSource("components/ops/agencies/SupportSessionDialog.tsx")
+
+        expect(source).toContain("supportSessionReducer")
+        expect(source).toContain("useReducer")
+        expect(source).toContain("applyPopupStyles")
+        expect(source).toContain(".style.cssText")
+        expect(source).not.toContain("useState")
+        expect(source).not.toContain(".style.fontSize")
+        expect(source).not.toContain(".style.opacity")
+        expect(source).not.toContain(".style.padding")
+        expect(source).not.toContain(".style.margin")
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 
