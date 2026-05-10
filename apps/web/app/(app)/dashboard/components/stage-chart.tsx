@@ -35,7 +35,7 @@ const STAGE_CHART_SKELETON_KEYS = [
 ]
 
 export function StageChart() {
-    const router = useRouter()
+    const { push } = useRouter()
     const { filters, getDateParams, resetFilters, hasActiveFilters } = useDashboardFilters()
     const [viewMode, setViewMode] = useState<ViewMode>("count")
 
@@ -106,7 +106,7 @@ export function StageChart() {
     // Handle bar click - navigate to surrogates filtered by stage
     const handleBarClick = (data: { stage_id: string | null }) => {
         if (!data.stage_id) return
-        router.push(buildStageUrl(data.stage_id))
+        push(buildStageUrl(data.stage_id))
     }
 
     const stageLinkEntries = chartData.flatMap((entry) => {

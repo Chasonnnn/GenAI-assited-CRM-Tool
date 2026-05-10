@@ -435,9 +435,12 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/dashboard/components/stage-chart.tsx")
 
         expect(source).toContain("const STAGE_CHART_SKELETON_KEYS")
+        expect(source).toContain("const { push } = useRouter()")
         expect(source).toContain("key={rowKey}")
         expect(source).toContain("key={line}")
         expect(source).toContain('key={`${entry.stage_id ?? "grouped"}:${entry.status}`}')
+        expect(source).not.toContain("const router = useRouter()")
+        expect(source).not.toContain("router.push(")
         expect(source).not.toContain("key={i}")
         expect(source).not.toContain("key={index}")
         expect(source).not.toContain("key={`${line}-${index}`}")
