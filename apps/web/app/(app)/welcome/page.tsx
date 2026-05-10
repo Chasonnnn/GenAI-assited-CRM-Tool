@@ -46,7 +46,7 @@ type WelcomeFormData = z.infer<typeof welcomeSchema>
  * After completing the form, redirects to the dashboard.
  */
 export default function WelcomePage() {
-    const router = useRouter()
+    const { push, replace } = useRouter()
     const { user, refetch } = useAuth()
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -77,7 +77,7 @@ export default function WelcomePage() {
             await refetch()
 
             toast.success("Profile completed successfully!")
-            router.push("/dashboard")
+            push("/dashboard")
         } catch (error) {
             toast.error(
                 error instanceof Error ? error.message : "Failed to update profile"
@@ -89,9 +89,9 @@ export default function WelcomePage() {
 
     useEffect(() => {
         if (user?.profile_complete) {
-            router.replace("/dashboard")
+            replace("/dashboard")
         }
-    }, [user, router])
+    }, [user, replace])
 
     useEffect(() => {
         if (user) {

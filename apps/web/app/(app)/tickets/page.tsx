@@ -49,7 +49,7 @@ function getTicketPriorityLabel(value: TicketPriorityFilter | null | undefined):
 }
 
 export default function TicketsPage() {
-    const router = useRouter()
+    const { push } = useRouter()
     const { user } = useAuth()
     const isDeveloper = user?.role === 'developer'
 
@@ -115,7 +115,7 @@ export default function TicketsPage() {
             setComposeTo('')
             setComposeSubject('')
             setComposeBody('')
-            router.push(`/tickets/${result.ticket_id}`)
+            push(`/tickets/${result.ticket_id}`)
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to compose ticket email'
             toast.error(message)

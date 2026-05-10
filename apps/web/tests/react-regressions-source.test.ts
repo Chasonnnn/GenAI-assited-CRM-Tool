@@ -431,6 +431,23 @@ describe("React regression guards (source)", () => {
         expect(publishDialogSource).not.toContain("Loading organizations...")
     })
 
+    it("destructures navigation methods in smaller operational pages", () => {
+        const welcomeSource = readSource("app/(app)/welcome/page.tsx")
+        const ticketsSource = readSource("app/(app)/tickets/page.tsx")
+
+        expect(welcomeSource).toContain("const { push, replace } = useRouter()")
+        expect(welcomeSource).toContain('push("/dashboard")')
+        expect(welcomeSource).toContain('replace("/dashboard")')
+        expect(welcomeSource).toContain("[user, replace]")
+        expect(ticketsSource).toContain("const { push } = useRouter()")
+        expect(ticketsSource).toContain("push(`/tickets/${result.ticket_id}`)")
+        expect(welcomeSource).not.toContain("const router = useRouter()")
+        expect(welcomeSource).not.toContain("router.push(")
+        expect(welcomeSource).not.toContain("router.replace(")
+        expect(ticketsSource).not.toContain("const router = useRouter()")
+        expect(ticketsSource).not.toContain("router.push(")
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
