@@ -184,9 +184,12 @@ function MembersTab() {
 
     const toggleSelectAll = () => {
         if (!members) return
-        const selectableIds = members
-            .filter(m => m.user_id !== user?.user_id && m.role !== "developer")
-            .map(m => m.id)
+        const selectableIds: string[] = []
+
+        for (const member of members) {
+            if (member.user_id === user?.user_id || member.role === "developer") continue
+            selectableIds.push(member.id)
+        }
 
         if (selectedIds.size === selectableIds.length) {
             setSelectedIds(new Set())
