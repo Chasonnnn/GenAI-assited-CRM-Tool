@@ -80,7 +80,7 @@ export default function AlertsPage() {
                 {/* Summary Cards */}
                 <div className="grid gap-4 md:grid-cols-3">
                     <Card className={summary?.critical && summary.critical > 0 ? "border-red-500" : ""}>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Critical</CardTitle>
                             <XCircleIcon className="size-4 text-red-600" aria-hidden="true" />
                         </CardHeader>
@@ -94,7 +94,7 @@ export default function AlertsPage() {
                     </Card>
 
                     <Card className={summary?.error && summary.error > 0 ? "border-orange-500" : ""}>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Errors</CardTitle>
                             <AlertCircleIcon className="size-4 text-orange-600" aria-hidden="true" />
                         </CardHeader>
@@ -108,7 +108,7 @@ export default function AlertsPage() {
                     </Card>
 
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Warnings</CardTitle>
                             <AlertTriangleIcon className="size-4 text-yellow-600" aria-hidden="true" />
                         </CardHeader>
