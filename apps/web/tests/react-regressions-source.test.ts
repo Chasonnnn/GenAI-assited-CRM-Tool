@@ -311,6 +311,23 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("{conflict.id} — connected by")
     })
 
+    it("uses typographic ellipses in the AI builder", () => {
+        const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+
+        expect(source).toContain("Generating…")
+        expect(source).toContain("Saving…")
+        expect(source).toContain("Loading variables…")
+        expect(source).toContain("follow-up task for next week…")
+        expect(source).toContain("just submitted their form…")
+        expect(source).toContain('suggestion.slice(0, 50) + "…"')
+        expect(source).not.toContain("Generating...")
+        expect(source).not.toContain("Saving...")
+        expect(source).not.toContain("Loading variables...")
+        expect(source).not.toContain("follow-up task for next week...")
+        expect(source).not.toContain("just submitted their form...")
+        expect(source).not.toContain('suggestion.slice(0, 50) + "..."')
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

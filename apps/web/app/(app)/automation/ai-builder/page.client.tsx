@@ -191,8 +191,8 @@ export default function AIWorkflowBuilderPage() {
     const activePrompt = mode === "workflow" ? workflowPrompt : emailPrompt
     const promptPlaceholder =
         mode === "workflow"
-            ? "Example: When a new lead comes in from Texas, send them a welcome email and create a follow-up task for next week..."
-            : "Example: Create a warm welcome email for new applicants who just submitted their form..."
+            ? "Example: When a new lead comes in from Texas, send them a welcome email and create a follow-up task for next week…"
+            : "Example: Create a warm welcome email for new applicants who just submitted their form…"
     const promptTitle = mode === "workflow" ? "Describe Your Workflow" : "Describe Your Email Template"
     const promptDescription =
         mode === "workflow"
@@ -429,7 +429,7 @@ export default function AIWorkflowBuilderPage() {
                                         onClick={() => handleSuggestionClick(suggestion)}
                                         className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
                                     >
-                                        {suggestion.length > 50 ? suggestion.slice(0, 50) + "..." : suggestion}
+                                        {suggestion.length > 50 ? suggestion.slice(0, 50) + "…" : suggestion}
                                     </button>
                                 ))}
                             </div>
@@ -466,7 +466,7 @@ export default function AIWorkflowBuilderPage() {
                                 {isGenerating ? (
                                     <>
                                         <Loader2Icon className="size-4 animate-spin" />
-                                        Generating...
+                                        Generating…
                                     </>
                                 ) : (
                                     <>
@@ -613,7 +613,7 @@ export default function AIWorkflowBuilderPage() {
                                         {isSavingWorkflow ? (
                                             <>
                                                 <Loader2Icon className="size-4 animate-spin mr-2" />
-                                                Saving...
+                                                Saving…
                                             </>
                                         ) : (
                                             <>
@@ -777,7 +777,7 @@ export default function AIWorkflowBuilderPage() {
                                     {createEmailTemplate.isPending ? (
                                         <>
                                             <Loader2Icon className="size-4 animate-spin mr-2" />
-                                            Saving...
+                                            Saving…
                                         </>
                                     ) : (
                                         <>
@@ -833,7 +833,7 @@ export default function AIWorkflowBuilderPage() {
                                 </div>
                                 <div className="flex flex-wrap gap-2 justify-center">
                                     {templateVariableCatalogLoading && (
-                                        <Badge variant="outline">Loading variables...</Badge>
+                                        <Badge variant="outline">Loading variables…</Badge>
                                     )}
                                     {!templateVariableCatalogLoading &&
                                         templateVariableCatalog.length > 0 && (
