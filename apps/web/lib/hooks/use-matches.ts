@@ -18,9 +18,6 @@ import {
     type MatchRejectRequest,
     type MatchCancelRequest,
     type MatchUpdateNotesRequest,
-    type MatchListResponse,
-    type MatchStatsResponse,
-    type MatchRead,
     type MatchListItem,
     type MatchStatus,
 } from '@/lib/api/matches'
@@ -151,7 +148,7 @@ export function useUpdateMatchNotes() {
 }
 
 // Re-export types
-export type { MatchListResponse, MatchStatsResponse, MatchRead, MatchListItem, MatchStatus, ListMatchesParams }
+export type { MatchListItem, MatchStatus, ListMatchesParams }
 
 // =============================================================================
 // Match Events Hooks
@@ -164,11 +161,6 @@ import {
     deleteMatchEvent,
     type MatchEventCreate,
     type MatchEventUpdate,
-    type MatchEventRead,
-    type MatchEventType,
-    type MatchEventPersonType,
-    EVENT_TYPE_COLORS,
-    PERSON_TYPE_COLORS,
 } from '@/lib/api/matches'
 
 const matchEventKeys = {
@@ -230,7 +222,3 @@ export function useDeleteMatchEvent(matchId: string) {
         },
     })
 }
-
-// Re-export event types and colors
-export type { MatchEventCreate, MatchEventUpdate, MatchEventRead, MatchEventType, MatchEventPersonType }
-export { EVENT_TYPE_COLORS, PERSON_TYPE_COLORS }

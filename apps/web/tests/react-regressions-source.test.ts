@@ -616,6 +616,18 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps unused match hook response type re-exports private", () => {
+        const source = readSource("lib/hooks/use-matches.ts")
+
+        expect(source).not.toContain("MatchListResponse")
+        expect(source).not.toContain("MatchStatsResponse")
+        expect(source).not.toContain("MatchRead")
+        expect(source).not.toContain("export type { MatchEventCreate")
+        expect(source).not.toContain("MatchEventRead")
+        expect(source).not.toContain("MatchEventType")
+        expect(source).not.toContain("MatchEventPersonType")
+    })
+
     it("keeps label map internals private", () => {
         const surrogateFieldLabelsSource = readSource("lib/constants/surrogate-field-labels.ts")
         const usStatesSource = readSource("lib/constants/us-states.ts")
