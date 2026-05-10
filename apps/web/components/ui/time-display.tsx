@@ -58,6 +58,10 @@ function getServerNowSnapshot() {
     return null
 }
 
+export function useCurrentMinuteTimestamp() {
+    return useSyncExternalStore(subscribeNow, getNowSnapshot, getServerNowSnapshot)
+}
+
 export function formatUtcDateLabel(
     value: string | null | undefined,
     options: { month?: "short" | "long"; fallback?: string } = {},
@@ -96,7 +100,7 @@ export function RelativeTime({
     value: string | null | undefined
     fallback?: string
 }) {
-    const now = useSyncExternalStore(subscribeNow, getNowSnapshot, getServerNowSnapshot)
+    const now = useCurrentMinuteTimestamp()
 
     if (!value) return <span>{fallback}</span>
     if (now === null) {

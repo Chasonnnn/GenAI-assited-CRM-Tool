@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { renderToString } from 'react-dom/server'
 import TasksPage from '../app/(app)/tasks/page'
 import { TasksListView } from '@/components/tasks/TasksListView'
 import { TasksCalendarView } from '@/components/tasks/TasksCalendarView'
@@ -449,5 +450,56 @@ describe('TasksApprovalsSection', () => {
         expect(screen.getByText('Stage Regression Request')).toBeInTheDocument()
         expect(screen.getByText('Import Approval')).toBeInTheDocument()
         expect(screen.getByText('Approve: Assign surrogate to John')).toBeInTheDocument()
+    })
+
+    it('server-renders approval timestamps as deterministic UTC fallback labels', () => {
+        const html = renderToString(
+            <TasksApprovalsSection
+                pendingApprovals={[
+                    {
+                        id: 'approval-1',
+                        title: 'Approve: Assign surrogate to John',
+                        task_type: 'workflow_approval',
+                        status: 'pending',
+                        is_completed: false,
+                        due_date: null,
+                        due_at: '2026-06-04T00:30:00.000Z',
+                        surrogate_id: 's1',
+                        surrogate_number: 'S12345',
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Test User',
+                        workflow_action_preview: 'Assign surrogate to John Smith',
+                    } as TaskListItem,
+                ]}
+                pendingStatusRequests={[]}
+                pendingImportApprovals={[
+                    {
+                        id: 'import-1',
+                        filename: 'surrogates.csv',
+                        status: 'awaiting_approval',
+                        total_rows: 120,
+                        created_at: '2026-06-03T00:30:00.000Z',
+                        created_by_name: 'Admin User',
+                        deduplication_stats: {
+                            total: 120,
+                            new_records: 115,
+                            duplicates: [],
+                        },
+                        column_mapping_snapshot: [],
+                    },
+                ]}
+                loadingApprovals={false}
+                loadingStatusRequests={false}
+                loadingImportApprovals={false}
+                onResolvedStatusRequests={() => {}}
+                onResolvedImportApprovals={() => {}}
+                currentUserId="u1"
+            />,
+        )
+
+        expect(html).toContain('Jun 3, 2026')
+        expect(html).toContain('Jun 4, 2026')
+        expect(html).not.toContain('remaining')
     })
 })

@@ -11,7 +11,11 @@ import type { TaskListItem } from "@/lib/types/task"
 import type { StatusChangeRequestDetail } from "@/lib/api/status-change-requests"
 import type { ImportApprovalItem } from "@/lib/api/import"
 import { ClockIcon, Loader2Icon, ShieldCheckIcon } from "lucide-react"
-import { format } from "date-fns"
+import {
+    RelativeTime,
+    formatUtcDateLabel,
+    useCurrentMinuteTimestamp,
+} from "@/components/ui/time-display"
 
 type TasksApprovalsSectionProps = {
     pendingApprovals: TaskListItem[]
@@ -23,6 +27,55 @@ type TasksApprovalsSectionProps = {
     onResolvedStatusRequests: () => void
     onResolvedImportApprovals: () => void
     currentUserId?: string | null
+}
+
+function getApprovalDueState(dueAt: string, now: number) {
+    const dueAtTimestamp = Date.parse(dueAt)
+    if (!Number.isFinite(dueAtTimestamp)) {
+        return { label: "Due date unavailable", isUrgent: false }
+    }
+
+    const hoursRemaining = Math.max(
+        0,
+        Math.round((dueAtTimestamp - now) / (1000 * 60 * 60)),
+    )
+
+    return {
+        label:
+            hoursRemaining > 24
+                ? `${Math.floor(hoursRemaining / 24)}d ${hoursRemaining % 24}h remaining`
+                : hoursRemaining > 0
+                  ? `${hoursRemaining}h remaining`
+                  : "Due now",
+        isUrgent: hoursRemaining < 8,
+    }
+}
+
+function ApprovalDueTime({ dueAt }: { dueAt: string }) {
+    const now = useCurrentMinuteTimestamp()
+
+    if (now === null) {
+        return (
+            <span className="flex items-center gap-1" suppressHydrationWarning>
+                <ClockIcon className="size-3" />
+                {formatUtcDateLabel(dueAt)}
+            </span>
+        )
+    }
+
+    const dueState = getApprovalDueState(dueAt, now)
+
+    return (
+        <span
+            className={`flex items-center gap-1 ${
+                dueState.isUrgent ? "text-amber-600 font-medium" : ""
+            }`}
+            suppressHydrationWarning
+        >
+            <ClockIcon className="size-3" />
+            {dueState.label}
+        </span>
+    )
 }
 
 export function TasksApprovalsSection({
@@ -133,10 +186,6 @@ export function TasksApprovalsSection({
                                 typeof dedupe?.new_records === "number"
                                     ? dedupe.new_records
                                     : Math.max(item.total_rows - duplicateCount, 0)
-                            const createdAtLabel = item.created_at
-                                ? format(new Date(item.created_at), "MMM d, yyyy h:mm a")
-                                : "Unknown time"
-
                             return (
                                 <div
                                     key={`import-${item.id}`}
@@ -173,7 +222,12 @@ export function TasksApprovalsSection({
                                             <span>
                                                 Submitted by {item.created_by_name || "Unknown"}
                                             </span>
-                                            <span>{createdAtLabel}</span>
+                                            <span>
+                                                <RelativeTime
+                                                    value={item.created_at}
+                                                    fallback="Unknown time"
+                                                />
+                                            </span>
                                         </div>
                                     </div>
                                     <div className="flex-shrink-0">
@@ -188,17 +242,6 @@ export function TasksApprovalsSection({
 
                         {pendingApprovals.map((approval) => {
                             const isOwner = currentUserId === approval.owner_id
-                            const dueAt = approval.due_at ? new Date(approval.due_at) : null
-                            const now = new Date()
-                            const hoursRemaining = dueAt
-                                ? Math.max(
-                                      0,
-                                      Math.round(
-                                          (dueAt.getTime() - now.getTime()) / (1000 * 60 * 60)
-                                      )
-                                  )
-                                : null
-                            const isUrgent = hoursRemaining !== null && hoursRemaining < 8
 
                             return (
                                 <div
@@ -226,21 +269,8 @@ export function TasksApprovalsSection({
                                                     Surrogate #{approval.surrogate_number}
                                                 </Link>
                                             )}
-                                            {hoursRemaining !== null && (
-                                                <span
-                                                    className={`flex items-center gap-1 ${
-                                                        isUrgent ? "text-amber-600 font-medium" : ""
-                                                    }`}
-                                                >
-                                                    <ClockIcon className="size-3" />
-                                                    {hoursRemaining > 24
-                                                        ? `${Math.floor(
-                                                              hoursRemaining / 24
-                                                          )}d ${hoursRemaining % 24}h remaining`
-                                                        : hoursRemaining > 0
-                                                          ? `${hoursRemaining}h remaining`
-                                                          : "Due now"}
-                                                </span>
+                                            {approval.due_at && (
+                                                <ApprovalDueTime dueAt={approval.due_at} />
                                             )}
                                         </div>
                                     </div>
