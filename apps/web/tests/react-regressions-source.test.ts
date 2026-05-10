@@ -283,6 +283,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("flex flex-row items-center justify-between space-y-0 pb-2")
     })
 
+    it("uses gap spacing for ops metric card headers", () => {
+        const source = readSource("app/ops/page.client.tsx")
+
+        expect(source).toContain("flex flex-row items-center justify-between gap-y-0 pb-2")
+        expect(source).not.toContain("flex flex-row items-center justify-between space-y-0 pb-2")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

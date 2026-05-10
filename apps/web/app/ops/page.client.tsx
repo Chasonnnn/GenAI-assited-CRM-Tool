@@ -31,7 +31,7 @@ function StatCard({
 }) {
     return (
         <Card className={variant === 'warning' && value > 0 ? 'border-amber-200 dark:border-amber-900/50' : ''}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-stone-500 dark:text-stone-400">
                     {title}
                 </CardTitle>
