@@ -1,6 +1,6 @@
 import api from '../api'
 
-export type WorkflowMetricEventType =
+type WorkflowMetricEventType =
     | "workflow_path_dashboard_viewed"
     | "workflow_path_unassigned_queue_viewed"
     | "workflow_path_surrogate_viewed"

@@ -3,7 +3,7 @@ import api from "../api"
 export type AIStudioPlatform = "instagram" | "facebook" | "linkedin" | "x" | "tiktok"
 export type AIStudioFormat = "feed" | "story" | "reel" | "carousel" | "ad"
 export type AIStudioTone = "warm" | "professional" | "bold" | "calm" | "educational"
-export type AIStudioDraftStatus = "preview" | "saved"
+type AIStudioDraftStatus = "preview" | "saved"
 export type AIStudioImageSize =
     | "auto"
     | "1024x1024"
