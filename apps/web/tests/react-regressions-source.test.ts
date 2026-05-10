@@ -121,6 +121,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={index}")
     })
 
+    it("keeps pending interview comment quote styling subtle", () => {
+        const source = readSource("components/surrogates/interviews/InterviewComments/PendingCommentInput.tsx")
+
+        expect(source).not.toContain("border-l-")
+        expect(source).not.toContain("Add your comment...")
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 

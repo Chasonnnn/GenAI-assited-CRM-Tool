@@ -22,13 +22,13 @@ export function PendingCommentInput({
 
     return (
         <div className="bg-card border border-teal-500 rounded-lg p-3 space-y-2 shadow-md mb-3">
-            <div className="text-xs italic px-2 py-1 rounded bg-amber-50 dark:bg-amber-950/30 border-l-2 border-amber-400 text-amber-800 dark:text-amber-200 line-clamp-2">
+            <div className="text-xs italic px-2 py-1 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 line-clamp-2">
                 &ldquo;{anchorText}&rdquo;
             </div>
             <Textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Add your comment..."
+                placeholder="Add your comment…"
                 className="min-h-[80px] text-sm resize-none"
                 onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
