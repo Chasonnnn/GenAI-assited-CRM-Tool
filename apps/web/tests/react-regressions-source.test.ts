@@ -230,6 +230,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useState")
     })
 
+    it("uses gap spacing for CSV validation option rows", () => {
+        const source = readSource("components/import/CSVUpload.tsx")
+
+        expect(source).not.toContain("flex items-start space-x-3")
+        expect(source).toContain("flex items-start gap-3 rounded-md border border-border p-3")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

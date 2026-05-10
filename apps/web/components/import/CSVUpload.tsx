@@ -1173,7 +1173,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     }
                                     className="space-y-3"
                                 >
-                                    <div className="flex items-start space-x-3 rounded-md border border-border p-3">
+                                    <div className="flex items-start gap-3 rounded-md border border-border p-3">
                                         <RadioGroupItem value="drop_invalid_fields" id="validation-drop-fields" />
                                         <div className="space-y-1">
                                             <Label htmlFor="validation-drop-fields" className="font-medium">
@@ -1185,7 +1185,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-start space-x-3 rounded-md border border-border p-3">
+                                    <div className="flex items-start gap-3 rounded-md border border-border p-3">
                                         <RadioGroupItem value="skip_invalid_rows" id="validation-skip-rows" />
                                         <div className="space-y-1">
                                             <Label htmlFor="validation-skip-rows" className="font-medium">
