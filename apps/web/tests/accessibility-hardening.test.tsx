@@ -8,6 +8,7 @@ const mockUsePathname = vi.fn()
 const mockUseAuth = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseDashboardFilters = vi.fn()
+const FIXED_LAST_UPDATED = Date.parse("2026-01-01T00:00:00.000Z")
 
 vi.mock("@/lib/context/ai-context", () => ({
     useAIContext: () => mockUseAIContext(),
@@ -90,7 +91,7 @@ describe("accessibility hardening", () => {
     it("labels the dashboard refresh control", () => {
         render(
             <DashboardFilterBar
-                lastUpdated={Date.now()}
+                lastUpdated={FIXED_LAST_UPDATED}
                 onRefresh={vi.fn()}
                 isRefreshing={false}
             />

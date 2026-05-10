@@ -6,6 +6,7 @@ import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplic
 const mockSendFormIntakeLink = vi.fn()
 const mockUseFormIntakeLinks = vi.fn()
 const mockUseSurrogateFormSubmission = vi.fn()
+const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({
@@ -63,8 +64,8 @@ describe("SurrogateApplicationTab", () => {
                     max_submissions: null,
                     submissions_count: 0,
                     intake_url: "https://portal.example.com/intake/shared-slug",
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
+                    created_at: FIXED_TIMESTAMP,
+                    updated_at: FIXED_TIMESTAMP,
                 },
             ],
             isLoading: false,
@@ -77,7 +78,7 @@ describe("SurrogateApplicationTab", () => {
             intake_link_id: "link-1",
             template_id: "template-1",
             email_log_id: "email-log-1",
-            sent_at: new Date().toISOString(),
+            sent_at: FIXED_TIMESTAMP,
             intake_url: "https://portal.example.com/intake/shared-slug",
         })
 
@@ -90,8 +91,8 @@ describe("SurrogateApplicationTab", () => {
                         id: "form-1",
                         name: "Application Form",
                         status: "published",
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
+                        created_at: FIXED_TIMESTAMP,
+                        updated_at: FIXED_TIMESTAMP,
                     },
                 ]}
             />,
@@ -126,8 +127,8 @@ describe("SurrogateApplicationTab", () => {
                         id: "form-1",
                         name: "Application Form",
                         status: "published",
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
+                        created_at: FIXED_TIMESTAMP,
+                        updated_at: FIXED_TIMESTAMP,
                     },
                 ]}
             />,
@@ -153,7 +154,7 @@ describe("SurrogateApplicationTab", () => {
                 form_id: "form-1",
                 surrogate_id: "surrogate-1",
                 status: "pending_review",
-                submitted_at: new Date().toISOString(),
+                submitted_at: FIXED_TIMESTAMP,
                 reviewed_at: null,
                 reviewed_by_user_id: null,
                 review_notes: null,
@@ -162,7 +163,7 @@ describe("SurrogateApplicationTab", () => {
                 intake_lead_id: null,
                 match_status: "linked",
                 match_reason: "manual_match",
-                matched_at: new Date().toISOString(),
+                matched_at: FIXED_TIMESTAMP,
                 answers: {},
                 schema_snapshot: {
                     pages: [
@@ -213,7 +214,7 @@ describe("SurrogateApplicationTab", () => {
                 form_id: "form-1",
                 surrogate_id: "surrogate-1",
                 status: "pending_review",
-                submitted_at: new Date().toISOString(),
+                submitted_at: FIXED_TIMESTAMP,
                 reviewed_at: null,
                 reviewed_by_user_id: null,
                 review_notes: null,
@@ -222,7 +223,7 @@ describe("SurrogateApplicationTab", () => {
                 intake_lead_id: null,
                 match_status: "linked",
                 match_reason: "manual_match",
-                matched_at: new Date().toISOString(),
+                matched_at: FIXED_TIMESTAMP,
                 answers: {
                     email: "surrogate@example.com",
                 },
@@ -295,7 +296,7 @@ describe("SurrogateApplicationTab", () => {
                 form_id: "form-1",
                 surrogate_id: "surrogate-1",
                 status: "pending_review",
-                submitted_at: new Date().toISOString(),
+                submitted_at: FIXED_TIMESTAMP,
                 reviewed_at: null,
                 reviewed_by_user_id: null,
                 review_notes: null,
@@ -304,7 +305,7 @@ describe("SurrogateApplicationTab", () => {
                 intake_lead_id: null,
                 match_status: "linked",
                 match_reason: "manual_match",
-                matched_at: new Date().toISOString(),
+                matched_at: FIXED_TIMESTAMP,
                 answers: {
                     journey_timing_preference: "months_0_3",
                 },
@@ -353,7 +354,7 @@ describe("SurrogateApplicationTab", () => {
                 form_id: "form-1",
                 surrogate_id: "surrogate-1",
                 status: "pending_review",
-                submitted_at: new Date().toISOString(),
+                submitted_at: FIXED_TIMESTAMP,
                 reviewed_at: null,
                 reviewed_by_user_id: null,
                 review_notes: null,
@@ -362,7 +363,7 @@ describe("SurrogateApplicationTab", () => {
                 intake_lead_id: null,
                 match_status: "linked",
                 match_reason: "manual_match",
-                matched_at: new Date().toISOString(),
+                matched_at: FIXED_TIMESTAMP,
                 answers: {
                     journey_timing_preference: "months_0_3",
                 },

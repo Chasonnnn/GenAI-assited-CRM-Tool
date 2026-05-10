@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { VersionHistoryModal } from '../components/version-history-modal'
 
+const FIXED_CREATED_AT = "2026-01-01T00:00:00.000Z"
+
 vi.mock('@/components/ui/dialog', () => ({
     Dialog: ({ open, children }: PropsWithChildren<{ open?: boolean }>) => (open ? <div>{children}</div> : null),
     DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
@@ -47,7 +49,7 @@ describe('VersionHistoryModal', () => {
                         payload: { stages: [{ label: 'New' }, { label: 'Contacted' }] },
                         comment: 'init',
                         created_by_user_id: null,
-                        created_at: new Date().toISOString(),
+                        created_at: FIXED_CREATED_AT,
                     },
                     {
                         id: 'v2',
@@ -55,7 +57,7 @@ describe('VersionHistoryModal', () => {
                         payload: { stages: [{ label: 'New' }] },
                         comment: null,
                         created_by_user_id: null,
-                        created_at: new Date().toISOString(),
+                        created_at: FIXED_CREATED_AT,
                     },
                 ]}
             />
@@ -84,7 +86,7 @@ describe('VersionHistoryModal', () => {
                         payload: { subject: 'Hi' },
                         comment: null,
                         created_by_user_id: null,
-                        created_at: new Date().toISOString(),
+                        created_at: FIXED_CREATED_AT,
                     },
                 ]}
             />
