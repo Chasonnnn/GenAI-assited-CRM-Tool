@@ -888,14 +888,14 @@ function DayAgendaSheet({
         if (!dateStr) return []
         return appointments
             .filter((appt) => format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr)
-            .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
+            .toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
     }, [appointments, dateStr])
 
     const dayTasks = useMemo(() => {
         if (!dateStr) return []
         return tasks
             .filter((task) => task.due_date === dateStr)
-            .sort((a, b) => {
+            .toSorted((a, b) => {
                 const first = a.due_time ?? "99:99:99"
                 const second = b.due_time ?? "99:99:99"
                 return first.localeCompare(second)
@@ -913,7 +913,7 @@ function DayAgendaSheet({
                 }
                 return format(parseISO(event.start), "yyyy-MM-dd") === dateStr
             })
-            .sort((a, b) => {
+            .toSorted((a, b) => {
                 if (a.is_all_day && !b.is_all_day) return -1
                 if (!a.is_all_day && b.is_all_day) return 1
                 return a.start.localeCompare(b.start)
@@ -1158,7 +1158,7 @@ function DayView({
     const dayAppointments = useMemo(() => {
         return appointments.filter((appt) =>
             format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr
-        ).sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
+        ).toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
     }, [dateStr, appointments])
 
     const dayTasks = useMemo(() => {

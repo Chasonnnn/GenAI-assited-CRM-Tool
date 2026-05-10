@@ -753,6 +753,15 @@ describe("React regression guards (source)", () => {
         expect(changeStageSource).not.toContain(".sort((a, b) => a.order - b.order)")
     })
 
+    it("uses immutable sorting in unified calendar derived lists", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+
+        expect(source).toContain(".toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))")
+        expect(source).toContain(".toSorted((a, b) => {")
+        expect(source).not.toContain(".sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))")
+        expect(source).not.toContain(".sort((a, b) => {")
+    })
+
     it("uses immutable sorting for stage and intake link ordering", () => {
         const intendedParentStageSource = readSource("lib/intended-parent-stage-utils.ts")
         const formBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")
