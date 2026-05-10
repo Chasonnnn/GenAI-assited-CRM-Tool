@@ -812,7 +812,7 @@ describe("Appointments Google Meet UI", () => {
         const timeButton = await screen.findByRole("button", { name: /:00/ })
         fireEvent.click(timeButton)
 
-        fireEvent.click(screen.getByRole("button", { name: /Continue/i }))
+        fireEvent.click(screen.getByRole("button", { name: /Enter contact details/i }))
 
         fireEvent.change(screen.getByLabelText(/Full Name/i), {
             target: { value: "Chason Zhang" },

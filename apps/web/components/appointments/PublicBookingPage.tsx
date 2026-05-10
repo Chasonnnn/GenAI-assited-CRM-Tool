@@ -1232,14 +1232,14 @@ export function PublicBookingPage({
                                     />
                                 )}
 
-                                {/* Continue Button */}
+                                {/* Contact Details Button */}
                                 {selectedSlot && meetingModeReady && (
                                     <Button
                                         className="w-full"
                                         size="lg"
                                         onClick={() => setShowForm(true)}
                                     >
-                                        Continue
+                                        Enter contact details
                                     </Button>
                                 )}
                             </>
