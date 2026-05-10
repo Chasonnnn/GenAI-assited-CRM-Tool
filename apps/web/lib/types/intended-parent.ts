@@ -5,9 +5,9 @@
 import type { MaritalStatus } from '@/lib/intended-parent-marital-status'
 import type { TrustFundingStatus } from '@/lib/trust-funding-status'
 
-export type IntendedParentStatus = string
-export type EmbryoEggSource = 'intended_mother' | 'egg_donor'
-export type EmbryoSpermSource = 'intended_father' | 'sperm_donor'
+type IntendedParentStatus = string
+type EmbryoEggSource = 'intended_mother' | 'egg_donor'
+type EmbryoSpermSource = 'intended_father' | 'sperm_donor'
 
 export interface IntendedParent {
     id: string

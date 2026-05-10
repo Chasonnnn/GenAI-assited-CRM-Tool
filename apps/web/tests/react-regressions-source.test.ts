@@ -466,6 +466,15 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps intended-parent subtype aliases private", () => {
+        const source = readSource("lib/types/intended-parent.ts")
+        const privateAliases = ["IntendedParentStatus", "EmbryoEggSource", "EmbryoSpermSource"]
+
+        for (const aliasName of privateAliases) {
+            expect(source).not.toContain(`export type ${aliasName}`)
+        }
+    })
+
     it("keeps public embed field visibility filtering single pass", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
 
