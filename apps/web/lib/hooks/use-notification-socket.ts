@@ -36,6 +36,8 @@ interface UseNotificationSocketOptions {
     maxReconnectAttempts?: number
 }
 
+const AUTH_CLOSE_CODES = new Set([4001, 4003])
+
 export function useNotificationSocket(options: UseNotificationSocketOptions = {}) {
     const {
         enabled = true,
@@ -106,7 +108,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                 }
             }
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 setIsConnected(false)
                 setUnreadCount(null)
                 if (pingInterval.current) {
@@ -116,6 +118,11 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                 wsRef.current = null
 
                 if (!isActiveRef.current || !enabled || !user) {
+                    return
+                }
+
+                if (AUTH_CLOSE_CODES.has(event.code)) {
+                    reconnectAttempts.current = maxReconnectAttempts
                     return
                 }
 

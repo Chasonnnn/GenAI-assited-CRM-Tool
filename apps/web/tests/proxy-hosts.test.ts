@@ -24,6 +24,10 @@ describe('isPlatformRootHost', () => {
         expect(isPlatformRootHost('www.surrogacyforce.com', 'surrogacyforce.com')).toBe(true)
     })
 
+    it('treats the app platform domain as a root host', () => {
+        expect(isPlatformRootHost('app.surrogacyforce.com', 'surrogacyforce.com')).toBe(true)
+    })
+
     it('does not treat org or ops subdomains as root hosts', () => {
         expect(isPlatformRootHost('ewi.surrogacyforce.com', 'surrogacyforce.com')).toBe(false)
         expect(isPlatformRootHost('ops.surrogacyforce.com', 'surrogacyforce.com')).toBe(false)
@@ -66,6 +70,19 @@ describe('proxy hard-fail behavior', () => {
 
         expect(response.status).toBe(200)
         expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    })
+
+    it('does not resolve app platform host as an organization subdomain', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+        const response = await proxy(
+            createRequest('https://app.surrogacyforce.com/dashboard', {
+                host: 'app.surrogacyforce.com',
+            }) as never,
+        )
+
+        expect(response.status).toBe(200)
+        expect(fetchSpy).not.toHaveBeenCalled()
     })
 
     it('returns 500 when tenant lookup fails for a platform subdomain', async () => {

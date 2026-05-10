@@ -28,7 +28,11 @@ type OrgCacheEntry = {
 const orgCache = new Map<string, OrgCacheEntry>();
 
 export function isPlatformRootHost(hostname: string, platformBaseDomain: string): boolean {
-    return hostname === platformBaseDomain || hostname === `www.${platformBaseDomain}`;
+    return (
+        hostname === platformBaseDomain ||
+        hostname === `www.${platformBaseDomain}` ||
+        hostname === `app.${platformBaseDomain}`
+    );
 }
 
 export function getServerApiBaseUrl(): string {

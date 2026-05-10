@@ -9,11 +9,12 @@ from uuid import UUID
 from typing import Literal, Optional, Annotated
 
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_permission
+from app.core.deps import get_current_session, get_db
+from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 
 from app.services import analytics_service
@@ -21,10 +22,49 @@ from app.schemas.auth import UserSession
 from app.db.enums import Role
 
 
+DASHBOARD_ANALYTICS_PATHS = {
+    "/analytics/surrogates/by-status",
+    "/analytics/surrogates/trend",
+}
+
+
+def require_analytics_access(
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> UserSession:
+    """Allow dashboard chart data without opening the full reports surface."""
+    from app.services import permission_service
+
+    session = get_current_session(request, db)
+    path = request.scope.get("path") or request.url.path
+    required_permissions = [POLICIES["reports"].default.value]
+    if path in DASHBOARD_ANALYTICS_PATHS:
+        required_permissions.append(PermissionKey.VIEW_DASHBOARD.value)
+
+    if any(
+        permission_service.check_permission(
+            db,
+            session.org_id,
+            session.user_id,
+            session.role.value,
+            permission,
+        )
+        for permission in required_permissions
+    ):
+        return session
+
+    if len(required_permissions) == 1:
+        raise HTTPException(status_code=403, detail=f"Missing permission: {required_permissions[0]}")
+    raise HTTPException(
+        status_code=403,
+        detail=f"Missing one of permissions: {', '.join(required_permissions)}",
+    )
+
+
 router = APIRouter(
     prefix="/analytics",
     tags=["analytics"],
-    dependencies=[Depends(require_permission(POLICIES["reports"].default))],
+    dependencies=[Depends(require_analytics_access)],
 )
 
 

@@ -168,6 +168,52 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.queryByText("Tickets")).not.toBeInTheDocument()
     })
 
+    it("hides primary links when the user lacks matching permissions", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_dashboard", "view_surrogates"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Dashboard")).toBeInTheDocument()
+        })
+        expect(screen.getByText("Surrogates")).toBeInTheDocument()
+        expect(screen.queryByText("Intended Parents")).not.toBeInTheDocument()
+        expect(screen.queryByText("Matches")).not.toBeInTheDocument()
+        expect(screen.queryByText("Reports")).not.toBeInTheDocument()
+    })
+
+    it("shows primary links when the user has matching permissions", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: [
+                    "view_dashboard",
+                    "view_surrogates",
+                    "view_intended_parents",
+                    "view_matches",
+                    "view_reports",
+                ],
+            },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Intended Parents")).toBeInTheDocument()
+        })
+        expect(screen.getByText("Matches")).toBeInTheDocument()
+        expect(screen.getByText("Reports")).toBeInTheDocument()
+    })
+
     it("shows Tickets for developer role", async () => {
         mockUseAuth.mockReturnValue({
             user: {

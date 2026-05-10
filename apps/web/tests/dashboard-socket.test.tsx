@@ -57,6 +57,7 @@ describe('useDashboardSocket', () => {
 
     afterEach(() => {
         errorSpy.mockRestore()
+        vi.useRealTimers()
         vi.unstubAllGlobals()
     })
 
@@ -110,5 +111,22 @@ describe('useDashboardSocket', () => {
 
         expect(getWebSocketUrl).toHaveBeenCalledWith('/ws/notifications')
         expect(ws.url).toBe('ws://127.0.0.1:8000/ws/notifications')
+    })
+
+    it('does not reconnect after a forbidden close', () => {
+        vi.useFakeTimers()
+        render(<DashboardSocketHarness />)
+
+        const ws = MockWebSocket.instances[0]
+        if (!ws) {
+            throw new Error('WebSocket instance was not created')
+        }
+
+        act(() => {
+            ws.close(4003, 'MFA required')
+            vi.advanceTimersByTime(1000)
+        })
+
+        expect(MockWebSocket.instances).toHaveLength(1)
     })
 })

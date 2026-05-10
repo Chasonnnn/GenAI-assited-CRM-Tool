@@ -10,19 +10,83 @@ Tests the analytics router endpoints including:
 """
 
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone, date, time
 from decimal import Decimal
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
+from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email, hash_phone
+from app.core.security import create_session_token
+from app.db.enums import Role
+from app.db.models import Membership, User
 from app.db.models import Surrogate, PipelineStage, MetaLead, MetaAdAccount, MetaDailySpend
+from app.main import app
+from app.services import session_service
 from app.utils.normalization import normalize_email
 
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
+
+@asynccontextmanager
+async def _authed_client_for_role(db, test_org, role: Role):
+    user = User(
+        id=uuid.uuid4(),
+        email=f"analytics-{role.value}-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Analytics Permission User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    db.add(
+        Membership(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            organization_id=test_org.id,
+            role=role.value,
+        )
+    )
+    db.flush()
+
+    token = create_session_token(
+        user_id=user.id,
+        org_id=test_org.id,
+        role=role.value,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=test_org.id,
+        token=token,
+        request=None,
+    )
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    csrf_token = generate_csrf_token()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="https://test",
+        cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+        headers={CSRF_HEADER: csrf_token},
+    ) as client:
+        yield client
+
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -280,6 +344,16 @@ class TestCasesByStatus:
             assert "count" in item
             assert isinstance(item["count"], int)
 
+    @pytest.mark.asyncio
+    async def test_dashboard_user_can_get_surrogates_by_status(
+        self, db, test_org, sample_cases
+    ):
+        """Dashboard users can load dashboard chart data without full Reports access."""
+        async with _authed_client_for_role(db, test_org, Role.INTAKE_SPECIALIST) as client:
+            response = await client.get("/analytics/surrogates/by-status")
+
+        assert response.status_code == 200
+
 
 class TestCasesByAssignee:
     """Tests for GET /analytics/surrogates/by-assignee"""
@@ -315,6 +389,26 @@ class TestCasesTrend:
         for point in data:
             assert "date" in point
             assert "count" in point
+
+    @pytest.mark.asyncio
+    async def test_dashboard_user_can_get_surrogates_trend(
+        self, db, test_org, sample_cases
+    ):
+        """Dashboard users can load dashboard trend data without full Reports access."""
+        async with _authed_client_for_role(db, test_org, Role.INTAKE_SPECIALIST) as client:
+            response = await client.get("/analytics/surrogates/trend")
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_dashboard_user_still_cannot_get_full_reports_summary(
+        self, db, test_org, sample_cases
+    ):
+        """Dashboard analytics access does not grant the full reports surface."""
+        async with _authed_client_for_role(db, test_org, Role.INTAKE_SPECIALIST) as client:
+            response = await client.get("/analytics/summary")
+
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_trend_with_period(self, authed_client, sample_cases):

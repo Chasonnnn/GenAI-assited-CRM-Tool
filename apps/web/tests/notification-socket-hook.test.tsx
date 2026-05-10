@@ -50,6 +50,7 @@ describe("useNotificationSocket", () => {
     })
 
     afterEach(() => {
+        vi.useRealTimers()
         vi.unstubAllGlobals()
     })
 
@@ -63,5 +64,20 @@ describe("useNotificationSocket", () => {
 
         expect(getWebSocketUrl).toHaveBeenCalledWith("/ws/notifications")
         expect(ws.url).toBe("ws://127.0.0.1:8000/ws/notifications")
+    })
+
+    it("does not reconnect after an auth-required close", () => {
+        vi.useFakeTimers()
+        render(<NotificationSocketHarness />)
+
+        const ws = MockWebSocket.instances[0]
+        if (!ws) {
+            throw new Error("WebSocket instance was not created")
+        }
+
+        ws.close(4001, "Authentication required")
+        vi.advanceTimersByTime(3000)
+
+        expect(MockWebSocket.instances).toHaveLength(1)
     })
 })

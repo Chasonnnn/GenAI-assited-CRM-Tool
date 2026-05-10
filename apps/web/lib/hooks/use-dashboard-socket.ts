@@ -14,6 +14,7 @@ import { getWebSocketUrl } from '@/lib/websocket-url';
 
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
 const INITIAL_RECONNECT_DELAY = 1000; // Start with 1 second
+const AUTH_CLOSE_CODES = new Set([4001, 4003]);
 
 interface WebSocketMessage {
     type: 'notification' | 'count_update' | 'stats_update';
@@ -116,6 +117,11 @@ export function useDashboardSocket(enabled: boolean = true) {
                 if (manualCloseRef.current) {
                     manualCloseRef.current = false;
                     connect();
+                    return;
+                }
+
+                if (AUTH_CLOSE_CODES.has(event.code)) {
+                    reconnectDelayRef.current = MAX_RECONNECT_DELAY;
                     return;
                 }
 

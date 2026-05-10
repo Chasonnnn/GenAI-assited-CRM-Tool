@@ -67,11 +67,13 @@ const navigation = [
         title: "Intended Parents",
         url: "/intended-parents",
         icon: Users,
+        requiredPermission: "view_intended_parents",
     },
     {
         title: "Matches",
         url: "/intended-parents/matches",
         icon: HeartHandshake,
+        requiredPermission: "view_matches",
     },
 ]
 
@@ -142,10 +144,17 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const canViewAutomationExecutions = isDeveloper || permissionSet.has("manage_automation")
     const isMobile = useIsMobile()
 
+    const canViewReports = isDeveloper || permissionSet.has("view_reports")
+
     const navigationItems = React.useMemo(() => {
-        if (canViewTickets) return navigation
-        return navigation.filter((item) => item.url !== "/tickets")
-    }, [canViewTickets])
+        return navigation.filter((item) => {
+            if (item.url === "/tickets") return canViewTickets
+            if ("requiredPermission" in item) {
+                return isDeveloper || permissionSet.has(item.requiredPermission)
+            }
+            return true
+        })
+    }, [canViewTickets, isDeveloper, permissionSet])
 
     const activeNavUrl = React.useMemo(() => {
         if (!pathname) return null
@@ -421,7 +430,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         </div>
                     )}
 
-                    <div>{renderNavLink(reportsNavigation)}</div>
+                    {canViewReports && <div>{renderNavLink(reportsNavigation)}</div>}
 
                     {user?.ai_enabled && (
                         <div>{renderNavLink(aiNavigation)}</div>
