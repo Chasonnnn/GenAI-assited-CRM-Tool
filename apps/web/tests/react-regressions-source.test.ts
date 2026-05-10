@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest"
-import { readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 
 function readSource(pathFromWebRoot: string): string {
     return readFileSync(join(process.cwd(), pathFromWebRoot), "utf8")
+}
+
+function sourceExists(pathFromWebRoot: string): boolean {
+    return existsSync(join(process.cwd(), pathFromWebRoot))
 }
 
 function readApiModuleSources(): Array<{ path: string; source: string }> {
@@ -237,6 +241,32 @@ describe("React regression guards (source)", () => {
         expect(dropdownSource).not.toContain("DropdownMenuShortcut")
     })
 
+    it("keeps unused UI primitive inventory out of the bundle", () => {
+        const unusedPrimitives = [
+            "aspect-ratio",
+            "breadcrumb",
+            "button-group",
+            "combobox",
+            "context-menu",
+            "drawer",
+            "hover-card",
+            "input-otp",
+            "item",
+            "kbd",
+            "menubar",
+            "native-select",
+            "navigation-menu",
+            "pagination",
+            "resizable",
+            "sidebar",
+            "slider",
+        ]
+
+        for (const primitive of unusedPrimitives) {
+            expect(sourceExists(`components/ui/${primitive}.tsx`), primitive).toBe(false)
+        }
+    })
+
     it("keeps task due category internals private", () => {
         const source = readSource("lib/utils/task-due.ts")
 
@@ -374,6 +404,14 @@ describe("React regression guards (source)", () => {
 
         expect(outcomeSource).not.toContain("export type OutcomeTone")
         expect(templateVariableSource).not.toContain("export type TemplateVariableValueType")
+    })
+
+    it("keeps API payload subtype aliases private", () => {
+        const aiStudioSource = readSource("lib/api/ai-studio.ts")
+        const workflowMetricsSource = readSource("lib/api/workflow-metrics.ts")
+
+        expect(aiStudioSource).not.toContain("export type AIStudioDraftStatus")
+        expect(workflowMetricsSource).not.toContain("export type WorkflowMetricEventType")
     })
 
     it("keeps public embed field visibility filtering single pass", () => {
