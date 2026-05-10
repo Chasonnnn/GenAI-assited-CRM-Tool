@@ -10,6 +10,8 @@ type SafeHtmlContentProps = {
     className?: string
 }
 
+type ParsedHtmlContentProps = SafeHtmlContentProps
+
 const NUMERIC_ATTRIBUTES = new Set([
     "colspan",
     "rowspan",
@@ -34,12 +36,15 @@ function toCamelCase(value: string) {
 function parseStyleAttribute(styleValue: string): React.CSSProperties {
     const styles: Record<string, string> = {}
 
-    for (const declaration of styleValue.split(";").map((entry) => entry.trim()).filter(Boolean)) {
-        const separatorIndex = declaration.indexOf(":")
-        if (separatorIndex === -1) continue
+    for (const entry of styleValue.split(";")) {
+        const declaration = entry.trim()
+        if (!declaration) continue
 
-        const property = declaration.slice(0, separatorIndex).trim()
-        const value = declaration.slice(separatorIndex + 1).trim()
+        const [propertyPart = "", ...valueParts] = declaration.split(":")
+        if (valueParts.length === 0) continue
+
+        const property = propertyPart.trim()
+        const value = valueParts.join(":").trim()
         if (!property || !value) continue
 
         styles[toCamelCase(property)] = value
@@ -108,34 +113,53 @@ function nodeToReactNode(node: ChildNode, key: string): React.ReactNode {
     )
 }
 
-export function SafeHtmlContent({ html, className }: SafeHtmlContentProps) {
-    const sanitizedHtml = React.useMemo(() => sanitizeHtml(html), [html])
-    const [isMounted, setIsMounted] = React.useState(false)
-
-    React.useEffect(() => {
-        setIsMounted(true)
-    }, [])
+function useParsedHtmlContent(html: string) {
+    const isClient = React.useSyncExternalStore(
+        () => () => undefined,
+        () => true,
+        () => false,
+    )
 
     const content = React.useMemo(() => {
-        if (!isMounted || typeof window === "undefined") {
+        if (!isClient || typeof window === "undefined") {
             return null
         }
 
         const parser = new window.DOMParser()
-        const document = parser.parseFromString(`<div>${sanitizedHtml}</div>`, "text/html")
+        const document = parser.parseFromString(`<div>${html}</div>`, "text/html")
         const root = document.body.firstElementChild
         if (!root) return null
 
         return Array.from(root.childNodes).map((node, index) => nodeToReactNode(node, `node-${index}`))
-    }, [isMounted, sanitizedHtml])
+    }, [html, isClient])
 
-    if (!isMounted || !content) {
-        return (
-            <div className={cn("text-sm whitespace-pre-wrap text-foreground", className)}>
-                {stripHtml(sanitizedHtml)}
-            </div>
-        )
-    }
+    return content ?? stripHtml(html)
+}
 
+function ParsedHtmlContent({ html, className }: ParsedHtmlContentProps) {
+    const content = useParsedHtmlContent(html)
     return <div className={className}>{content}</div>
+}
+
+export function TrustedSanitizedHtmlFragment({ html }: { html: string }) {
+    const content = useParsedHtmlContent(html)
+    return <>{content}</>
+}
+
+export function TrustedSanitizedHtmlContent({ html, className }: ParsedHtmlContentProps) {
+    if (className === undefined) {
+        return <ParsedHtmlContent html={html} />
+    }
+    return <ParsedHtmlContent html={html} className={className} />
+}
+
+export function SafeHtmlContent({ html, className }: SafeHtmlContentProps) {
+    const sanitizedHtml = React.useMemo(() => sanitizeHtml(html), [html])
+
+    return (
+        <ParsedHtmlContent
+            html={sanitizedHtml}
+            className={cn("text-sm whitespace-pre-wrap text-foreground", className)}
+        />
+    )
 }

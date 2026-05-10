@@ -10,10 +10,11 @@
  * - Click on highlighted text to scroll to note in sidebar
  */
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { MessageSquarePlusIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 import type { TipTapDoc, TipTapNode, TipTapMark, InterviewNoteRead } from "@/lib/api/interviews"
 
 interface TranscriptViewerProps {
@@ -167,12 +168,16 @@ export function TranscriptViewer({
     const [selection, setSelection] = useState<SelectionPosition | null>(null)
 
     // Build comment-to-note mapping
-    const commentNoteMap = buildCommentNoteMap(notes)
+    const commentNoteMap = useMemo(() => buildCommentNoteMap(notes), [notes])
 
     // Render transcript HTML with comment highlights
-    const renderedHtml = transcriptJson
-        ? renderTranscriptWithHighlights(transcriptJson, commentNoteMap, onNoteClick)
-        : transcriptHtml || ""
+    const renderedHtml = useMemo(
+        () =>
+            transcriptJson
+                ? renderTranscriptWithHighlights(transcriptJson, commentNoteMap, onNoteClick)
+                : transcriptHtml || "",
+        [commentNoteMap, onNoteClick, transcriptHtml, transcriptJson],
+    )
 
     // Handle text selection
     const handleMouseUp = useCallback(() => {
@@ -228,23 +233,38 @@ export function TranscriptViewer({
         // Otherwise dismiss after a short delay (to allow selection to complete)
     }, [])
 
+    const handleMouseUpRef = useRef(handleMouseUp)
+    const handleClickRef = useRef(handleClick)
+    const handleKeyDownRef = useRef(handleKeyDown)
+    const handleMouseDownRef = useRef(handleMouseDown)
+
+    handleMouseUpRef.current = handleMouseUp
+    handleClickRef.current = handleClick
+    handleKeyDownRef.current = handleKeyDown
+    handleMouseDownRef.current = handleMouseDown
+
     // Set up event listeners
     useEffect(() => {
         const container = containerRef.current
         if (!container) return
 
-        container.addEventListener("mouseup", handleMouseUp)
-        container.addEventListener("click", handleClick as EventListener)
-        document.addEventListener("keydown", handleKeyDown)
-        document.addEventListener("mousedown", handleMouseDown as EventListener)
+        const onMouseUp = () => handleMouseUpRef.current()
+        const onClick = (event: MouseEvent) => handleClickRef.current(event)
+        const onKeyDown = (event: KeyboardEvent) => handleKeyDownRef.current(event)
+        const onMouseDown = (event: MouseEvent) => handleMouseDownRef.current(event)
+
+        container.addEventListener("mouseup", onMouseUp)
+        container.addEventListener("click", onClick)
+        document.addEventListener("keydown", onKeyDown)
+        document.addEventListener("mousedown", onMouseDown)
 
         return () => {
-            container.removeEventListener("mouseup", handleMouseUp)
-            container.removeEventListener("click", handleClick as EventListener)
-            document.removeEventListener("keydown", handleKeyDown)
-            document.removeEventListener("mousedown", handleMouseDown as EventListener)
+            container.removeEventListener("mouseup", onMouseUp)
+            container.removeEventListener("click", onClick)
+            document.removeEventListener("keydown", onKeyDown)
+            document.removeEventListener("mousedown", onMouseDown)
         }
-    }, [handleMouseUp, handleClick, handleKeyDown, handleMouseDown])
+    }, [])
 
     // Handle add note click
     const handleAddNoteClick = useCallback(() => {
@@ -267,18 +287,19 @@ export function TranscriptViewer({
     return (
         <div className="relative">
             {/* Transcript content */}
-            <div
-                ref={containerRef}
-                className={cn(
-                    "prose prose-sm max-w-none dark:prose-invert",
-                    "[&_.transcript-comment]:transition-all",
-                    "[&_.transcript-comment]:rounded-sm",
-                    "[&_.transcript-comment-orphan]:transition-all",
-                    "[&_.transcript-comment-orphan]:rounded-sm",
-                    className
-                )}
-                dangerouslySetInnerHTML={{ __html: renderedHtml }}
-            />
+            <div ref={containerRef}>
+                <SafeHtmlContent
+                    html={renderedHtml}
+                    className={cn(
+                        "prose prose-sm max-w-none dark:prose-invert",
+                        "[&_.transcript-comment]:transition-all",
+                        "[&_.transcript-comment]:rounded-sm",
+                        "[&_.transcript-comment-orphan]:transition-all",
+                        "[&_.transcript-comment-orphan]:rounded-sm",
+                        className
+                    )}
+                />
+            </div>
 
             {/* Floating add note button */}
             {selection && (

@@ -23,7 +23,7 @@ import {
     type SearchResponse,
 } from "@/lib/api/search"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
-import { sanitizeHtml } from "@/lib/utils/sanitize"
+import { SafeHtmlContent } from "@/components/safe-html-content"
 
 const ENTITY_CONFIG = {
     surrogate: {
@@ -89,9 +89,9 @@ export default function SearchPage() {
 
             {/* Search Input */}
             <div className="relative max-w-2xl">
-                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                    placeholder="Search surrogates, intended parents, notes, files..."
+                    placeholder="Search surrogates, intended parents, notes, files"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -126,15 +126,15 @@ export default function SearchPage() {
             {/* Loading State */}
             {isLoading && debouncedQuery.length >= 2 && (
                 <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Searching...</span>
+                    <Loader2 className="size-5 animate-spin" />
+                    <span>Searching&hellip;</span>
                 </div>
             )}
 
             {/* Error State */}
             {isError && (
                 <div className="flex items-center gap-2 text-destructive">
-                    <AlertCircle className="h-5 w-5" />
+                    <AlertCircle className="size-5" />
                     <span>Failed to search. Please try again.</span>
                 </div>
             )}
@@ -167,9 +167,9 @@ export default function SearchPage() {
                                     <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
                                         <CardContent className="flex items-start gap-4 p-4">
                                             <div
-                                                className={`flex h-10 w-10 items-center justify-center rounded-lg ${config.color}`}
+                                                className={`flex size-10 items-center justify-center rounded-lg ${config.color}`}
                                             >
-                                                <Icon className="h-5 w-5" />
+                                                <Icon className="size-5" />
                                             </div>
                                             <div className="flex-1 space-y-1 min-w-0">
                                                 <div className="flex items-center gap-2">
@@ -181,11 +181,9 @@ export default function SearchPage() {
                                                     </Badge>
                                                 </div>
                                                 {result.snippet && (
-                                                    <p
+                                                    <SafeHtmlContent
+                                                        html={result.snippet}
                                                         className="text-sm text-muted-foreground line-clamp-2"
-                                                        dangerouslySetInnerHTML={{
-                                                            __html: sanitizeHtml(result.snippet),
-                                                        }}
                                                     />
                                                 )}
                                                 {result.surrogate_name &&
@@ -195,7 +193,7 @@ export default function SearchPage() {
                                                         </p>
                                                     )}
                                             </div>
-                                            <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                                            <ArrowRight className="size-5 text-muted-foreground shrink-0" />
                                         </CardContent>
                                     </Card>
                                 </Link>

@@ -94,7 +94,7 @@ describe("Search debounce and query options", () => {
         render(<SearchCommandDialog open onOpenChange={vi.fn()} />)
 
         fireEvent.change(
-            screen.getByPlaceholderText("Search surrogates, intended parents, notes, files..."),
+            screen.getByPlaceholderText("Search surrogates, intended parents, notes, files"),
             { target: { value: "Sur" } }
         )
 
@@ -113,7 +113,7 @@ describe("Search debounce and query options", () => {
         render(<SearchPage />)
 
         fireEvent.change(
-            screen.getByPlaceholderText("Search surrogates, intended parents, notes, files..."),
+            screen.getByPlaceholderText("Search surrogates, intended parents, notes, files"),
             { target: { value: "Parent" } }
         )
 

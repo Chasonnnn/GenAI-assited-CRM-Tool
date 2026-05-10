@@ -6,7 +6,31 @@ import DOMPurify from 'dompurify'
  */
 export function sanitizeHtml(html: string): string {
     return DOMPurify.sanitize(html, {
-        ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'u', 'a', 'ul', 'ol', 'li', 'span', 'mark'],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+        ALLOWED_TAGS: [
+            'p',
+            'br',
+            'strong',
+            'b',
+            'em',
+            'u',
+            's',
+            'a',
+            'ul',
+            'ol',
+            'li',
+            'span',
+            'mark',
+            'blockquote',
+            'code',
+            'pre',
+            'hr',
+            'h1',
+            'h2',
+            'h3',
+            'h4',
+            'h5',
+            'h6',
+        ],
+        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'data-comment-id', 'data-note-id'],
     })
 }
