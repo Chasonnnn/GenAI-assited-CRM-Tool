@@ -1,4 +1,4 @@
-export const SURROGATE_FIELD_LABELS: Record<string, string> = {
+const SURROGATE_FIELD_LABELS: Record<string, string> = {
     full_name: "Full Name",
     email: "Email",
     phone: "Phone",

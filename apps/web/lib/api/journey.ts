@@ -124,9 +124,3 @@ export async function exportJourneyPdf(
     document.body.removeChild(link);
     URL.revokeObjectURL(objectUrl);
 }
-
-export default {
-    getSurrogateJourney,
-    updateMilestoneFeaturedImage,
-    exportJourneyPdf,
-};

@@ -62,12 +62,3 @@ export const US_STATES = [
     { value: "AS", label: "American Samoa" },
     { value: "MP", label: "Northern Mariana Islands" },
 ] as const
-
-/**
- * Get state label from code
- */
-export function getStateLabel(code: string | null | undefined): string {
-    if (!code) return "—"
-    const state = US_STATES.find((s) => s.value === code)
-    return state?.label ?? code
-}

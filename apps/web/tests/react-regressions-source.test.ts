@@ -336,6 +336,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export const api =")
     })
 
+    it("keeps journey API endpoints on named exports only", () => {
+        const source = readSource("lib/api/journey.ts")
+
+        expect(source).not.toContain("export default {")
+    })
+
     it("keeps hook query key factories private", () => {
         const notesSource = readSource("lib/hooks/use-notes.ts")
         const journeySource = readSource("lib/hooks/use-journey.ts")
@@ -344,6 +350,14 @@ describe("React regression guards (source)", () => {
         expect(notesSource).not.toContain("export const noteKeys")
         expect(journeySource).not.toContain("export const journeyKeys")
         expect(profileSource).not.toContain("export const profileKeys")
+    })
+
+    it("keeps label map internals private", () => {
+        const surrogateFieldLabelsSource = readSource("lib/constants/surrogate-field-labels.ts")
+        const usStatesSource = readSource("lib/constants/us-states.ts")
+
+        expect(surrogateFieldLabelsSource).not.toContain("export const SURROGATE_FIELD_LABELS")
+        expect(usStatesSource).not.toContain("export function getStateLabel")
     })
 
     it("uses stable keys for report chart cells and parser warnings", () => {
