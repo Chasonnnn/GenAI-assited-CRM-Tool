@@ -121,6 +121,22 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={index}")
     })
 
+    it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
+        const source = readSource("components/app-sidebar.tsx")
+
+        expect(source).toContain("appSidebarReducer")
+        expect(source).toContain("SidebarNavLink")
+        expect(source).toContain("activeTab: null")
+        expect(source).toContain('{ type: "setActiveTab"')
+        expect(source).not.toContain("useSearchParams")
+        expect(source).not.toContain("const activeTab = readCurrentTabParam()")
+        expect(source).not.toContain("renderNavLink")
+        expect(source).not.toContain("useState")
+        expect(source).not.toContain("setAutomationOpen(true)")
+        expect(source).not.toContain("setSettingsOpen(true)")
+        expect(source).not.toContain("setTasksOpen(true)")
+    })
+
     it("keeps pending interview comment quote styling subtle", () => {
         const source = readSource("components/surrogates/interviews/InterviewComments/PendingCommentInput.tsx")
 

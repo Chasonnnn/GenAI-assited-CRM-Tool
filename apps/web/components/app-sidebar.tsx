@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useReducer } from "react"
 import Link from "next/link"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useSearchHotkey, SearchCommandDialog } from "@/components/search-command"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -110,6 +110,33 @@ interface AppSidebarProps {
     children: React.ReactNode
 }
 
+type NavLinkItem = {
+    title: string
+    url: string
+    icon: React.ComponentType<{ className?: string }>
+}
+
+type SidebarSection = "tasks" | "automation" | "settings"
+
+type AppSidebarState = {
+    isExpanded: boolean
+    mobileOpen: boolean
+    automationOpen: boolean
+    settingsOpen: boolean
+    tasksOpen: boolean
+    searchOpen: boolean
+    activeTab: string | null
+}
+
+type AppSidebarAction =
+    | { type: "setExpanded"; isExpanded: boolean }
+    | { type: "setMobileOpen"; mobileOpen: boolean }
+    | { type: "toggleMobileOpen" }
+    | { type: "toggleSection"; section: SidebarSection }
+    | { type: "openSectionsForPath"; pathname: string | null }
+    | { type: "setSearchOpen"; searchOpen: boolean }
+    | { type: "setActiveTab"; activeTab: string | null }
+
 function readSidebarCookie() {
     if (typeof document === "undefined") return true
     const match = document.cookie
@@ -120,9 +147,393 @@ function readSidebarCookie() {
     return match.split("=")[1] === "true"
 }
 
+function createInitialAppSidebarState(): AppSidebarState {
+    return {
+        isExpanded: readSidebarCookie(),
+        mobileOpen: false,
+        automationOpen: false,
+        settingsOpen: false,
+        tasksOpen: false,
+        searchOpen: false,
+        activeTab: null,
+    }
+}
+
+function appSidebarReducer(state: AppSidebarState, action: AppSidebarAction): AppSidebarState {
+    switch (action.type) {
+        case "setExpanded":
+            return { ...state, isExpanded: action.isExpanded }
+        case "setMobileOpen":
+            return { ...state, mobileOpen: action.mobileOpen }
+        case "toggleMobileOpen":
+            return { ...state, mobileOpen: !state.mobileOpen }
+        case "toggleSection":
+            return { ...state, [`${action.section}Open`]: !state[`${action.section}Open`] }
+        case "openSectionsForPath":
+            return {
+                ...state,
+                automationOpen: state.automationOpen || action.pathname?.startsWith("/automation") === true,
+                settingsOpen:
+                    state.settingsOpen ||
+                    (action.pathname?.startsWith("/settings") === true &&
+                        action.pathname?.startsWith("/settings/appointments") !== true),
+                tasksOpen:
+                    state.tasksOpen ||
+                    action.pathname?.startsWith("/tasks") === true ||
+                    action.pathname?.startsWith("/appointments") === true ||
+                    action.pathname === "/settings/appointments",
+            }
+        case "setSearchOpen":
+            return { ...state, searchOpen: action.searchOpen }
+        case "setActiveTab":
+            return { ...state, activeTab: action.activeTab }
+    }
+}
+
+function readCurrentTabParam() {
+    if (typeof window === "undefined") return null
+    return new URLSearchParams(window.location.search).get("tab")
+}
+
+function getNavItemClass(active: boolean) {
+    return cn(
+        "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center transition-colors focus-visible:ring-2 outline-none",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+    )
+}
+
+function SidebarNavLink({
+    item,
+    active,
+    isCollapsed,
+}: {
+    item: NavLinkItem
+    active: boolean
+    isCollapsed: boolean
+}) {
+    const Icon = item.icon
+    return (
+        <Link
+            href={item.url}
+            prefetch={false}
+            className={getNavItemClass(active)}
+            title={item.title}
+        >
+            <Icon className="size-4 shrink-0" />
+            {!isCollapsed && <span className="truncate">{item.title}</span>}
+        </Link>
+    )
+}
+
+type SidebarSubItem = { title: string; url: string; tab?: string | null }
+
+type SidebarUser = {
+    org_display_name?: string | null
+    org_name?: string | null
+    display_name?: string | null
+    email?: string | null
+    role?: string | null
+    ai_enabled?: boolean | null
+}
+
+type AppSidebarContentProps = {
+    user: SidebarUser | null | undefined
+    initials: string
+    pathname: string | null
+    navigationItems: NavLinkItem[]
+    tasksItems: SidebarSubItem[]
+    automationItems: SidebarSubItem[]
+    settingsItems: SidebarSubItem[]
+    viewState: {
+        collapsed: boolean
+        reportsVisible: boolean
+        sections: Record<SidebarSection, boolean>
+    }
+    activeState: {
+        navItem: (item: NavLinkItem) => boolean
+        automationItem: (item: SidebarSubItem) => boolean
+        settingsItem: (item: SidebarSubItem) => boolean
+    }
+    onOpenSearch: () => void
+    onLogout: () => void
+    dispatch: React.Dispatch<AppSidebarAction>
+}
+
+function AppSidebarContent({
+    user,
+    initials,
+    pathname,
+    navigationItems,
+    tasksItems,
+    automationItems,
+    settingsItems,
+    viewState,
+    activeState,
+    onOpenSearch,
+    onLogout,
+    dispatch,
+}: AppSidebarContentProps) {
+    const { collapsed, reportsVisible, sections } = viewState
+
+    return (
+        <div className="flex h-full flex-col">
+            <div className="p-2">
+                <div className={cn("flex items-center gap-2 rounded-lg p-2", collapsed && "justify-center")}
+                >
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                        <Users className="size-4" />
+                    </div>
+                    {!collapsed && (
+                        <div className="grid flex-1 text-left text-sm leading-tight">
+                            <span className="truncate font-semibold">Surrogacy Force</span>
+                            <span className="truncate text-xs text-muted-foreground">
+                                {user?.org_display_name || user?.org_name || "Loading..."}
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="px-2">
+                <Button
+                    variant="secondary"
+                    className={cn(
+                        "w-full justify-start gap-2",
+                        collapsed && "justify-center"
+                    )}
+                    onClick={onOpenSearch}
+                    title="Search (⌘K)"
+                >
+                    <Search className="size-4" />
+                    {!collapsed && (
+                        <span className="flex-1 text-left text-muted-foreground">Search</span>
+                    )}
+                </Button>
+            </div>
+
+            <nav className="flex-1 px-2 pt-3" aria-label="Navigation">
+                {!collapsed && (
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
+                )}
+                <div className="flex flex-col gap-1">
+                    {navigationItems.map((item) => (
+                        <SidebarNavLink
+                            key={item.title}
+                            item={item}
+                            active={activeState.navItem(item)}
+                            isCollapsed={collapsed}
+                        />
+                    ))}
+
+                    <button
+                        type="button"
+                        onClick={() => dispatch({ type: "toggleSection", section: "tasks" })}
+                        className={getNavItemClass(Boolean(pathname?.startsWith("/tasks")) || Boolean(pathname?.startsWith("/appointments")) || pathname === "/settings/appointments")}
+                        title={tasksNavigation.title}
+                        aria-expanded={sections.tasks}
+                    >
+                        <tasksNavigation.icon className="size-4 shrink-0" />
+                        {!collapsed && (
+                            <>
+                                <span className="truncate">{tasksNavigation.title}</span>
+                                <ChevronRightIcon
+                                    className={cn(
+                                        "ml-auto transition-transform",
+                                        sections.tasks && "rotate-90"
+                                    )}
+                                />
+                            </>
+                        )}
+                    </button>
+                    {!collapsed && sections.tasks && (
+                        <div className="ml-6 flex flex-col gap-1">
+                            {tasksItems.map((subItem) => (
+                                <Link
+                                    key={subItem.url}
+                                    href={subItem.url}
+                                    prefetch={false}
+                                    className={getNavItemClass(pathname === subItem.url || Boolean(pathname?.startsWith(subItem.url + "/")))}
+                                >
+                                    <span className="truncate text-sm">{subItem.title}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={() => dispatch({ type: "toggleSection", section: "automation" })}
+                        className={getNavItemClass(Boolean(pathname?.startsWith("/automation")))}
+                        title={automationNavigation.title}
+                        aria-expanded={sections.automation}
+                    >
+                        <automationNavigation.icon className="size-4 shrink-0" />
+                        {!collapsed && (
+                            <>
+                                <span className="truncate">{automationNavigation.title}</span>
+                                <ChevronRightIcon
+                                    className={cn(
+                                        "ml-auto transition-transform",
+                                        sections.automation && "rotate-90"
+                                    )}
+                                />
+                            </>
+                        )}
+                    </button>
+                    {!collapsed && sections.automation && (
+                        <div className="ml-6 flex flex-col gap-1">
+                            {automationItems.map((subItem) => (
+                                <Link
+                                    key={subItem.url}
+                                    href={subItem.url}
+                                    prefetch={false}
+                                    className={getNavItemClass(activeState.automationItem(subItem))}
+                                >
+                                    <span className="truncate text-sm">{subItem.title}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+
+                    {reportsVisible && (
+                        <SidebarNavLink
+                            item={reportsNavigation}
+                            active={activeState.navItem(reportsNavigation)}
+                            isCollapsed={collapsed}
+                        />
+                    )}
+
+                    {user?.ai_enabled && (
+                        <>
+                            <SidebarNavLink
+                                item={aiNavigation}
+                                active={activeState.navItem(aiNavigation)}
+                                isCollapsed={collapsed}
+                            />
+                        </>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={() => dispatch({ type: "toggleSection", section: "settings" })}
+                        className={getNavItemClass(Boolean(pathname?.startsWith("/settings")) && !pathname?.startsWith("/settings/appointments"))}
+                        title={settingsNavigation.title}
+                        aria-expanded={sections.settings}
+                    >
+                        <settingsNavigation.icon className="size-4 shrink-0" />
+                        {!collapsed && (
+                            <>
+                                <span className="truncate">{settingsNavigation.title}</span>
+                                <ChevronRightIcon
+                                    className={cn(
+                                        "ml-auto transition-transform",
+                                        sections.settings && "rotate-90"
+                                    )}
+                                />
+                            </>
+                        )}
+                    </button>
+                    {!collapsed && sections.settings && (
+                        <div className="ml-6 flex flex-col gap-1">
+                            {settingsItems.map((subItem) => (
+                                <Link
+                                    key={subItem.url}
+                                    href={subItem.url}
+                                    prefetch={false}
+                                    className={getNavItemClass(activeState.settingsItem(subItem))}
+                                >
+                                    <span className="truncate text-sm">{subItem.title}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </nav>
+
+            <div className="mt-auto p-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        render={
+                            <button
+                                className={cn(
+                                    "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                                    getNavItemClass(false)
+                                )}
+                                aria-label="User menu"
+                            />
+                        }
+                    >
+                        <Avatar className="size-8 rounded-lg">
+                            <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
+                            <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                        </Avatar>
+                        {!collapsed && (
+                            <>
+                                <div className="grid flex-1 text-left text-sm leading-tight">
+                                    <span className="truncate font-semibold">{user?.display_name || "Loading..."}</span>
+                                    <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
+                                </div>
+                                <ChevronsUpDown className="ml-auto size-4" />
+                            </>
+                        )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        className="w-56 rounded-lg"
+                        side="bottom"
+                        align="end"
+                        sideOffset={4}
+                    >
+                        <DropdownMenuGroup>
+                            <DropdownMenuLabel className="p-0 font-normal">
+                                <div className="flex items-center gap-2 p-1.5 text-left text-sm">
+                                    <Avatar className="size-8 rounded-lg">
+                                        <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="grid flex-1 text-left text-sm leading-tight">
+                                        <span className="truncate font-semibold">{user?.display_name}</span>
+                                        <span className="truncate text-xs">{user?.role}</span>
+                                    </div>
+                                </div>
+                            </DropdownMenuLabel>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                            <DropdownMenuItem
+                                className="flex items-center"
+                                render={<Link href="/settings" prefetch={false} />}
+                            >
+                                <User className="mr-2 size-4" />
+                                Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="flex items-center"
+                                render={<Link href="/settings/notifications" prefetch={false} />}
+                            >
+                                <Bell className="mr-2 size-4" />
+                                Notifications
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="flex items-center"
+                                render={<Link href="/settings" prefetch={false} />}
+                            >
+                                <Settings className="mr-2 size-4" />
+                                Settings
+                            </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={onLogout} className="cursor-pointer">
+                            <LogOut className="mr-2 size-4" />
+                            Log out
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </div>
+    )
+}
+
 export function AppSidebar({ children }: AppSidebarProps) {
     const pathname = usePathname()
-    const searchParams = useSearchParams()
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
@@ -166,22 +577,29 @@ export function AppSidebar({ children }: AppSidebarProps) {
         return matches[0]!.url
     }, [pathname, navigationItems])
 
-    const activeSettingsTab = searchParams.get("tab")
-    const activeAutomationTab = searchParams.get("tab")
-
-    const [isExpanded, setIsExpanded] = useState(readSidebarCookie)
-    const [mobileOpen, setMobileOpen] = useState(false)
+    const [state, dispatch] = useReducer(appSidebarReducer, undefined, createInitialAppSidebarState)
+    const {
+        isExpanded,
+        mobileOpen,
+        automationOpen,
+        settingsOpen,
+        tasksOpen,
+        searchOpen,
+        activeTab,
+    } = state
+    const activeSettingsTab = activeTab
+    const activeAutomationTab = activeTab
 
     const isCollapsed = !isExpanded && !isMobile
 
     const setExpanded = useCallback((open: boolean) => {
-        setIsExpanded(open)
+        dispatch({ type: "setExpanded", isExpanded: open })
         document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     }, [])
 
     const toggleSidebar = useCallback(() => {
         if (isMobile) {
-            setMobileOpen((prev) => !prev)
+            dispatch({ type: "toggleMobileOpen" })
             return
         }
         setExpanded(!isExpanded)
@@ -190,27 +608,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
     // Sync cookie on mount when switching between mobile/desktop
     useEffect(() => {
         if (!isMobile) {
-            setIsExpanded(readSidebarCookie())
+            dispatch({ type: "setExpanded", isExpanded: readSidebarCookie() })
         }
     }, [isMobile])
 
-    // Controlled collapsible state
-    const [automationOpen, setAutomationOpen] = React.useState(false)
-    const [settingsOpen, setSettingsOpen] = React.useState(false)
-    const [tasksOpen, setTasksOpen] = React.useState(false)
-
     React.useEffect(() => {
-        if (pathname?.startsWith("/automation")) setAutomationOpen(true)
-        if (pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments")) {
-            setSettingsOpen(true)
-        }
-        if (
-            pathname?.startsWith("/tasks") ||
-            pathname?.startsWith("/appointments") ||
-            pathname === "/settings/appointments"
-        ) {
-            setTasksOpen(true)
-        }
+        dispatch({ type: "openSectionsForPath", pathname })
+        dispatch({ type: "setActiveTab", activeTab: readCurrentTabParam() })
     }, [pathname])
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
@@ -282,276 +686,41 @@ export function AppSidebar({ children }: AppSidebarProps) {
         window.location.href = "/login"
     }
 
-    // Search command palette state
-    const [searchOpen, setSearchOpen] = useState(false)
-    const openSearch = useCallback(() => setSearchOpen(true), [])
+    const openSearch = useCallback(() => dispatch({ type: "setSearchOpen", searchOpen: true }), [])
     useSearchHotkey(openSearch)
 
-    const navItemClass = useCallback(
-        (active: boolean) =>
-            cn(
-                "ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground gap-2 rounded-lg p-2 text-left text-sm flex w-full items-center transition-colors focus-visible:ring-2 outline-none",
-                active && "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-            ),
-        []
-    )
-
-    const renderNavLink = useCallback(
-        (item: { title: string; url: string; icon: React.ComponentType<{ className?: string }> }) => {
-            const active = activeNavUrl === item.url
-            const Icon = item.icon
-            return (
-                <Link
-                    href={item.url}
-                    prefetch={false}
-                    className={navItemClass(active)}
-                    title={item.title}
-                >
-                    <Icon className="size-4 shrink-0" />
-                    {!isCollapsed && <span className="truncate">{item.title}</span>}
-                </Link>
-            )
-        },
-        [activeNavUrl, navItemClass, isCollapsed]
-    )
+    const isNavItemActive = (item: NavLinkItem) =>
+        activeNavUrl === item.url ||
+        pathname === item.url ||
+        Boolean(pathname?.startsWith(item.url + "/"))
 
     const sidebarContent = (
-        <div className="flex h-full flex-col">
-            <div className="p-2">
-                <div className={cn("flex items-center gap-2 rounded-lg p-2", isCollapsed && "justify-center")}
-                >
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                        <Users className="size-4" />
-                    </div>
-                    {!isCollapsed && (
-                        <div className="grid flex-1 text-left text-sm leading-tight">
-                            <span className="truncate font-semibold">Surrogacy Force</span>
-                            <span className="truncate text-xs text-muted-foreground">
-                                {user?.org_display_name || user?.org_name || "Loading..."}
-                            </span>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="px-2">
-                <Button
-                    variant="secondary"
-                    className={cn(
-                        "w-full justify-start gap-2",
-                        isCollapsed && "justify-center"
-                    )}
-                    onClick={openSearch}
-                    title="Search (⌘K)"
-                >
-                    <Search className="size-4" />
-                    {!isCollapsed && (
-                        <span className="flex-1 text-left text-muted-foreground">Search</span>
-                    )}
-                </Button>
-            </div>
-
-            <nav className="flex-1 px-2 pt-3" aria-label="Navigation">
-                {!isCollapsed && (
-                    <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
-                )}
-                <div className="flex flex-col gap-1">
-                    {navigationItems.map((item) => (
-                        <div key={item.title}>{renderNavLink(item)}</div>
-                    ))}
-
-                    <button
-                        type="button"
-                        onClick={() => setTasksOpen((o) => !o)}
-                        className={navItemClass(pathname?.startsWith("/tasks") || pathname?.startsWith("/appointments") || pathname === "/settings/appointments")}
-                        title={tasksNavigation.title}
-                        aria-expanded={tasksOpen}
-                    >
-                        <tasksNavigation.icon className="size-4 shrink-0" />
-                        {!isCollapsed && (
-                            <>
-                                <span className="truncate">{tasksNavigation.title}</span>
-                                <ChevronRightIcon
-                                    className={cn(
-                                        "ml-auto transition-transform",
-                                        tasksOpen && "rotate-90"
-                                    )}
-                                />
-                            </>
-                        )}
-                    </button>
-                    {!isCollapsed && tasksOpen && (
-                        <div className="ml-6 flex flex-col gap-1">
-                            {tasksItems.map((subItem) => (
-                                <Link
-                                    key={subItem.url}
-                                    href={subItem.url}
-                                    prefetch={false}
-                                    className={navItemClass(pathname === subItem.url || pathname?.startsWith(subItem.url + "/"))}
-                                >
-                                    <span className="truncate text-sm">{subItem.title}</span>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={() => setAutomationOpen((o) => !o)}
-                        className={navItemClass(pathname?.startsWith("/automation"))}
-                        title={automationNavigation.title}
-                        aria-expanded={automationOpen}
-                    >
-                        <automationNavigation.icon className="size-4 shrink-0" />
-                        {!isCollapsed && (
-                            <>
-                                <span className="truncate">{automationNavigation.title}</span>
-                                <ChevronRightIcon
-                                    className={cn(
-                                        "ml-auto transition-transform",
-                                        automationOpen && "rotate-90"
-                                    )}
-                                />
-                            </>
-                        )}
-                    </button>
-                    {!isCollapsed && automationOpen && (
-                        <div className="ml-6 flex flex-col gap-1">
-                            {automationItems.map((subItem) => (
-                                <Link
-                                    key={subItem.url}
-                                    href={subItem.url}
-                                    prefetch={false}
-                                    className={navItemClass(isAutomationItemActive(subItem))}
-                                >
-                                    <span className="truncate text-sm">{subItem.title}</span>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-
-                    {canViewReports && <div>{renderNavLink(reportsNavigation)}</div>}
-
-                    {user?.ai_enabled && (
-                        <div>{renderNavLink(aiNavigation)}</div>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={() => setSettingsOpen((o) => !o)}
-                        className={navItemClass(pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/appointments"))}
-                        title={settingsNavigation.title}
-                        aria-expanded={settingsOpen}
-                    >
-                        <settingsNavigation.icon className="size-4 shrink-0" />
-                        {!isCollapsed && (
-                            <>
-                                <span className="truncate">{settingsNavigation.title}</span>
-                                <ChevronRightIcon
-                                    className={cn(
-                                        "ml-auto transition-transform",
-                                        settingsOpen && "rotate-90"
-                                    )}
-                                />
-                            </>
-                        )}
-                    </button>
-                    {!isCollapsed && settingsOpen && (
-                        <div className="ml-6 flex flex-col gap-1">
-                            {settingsItems.map((subItem) => (
-                                <Link
-                                    key={subItem.url}
-                                    href={subItem.url}
-                                    prefetch={false}
-                                    className={navItemClass(isSettingsItemActive(subItem))}
-                                >
-                                    <span className="truncate text-sm">{subItem.title}</span>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </nav>
-
-            <div className="mt-auto p-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger
-                        render={
-                            <button
-                                className={cn(
-                                    "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
-                                    navItemClass(false)
-                                )}
-                                aria-label="User menu"
-                            />
-                        }
-                    >
-                        <Avatar className="size-8 rounded-lg">
-                            <AvatarImage src="/placeholder.svg" alt={user?.display_name || "User"} />
-                            <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
-                        </Avatar>
-                        {!isCollapsed && (
-                            <>
-                                <div className="grid flex-1 text-left text-sm leading-tight">
-                                    <span className="truncate font-semibold">{user?.display_name || "Loading..."}</span>
-                                    <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
-                                </div>
-                                <ChevronsUpDown className="ml-auto size-4" />
-                            </>
-                        )}
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        className="w-56 rounded-lg"
-                        side="bottom"
-                        align="end"
-                        sideOffset={4}
-                    >
-                        <DropdownMenuGroup>
-                            <DropdownMenuLabel className="p-0 font-normal">
-                                <div className="flex items-center gap-2 p-1.5 text-left text-sm">
-                                    <Avatar className="size-8 rounded-lg">
-                                        <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="grid flex-1 text-left text-sm leading-tight">
-                                        <span className="truncate font-semibold">{user?.display_name}</span>
-                                        <span className="truncate text-xs">{user?.role}</span>
-                                    </div>
-                                </div>
-                            </DropdownMenuLabel>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            <DropdownMenuItem
-                                className="flex items-center"
-                                render={<Link href="/settings" prefetch={false} />}
-                            >
-                                <User className="mr-2 size-4" />
-                                Profile
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                className="flex items-center"
-                                render={<Link href="/settings/notifications" prefetch={false} />}
-                            >
-                                <Bell className="mr-2 size-4" />
-                                Notifications
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                className="flex items-center"
-                                render={<Link href="/settings" prefetch={false} />}
-                            >
-                                <Settings className="mr-2 size-4" />
-                                Settings
-                            </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                            <LogOut className="mr-2 size-4" />
-                            Log out
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </div>
+        <AppSidebarContent
+            user={user}
+            initials={initials}
+            pathname={pathname}
+            navigationItems={navigationItems}
+            tasksItems={tasksItems}
+            automationItems={automationItems}
+            settingsItems={settingsItems}
+            viewState={{
+                collapsed: isCollapsed,
+                reportsVisible: canViewReports,
+                sections: {
+                    tasks: tasksOpen,
+                    automation: automationOpen,
+                    settings: settingsOpen,
+                },
+            }}
+            activeState={{
+                navItem: isNavItemActive,
+                automationItem: isAutomationItemActive,
+                settingsItem: isSettingsItemActive,
+            }}
+            onOpenSearch={openSearch}
+            onLogout={handleLogout}
+            dispatch={dispatch}
+        />
     )
 
     return (
@@ -560,7 +729,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 <button
                     type="button"
                     className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm appearance-none border-0 p-0 m-0"
-                    onClick={() => setMobileOpen(false)}
+                    onClick={() => dispatch({ type: "setMobileOpen", mobileOpen: false })}
                     aria-label="Close sidebar overlay"
                 />
             )}
@@ -594,7 +763,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 <main className="flex-1 min-w-0 overflow-hidden print:overflow-visible">{children}</main>
             </div>
 
-            <SearchCommandDialog open={searchOpen} onOpenChange={setSearchOpen} />
+            <SearchCommandDialog
+                open={searchOpen}
+                onOpenChange={(nextOpen) => dispatch({ type: "setSearchOpen", searchOpen: nextOpen })}
+            />
         </div>
     )
 }
