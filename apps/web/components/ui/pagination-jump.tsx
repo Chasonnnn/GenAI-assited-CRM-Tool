@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,15 +10,23 @@ type PaginationJumpProps = {
     page: number
     totalPages: number
     onPageChange: (page: number) => void
-    className?: string
+    className?: string | undefined
 }
 
 export function PaginationJump({ page, totalPages, onPageChange, className }: PaginationJumpProps) {
-    const [pageInput, setPageInput] = useState(String(page))
+    return (
+        <PaginationJumpInput
+            key={page}
+            page={page}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+            className={className}
+        />
+    )
+}
 
-    useEffect(() => {
-        setPageInput(String(page))
-    }, [page])
+function PaginationJumpInput({ page, totalPages, onPageChange, className }: PaginationJumpProps) {
+    const [pageInput, setPageInput] = useState(String(page))
 
     const commitPage = () => {
         const parsed = Number(pageInput)
@@ -56,7 +64,7 @@ export function PaginationJump({ page, totalPages, onPageChange, className }: Pa
             />
             <span className="text-xs text-muted-foreground">of {totalPages}</span>
             <Button variant="outline" size="sm" onClick={commitPage} disabled={!canCommit}>
-                Go
+                Go to page
             </Button>
         </div>
     )

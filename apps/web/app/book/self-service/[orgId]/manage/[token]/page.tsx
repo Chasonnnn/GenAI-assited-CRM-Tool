@@ -1,7 +1,19 @@
 "use client"
 
-import { use, useCallback, useEffect, useMemo, useState } from "react"
-import { format, isSameDay, parseISO, startOfDay } from "date-fns"
+import { use, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import {
+    addMonths,
+    eachDayOfInterval,
+    endOfMonth,
+    format,
+    getDate,
+    getDay,
+    isBefore,
+    isSameDay,
+    parseISO,
+    startOfDay,
+    startOfMonth,
+} from "date-fns"
 import {
     AlertCircleIcon,
     CalendarIcon,
@@ -67,6 +79,21 @@ type SearchParams = {
     action?: string | string[]
 }
 
+let todaySnapshot: Date | null = null
+
+function subscribeTodaySnapshot() {
+    return () => {}
+}
+
+function getTodaySnapshot() {
+    todaySnapshot ??= startOfDay(new Date())
+    return todaySnapshot
+}
+
+function getServerTodaySnapshot() {
+    return null
+}
+
 interface PageProps {
     params: Promise<{ orgId?: string | string[]; token?: string | string[] }>
     searchParams: Promise<SearchParams>
@@ -98,7 +125,8 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
 
     const [action, setAction] = useState<ManageAction>(() => initialAction)
     const [timezone, setTimezone] = useState("America/Los_Angeles")
-    const [viewMonth, setViewMonth] = useState(new Date())
+    const [viewMonth, setViewMonth] = useState<Date | null>(null)
+    const today = useSyncExternalStore(subscribeTodaySnapshot, getTodaySnapshot, getServerTodaySnapshot)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [slots, setSlots] = useState<TimeSlot[]>([])
@@ -162,6 +190,11 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         }
     }, [appointment?.client_timezone])
 
+    useEffect(() => {
+        if (!appointment?.scheduled_start || viewMonth) return
+        setViewMonth(startOfMonth(parseISO(appointment.scheduled_start)))
+    }, [appointment?.scheduled_start, viewMonth])
+
     const timezoneOptions = useMemo(() => {
         if (TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)) {
             return TIMEZONE_OPTIONS
@@ -170,35 +203,33 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     }, [timezone])
 
     const calendarDays = useMemo(() => {
-        const monthStart = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
-        const startDay = monthStart.getDay()
-        const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate()
+        if (!viewMonth || !today) return []
 
         const days: Array<{ key: string; date: Date | null; isToday: boolean; isAvailable: boolean }> = []
+        const monthStart = startOfMonth(viewMonth)
+        const startDay = getDay(monthStart)
         for (let i = 0; i < startDay; i++) {
             days.push({
-                key: `empty-${viewMonth.getFullYear()}-${viewMonth.getMonth()}-${i + 1}`,
+                key: `empty-${format(monthStart, "yyyy-MM")}-${i + 1}`,
                 date: null,
                 isToday: false,
                 isAvailable: false,
             })
         }
 
-        const today = startOfDay(new Date())
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day)
-            const weekday = date.getDay()
+        for (const date of eachDayOfInterval({ start: monthStart, end: endOfMonth(viewMonth) })) {
+            const weekday = getDay(date)
             const isWeekday = weekday >= 1 && weekday <= 5
             days.push({
-                key: `date-${viewMonth.getFullYear()}-${viewMonth.getMonth()}-${day}`,
+                key: `date-${format(date, "yyyy-MM-dd")}`,
                 date,
                 isToday: isSameDay(date, today),
-                isAvailable: isWeekday && date >= today,
+                isAvailable: isWeekday && !isBefore(date, today),
             })
         }
 
         return days
-    }, [viewMonth])
+    }, [today, viewMonth])
 
     const loadSlotsForDate = async (date: Date) => {
         setSelectedDate(date)
@@ -417,30 +448,20 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                                                     type="button"
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() =>
-                                                        setViewMonth(
-                                                            new Date(
-                                                                viewMonth.getFullYear(),
-                                                                viewMonth.getMonth() - 1
-                                                            )
-                                                        )
-                                                    }
+                                                    disabled={!viewMonth}
+                                                    onClick={() => setViewMonth((month) => month ? addMonths(month, -1) : month)}
                                                 >
                                                     <ChevronLeftIcon className="size-4" />
                                                 </Button>
-                                                <span className="font-medium">{format(viewMonth, "MMMM yyyy")}</span>
+                                                <span className="font-medium">
+                                                    {viewMonth ? format(viewMonth, "MMMM yyyy") : "Loading calendar"}
+                                                </span>
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() =>
-                                                        setViewMonth(
-                                                            new Date(
-                                                                viewMonth.getFullYear(),
-                                                                viewMonth.getMonth() + 1
-                                                            )
-                                                        )
-                                                    }
+                                                    disabled={!viewMonth}
+                                                    onClick={() => setViewMonth((month) => month ? addMonths(month, 1) : month)}
                                                 >
                                                     <ChevronRightIcon className="size-4" />
                                                 </Button>
@@ -484,7 +505,7 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                                                                         : "text-muted-foreground/40"
                                                             }`}
                                                         >
-                                                            {day.date.getDate()}
+                                                            {getDate(day.date)}
                                                         </Button>
                                                     )
                                                 })}

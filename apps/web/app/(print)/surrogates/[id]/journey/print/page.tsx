@@ -41,8 +41,7 @@ async function fetchJourneyForExport(
 }
 
 export default async function JourneyPrintPage({ params, searchParams }: PageProps) {
-    const resolvedParams = await params
-    const resolvedSearchParams = await searchParams
+    const [resolvedParams, resolvedSearchParams] = await Promise.all([params, searchParams])
 
     const rawId = resolvedParams.id
     const surrogateId = Array.isArray(rawId) ? rawId[0] : rawId

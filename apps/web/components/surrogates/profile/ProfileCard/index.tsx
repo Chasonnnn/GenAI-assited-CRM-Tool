@@ -52,7 +52,10 @@ function SectionCustomQas({ sectionKey }: { sectionKey: string }) {
     }
 
     const removeQa = (qaId: string) => {
-        const next = qas.filter((qa) => qa.id !== qaId).map((qa, index) => ({ ...qa, order: index }))
+        const next: ProfileCustomQa[] = []
+        for (const qa of qas) {
+            if (qa.id !== qaId) next.push({ ...qa, order: next.length })
+        }
         updateQas(next)
     }
 
@@ -122,7 +125,7 @@ function ProfileCardContent() {
             <Card>
                 <CardContent className="flex items-center justify-center py-12">
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                    <span className="ml-2 text-muted-foreground">Loading profile...</span>
+                    <span className="ml-2 text-muted-foreground">Loading profile</span>
                 </CardContent>
             </Card>
         )
@@ -145,7 +148,7 @@ function ProfileCardContent() {
             <Card>
                 <Header />
                 <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-                    <FileTextIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                    <FileTextIcon className="size-12 text-muted-foreground/50 mb-4" />
                     <p className="text-sm text-muted-foreground">
                         No application submitted yet
                     </p>
@@ -166,17 +169,19 @@ function ProfileCardContent() {
                         index={pageIndex}
                         title={page.title || `Section ${pageIndex + 1}`}
                     >
-                        {page.fields
-                            .filter((f) => f.type !== "file")
-                            .map((field) => (
+                        {page.fields.flatMap((field) =>
+                            field.type === "file"
+                                ? []
+                                : [
                                 <FieldRow
                                     key={field.key}
                                     fieldKey={field.key}
                                     field={field}
                                     mergedValue={profile.merged_view[field.key]}
                                     baseValue={profile.base_answers[field.key]}
-                                />
-                            ))}
+                                />,
+                            ],
+                        )}
                         <SectionCustomQas sectionKey={`section_${pageIndex}`} />
                     </Section>
                 ))}

@@ -64,11 +64,11 @@ function FieldRowValue({
                 <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 w-7 p-0"
+                    className="size-7 p-0"
                     onClick={() => cancelFieldEdit(fieldKey)}
                     aria-label={`Cancel editing ${field.label}`}
                 >
-                    <XIcon className="h-3.5 w-3.5" />
+                    <XIcon className="size-3.5" />
                 </Button>
             </div>
         )
@@ -85,7 +85,7 @@ function FieldRowValue({
     )
 
     if (displayValue === null || displayValue === undefined || displayValue === "") {
-        return <span className="text-sm text-muted-foreground">—</span>
+        return <span className="text-sm text-muted-foreground">Not provided</span>
     }
 
     if (field.type === "date" && typeof displayValue === "string") {
@@ -118,7 +118,7 @@ function FieldRowValue({
                 {getFormOptionLabels(field.options, displayValue).join(", ")}
             </span>
         ) : (
-            <span className="text-sm text-muted-foreground">—</span>
+            <span className="text-sm text-muted-foreground">Not provided</span>
         )
     }
 
@@ -174,11 +174,11 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        className="size-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         onClick={() => setEditingField(fieldKey)}
                         aria-label={`Edit ${field.label}`}
                     >
-                        <PencilIcon className="h-3 w-3" />
+                        <PencilIcon className="size-3" />
                     </Button>
                 )}
 
@@ -187,15 +187,15 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        className="size-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         onClick={() => toggleReveal(fieldKey)}
                         aria-label={isRevealed ? "Hide field value" : "Reveal field value"}
                         title={isRevealed ? "Hide field value" : "Reveal field value"}
                     >
                         {isRevealed ? (
-                            <EyeOffIcon className="h-3 w-3" />
+                            <EyeOffIcon className="size-3" />
                         ) : (
-                            <EyeIcon className="h-3 w-3" />
+                            <EyeIcon className="size-3" />
                         )}
                     </Button>
                 )}
@@ -205,15 +205,15 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        className="size-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         onClick={() => toggleHidden(fieldKey)}
                         aria-label={isHidden ? "Unhide field" : "Hide field"}
                         title={isHidden ? "Unhide field" : "Hide field"}
                     >
                         {isHidden ? (
-                            <EyeIcon className="h-3 w-3" />
+                            <EyeIcon className="size-3" />
                         ) : (
-                            <EyeOffIcon className="h-3 w-3" />
+                            <EyeOffIcon className="size-3" />
                         )}
                     </Button>
                 )}

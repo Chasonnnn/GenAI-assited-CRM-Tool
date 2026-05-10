@@ -35,15 +35,17 @@ import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageMod
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
+const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+})
+
 // Format date for display
 function formatDate(dateString: string | null | undefined): string {
     if (!dateString) return "—"
     const date = parseDateInput(dateString)
-    return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-    }).format(date)
+    return SHORT_DATE_FORMATTER.format(date)
 }
 
 function getLastModifiedAt(
@@ -156,8 +158,8 @@ function FloatingActionBar({
                                 aria-label="Assign to user"
                             >
                                 <span className="inline-flex items-center gap-1">
-                                    <UserPlusIcon className="h-4 w-4" />
-                                    Assign to...
+                                    <UserPlusIcon className="size-4" />
+                                    Assign to
                                 </span>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
@@ -177,17 +179,17 @@ function FloatingActionBar({
                             onClick={() => setIsChangeStageOpen(true)}
                             disabled={isLoading}
                         >
-                            Change stage...
+                            Change stage
                         </Button>
                     )}
 
                     <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
-                        <ArchiveIcon className="h-4 w-4 mr-1" />
+                        <ArchiveIcon className="size-4 mr-1" />
                         Archive
                     </Button>
 
                     <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
-                        <XIcon className="h-4 w-4 mr-1" />
+                        <XIcon className="size-4 mr-1" />
                         Clear
                     </Button>
                 </div>
@@ -365,7 +367,7 @@ const hasSearchParamKey = (
 
 export function SurrogatesPageClient() {
     const searchParams = useSearchParams()
-    const router = useRouter()
+    const { push, replace } = useRouter()
     const currentQuery = searchParams.toString()
     const currentListHref = buildSurrogatesListHref(currentQuery)
 
@@ -533,8 +535,8 @@ export function SurrogatesPageClient() {
         const newUrl = nextQuery ? `/surrogates?${nextQuery}` : "/surrogates"
         const currentUrl = currentQuery ? `/surrogates?${currentQuery}` : "/surrogates"
         if (newUrl === currentUrl) return
-        router.replace(newUrl, { scroll: false })
-    }, [router, searchParams])
+        replace(newUrl, { scroll: false })
+    }, [replace, searchParams])
 
     // Update URL when filters change - wrapped in startTransition for smoother UI
     const handleStageChange = useCallback((stage: string) => {
@@ -788,8 +790,8 @@ export function SurrogatesPageClient() {
         if (nextQuery === currentQuery) return
 
         const newUrl = nextQuery ? `/surrogates?${nextQuery}` : "/surrogates"
-        router.replace(newUrl, { scroll: false })
-    }, [currentQuery, router, searchParams])
+        replace(newUrl, { scroll: false })
+    }, [currentQuery, replace, searchParams])
 
     // Sync debouncedSearch to URL (separate effect to avoid circular updates)
     useEffect(() => {
@@ -1016,8 +1018,8 @@ export function SurrogatesPageClient() {
         setIsMoreFiltersOpen(false)
         setSelectedSurrogates(new Set())
         // Clear URL params
-        router.replace('/surrogates', { scroll: false })
-    }, [router])
+        replace('/surrogates', { scroll: false })
+    }, [replace])
 
     const clearActiveFilter = useCallback((
         filterKey: "intelligent" | "stage" | "date" | "source" | "queue" | "owner" | "dynamic" | "priority" | "search"
@@ -1171,7 +1173,7 @@ export function SurrogatesPageClient() {
             setIsCreateOpen(false)
             resetCreateForm()
             toast.success("Surrogate created successfully")
-            router.push(buildSurrogateDetailHref(created.id, currentListHref))
+            push(buildSurrogateDetailHref(created.id, currentListHref))
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to create surrogate"
             toast.error(message)
@@ -1426,7 +1428,7 @@ export function SurrogatesPageClient() {
                         <div className="relative w-full xl:ml-auto xl:w-[320px] xl:flex-none">
                             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search surrogates..."
+                                placeholder="Search surrogates"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-9"
@@ -1470,7 +1472,7 @@ export function SurrogatesPageClient() {
                             <Input
                                 id="surrogate-full-name"
                                 value={createForm.full_name}
-                                onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                                onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, full_name: e.target.value }))}
                                 placeholder="Jane Smith"
                             />
                         </div>
@@ -1480,7 +1482,7 @@ export function SurrogatesPageClient() {
                                 id="surrogate-email"
                                 type="email"
                                 value={createForm.email}
-                                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                                onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, email: e.target.value }))}
                                 placeholder="jane@example.com"
                             />
                         </div>
@@ -1488,7 +1490,9 @@ export function SurrogatesPageClient() {
                             <Label htmlFor="surrogate-source">Source *</Label>
                             <Select
                                 value={createForm.source}
-                                onValueChange={(value) => setCreateForm({ ...createForm, source: value as SurrogateSource })}
+                                onValueChange={(value) =>
+                                    setCreateForm((currentForm) => ({ ...currentForm, source: value as SurrogateSource }))
+                                }
                             >
                                 <SelectTrigger id="surrogate-source">
                                     <SelectValue placeholder="Select a source" />
@@ -1668,7 +1672,7 @@ export function SurrogatesPageClient() {
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger>
-                                                                    <Avatar className="h-7 w-7">
+                                                                    <Avatar className="size-7">
                                                                         <AvatarFallback className="text-xs">
                                                                             {getInitials(surrogateItem.owner_name)}
                                                                         </AvatarFallback>
@@ -1680,7 +1684,7 @@ export function SurrogatesPageClient() {
                                                             </Tooltip>
                                                         </TooltipProvider>
                                                     ) : (
-                                                        <span className="text-muted-foreground">—</span>
+                                                        <span className="text-muted-foreground">Not set</span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className={mutedCellClass}>

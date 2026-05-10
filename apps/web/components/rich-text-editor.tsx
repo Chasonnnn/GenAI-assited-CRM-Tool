@@ -25,9 +25,10 @@ import {
     SmileIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useState, type Ref } from 'react'
 
 interface RichTextEditorProps {
+    ref?: Ref<RichTextEditorHandle>
     content?: string
     placeholder?: string
     onChange?: (html: string) => void
@@ -49,32 +50,25 @@ export type RichTextEditorHandle = {
     insertHtml: (html: string) => void
 }
 
-export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
-    {
-        content = '',
-        placeholder = 'Write something...',
-        onChange,
-        onFocus,
-        onSubmit,
-        submitLabel = 'Submit',
-        isSubmitting = false,
-        className,
-        minHeight = '80px',
-        maxHeight = '300px',
-        enableImages = false,
-        enableEmojiPicker = false,
-        ariaLabel,
-        ariaLabelledBy,
-    }: RichTextEditorProps,
-    ref
-) {
-    const [mounted, setMounted] = useState(false)
+export function RichTextEditor({
+    ref,
+    content = '',
+    placeholder = 'Write something...',
+    onChange,
+    onFocus,
+    onSubmit,
+    submitLabel = 'Submit',
+    isSubmitting = false,
+    className,
+    minHeight = '80px',
+    maxHeight = '300px',
+    enableImages = false,
+    enableEmojiPicker = false,
+    ariaLabel,
+    ariaLabelledBy,
+}: RichTextEditorProps) {
     const [emojiOpen, setEmojiOpen] = useState(false)
     const [suggestedEmojisMode, setSuggestedEmojisMode] = useState<SuggestionMode>(SuggestionMode.FREQUENT)
-
-    useEffect(() => {
-        setMounted(true)
-    }, [])
 
     const editor = useEditor({
         immediatelyRender: false, // Fix SSR hydration mismatch
@@ -191,14 +185,14 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         [insertEmoji]
     )
 
-    if (!mounted || !editor) {
+    if (!editor) {
         // Show placeholder while editor initializes
         return (
             <div className={cn("border rounded-md", className)}>
                 <div className="flex items-center gap-1 border-b px-2 py-1.5 bg-muted/30 h-10">
-                    <div className="h-6 w-6 rounded bg-muted animate-pulse" />
-                    <div className="h-6 w-6 rounded bg-muted animate-pulse" />
-                    <div className="h-6 w-6 rounded bg-muted animate-pulse" />
+                    <div className="size-6 rounded bg-muted animate-pulse" />
+                    <div className="size-6 rounded bg-muted animate-pulse" />
+                    <div className="size-6 rounded bg-muted animate-pulse" />
                     {onSubmit && (
                         <div className="ml-auto h-7 w-16 rounded bg-muted animate-pulse" />
                     )}
@@ -398,4 +392,4 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             </div>
         </div>
     )
-})
+}

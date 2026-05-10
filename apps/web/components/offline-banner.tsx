@@ -1,7 +1,33 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 import { WifiOff } from "lucide-react"
+
+let offlineSnapshot = false
+const offlineListeners = new Set<() => void>()
+
+function setOfflineSnapshot(nextSnapshot: boolean) {
+    if (offlineSnapshot === nextSnapshot) return
+    offlineSnapshot = nextSnapshot
+    for (const listener of offlineListeners) {
+        listener()
+    }
+}
+
+function subscribeOffline(listener: () => void) {
+    offlineListeners.add(listener)
+    return () => {
+        offlineListeners.delete(listener)
+    }
+}
+
+function getOfflineSnapshot() {
+    return offlineSnapshot
+}
+
+function getServerOfflineSnapshot() {
+    return false
+}
 
 /**
  * Offline detection banner.
@@ -13,21 +39,20 @@ import { WifiOff } from "lucide-react"
  * sticky banner after network recovery.
  */
 export function OfflineBanner() {
-    const [isOffline, setIsOffline] = useState(false)
-    const isOfflineRef = useRef(isOffline)
-
-    useEffect(() => {
-        isOfflineRef.current = isOffline
-    }, [isOffline])
+    const isOffline = useSyncExternalStore(
+        subscribeOffline,
+        getOfflineSnapshot,
+        getServerOfflineSnapshot
+    )
 
     // Track online/offline events
     useEffect(() => {
-        const handleOnline = () => setIsOffline(false)
-        const handleOffline = () => setIsOffline(true)
+        const handleOnline = () => setOfflineSnapshot(false)
+        const handleOffline = () => setOfflineSnapshot(true)
 
         // Check initial state
         if (!navigator.onLine) {
-            setIsOffline(true)
+            setOfflineSnapshot(true)
         }
 
         window.addEventListener("online", handleOnline)
@@ -47,10 +72,7 @@ export function OfflineBanner() {
             try {
                 const response = await originalFetch(...args)
                 // Successful fetch - clear offline state.
-                if (isOfflineRef.current) {
-                    isOfflineRef.current = false
-                    setIsOffline(false)
-                }
+                setOfflineSnapshot(false)
                 return response
             } catch (error) {
                 // Network error - likely offline.
@@ -58,11 +80,9 @@ export function OfflineBanner() {
                     error instanceof TypeError &&
                     (error.message.includes("Failed to fetch") ||
                         error.message.includes("NetworkError") ||
-                        error.message.includes("Network request failed")) &&
-                    !isOfflineRef.current
+                        error.message.includes("Network request failed"))
                 ) {
-                    isOfflineRef.current = true
-                    setIsOffline(true)
+                    setOfflineSnapshot(true)
                 }
                 throw error
             }

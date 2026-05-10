@@ -31,8 +31,8 @@ const APPOINTMENT = {
     staff_name: "Dr. Smith",
     client_name: "Jordan Client",
     client_email: "jordan@example.com",
-    scheduled_start: "2026-03-03T16:00:00.000Z",
-    scheduled_end: "2026-03-03T16:30:00.000Z",
+    scheduled_start: "2026-06-03T16:00:00.000Z",
+    scheduled_end: "2026-06-03T16:30:00.000Z",
     duration_minutes: 30,
     meeting_mode: "zoom",
     meeting_location: "Zoom",
@@ -46,7 +46,7 @@ const APPOINTMENT = {
 async function renderManagePage(searchParams: Record<string, string> = {}) {
     await act(async () => {
         render(
-            <React.Suspense fallback={<div>Loading...</div>}>
+            <React.Suspense fallback={<div>Loading</div>}>
                 <ManageAppointmentPage
                     params={Promise.resolve({ orgId: "org-1", token: "token-1" })}
                     searchParams={Promise.resolve(searchParams)}
@@ -64,8 +64,8 @@ describe("Self-service manage appointment page", () => {
         getRescheduleSlotsByTokenMock.mockResolvedValue({
             slots: [
                 {
-                    start: "2026-03-04T16:00:00.000Z",
-                    end: "2026-03-04T16:30:00.000Z",
+                    start: "2026-06-04T16:00:00.000Z",
+                    end: "2026-06-04T16:30:00.000Z",
                 },
             ],
             appointment_type: null,
@@ -101,6 +101,7 @@ describe("Self-service manage appointment page", () => {
         await renderManagePage()
 
         expect(await screen.findByText("Manage Appointment")).toBeInTheDocument()
+        expect(await screen.findByText("June 2026")).toBeInTheDocument()
 
         const dateButton = screen
             .getAllByRole("button")
@@ -122,7 +123,7 @@ describe("Self-service manage appointment page", () => {
             expect(rescheduleByManageTokenMock).toHaveBeenCalledWith(
                 "org-1",
                 "token-1",
-                "2026-03-04T16:00:00.000Z"
+                "2026-06-04T16:00:00.000Z"
             )
         })
 

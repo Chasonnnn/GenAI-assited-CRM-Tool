@@ -32,6 +32,7 @@ type VisibleSection = {
 }
 
 const ALL_CATEGORY_ID = "all"
+const PRESET_FIELD_GROUP_IDS = new Set(PRESET_FIELD_GROUPS.map((group) => group.id))
 
 function buildTileTestId(field: BuilderPaletteField) {
     return `form-builder-palette-tile-${field.key}`
@@ -70,7 +71,7 @@ function PaletteFieldTile({
         >
             <span
                 className={cn(
-                    "flex size-12 items-center justify-center rounded-2xl border bg-white text-slate-900 transition-transform group-hover:scale-[1.02]",
+                    "flex size-12 items-center justify-center rounded-2xl border bg-white text-zinc-900 transition-transform group-hover:scale-[1.02]",
                     isPreset
                         ? "border-sky-200/90 bg-sky-50/70"
                         : "border-emerald-200/90 bg-emerald-50/65",
@@ -78,7 +79,7 @@ function PaletteFieldTile({
             >
                 <Icon className="size-4" aria-hidden="true" />
             </span>
-            <div className="w-full text-[13px] font-medium leading-tight text-slate-950">{field.label}</div>
+            <div className="w-full text-[13px] font-medium leading-tight text-zinc-950">{field.label}</div>
         </button>
     )
 }
@@ -112,17 +113,20 @@ export function FormBuilderPalette({
                 ? ALL_BUILDER_FIELD_GROUPS
                 : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
 
-        return sourceGroups
-            .map((group) => ({
+        const sections: VisibleSection[] = []
+        for (const group of sourceGroups) {
+            const section = {
                 id: group.id,
                 label: group.label,
-                isPreset: PRESET_FIELD_GROUPS.some((presetGroup) => presetGroup.id === group.id),
+                isPreset: PRESET_FIELD_GROUP_IDS.has(group.id),
                 fields: group.fields.filter((field) => {
                     if (!normalizedSearch) return true
-                    return `${field.label} ${field.key}`.toLowerCase().includes(normalizedSearch)
+                    return `${field.label} ${field.key}`.toLowerCase().indexOf(normalizedSearch) !== -1
                 }),
-            }))
-            .filter((section) => section.fields.length > 0)
+            }
+            if (section.fields.length > 0) sections.push(section)
+        }
+        return sections
     }, [activeCategory, normalizedSearch])
 
     return (
@@ -135,8 +139,8 @@ export function FormBuilderPalette({
             )}
         >
             <div className="flex h-full min-h-0 flex-col">
-                <div className="border-b border-border/70 px-4 py-4">
-                    <h2 className="text-[1.05rem] font-semibold tracking-tight text-slate-950">Add form fields</h2>
+                <div className="border-b border-border/70 p-4">
+                    <h2 className="text-[1.05rem] font-semibold tracking-tight text-zinc-950">Add form fields</h2>
                 </div>
 
                 <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[8rem_minmax(0,1fr)]">
@@ -154,8 +158,8 @@ export function FormBuilderPalette({
                                             className={cn(
                                                 "flex w-full items-center rounded-lg px-3 py-2 text-left text-[15px] font-medium leading-5 transition-all",
                                                 isActive
-                                                    ? "bg-sky-100/90 text-slate-950"
-                                                    : "text-slate-700 hover:bg-white/90 hover:text-slate-950",
+                                                    ? "bg-sky-100/90 text-zinc-950"
+                                                    : "text-zinc-700 hover:bg-white/90 hover:text-zinc-950",
                                             )}
                                         >
                                             {category.label}
@@ -174,7 +178,7 @@ export function FormBuilderPalette({
                             >
                                 <Command className="rounded-xl border-0 bg-transparent p-0 shadow-none">
                                     <CommandInput
-                                        className="text-[15px] placeholder:text-slate-400"
+                                        className="text-[15px] placeholder:text-zinc-400"
                                         value={search}
                                         onValueChange={onSearchChange}
                                         placeholder="Search form fields"
@@ -188,7 +192,7 @@ export function FormBuilderPalette({
                                 {visibleSections.length > 0 ? (
                                     visibleSections.map((section) => (
                                         <section key={section.id} className="space-y-3">
-                                            <h3 className="text-[15px] font-semibold tracking-tight text-slate-950">
+                                            <h3 className="text-[15px] font-semibold tracking-tight text-zinc-950">
                                                 {section.label}
                                             </h3>
                                             <div
@@ -210,8 +214,8 @@ export function FormBuilderPalette({
                                     ))
                                 ) : (
                                     <div className="rounded-[22px] border border-dashed border-border/80 bg-stone-50 p-8 text-center">
-                                        <p className="text-base font-semibold text-slate-900">No matching fields</p>
-                                        <p className="mt-1.5 text-sm text-slate-500">
+                                        <p className="text-base font-semibold text-zinc-900">No matching fields</p>
+                                        <p className="mt-1.5 text-sm text-zinc-500">
                                             Try a different search or switch categories.
                                         </p>
                                     </div>

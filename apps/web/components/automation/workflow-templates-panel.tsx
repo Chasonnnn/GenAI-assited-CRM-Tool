@@ -94,7 +94,7 @@ const CATEGORY_COLORS: Record<string, string> = {
     "follow-up": "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
     notifications: "bg-purple-500/10 text-purple-500 border-purple-500/20",
     compliance: "bg-red-500/10 text-red-500 border-red-500/20",
-    general: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+    general: "bg-zinc-500/10 text-zinc-500 border-zinc-500/20",
 }
 
 const DEFAULT_CATEGORIES = Object.entries(DEFAULT_CATEGORY_LABELS).map(([value, label]) => ({
@@ -153,7 +153,7 @@ interface WorkflowTemplatesPanelProps {
 }
 
 export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTemplatesPanelProps) {
-    const router = useRouter()
+    const { push } = useRouter()
     const queryClient = useQueryClient()
     const { user } = useAuth()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
@@ -226,13 +226,13 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
     const missingEmailActions =
         selectedTemplate && selectedTemplateDetail?.actions
             ? selectedTemplateDetail.actions
-                .map((action, index) => {
+                .flatMap((action, index) => {
                     const actionType = typeof action.action_type === "string" ? action.action_type : ""
                     const templateId =
                         typeof action.template_id === "string" ? action.template_id : null
-                    return { action, actionType, templateId, index }
+                    if (actionType !== "send_email" || templateId) return []
+                    return [{ action, actionType, templateId, index }]
                 })
-                .filter(({ actionType, templateId }) => actionType === "send_email" && !templateId)
             : []
     const hasMissingEmailTemplates = missingEmailActions.length > 0
     const hasAllEmailSelections =
@@ -266,8 +266,8 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                     <h1 className="text-2xl font-semibold">Workflow Templates</h1>
                     <p className="text-sm text-muted-foreground">Use templates to quickly create workflows</p>
                 </div>
-                <Button onClick={() => router.push("/automation?create=true")}>
-                    <PlusIcon className="mr-2 h-4 w-4" />
+                <Button onClick={() => push("/automation?create=true")}>
+                    <PlusIcon className="mr-2 size-4" />
                     Create Workflow
                 </Button>
             </div>
@@ -296,11 +296,11 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
             {/* Templates Grid */}
             {isLoading ? (
                 <div className="flex items-center justify-center py-12">
-                    <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                 </div>
             ) : templates.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12">
-                    <LayoutTemplateIcon className="h-12 w-12 text-muted-foreground" />
+                    <LayoutTemplateIcon className="size-12 text-muted-foreground" />
                     <h3 className="mt-4 text-lg font-semibold">No templates found</h3>
                     <p className="text-sm text-muted-foreground">Try adjusting your filters.</p>
                 </div>
@@ -309,7 +309,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                     {globalTemplates.length > 0 && (
                         <div>
                             <div className="mb-4 flex items-center gap-2">
-                                <GlobeIcon className="h-4 w-4 text-muted-foreground" />
+                                <GlobeIcon className="size-4 text-muted-foreground" />
                                 <h2 className="text-lg font-semibold">Global Templates</h2>
                             </div>
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -328,7 +328,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                     {orgTemplates.length > 0 && (
                         <div>
                             <div className="mb-4 flex items-center gap-2">
-                                <BuildingIcon className="h-4 w-4 text-muted-foreground" />
+                                <BuildingIcon className="size-4 text-muted-foreground" />
                                 <h2 className="text-lg font-semibold">Organization Templates</h2>
                             </div>
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -351,7 +351,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <SparklesIcon className="h-5 w-5 text-teal-500" />
+                            <SparklesIcon className="size-5 text-teal-500" />
                             Use Template
                         </DialogTitle>
                         <DialogDescription>
@@ -373,13 +373,13 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                                     <SelectContent>
                                         <SelectItem value="personal">
                                             <div className="flex items-center gap-2">
-                                                <UserIcon className="h-4 w-4" />
+                                                <UserIcon className="size-4" />
                                                 Personal Workflow
                                             </div>
                                         </SelectItem>
                                         <SelectItem value="org">
                                             <div className="flex items-center gap-2">
-                                                <BuildingIcon className="h-4 w-4" />
+                                                <BuildingIcon className="size-4" />
                                                 Organization Workflow
                                             </div>
                                         </SelectItem>
@@ -413,13 +413,13 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
 
                         {isTemplateDetailLoading && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2Icon className="h-4 w-4 animate-spin" />
-                                Loading template details...
+                                <Loader2Icon className="size-4 animate-spin" />
+                                Loading template details
                             </div>
                         )}
                         {isTemplateDetailError && (
                             <div className="flex items-center gap-2 text-sm text-red-500">
-                                <AlertCircleIcon className="h-4 w-4" />
+                                <AlertCircleIcon className="size-4" />
                                 {templateDetailErrorMessage}
                             </div>
                         )}
@@ -427,17 +427,17 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                         {hasMissingEmailTemplates && (
                             <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/40 p-3">
                                 <div className="flex items-center gap-2 text-sm font-medium">
-                                    <MailIcon className="h-4 w-4 text-teal-500" />
+                                    <MailIcon className="size-4 text-teal-500" />
                                     Select email templates for this workflow
                                 </div>
                                 {isLoadingEmailTemplates ? (
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2Icon className="h-4 w-4 animate-spin" />
-                                        Loading email templates...
+                                        <Loader2Icon className="size-4 animate-spin" />
+                                        Loading email templates
                                     </div>
                                 ) : emailTemplates.length === 0 ? (
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <AlertCircleIcon className="h-4 w-4" />
+                                        <AlertCircleIcon className="size-4" />
                                         Create an email template before using this workflow template.
                                     </div>
                                 ) : (
@@ -451,7 +451,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                                                     : `Email action ${index + 1}`
                                             const overrideSelectId = `email-action-template-${index}`
                                             return (
-                                                <div key={`email-action-${index}`} className="space-y-2">
+                                                <div key={overrideSelectId} className="space-y-2">
                                                     <Label htmlFor={overrideSelectId} className="text-sm">
                                                         {actionLabel}
                                                     </Label>
@@ -503,7 +503,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                                 id="is_enabled"
                                 checked={formData.is_enabled}
                                 onChange={(e) => setFormData((f) => ({ ...f, is_enabled: e.target.checked }))}
-                                className="h-4 w-4 rounded border-gray-300"
+                                className="size-4 rounded border-zinc-300"
                             />
                             <Label htmlFor="is_enabled">Enable workflow immediately</Label>
                         </div>
@@ -518,9 +518,9 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                             disabled={!canCreateWorkflow}
                         >
                             {useTemplateMutation.isPending ? (
-                                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
                             ) : (
-                                <PlayIcon className="mr-2 h-4 w-4" />
+                                <PlayIcon className="mr-2 size-4" />
                             )}
                             Create Workflow
                         </Button>
@@ -574,7 +574,7 @@ function TemplateCard({
                                 </Badge>
                                 {template.is_global && (
                                     <Badge variant="outline" className="text-xs">
-                                        <GlobeIcon className="mr-1 h-3 w-3" aria-hidden="true" />
+                                        <GlobeIcon className="mr-1 size-3" aria-hidden="true" />
                                         Global
                                     </Badge>
                                 )}

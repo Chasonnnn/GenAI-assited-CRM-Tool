@@ -70,9 +70,9 @@ export function Header() {
                     disabled={isExporting}
                 >
                     {isExporting ? (
-                        <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2Icon className="size-3.5 animate-spin" />
                     ) : (
-                        <DownloadIcon className="h-3.5 w-3.5" />
+                        <DownloadIcon className="size-3.5" />
                     )}
                     <span className="ml-1.5">Export</span>
                 </Button>
@@ -84,9 +84,9 @@ export function Header() {
                     disabled={isSyncing}
                 >
                     {isSyncing ? (
-                        <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2Icon className="size-3.5 animate-spin" />
                     ) : (
-                        <RefreshCwIcon className="h-3.5 w-3.5" />
+                        <RefreshCwIcon className="size-3.5" />
                     )}
                     <span className="ml-1.5">Sync</span>
                 </Button>
@@ -105,7 +105,7 @@ export function Header() {
                         className="h-7"
                         onClick={enterEditMode}
                     >
-                        <EditIcon className="h-3.5 w-3.5 mr-1.5" />
+                        <EditIcon className="size-3.5 mr-1.5" />
                         Edit
                     </Button>
                 )}

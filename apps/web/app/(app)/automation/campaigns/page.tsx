@@ -59,6 +59,7 @@ import {
 import { format } from "date-fns"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { parseDateInput } from "@/lib/utils/date"
 import {
     useCampaigns,
     useCreateCampaign,
@@ -113,7 +114,7 @@ const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.val
 const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
 
 export default function CampaignsPage() {
-    const router = useRouter()
+    const { push } = useRouter()
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
     const [showCreateWizard, setShowCreateWizard] = useState(false)
 
@@ -295,12 +296,14 @@ export default function CampaignsPage() {
               ]
 
     const stagePresetsAvailable = stagePresets.filter((preset) => preset.stageIds.length > 0)
-    const selectedStageLabels = selectedStages
-        .map((stageId) => stageOptions.find((stage) => stage.id === stageId)?.label)
-        .filter(Boolean) as string[]
-    const selectedStateLabels = selectedStates
-        .map((stateCode) => US_STATES.find((state) => state.value === stateCode)?.label)
-        .filter(Boolean) as string[]
+    const selectedStageLabels = selectedStages.flatMap((stageId) => {
+        const label = stageOptions.find((stage) => stage.id === stageId)?.label
+        return label ? [label] : []
+    })
+    const selectedStateLabels = selectedStates.flatMap((stateCode) => {
+        const label = US_STATES.find((state) => state.value === stateCode)?.label
+        return label ? [label] : []
+    })
 
     // Filtered campaigns
     const filteredCampaigns = campaigns || []
@@ -565,8 +568,8 @@ export default function CampaignsPage() {
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground text-sm">
                                                             {campaign.scheduled_at
-                                                                ? `Scheduled ${format(new Date(campaign.scheduled_at), "MMM d, yyyy")}`
-                                                                : format(new Date(campaign.created_at), "MMM d, yyyy")}
+                                                                ? `Scheduled ${format(parseDateInput(campaign.scheduled_at), "MMM d, yyyy")}`
+                                                                : format(parseDateInput(campaign.created_at), "MMM d, yyyy")}
                                                         </TableCell>
                                                         <TableCell>
                                                             <DropdownMenu>
@@ -580,7 +583,7 @@ export default function CampaignsPage() {
                                                                 </DropdownMenuTrigger>
                                                                 <DropdownMenuContent align="end">
                                                                     <DropdownMenuItem
-                                                                        onClick={() => router.push(`/automation/campaigns/${campaign.id}`)}
+                                                                        onClick={() => push(`/automation/campaigns/${campaign.id}`)}
                                                                     >
                                                                         <EyeIcon className="mr-2 size-4" />
                                                                         View Details
@@ -595,7 +598,7 @@ export default function CampaignsPage() {
                                                                     )}
                                                                     {(campaign.status === "draft" || campaign.status === "scheduled") && (
                                                                         <DropdownMenuItem
-                                                                            onClick={() => router.push(`/automation/campaigns/${campaign.id}?edit=1`)}
+                                                                            onClick={() => push(`/automation/campaigns/${campaign.id}?edit=1`)}
                                                                         >
                                                                             <PencilIcon className="mr-2 size-4" />
                                                                         Edit
@@ -837,7 +840,7 @@ export default function CampaignsPage() {
                                     )}
                                     <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
                                         {stageOptions.map((stage) => (
-                                            <div key={stage.id} className="flex items-center space-x-2">
+                                            <div key={stage.id} className="flex items-center gap-x-2">
                                                 <Checkbox
                                                     id={stage.id}
                                                     checked={selectedStages.includes(stage.id)}
@@ -851,7 +854,7 @@ export default function CampaignsPage() {
                                                 />
                                                 <Label htmlFor={stage.id} className="text-sm cursor-pointer">
                                                     <span
-                                                        className="inline-block w-2 h-2 rounded-full mr-1.5"
+                                                        className="inline-block size-2 rounded-full mr-1.5"
                                                         style={{ backgroundColor: stage.color }}
                                                     />
                                                     {stage.label}
@@ -954,7 +957,7 @@ export default function CampaignsPage() {
                                         </p>
                                     )}
                                     {visibleStateOptions.map((state) => (
-                                        <div key={state.value} className="flex items-center space-x-2">
+                                        <div key={state.value} className="flex items-center gap-x-2">
                                             <Checkbox
                                                 id={`state-${state.value}`}
                                                 checked={selectedStates.includes(state.value)}
@@ -1028,7 +1031,7 @@ export default function CampaignsPage() {
                                                     const stage = stageOptions.find(s => s.id === stageId)
                                                     return stage ? (
                                                         <Badge key={stageId} variant="secondary" className="text-xs">
-                                                            <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
+                                                            <span className="inline-block size-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
                                                             {stage.label}
                                                             </Badge>
                                                         ) : null

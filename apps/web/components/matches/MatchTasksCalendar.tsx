@@ -122,7 +122,7 @@ function AppointmentItem({
     }
 
     return (
-        <div className="w-full text-left p-2 rounded-lg border-l-4 border-blue-500 bg-muted/50">
+        <div className="w-full text-left p-2 rounded-lg border border-teal-200 bg-teal-50/60">
             <p className="font-medium text-sm truncate flex items-center gap-1">
                 <CalendarIcon className="size-3" />
                 {typeName}
@@ -189,7 +189,7 @@ function MonthView({
 
             {/* Days Grid */}
             <div className="grid grid-cols-7">
-                {days.map((day, i) => {
+                {days.map((day) => {
                     const dateStr = format(day, "yyyy-MM-dd")
                     const dayTasks = tasksByDate.get(dateStr) || []
                     const dayAppointments = appointmentsByDate.get(dateStr) || []
@@ -206,10 +206,10 @@ function MonthView({
 
                     return (
                         <div
-                            key={i}
+                            key={format(day, "yyyy-MM-dd")}
                             className={`min-h-[80px] p-1 border-b border-r border-border ${!isCurrentMonth ? "bg-muted/30" : ""}`}
                         >
-                            <div className={`text-sm p-1 ${isCurrentDay ? "bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center" : ""} ${!isCurrentMonth ? "text-muted-foreground" : ""}`}>
+                            <div className={`text-sm p-1 ${isCurrentDay ? "bg-primary text-primary-foreground rounded-full size-7 flex items-center justify-center" : ""} ${!isCurrentMonth ? "text-muted-foreground" : ""}`}>
                                 {format(day, "d")}
                             </div>
                             <div className="space-y-1 mt-1">
@@ -500,6 +500,10 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
         }
     }
 
+    const goToToday = () => {
+        setCurrentDate(new Date())
+    }
+
     const isLoading = loadingSurrogate || loadingIP || loadingAppointments
 
     return (
@@ -518,7 +522,7 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
                     <Button variant="outline" size="sm" onClick={() => navigate("next")}>
                         <ChevronRightIcon className="size-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date())}>
+                    <Button variant="ghost" size="sm" onClick={goToToday}>
                         Today
                     </Button>
                     {onAddTask && (
@@ -627,15 +631,15 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
             {/* Legend */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-purple-500"></div>
+                    <div className="size-3 rounded bg-purple-500"></div>
                     <span>Surrogate Tasks</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-green-500"></div>
+                    <div className="size-3 rounded bg-green-500"></div>
                     <span>IP Tasks</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded bg-blue-500"></div>
+                    <div className="size-3 rounded bg-blue-500"></div>
                     <span>Appointments</span>
                 </div>
             </div>

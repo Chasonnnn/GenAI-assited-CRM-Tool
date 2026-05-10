@@ -120,13 +120,19 @@ function resolveTableColumns(
         return field.columns
     }
     if (rows.length === 0) return []
-    return Object.keys(rows[0] || {}).map((key) => ({
-        key,
-        label: key,
-        type: "text" as const,
-        required: false,
-        options: null,
-    })).filter((column) => column.key !== "row_key")
+    return Object.keys(rows[0] || {}).flatMap((key) =>
+        key === "row_key"
+            ? []
+            : [
+                  {
+                      key,
+                      label: key,
+                      type: "text" as const,
+                      required: false,
+                      options: null,
+                  },
+              ],
+    )
 }
 
 function resolveFixedTableRows(
@@ -733,7 +739,7 @@ export function SurrogateApplicationTab({
                                 onClick={addRow}
                                 disabled={maxRows !== null && rows.length >= maxRows}
                             >
-                                <PlusIcon className="h-3.5 w-3.5 mr-1" />
+                                <PlusIcon className="size-3.5 mr-1" />
                                 Add row
                             </Button>
                         </div>
@@ -838,7 +844,7 @@ export function SurrogateApplicationTab({
             <Card>
                 <CardContent className="flex items-center justify-center py-16">
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                    <span className="ml-2 text-muted-foreground">Loading application...</span>
+                    <span className="ml-2 text-muted-foreground">Loading application</span>
                 </CardContent>
             </Card>
         )
@@ -848,7 +854,7 @@ export function SurrogateApplicationTab({
         return (
             <Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                    <AlertTriangleIcon className="h-12 w-12 text-amber-500 mb-4" />
+                    <AlertTriangleIcon className="size-12 text-amber-500 mb-4" />
                     <h3 className="text-lg font-semibold mb-2">Unable to load application</h3>
                     <p className="text-sm text-muted-foreground max-w-md">
                         Please refresh the page or try again later.
@@ -874,7 +880,7 @@ export function SurrogateApplicationTab({
         return (
             <Card>
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                    <FileTextIcon className="h-16 w-16 text-muted-foreground mb-4" />
+                    <FileTextIcon className="size-16 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-semibold mb-2">No Application Submitted</h3>
                     <p className="text-sm text-muted-foreground mb-6 max-w-md">
                         This candidate has not yet submitted their application form. Send them a secure form link to get started.
@@ -903,7 +909,7 @@ export function SurrogateApplicationTab({
                         </div>
                     )}
                     {availableForms.length > 0 && (
-                        <div className="mb-4 w-full max-w-xs rounded-lg border px-3 py-3 text-left">
+                        <div className="mb-4 w-full max-w-xs rounded-lg border p-3 text-left">
                             <div className="mb-2 flex items-center justify-between">
                                 <span className="text-xs font-medium text-muted-foreground">Advanced override</span>
                                 <Button
@@ -1017,7 +1023,7 @@ export function SurrogateApplicationTab({
                         onClick={handleGenerateFormLink}
                         disabled={!canSendLink || !selectedIntakeLink}
                     >
-                        <SendIcon className="h-4 w-4 mr-2" />
+                        <SendIcon className="size-4 mr-2" />
                         Send Form Link
                     </Button>
 
@@ -1063,7 +1069,7 @@ export function SurrogateApplicationTab({
                                     </p>
                                 </div>
                                 <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                                    <AlertTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+                                    <AlertTriangleIcon className="size-4 mt-0.5 shrink-0" />
                                     <p>
                                         This is a shared link. Applicants can return later and resume from autosaved progress.
                                     </p>
@@ -1076,12 +1082,12 @@ export function SurrogateApplicationTab({
                                 <Button onClick={copyFormLink} disabled={!formLink}>
                                     {formLinkCopied ? (
                                         <>
-                                            <CheckIcon className="h-4 w-4 mr-2" />
+                                            <CheckIcon className="size-4 mr-2" />
                                             Copied!
                                         </>
                                     ) : (
                                         <>
-                                            <CopyIcon className="h-4 w-4 mr-2" />
+                                            <CopyIcon className="size-4 mr-2" />
                                             Copy Link
                                         </>
                                     )}
@@ -1089,12 +1095,12 @@ export function SurrogateApplicationTab({
                                 <Button onClick={handleSendEmailLink} disabled={!formLink || !selectedTemplateId || isSendingLink}>
                                     {isSendingLink ? (
                                         <>
-                                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                            Sending...
+                                            <Loader2Icon className="size-4 mr-2 animate-spin" />
+                                            Sending
                                         </>
                                     ) : (
                                         <>
-                                            <SendIcon className="h-4 w-4 mr-2" />
+                                            <SendIcon className="size-4 mr-2" />
                                             Send Email
                                         </>
                                     )}
@@ -1118,9 +1124,9 @@ export function SurrogateApplicationTab({
     const fileFieldLabels = new Map(
         fileFields.map((field) => [field.key, field.label]),
     )
-    const previewFields = pages
-        .flatMap((page) => page.fields)
-        .filter((field) => field.type !== "file")
+    const previewFields = pages.flatMap((page) =>
+        page.fields.flatMap((field) => (field.type === "file" ? [] : [field])),
+    )
         .slice(0, 3)
 
     const getFieldValueContent = (
@@ -1128,14 +1134,14 @@ export function SurrogateApplicationTab({
         value: unknown,
     ) => {
         if (value === null || value === undefined || value === "") {
-            return <span className="text-sm text-muted-foreground">—</span>
+            return <span className="text-sm text-muted-foreground">Not provided</span>
         }
         if (field.type === "repeatable_table" || field.type === "table") {
             const isFixedTable = field.type === "table"
             const rows = isFixedTable ? resolveFixedTableRows(field, value) : normalizeTableRows(value)
             const columns = resolveTableColumns(field, rows)
             if (rows.length === 0 || columns.length === 0) {
-                return <span className="text-sm text-muted-foreground">—</span>
+                return <span className="text-sm text-muted-foreground">Not provided</span>
             }
             return (
                 <div className="max-w-[360px] overflow-x-auto">
@@ -1198,7 +1204,7 @@ export function SurrogateApplicationTab({
                     {getFormOptionLabels(field.options, value).join(", ")}
                 </span>
             ) : (
-                <span className="text-sm text-muted-foreground">—</span>
+                <span className="text-sm text-muted-foreground">Not provided</span>
             )
         }
         return <span className="text-sm text-right">{String(value)}</span>
@@ -1249,9 +1255,9 @@ export function SurrogateApplicationTab({
                         disabled={isExporting}
                     >
                         {isExporting ? (
-                            <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                            <Loader2Icon className="size-4 animate-spin mr-2" />
                         ) : (
-                            <DownloadIcon className="h-4 w-4 mr-2" />
+                            <DownloadIcon className="size-4 mr-2" />
                         )}
                         Export
                     </Button>
@@ -1267,9 +1273,9 @@ export function SurrogateApplicationTab({
                                 className="bg-primary"
                             >
                                 {updateAnswersMutation.isPending ? (
-                                    <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                                    <Loader2Icon className="size-4 animate-spin mr-2" />
                                 ) : (
-                                    <SaveIcon className="h-4 w-4 mr-2" />
+                                    <SaveIcon className="size-4 mr-2" />
                                 )}
                                 Save Changes
                                 {hasEdits && (
@@ -1281,7 +1287,7 @@ export function SurrogateApplicationTab({
                         </>
                     ) : (
                         <Button onClick={() => setIsEditMode(true)}>
-                            <EditIcon className="h-4 w-4 mr-2" />
+                            <EditIcon className="size-4 mr-2" />
                             Edit
                         </Button>
                     )}
@@ -1317,9 +1323,9 @@ export function SurrogateApplicationTab({
                                         <CollapsibleTrigger className="flex items-center justify-between w-full hover:opacity-70 transition-opacity">
                                             <CardTitle>{pageTitle}</CardTitle>
                                             {isOpen ? (
-                                                <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
+                                                <ChevronUpIcon className="size-4 text-muted-foreground" />
                                             ) : (
-                                                <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                                                <ChevronDownIcon className="size-4 text-muted-foreground" />
                                             )}
                                         </CollapsibleTrigger>
                                     </CardHeader>
@@ -1360,11 +1366,11 @@ export function SurrogateApplicationTab({
                                                                         <Button
                                                                             size="sm"
                                                                             variant="ghost"
-                                                                            className="h-7 w-7 p-0"
+                                                                            className="size-7 p-0"
                                                                             onClick={cancelEditing}
                                                                             aria-label={`Cancel editing ${field.label || field.key || "field"}`}
                                                                         >
-                                                                            <XIcon className="h-3.5 w-3.5" />
+                                                                            <XIcon className="size-3.5" />
                                                                         </Button>
                                                                     </div>
                                                                 ) : (
@@ -1382,11 +1388,11 @@ export function SurrogateApplicationTab({
                                                                             <Button
                                                                                 size="sm"
                                                                                 variant="ghost"
-                                                                                className="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                                                                                className="size-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                                                                                 onClick={() => setEditingField(field.key)}
                                                                                 aria-label={`Edit ${field.label || field.key || "field"}`}
                                                                             >
-                                                                                <PencilIcon className="h-3 w-3" />
+                                                                                <PencilIcon className="size-3" />
                                                                             </Button>
                                                                         )}
                                                                     </>
@@ -1412,9 +1418,9 @@ export function SurrogateApplicationTab({
                                 <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-70 transition-opacity">
                                     <CardTitle>Uploaded Files ({submission.files.length})</CardTitle>
                                     {filesOpen ? (
-                                        <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
+                                        <ChevronUpIcon className="size-4 text-muted-foreground" />
                                     ) : (
-                                        <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                                        <ChevronDownIcon className="size-4 text-muted-foreground" />
                                     )}
                                 </CollapsibleTrigger>
 
@@ -1452,9 +1458,9 @@ export function SurrogateApplicationTab({
                                                 disabled={uploadFileMutation.isPending || (fileFields.length > 1 && !uploadFieldKey)}
                                             >
                                                 {uploadFileMutation.isPending ? (
-                                                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                                                    <Loader2Icon className="size-3.5 animate-spin" />
                                                 ) : (
-                                                    <PlusIcon className="h-3.5 w-3.5" />
+                                                    <PlusIcon className="size-3.5" />
                                                 )}
                                                 Upload File
                                             </Button>
@@ -1477,7 +1483,7 @@ export function SurrogateApplicationTab({
                             <CardContent className="space-y-3">
                                 {submission.files.length === 0 ? (
                                     <div className="py-6 text-center">
-                                        <UploadIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+                                        <UploadIcon className="size-8 mx-auto mb-2 text-muted-foreground/40" />
                                         <p className="text-sm text-muted-foreground">No files uploaded</p>
                                         {isEditMode && (
                                             <Button
@@ -1486,7 +1492,7 @@ export function SurrogateApplicationTab({
                                                 className="mt-2 text-primary hover:text-primary/80"
                                                 onClick={() => fileInputRef.current?.click()}
                                             >
-                                                <PlusIcon className="h-4 w-4 mr-1" />
+                                                <PlusIcon className="size-4 mr-1" />
                                                 Add a file
                                             </Button>
                                         )}
@@ -1510,9 +1516,9 @@ export function SurrogateApplicationTab({
                                             >
                                                 <div className="flex items-center gap-3 min-w-0 flex-1">
                                                     {file.quarantined ? (
-                                                        <AlertTriangleIcon className="h-8 w-8 text-amber-500 shrink-0" />
+                                                        <AlertTriangleIcon className="size-8 text-amber-500 shrink-0" />
                                                     ) : (
-                                                        <FileTextIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                                                        <FileTextIcon className="size-8 text-muted-foreground shrink-0" />
                                                     )}
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-medium truncate">{file.filename}</p>
@@ -1527,7 +1533,7 @@ export function SurrogateApplicationTab({
                                                                 file.quarantined ? "text-amber-600" : "text-muted-foreground"
                                                             )}
                                                         >
-                                                            {file.quarantined ? "Virus scan pending..." : formatFileSize(file.file_size)}
+                                                            {file.quarantined ? "Virus scan pending" : formatFileSize(file.file_size)}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1536,27 +1542,27 @@ export function SurrogateApplicationTab({
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-8 w-8"
+                                                        className="size-8"
                                                         disabled={file.quarantined}
                                                         onClick={() => handleDownloadFile(file.id)}
                                                         aria-label={`Download ${file.filename}`}
                                                     >
-                                                        <DownloadIcon className="h-4 w-4" aria-hidden="true" />
+                                                        <DownloadIcon className="size-4" aria-hidden="true" />
                                                     </Button>
 
                                                     {isEditMode && (
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                                             onClick={() => handleDeleteFile(file.id, file.filename)}
                                                             disabled={isDeleting}
                                                             aria-label={`Delete ${file.filename}`}
                                                         >
                                                             {isDeleting ? (
-                                                                <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                                                <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
                                                             ) : (
-                                                                <Trash2Icon className="h-4 w-4" aria-hidden="true" />
+                                                                <Trash2Icon className="size-4" aria-hidden="true" />
                                                             )}
                                                         </Button>
                                                     )}
@@ -1581,7 +1587,7 @@ export function SurrogateApplicationTab({
                             className="text-destructive hover:text-destructive bg-transparent"
                             onClick={() => setRejectModalOpen(true)}
                         >
-                            <XIcon className="h-4 w-4 mr-2" />
+                            <XIcon className="size-4 mr-2" />
                             Reject
                         </Button>
 
@@ -1590,7 +1596,7 @@ export function SurrogateApplicationTab({
                             className="bg-teal-500 hover:bg-teal-600"
                             onClick={() => setApproveModalOpen(true)}
                         >
-                            <ClipboardCheckIcon className="h-4 w-4 mr-2" />
+                            <ClipboardCheckIcon className="size-4 mr-2" />
                             Approve & Update Surrogate
                         </Button>
                     </div>
@@ -1611,7 +1617,7 @@ export function SurrogateApplicationTab({
                             <Label htmlFor="reject-reason">Rejection Reason *</Label>
                             <Textarea
                                 id="reject-reason"
-                                placeholder="Explain why this application is being rejected..."
+                                placeholder="Explain why this application is being rejected"
                                 className="mt-2 min-h-24"
                                 value={rejectReason}
                                 onChange={(e) => setRejectReason(e.target.value)}
@@ -1623,7 +1629,7 @@ export function SurrogateApplicationTab({
                             Cancel
                         </Button>
                         <Button variant="destructive" disabled={!rejectReason.trim() || isRejecting} onClick={handleReject}>
-                            {isRejecting && <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />}
+                            {isRejecting && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                             Reject Application
                         </Button>
                     </DialogFooter>
@@ -1664,7 +1670,7 @@ export function SurrogateApplicationTab({
                             <Label htmlFor="approve-notes">Optional Notes</Label>
                             <Textarea
                                 id="approve-notes"
-                                placeholder="Add any notes about this approval..."
+                                placeholder="Add any notes about this approval"
                                 className="mt-2 min-h-20"
                                 value={approveNotes}
                                 onChange={(e) => setApproveNotes(e.target.value)}
@@ -1676,7 +1682,7 @@ export function SurrogateApplicationTab({
                             Cancel
                         </Button>
                         <Button className="bg-teal-500 hover:bg-teal-600" onClick={handleApprove} disabled={isApproving}>
-                            {isApproving && <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />}
+                            {isApproving && <Loader2Icon className="size-4 mr-2 animate-spin" />}
                             Approve & Update
                         </Button>
                     </DialogFooter>

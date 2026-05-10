@@ -134,6 +134,31 @@ describe("MassEditStageModal", () => {
         expect(sentFilters).not.toHaveProperty("created_to")
     })
 
+    it("renders preview created dates with a deterministic UTC date label", async () => {
+        mockPreviewMutateAsync.mockResolvedValueOnce({
+            total: 1,
+            over_limit: false,
+            max_apply: 2000,
+            items: [
+                {
+                    id: "surrogate-1",
+                    surrogate_number: "S10001",
+                    full_name: "Alex Chen",
+                    status_label: "New",
+                    state: "CA",
+                    age: 31,
+                    created_at: "2025-01-02T23:30:00Z",
+                },
+            ],
+        })
+
+        renderModal()
+
+        fireEvent.click(screen.getByRole("button", { name: "Preview Matches" }))
+
+        expect(await screen.findByText("Jan 2, 2025")).toBeInTheDocument()
+    })
+
     it("applies archive action when archive mode is selected", async () => {
         renderModal()
 

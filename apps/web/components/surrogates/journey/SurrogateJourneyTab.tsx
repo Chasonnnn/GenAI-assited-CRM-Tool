@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { ChevronDownIcon, DownloadIcon, Loader2Icon, SparklesIcon } from "lucide-react"
 import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
@@ -45,6 +45,19 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     const [exportingVariant, setExportingVariant] = useState<JourneyExportVariant | null>(null)
     const isExporting = exportingVariant !== null
 
+    const milestoneBySlug = useMemo(() => {
+        const milestones = new Map<string, { label: string; featured_image_id: string | null }>()
+        for (const phase of journey?.phases ?? []) {
+            for (const milestone of phase.milestones) {
+                milestones.set(milestone.slug, {
+                    label: milestone.label,
+                    featured_image_id: milestone.featured_image_id,
+                })
+            }
+        }
+        return milestones
+    }, [journey?.phases])
+
     const handleExport = useCallback(async (variant: JourneyExportVariant) => {
         setExportingVariant(variant)
         try {
@@ -60,22 +73,16 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
 
     // Handle opening the image selector
     const handleEditImage = useCallback((milestoneSlug: string) => {
-        if (!journey) return
+        const milestone = milestoneBySlug.get(milestoneSlug)
+        if (!milestone) return
 
-        // Find the milestone to get its label and current attachment
-        for (const phase of journey.phases) {
-            const milestone = phase.milestones.find((m) => m.slug === milestoneSlug)
-            if (milestone) {
-                setSelectedMilestone({
-                    slug: milestoneSlug,
-                    label: milestone.label,
-                    currentAttachmentId: milestone.featured_image_id,
-                })
-                setSelectorOpen(true)
-                return
-            }
-        }
-    }, [journey])
+        setSelectedMilestone({
+            slug: milestoneSlug,
+            label: milestone.label,
+            currentAttachmentId: milestone.featured_image_id,
+        })
+        setSelectorOpen(true)
+    }, [milestoneBySlug])
 
     if (isLoading) {
         return (
@@ -88,7 +95,7 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
                         </div>
                     </div>
                     <p className="mt-4 text-sm text-muted-foreground">
-                        Loading journey...
+                        Loading journey&hellip;
                     </p>
                 </div>
             </Card>

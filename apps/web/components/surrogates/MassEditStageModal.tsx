@@ -39,14 +39,30 @@ type TriState = "any" | "true" | "false"
 type ComparisonOp = ">" | ">=" | "<" | "<=" | "="
 type ActionMode = "change_stage" | "archive"
 
+const UTC_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+function formatUtcDateLabel(value: string): string {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+    if (!match) return value
+
+    const monthIndex = Number(match[2]) - 1
+    const day = Number(match[3])
+    const monthLabel = UTC_MONTH_LABELS[monthIndex]
+
+    if (!monthLabel || !Number.isInteger(day) || day < 1 || day > 31) return value
+
+    return `${monthLabel} ${day}, ${match[1]}`
+}
+
 function parseStates(input: string): { states: string[] | undefined; error: string | null } {
     const trimmed = input.trim()
     if (!trimmed) return { states: undefined, error: null }
 
-    const parts = trimmed
-        .split(/[,\s]+/g)
-        .map((s) => s.trim().toUpperCase())
-        .filter(Boolean)
+    const parts: string[] = []
+    for (const rawPart of trimmed.split(/[,\s]+/g)) {
+        const part = rawPart.trim().toUpperCase()
+        if (part) parts.push(part)
+    }
 
     const invalid = parts.filter((s) => !/^[A-Z]{2}$/.test(s))
     if (invalid.length > 0) {
@@ -171,7 +187,7 @@ export function MassEditStageModal({
     }, [open, targetStageId, defaultTargetStageId])
 
     const { states, error: statesError } = React.useMemo(() => parseStates(statesInput), [statesInput])
-    const races = React.useMemo(() => (selectedRaces.length ? selectedRaces : undefined), [selectedRaces])
+    const races = selectedRaces.length ? selectedRaces : undefined
     const createdDateError = React.useMemo(() => {
         if (!createdFrom || !createdTo) return null
         if (createdFrom <= createdTo) return null
@@ -647,7 +663,7 @@ export function MassEditStageModal({
                                             size="sm"
                                             onClick={() => setIsNonSmoker((prev) => (prev === true ? null : true))}
                                         >
-                                            Yes
+                                            Non-smoker
                                         </Button>
                                         <Button
                                             type="button"
@@ -655,7 +671,7 @@ export function MassEditStageModal({
                                             size="sm"
                                             onClick={() => setIsNonSmoker((prev) => (prev === false ? null : false))}
                                         >
-                                            No
+                                            Smoker allowed
                                         </Button>
                                         {isNonSmoker !== null && (
                                             <Button
@@ -832,7 +848,7 @@ export function MassEditStageModal({
                                                                 </div>
                                                             </div>
                                                             <Badge variant="secondary" className="shrink-0">
-                                                                {new Date(item.created_at).toLocaleDateString()}
+                                                                {formatUtcDateLabel(item.created_at)}
                                                             </Badge>
                                                         </div>
                                                     ))}

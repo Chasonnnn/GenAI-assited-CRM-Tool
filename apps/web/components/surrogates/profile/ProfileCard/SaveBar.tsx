@@ -27,9 +27,9 @@ export function SaveBar() {
                 disabled={isSaving}
             >
                 {isSaving ? (
-                    <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                    <Loader2Icon className="size-4 animate-spin mr-2" />
                 ) : (
-                    <SaveIcon className="h-4 w-4 mr-2" />
+                    <SaveIcon className="size-4 mr-2" />
                 )}
                 Save Changes
                 {stagedChanges.length > 0 && (

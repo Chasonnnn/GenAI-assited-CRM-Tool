@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { createRef } from "react"
 
-import { RichTextEditor } from "@/components/rich-text-editor"
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
 
 const mockEmojiPickerProps = vi.fn()
 
@@ -150,5 +151,19 @@ describe("RichTextEditor", () => {
             ([props]) => (props as { suggestedEmojisMode?: string }).suggestedEmojisMode === "recent"
         )
         expect(hasRecentMode).toBe(true)
+    })
+
+    it("exposes imperative insertion through the React 19 ref prop", async () => {
+        const editorRef = createRef<RichTextEditorHandle>()
+
+        render(<RichTextEditor ref={editorRef} content="<p>hello</p>" />)
+
+        await waitFor(() => {
+            expect(screen.getByLabelText("Bold")).toBeInTheDocument()
+        })
+
+        editorRef.current?.insertText("follow-up")
+
+        expect(chain.insertContent).toHaveBeenCalledWith("follow-up")
     })
 })

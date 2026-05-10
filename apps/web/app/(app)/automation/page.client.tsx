@@ -385,10 +385,12 @@ type WorkflowBuilderState = {
     actions: EditableAction[]
 }
 
+type StateUpdate<T> = T | ((current: T) => T)
+
 type WorkflowBuilderAction =
     | { type: "reset"; scope?: WorkflowScope }
     | { type: "hydrateWorkflow"; workflow: WorkflowCreate & { scope: WorkflowScope }; workflowId: string; statusOptions: StatusOption[] }
-    | { type: "setWizardStep"; value: number }
+    | { type: "setWizardStep"; value: StateUpdate<number> }
     | { type: "setValidationError"; value: string | null }
     | { type: "setServerErrors"; value: string[] }
     | { type: "clearServerErrors" }
@@ -396,7 +398,7 @@ type WorkflowBuilderAction =
     | { type: "setWorkflowDescription"; value: string }
     | { type: "setWorkflowScope"; value: WorkflowScope }
     | { type: "setTriggerType"; value: string }
-    | { type: "setTriggerConfig"; value: JsonObject }
+    | { type: "setTriggerConfig"; value: StateUpdate<JsonObject> }
     | { type: "setConditionLogic"; value: "AND" | "OR" }
     | { type: "addCondition" }
     | { type: "removeCondition"; index: number }
@@ -501,7 +503,10 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
             }
         }
         case "setWizardStep":
-            return { ...state, wizardStep: action.value }
+            return {
+                ...state,
+                wizardStep: typeof action.value === "function" ? action.value(state.wizardStep) : action.value,
+            }
         case "setValidationError":
             return { ...state, validationError: action.value }
         case "setServerErrors":
@@ -517,7 +522,10 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
         case "setTriggerType":
             return { ...state, triggerType: action.value }
         case "setTriggerConfig":
-            return { ...state, triggerConfig: action.value }
+            return {
+                ...state,
+                triggerConfig: typeof action.value === "function" ? action.value(state.triggerConfig) : action.value,
+            }
         case "setConditionLogic":
             return { ...state, conditionLogic: action.value }
         case "addCondition":
@@ -618,7 +626,7 @@ export default function AutomationPageClient({
     initialCreateOpen,
     hasInitialScopeParam = false,
 }: AutomationPageClientProps) {
-    const router = useRouter()
+    const { push } = useRouter()
     const { user } = useAuth()
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
     const permissions = effectivePermissions?.permissions || []
@@ -674,7 +682,7 @@ export default function AutomationPageClient({
         templateBody,
     } = emailTemplateModal
 
-    const setWizardStep = (value: number) =>
+    const setWizardStep = (value: StateUpdate<number>) =>
         dispatchWorkflowBuilder({ type: "setWizardStep", value })
     const setValidationError = (value: string | null) =>
         dispatchWorkflowBuilder({ type: "setValidationError", value })
@@ -686,7 +694,7 @@ export default function AutomationPageClient({
         dispatchWorkflowBuilder({ type: "setWorkflowDescription", value })
     const setTriggerType = (value: string) =>
         dispatchWorkflowBuilder({ type: "setTriggerType", value })
-    const setTriggerConfig = (value: JsonObject) =>
+    const setTriggerConfig = (value: StateUpdate<JsonObject>) =>
         dispatchWorkflowBuilder({ type: "setTriggerConfig", value })
     const setConditionLogic = (value: "AND" | "OR") =>
         dispatchWorkflowBuilder({ type: "setConditionLogic", value })
@@ -805,10 +813,12 @@ export default function AutomationPageClient({
     const parseServerErrors = (error: unknown): string[] => {
         if (error instanceof ApiError) {
             if (error.message) {
-                return error.message
-                    .split(";")
-                    .map((message) => message.trim())
-                    .filter(Boolean)
+                const messages: string[] = []
+                for (const rawMessage of error.message.split(";")) {
+                    const message = rawMessage.trim()
+                    if (message) messages.push(message)
+                }
+                return messages
             }
             return ["An unexpected error occurred."]
         }
@@ -1086,7 +1096,7 @@ export default function AutomationPageClient({
             return
         }
         setValidationError(null)
-        setWizardStep(wizardStep + 1)
+        setWizardStep((currentStep) => currentStep + 1)
     }
 
     const handleSaveWorkflow = () => {
@@ -1238,7 +1248,7 @@ export default function AutomationPageClient({
                     <h1 className="text-2xl font-semibold">Workflows</h1>
                     <div className="flex gap-3">
                         {activeTab === "workflows" && (
-                            <Button variant="outline" onClick={() => router.push("/automation/executions")}>
+                            <Button variant="outline" onClick={() => push("/automation/executions")}>
                                 <ActivityIcon className="mr-2 size-4" />
                                 Execution History
                             </Button>
@@ -1291,7 +1301,7 @@ export default function AutomationPageClient({
                                     </div>
                                     {stats?.success_rate_24h && stats.success_rate_24h > 95 && (
                                         <div className="flex items-center text-xs font-medium text-green-600">
-                                            <TrendingUpIcon className="mr-1 h-3 w-3" />
+                                            <TrendingUpIcon className="mr-1 size-3" />
                                             Good
                                         </div>
                                     )}
@@ -1408,7 +1418,7 @@ export default function AutomationPageClient({
                                 </CardContent>
                             </Card>
                         ) : (
-                            [...workflows].sort((a, b) => {
+                            workflows.toSorted((a, b) => {
                                 // Enabled workflows first
                                 if (a.is_enabled !== b.is_enabled) return b.is_enabled ? 1 : -1
                                 // Then by name
@@ -1565,7 +1575,12 @@ export default function AutomationPageClient({
                                             <Label>To Stage (Optional)</Label>
                                             <Select
                                                 value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
-                                                onValueChange={(v) => setTriggerConfig({ ...triggerConfig, to_stage_id: v })}
+                                                onValueChange={(v) =>
+                                                    setTriggerConfig((currentConfig) => ({
+                                                        ...currentConfig,
+                                                        to_stage_id: v,
+                                                    }))
+                                                }
                                             >
                                                 <SelectTrigger className="mt-1.5">
                                                     <SelectValue placeholder="Any stage">
@@ -1588,7 +1603,12 @@ export default function AutomationPageClient({
                                             <Label>From Stage (Optional)</Label>
                                             <Select
                                                 value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
-                                                onValueChange={(v) => setTriggerConfig({ ...triggerConfig, from_stage_id: v })}
+                                                onValueChange={(v) =>
+                                                    setTriggerConfig((currentConfig) => ({
+                                                        ...currentConfig,
+                                                        from_stage_id: v,
+                                                    }))
+                                                }
                                             >
                                                 <SelectTrigger className="mt-1.5">
                                                     <SelectValue placeholder="Any stage">
@@ -1617,7 +1637,12 @@ export default function AutomationPageClient({
                                                 placeholder="0 9 * * 1"
                                                 className="mt-1.5"
                                                 value={typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""}
-                                                onChange={(e) => setTriggerConfig({ ...triggerConfig, cron: e.target.value })}
+                                                onChange={(e) =>
+                                                    setTriggerConfig((currentConfig) => ({
+                                                        ...currentConfig,
+                                                        cron: e.target.value,
+                                                    }))
+                                                }
                                             />
                                         </div>
                                         <div>
@@ -1626,7 +1651,12 @@ export default function AutomationPageClient({
                                                 placeholder="America/Los_Angeles"
                                                 className="mt-1.5"
                                                 value={typeof triggerConfig.timezone === "string" ? triggerConfig.timezone : "America/Los_Angeles"}
-                                                onChange={(e) => setTriggerConfig({ ...triggerConfig, timezone: e.target.value })}
+                                                onChange={(e) =>
+                                                    setTriggerConfig((currentConfig) => ({
+                                                        ...currentConfig,
+                                                        timezone: e.target.value,
+                                                    }))
+                                                }
                                             />
                                         </div>
                                     </div>
@@ -1640,7 +1670,12 @@ export default function AutomationPageClient({
                                             max={90}
                                             className="mt-1.5"
                                             value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
-                                            onChange={(e) => setTriggerConfig({ ...triggerConfig, days: Number(e.target.value) })}
+                                            onChange={(e) =>
+                                                setTriggerConfig((currentConfig) => ({
+                                                    ...currentConfig,
+                                                    days: Number(e.target.value),
+                                                }))
+                                            }
                                         />
                                     </div>
                                 )}
@@ -1650,7 +1685,7 @@ export default function AutomationPageClient({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig({ ...triggerConfig, form_id: value })
+                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -1683,7 +1718,7 @@ export default function AutomationPageClient({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig({ ...triggerConfig, form_id: value })
+                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -1716,7 +1751,7 @@ export default function AutomationPageClient({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig({ ...triggerConfig, form_id: value })
+                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -1752,7 +1787,12 @@ export default function AutomationPageClient({
                                             max={168}
                                             className="mt-1.5"
                                             value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
-                                            onChange={(e) => setTriggerConfig({ ...triggerConfig, hours_before: Number(e.target.value) })}
+                                            onChange={(e) =>
+                                                setTriggerConfig((currentConfig) => ({
+                                                    ...currentConfig,
+                                                    hours_before: Number(e.target.value),
+                                                }))
+                                            }
                                         />
                                     </div>
                                 )}
@@ -1764,9 +1804,14 @@ export default function AutomationPageClient({
                                                 value=""
                                                 onValueChange={(value) => {
                                                     if (!value || selectedTriggerFields.includes(value)) return
-                                                    setTriggerConfig({
-                                                        ...triggerConfig,
-                                                        fields: [...selectedTriggerFields, value],
+                                                    setTriggerConfig((currentConfig) => {
+                                                        const currentFields = Array.isArray(currentConfig.fields)
+                                                            ? currentConfig.fields.filter((field): field is string => typeof field === "string")
+                                                            : []
+                                                        return {
+                                                            ...currentConfig,
+                                                            fields: [...currentFields, value],
+                                                        }
                                                     })
                                                 }}
                                             >
@@ -1792,9 +1837,14 @@ export default function AutomationPageClient({
                                                             className="ml-1 text-xs"
                                                             aria-label="Remove field"
                                                             onClick={() =>
-                                                                setTriggerConfig({
-                                                                    ...triggerConfig,
-                                                                    fields: selectedTriggerFields.filter((f) => f !== field),
+                                                                setTriggerConfig((currentConfig) => {
+                                                                    const currentFields = Array.isArray(currentConfig.fields)
+                                                                        ? currentConfig.fields.filter((f): f is string => typeof f === "string" && f !== field)
+                                                                        : []
+                                                                    return {
+                                                                        ...currentConfig,
+                                                                        fields: currentFields,
+                                                                    }
                                                                 })
                                                             }
                                                         >
@@ -1811,7 +1861,12 @@ export default function AutomationPageClient({
                                         <Label>Assigned To (Optional)</Label>
                                         <Select
                                             value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
-                                            onValueChange={(value) => setTriggerConfig({ ...triggerConfig, to_user_id: value || null })}
+                                            onValueChange={(value) =>
+                                                setTriggerConfig((currentConfig) => ({
+                                                    ...currentConfig,
+                                                    to_user_id: value || null,
+                                                }))
+                                            }
                                         >
                                             <SelectTrigger className="mt-1.5">
                                                 <SelectValue placeholder="Any user">
@@ -2413,7 +2468,7 @@ export default function AutomationPageClient({
                                 variant="outline"
                                 onClick={() => {
                                     setValidationError(null)
-                                    setWizardStep(wizardStep - 1)
+                                    setWizardStep((currentStep) => currentStep - 1)
                                 }}
                             >
                                 Back
@@ -2469,7 +2524,7 @@ export default function AutomationPageClient({
                             <Textarea
                                 value={templateBody}
                                 onChange={(e) => setTemplateBody(e.target.value)}
-                                placeholder="Email body content..."
+                                placeholder="Email body content"
                                 className="mt-1.5 min-h-[200px]"
                             />
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -2534,7 +2589,7 @@ export default function AutomationPageClient({
                                             <div className="flex-1 pb-4">
                                                 <div className="flex items-start justify-between">
                                                     <div>
-                                                        <p className="font-medium">{execution.entity_type}: {execution.entity_id.slice(0, 8)}...</p>
+                                                        <p className="font-medium">{execution.entity_type}: {execution.entity_id.slice(0, 8)}&hellip;</p>
                                                         <p className="text-sm text-muted-foreground">{formatRelativeTime(execution.executed_at)}</p>
                                                     </div>
                                                     <Badge
@@ -2578,7 +2633,7 @@ export default function AutomationPageClient({
                         <div className="space-y-2">
                             <Label>{ENTITY_LABELS[testEntityType] ?? "Entity ID"}</Label>
                             <Input
-                                placeholder={`Enter ${testEntityType} UUID...`}
+                                placeholder={`Enter ${testEntityType} UUID`}
                                 list="workflow-test-entity-options"
                                 value={testEntityQuery}
                                 onChange={(e) => {
@@ -2601,7 +2656,7 @@ export default function AutomationPageClient({
                         </div>
 
                         {testEntitySuggestionsLoading ? (
-                            <div className="text-xs text-muted-foreground">Loading suggestions...</div>
+                            <div className="text-xs text-muted-foreground">Loading suggestions</div>
                         ) : testEntitySuggestions.length > 0 ? (
                             <div className="space-y-2 rounded-lg border p-3">
                                 <p className="text-xs font-medium text-muted-foreground">

@@ -281,8 +281,10 @@ describe('SurrogatesPage', () => {
         const table = screen.getByRole('table')
         const namedHeaders = within(table)
             .getAllByRole('columnheader')
-            .map((header) => header.textContent?.replace(/\s+/g, ' ').trim() ?? '')
-            .filter(Boolean)
+            .flatMap((header) => {
+                const label = header.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+                return label ? [label] : []
+            })
 
         expect(namedHeaders.some((header) => /email/i.test(header))).toBe(false)
         expect(within(table).queryByText('john@example.com')).not.toBeInTheDocument()
@@ -368,7 +370,7 @@ describe('SurrogatesPage', () => {
         expect(screen.getByText('Last Modified')).toBeInTheDocument()
     })
 
-    it('shows Change stage... in the floating selection bar only for admin and developer users', () => {
+    it('shows Change stage in the floating selection bar only for admin and developer users', () => {
         mockUseSurrogates.mockReturnValue({
             data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
             isLoading: false,
@@ -377,19 +379,19 @@ describe('SurrogatesPage', () => {
 
         const adminView = render(<SurrogatesPage />)
         fireEvent.click(screen.getByLabelText('Select John Doe'))
-        expect(screen.getByRole('button', { name: 'Change stage...' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Change stage' })).toBeInTheDocument()
         adminView.unmount()
 
         mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
         const caseManagerView = render(<SurrogatesPage />)
         fireEvent.click(screen.getByLabelText('Select John Doe'))
-        expect(screen.queryByRole('button', { name: 'Change stage...' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Change stage' })).not.toBeInTheDocument()
         caseManagerView.unmount()
 
         mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
         render(<SurrogatesPage />)
         fireEvent.click(screen.getByLabelText('Select John Doe'))
-        expect(screen.queryByRole('button', { name: 'Change stage...' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Change stage' })).not.toBeInTheDocument()
     })
 
     it('submits selected surrogate ids through the bulk change stage flow', async () => {
@@ -417,7 +419,7 @@ describe('SurrogatesPage', () => {
 
         fireEvent.click(screen.getByLabelText('Select Jane Doe'))
         fireEvent.click(screen.getByLabelText('Select Mia Ross'))
-        fireEvent.click(screen.getByRole('button', { name: 'Change stage...' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Change stage' }))
         fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
 
         await waitFor(() =>
@@ -459,7 +461,7 @@ describe('SurrogatesPage', () => {
 
         fireEvent.click(screen.getByLabelText('Select Jane Doe'))
         fireEvent.click(screen.getByLabelText('Select Mia Ross'))
-        fireEvent.click(screen.getByRole('button', { name: 'Change stage...' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Change stage' }))
         fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
 
         await waitFor(() => expect(screen.getByText('1 surrogate selected')).toBeInTheDocument())

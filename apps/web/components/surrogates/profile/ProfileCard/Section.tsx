@@ -22,9 +22,9 @@ export function Section({ index, title, children }: SectionProps) {
             <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-sm font-medium hover:text-primary transition-colors">
                 <span>{title}</span>
                 {isOpen ? (
-                    <ChevronUpIcon className="h-4 w-4" />
+                    <ChevronUpIcon className="size-4" />
                 ) : (
-                    <ChevronDownIcon className="h-4 w-4" />
+                    <ChevronDownIcon className="size-4" />
                 )}
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2">
