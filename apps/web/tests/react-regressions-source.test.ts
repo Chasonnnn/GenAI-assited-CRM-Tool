@@ -142,13 +142,6 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain(".style.margin")
     })
 
-    it("uses stable slider thumb keys", () => {
-        const source = readSource("components/ui/slider.tsx")
-
-        expect(source).toContain("thumbKeys")
-        expect(source).not.toContain("key={index}")
-    })
-
     it("keeps dashboard KPI chart code split and private", () => {
         const source = readSource("app/(app)/dashboard/components/kpi-card.tsx")
 

@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AIAssistantPage from '../app/(app)/ai-assistant/page'
 
-// Avoid Sidebar context requirements in tests
-vi.mock('@/components/ui/sidebar', () => ({
-    SidebarTrigger: () => <button type="button">Sidebar</button>,
-}))
-
 const mockStreamMessage = vi.fn()
 const mockApproveAction = vi.fn()
 const mockRejectAction = vi.fn()
