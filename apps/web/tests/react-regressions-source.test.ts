@@ -282,6 +282,7 @@ describe("React regression guards (source)", () => {
         const taskTypesSource = readSource("lib/types/task.ts")
         const taskApiSource = readSource("lib/api/tasks.ts")
         const stageContextSource = readSource("lib/surrogate-stage-context.ts")
+        const generatedStagesSource = readSource("lib/constants/stages.generated.ts")
 
         expect(taskTypesSource).toContain("export type { TaskListItem }")
         expect(taskTypesSource).not.toContain("export type TaskType")
@@ -294,6 +295,9 @@ describe("React regression guards (source)", () => {
         expect(taskApiSource).not.toContain("export type TaskType")
         expect(stageContextSource).not.toContain("export function roleRuleMatchesStage")
         expect(stageContextSource).not.toContain("export function getStageSemanticKey")
+        expect(generatedStagesSource).not.toContain("export type RoleStageRule")
+        expect(generatedStagesSource).not.toContain("ROLE_STAGE_VISIBILITY")
+        expect(generatedStagesSource).not.toContain("ROLE_STAGE_MUTATION")
     })
 
     it("keeps unused public form and analytics API helpers private", () => {

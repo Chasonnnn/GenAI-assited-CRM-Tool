@@ -11,11 +11,6 @@ export type StageDef = {
     stageType: StageType
 }
 
-export type RoleStageRule = {
-    stageTypes: StageType[]
-    extraSlugs: string[]
-}
-
 export const STAGE_DEFS: StageDef[] = [
     {
         "stageKey": "new_unread",
@@ -264,83 +259,4 @@ export const DEFAULT_STAGE_ORDER: string[] = [
     "lost",
     "disqualified"
 ]
-
-export const ROLE_STAGE_VISIBILITY: Record<string, RoleStageRule> = {
-    "admin": {
-        "extraSlugs": [],
-        "stageTypes": [
-            "intake",
-            "post_approval",
-            "paused",
-            "terminal"
-        ]
-    },
-    "case_manager": {
-        "extraSlugs": [
-            "approved",
-            "lost",
-            "disqualified"
-        ],
-        "stageTypes": [
-            "post_approval",
-            "paused"
-        ]
-    },
-    "developer": {
-        "extraSlugs": [],
-        "stageTypes": [
-            "intake",
-            "post_approval",
-            "paused",
-            "terminal"
-        ]
-    },
-    "intake_specialist": {
-        "extraSlugs": [],
-        "stageTypes": [
-            "intake",
-            "paused",
-            "terminal"
-        ]
-    }
-}
-
-export const ROLE_STAGE_MUTATION: Record<string, RoleStageRule> = {
-    "admin": {
-        "extraSlugs": [],
-        "stageTypes": [
-            "intake",
-            "post_approval",
-            "paused",
-            "terminal"
-        ]
-    },
-    "case_manager": {
-        "extraSlugs": [
-            "lost",
-            "disqualified"
-        ],
-        "stageTypes": [
-            "post_approval",
-            "paused"
-        ]
-    },
-    "developer": {
-        "extraSlugs": [],
-        "stageTypes": [
-            "intake",
-            "post_approval",
-            "paused",
-            "terminal"
-        ]
-    },
-    "intake_specialist": {
-        "extraSlugs": [],
-        "stageTypes": [
-            "intake",
-            "paused",
-            "terminal"
-        ]
-    }
-}
 

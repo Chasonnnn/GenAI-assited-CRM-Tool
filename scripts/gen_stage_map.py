@@ -20,7 +20,6 @@ os.environ.setdefault(
 sys.path.insert(0, str(API_ROOT))
 
 from app.core import stage_definitions  # noqa: E402
-from app.core import stage_rules  # noqa: E402
 
 
 def _stage_defs() -> list[dict[str, object]]:
@@ -38,25 +37,10 @@ def _stage_defs() -> list[dict[str, object]]:
     ]
 
 
-def _role_rules(
-    raw_rules: dict[str, dict[str, list[str]]],
-) -> dict[str, dict[str, list[str]]]:
-    return {
-        role: {
-            "stageTypes": rules["stage_types"],
-            "extraSlugs": rules.get("extra_slugs", []),
-        }
-        for role, rules in raw_rules.items()
-    }
-
-
 def main() -> None:
     stage_defs = _stage_defs()
     stage_type_map = dict(stage_definitions.STAGE_TYPE_MAP)
     stage_order = list(stage_definitions.DEFAULT_STAGE_ORDER)
-
-    role_visibility = _role_rules(stage_rules.ROLE_STAGE_VISIBILITY)
-    role_mutation = _role_rules(stage_rules.ROLE_STAGE_MUTATION)
 
     stage_types = sorted({stage["stageType"] for stage in stage_defs})
     stage_type_union = (
@@ -76,20 +60,11 @@ export type StageDef = {{
     stageType: StageType
 }}
 
-export type RoleStageRule = {{
-    stageTypes: StageType[]
-    extraSlugs: string[]
-}}
-
 export const STAGE_DEFS: StageDef[] = {json.dumps(stage_defs, indent=4)}
 
 export const STAGE_TYPE_MAP: Record<string, StageType> = {json.dumps(stage_type_map, indent=4, sort_keys=True)}
 
 export const DEFAULT_STAGE_ORDER: string[] = {json.dumps(stage_order, indent=4)}
-
-export const ROLE_STAGE_VISIBILITY: Record<string, RoleStageRule> = {json.dumps(role_visibility, indent=4, sort_keys=True)}
-
-export const ROLE_STAGE_MUTATION: Record<string, RoleStageRule> = {json.dumps(role_mutation, indent=4, sort_keys=True)}
 """
 
     WEB_OUT.parent.mkdir(parents=True, exist_ok=True)
