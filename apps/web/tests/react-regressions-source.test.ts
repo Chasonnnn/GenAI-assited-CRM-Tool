@@ -444,9 +444,13 @@ describe("React regression guards (source)", () => {
     })
 
     it("destructures navigation methods in smaller operational pages", () => {
+        const appLinkSource = readSource("components/app-link.tsx")
         const welcomeSource = readSource("app/(app)/welcome/page.tsx")
         const ticketsSource = readSource("app/(app)/tickets/page.tsx")
 
+        expect(appLinkSource).toContain("const { push, replace: replaceRoute } = useRouter()")
+        expect(appLinkSource).toContain("replaceRoute(targetHref")
+        expect(appLinkSource).toContain("push(targetHref")
         expect(welcomeSource).toContain("const { push, replace } = useRouter()")
         expect(welcomeSource).toContain('push("/dashboard")')
         expect(welcomeSource).toContain('replace("/dashboard")')
@@ -458,6 +462,9 @@ describe("React regression guards (source)", () => {
         expect(welcomeSource).not.toContain("router.replace(")
         expect(ticketsSource).not.toContain("const router = useRouter()")
         expect(ticketsSource).not.toContain("router.push(")
+        expect(appLinkSource).not.toContain("const router = useRouter()")
+        expect(appLinkSource).not.toContain("router.push(")
+        expect(appLinkSource).not.toContain("router.replace(")
     })
 
     it("uses stable content-derived keys in the AI builder", () => {
@@ -624,6 +631,8 @@ describe("React regression guards (source)", () => {
         const unassignedSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
         const activityTimelineTestSource = readSource("tests/activity-timeline.test.tsx")
         const dateRangePickerTestSource = readSource("tests/date-range-picker.test.tsx")
+        const dateKeysSource = readSource("lib/utils/date-keys.ts")
+        const formattersSource = readSource("lib/formatters.ts")
 
         expect(unifiedCalendarSource).toContain("clientDateFormatter = useMemo(")
         expect(unifiedCalendarSource).toContain("clientTimeFormatter = useMemo(")
@@ -637,6 +646,8 @@ describe("React regression guards (source)", () => {
         expect(unassignedSource).toContain("const unassignedDateFormatter = new Intl.DateTimeFormat")
         expect(activityTimelineTestSource).toContain("const activityTimestampFormatterForTest = new Intl.DateTimeFormat")
         expect(dateRangePickerTestSource).toContain("const shortDateFormatter = new Intl.DateTimeFormat")
+        expect(dateKeysSource).toContain('const formatter = Intl.DateTimeFormat("en-CA", {')
+        expect(formattersSource).toContain("const formatter = Intl.DateTimeFormat(undefined, options)")
         expect(activityTimelineSource).not.toMatch(/function formatActivityTimestamp[\s\S]*new Intl\.DateTimeFormat/)
         expect(aiStudioSource).not.toMatch(/function formatDraftDate[\s\S]*new Intl\.DateTimeFormat/)
         expect(unassignedSource).not.toMatch(/function formatDate[\s\S]*new Intl\.DateTimeFormat/)

@@ -61,7 +61,7 @@ function AppLink({
   ref,
   ...props
 }: AppLinkProps) {
-  const router = useRouter()
+  const { push, replace: replaceRoute } = useRouter()
   const handleClick = React.useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
       onClick?.(event)
@@ -101,15 +101,15 @@ function AppLink({
       event.preventDefault()
       if (targetUrl.origin === window.location.origin) {
         if (replace) {
-          router.replace(targetHref, scroll === undefined ? undefined : { scroll })
+          replaceRoute(targetHref, scroll === undefined ? undefined : { scroll })
         } else {
-          router.push(targetHref, scroll === undefined ? undefined : { scroll })
+          push(targetHref, scroll === undefined ? undefined : { scroll })
         }
       } else {
         window.location.assign(targetHref)
       }
     },
-    [onClick, href, target, download, fallbackMode, replace, router, scroll]
+    [onClick, href, target, download, fallbackMode, replace, replaceRoute, push, scroll]
   )
 
   const linkProps = {

@@ -23,7 +23,7 @@ function getDateFormatter(options: Intl.DateTimeFormatOptions | undefined): Intl
   const cached = dateFormatterCache.get(cacheKey)
   if (cached) return cached
 
-  const formatter = new Intl.DateTimeFormat(undefined, options)
+  const formatter = Intl.DateTimeFormat(undefined, options)
   dateFormatterCache.set(cacheKey, formatter)
   return formatter
 }

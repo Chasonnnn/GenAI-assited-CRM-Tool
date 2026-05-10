@@ -8,7 +8,7 @@ function getDateKeyFormatter(timezone: string): Intl.DateTimeFormat {
     const cached = dateKeyFormatters.get(timezone)
     if (cached) return cached
 
-    const formatter = new Intl.DateTimeFormat("en-CA", {
+    const formatter = Intl.DateTimeFormat("en-CA", {
         timeZone: timezone,
         year: "numeric",
         month: "2-digit",
