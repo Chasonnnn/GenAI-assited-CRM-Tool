@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.20...surrogacy-crm-platform-v0.91.21) (2026-05-10)
+
+
+### Features
+
+* Add AI Studio samples gallery workflow ([6bd0c4c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bd0c4ce0a54de6a2af6e51530df4635185b17a8))
+* Support AI Studio reference images ([3cad381](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3cad3810204eda609a3c18d6129e860a17d60c61))
+
 ## [0.91.20](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.19...surrogacy-crm-platform-v0.91.20) (2026-05-10)
 
 
