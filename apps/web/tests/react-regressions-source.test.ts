@@ -1133,6 +1133,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("React.useEffect(() => {\n        setValue(defaultValue ?? \"\")")
     })
 
+    it("uses named task list components instead of render functions", () => {
+        const source = readSource("components/tasks/TasksListView.tsx")
+
+        expect(source).toContain("function TaskListItemRow(")
+        expect(source).toContain("function TaskDueSection(")
+        expect(source).not.toContain("const renderTaskItem =")
+        expect(source).not.toContain("const renderSection =")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
