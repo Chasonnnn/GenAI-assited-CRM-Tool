@@ -20,15 +20,13 @@ import {
     type AiMapRequest,
     type AiMapResponse,
     type ImportApprovalItem,
-    type ImportSubmitResponse,
-    type ImportApprovalResponse,
     type ImportActionResponse,
 } from '@/lib/api/import'
 import type { SurrogateSource } from '@/lib/types/surrogate'
 import { surrogateKeys } from './use-surrogates'
 
 // Re-export types for convenience
-export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportSubmitResponse, ImportApprovalResponse, ImportActionResponse }
+export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportActionResponse }
 
 // Query keys
 const importKeys = {

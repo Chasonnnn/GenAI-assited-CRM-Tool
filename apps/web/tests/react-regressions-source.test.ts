@@ -593,6 +593,13 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps unused import hook response type re-exports private", () => {
+        const source = readSource("lib/hooks/use-import.ts")
+
+        expect(source).not.toContain("ImportSubmitResponse")
+        expect(source).not.toContain("ImportApprovalResponse")
+    })
+
     it("keeps label map internals private", () => {
         const surrogateFieldLabelsSource = readSource("lib/constants/surrogate-field-labels.ts")
         const usStatesSource = readSource("lib/constants/us-states.ts")
