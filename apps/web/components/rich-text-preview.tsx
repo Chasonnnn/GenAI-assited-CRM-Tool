@@ -3,7 +3,7 @@
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import TextAlign from "@tiptap/extension-text-align"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 
 import { sanitizeHtml } from "@/lib/utils/sanitize"
 import { cn } from "@/lib/utils"
@@ -23,12 +23,7 @@ function extractPlainText(html: string): string {
 }
 
 export function RichTextPreview({ html, className }: RichTextPreviewProps) {
-    const [mounted, setMounted] = useState(false)
     const sanitizedHtml = sanitizeHtml(html)
-
-    useEffect(() => {
-        setMounted(true)
-    }, [])
 
     const editor = useEditor({
         immediatelyRender: false,
@@ -64,7 +59,7 @@ export function RichTextPreview({ html, className }: RichTextPreviewProps) {
         }
     }, [editor, sanitizedHtml])
 
-    if (!mounted || !editor) {
+    if (!editor) {
         return (
             <div className={cn("text-sm whitespace-pre-wrap text-foreground", className)}>
                 {extractPlainText(sanitizedHtml)}

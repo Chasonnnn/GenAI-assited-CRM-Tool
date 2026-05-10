@@ -73,6 +73,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("document.documentElement.style.setProperty")
     })
 
+    it("keeps RichTextPreview hydration-safe without mount-only state", () => {
+        const source = readSource("components/rich-text-preview.tsx")
+
+        expect(source).not.toContain("const [mounted")
+        expect(source).not.toContain("setMounted(true)")
+        expect(source).toContain("if (!editor)")
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 
