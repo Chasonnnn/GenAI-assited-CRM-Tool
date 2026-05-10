@@ -46,7 +46,7 @@ import {
 } from '@/lib/hooks/use-import'
 import { useCreateBulkTasks } from '@/lib/hooks/use-schedule-parser'
 import { surrogateKeys } from '@/lib/hooks/use-surrogates'
-import { taskKeys } from '@/lib/hooks/use-tasks'
+import { taskKeys, useCreateTaskBatch } from '@/lib/hooks/use-tasks'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
 import { useZapierOutboundTest, useZapierTestLead, zapierKeys } from '@/lib/hooks/use-zapier'
@@ -438,6 +438,27 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: taskKeys.lists(),
         })
+    })
+
+    it('refreshes task lists and linked surrogate activity once after batch task creation', () => {
+        useCreateTaskBatch()
+
+        capturedOptions?.onSuccess?.(
+            [
+                { id: 'task-1', surrogate_id: 'surrogate-1' },
+                { id: 'task-2', surrogate_id: 'surrogate-1' },
+                { id: 'task-3', surrogate_id: null },
+            ],
+            []
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: taskKeys.lists(),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: surrogateKeys.activity('surrogate-1'),
+        })
+        expect(invalidateQueries).toHaveBeenCalledTimes(2)
     })
 
     it('refreshes surrogate CRM surfaces after creating bulk AI tasks', () => {

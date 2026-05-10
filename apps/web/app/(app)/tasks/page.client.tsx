@@ -16,7 +16,7 @@ import { TasksListView } from "@/components/tasks/TasksListView"
 import { TasksApprovalsSection } from "@/components/tasks/TasksApprovalsSection"
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
 import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDialog"
-import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useDeleteTask, useBulkCompleteTasks } from "@/lib/hooks/use-tasks"
+import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useCreateTaskBatch, useDeleteTask, useBulkCompleteTasks } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
 import { usePendingImportApprovals } from "@/lib/hooks/use-import"
 import { useAuth } from "@/lib/auth-context"
@@ -213,6 +213,7 @@ export default function TasksPage() {
     const bulkCompleteTasks = useBulkCompleteTasks()
     const updateTask = useUpdateTask()
     const createTask = useCreateTask()
+    const createTaskBatch = useCreateTaskBatch()
     const deleteTask = useDeleteTask()
 
     // Set AI context when editing a task, clear when not
@@ -308,9 +309,7 @@ export default function TasksPage() {
             return
         }
 
-        for (const date of dates) {
-            await createTask.mutateAsync(buildPayload(format(date, "yyyy-MM-dd")))
-        }
+        await createTaskBatch.mutateAsync(dates.map((date) => buildPayload(format(date, "yyyy-MM-dd"))))
     }
 
     const isLoading = loadingIncomplete
@@ -505,7 +504,7 @@ export default function TasksPage() {
                     open={addTaskDialogOpen}
                     onOpenChange={setAddTaskDialogOpen}
                     onSubmit={handleAddTask}
-                    isPending={createTask.isPending}
+                    isPending={createTask.isPending || createTaskBatch.isPending}
                 />
             </div>
         </div>

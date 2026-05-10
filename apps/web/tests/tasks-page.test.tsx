@@ -42,6 +42,7 @@ const mockCompleteTask = vi.fn()
 const mockUncompleteTask = vi.fn()
 const mockUpdateTask = vi.fn()
 const mockCreateTask = vi.fn()
+const mockCreateTaskBatch = vi.fn()
 const mockDeleteTask = vi.fn()
 const mockBulkCompleteTasks = vi.fn()
 const mockResolveApproval = vi.fn()
@@ -62,6 +63,7 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
     useUncompleteTask: () => ({ mutateAsync: mockUncompleteTask }),
     useUpdateTask: () => ({ mutateAsync: mockUpdateTask }),
     useCreateTask: () => ({ mutateAsync: mockCreateTask, isPending: false }),
+    useCreateTaskBatch: () => ({ mutateAsync: mockCreateTaskBatch, isPending: false }),
     useDeleteTask: () => ({ mutateAsync: mockDeleteTask, isPending: false }),
     useBulkCompleteTasks: () => ({ mutateAsync: mockBulkCompleteTasks, isPending: false }),
     useResolveWorkflowApproval: () => ({ mutateAsync: mockResolveApproval, isPending: false }),
@@ -170,6 +172,8 @@ describe('TasksPage', () => {
         })
         mockCompleteTask.mockReset()
         mockUncompleteTask.mockReset()
+        mockCreateTask.mockReset()
+        mockCreateTaskBatch.mockReset()
         mockBulkCompleteTasks.mockReset()
         mockResolveApproval.mockReset()
         mockApproveImport.mockReset()
@@ -263,6 +267,49 @@ describe('TasksPage', () => {
         await waitFor(() => {
             expect(mockBulkCompleteTasks).toHaveBeenCalledWith(['t1', 't2'])
         })
+    })
+
+    it('creates recurring tasks with the batch task mutation', async () => {
+        mockCreateTaskBatch.mockResolvedValue([])
+
+        render(<TasksPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add Task' }))
+        fireEvent.change(screen.getByLabelText('Title *'), {
+            target: { value: 'Weekly check-in' },
+        })
+        fireEvent.change(screen.getByLabelText('Due Date'), {
+            target: { value: '2026-05-01' },
+        })
+        fireEvent.click(screen.getByRole('combobox', { name: 'Repeat' }))
+        const weeklyOption = await screen.findByRole('option', { name: 'Weekly' })
+        fireEvent.mouseMove(weeklyOption)
+        fireEvent.click(weeklyOption)
+        fireEvent.change(await screen.findByLabelText('Repeat Until'), {
+            target: { value: '2026-05-15' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Create Task' }))
+
+        await waitFor(() => {
+            expect(mockCreateTaskBatch).toHaveBeenCalledWith([
+                {
+                    title: 'Weekly check-in',
+                    task_type: 'other',
+                    due_date: '2026-05-01',
+                },
+                {
+                    title: 'Weekly check-in',
+                    task_type: 'other',
+                    due_date: '2026-05-08',
+                },
+                {
+                    title: 'Weekly check-in',
+                    task_type: 'other',
+                    due_date: '2026-05-15',
+                },
+            ])
+        })
+        expect(mockCreateTask).not.toHaveBeenCalled()
     })
 })
 

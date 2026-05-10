@@ -18,7 +18,7 @@ export const taskKeys = {
 
 function invalidateSurrogateActivity(queryClient: ReturnType<typeof useQueryClient>, surrogateId?: string | null) {
     if (!surrogateId) return;
-    queryClient.invalidateQueries({ queryKey: [...surrogateKeys.detail(surrogateId), 'activity'] });
+    queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
 }
 
 /**
@@ -56,6 +56,29 @@ export function useCreateTask() {
         onSuccess: (createdTask) => {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             invalidateSurrogateActivity(queryClient, createdTask.surrogate_id);
+        },
+    });
+}
+
+/**
+ * Create a bounded batch of tasks through the standard task API and refresh caches once.
+ */
+export function useCreateTaskBatch() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (tasks: tasksApi.TaskCreatePayload[]) =>
+            Promise.all(tasks.map((task) => tasksApi.createTask(task))),
+        onSuccess: (createdTasks) => {
+            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            const surrogateIds = new Set(
+                createdTasks
+                    .map((task) => task.surrogate_id)
+                    .filter((surrogateId): surrogateId is string => Boolean(surrogateId))
+            );
+            for (const surrogateId of surrogateIds) {
+                invalidateSurrogateActivity(queryClient, surrogateId);
+            }
         },
     });
 }

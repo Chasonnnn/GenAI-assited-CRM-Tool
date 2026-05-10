@@ -11,6 +11,7 @@ import {
     useCompleteTask,
     useUncompleteTask,
     useCreateTask,
+    useCreateTaskBatch,
     useUpdateTask,
     useDeleteTask,
 } from "@/lib/hooks/use-tasks"
@@ -40,6 +41,7 @@ export default function SurrogateTasksPage() {
     const completeTaskMutation = useCompleteTask()
     const uncompleteTaskMutation = useUncompleteTask()
     const createTaskMutation = useCreateTask()
+    const createTaskBatchMutation = useCreateTaskBatch()
     const updateTaskMutation = useUpdateTask()
     const deleteTaskMutation = useDeleteTask()
 
@@ -83,9 +85,7 @@ export default function SurrogateTasksPage() {
             return
         }
 
-        for (const date of dates) {
-            await createTaskMutation.mutateAsync(buildPayload(format(date, "yyyy-MM-dd")))
-        }
+        await createTaskBatchMutation.mutateAsync(dates.map((date) => buildPayload(format(date, "yyyy-MM-dd"))))
     }
 
     const handleTaskClick = (task: TaskListItem) => {
@@ -119,7 +119,7 @@ export default function SurrogateTasksPage() {
                 open={addTaskDialogOpen}
                 onOpenChange={setAddTaskDialogOpen}
                 onSubmit={handleAddTask}
-                isPending={createTaskMutation.isPending}
+                isPending={createTaskMutation.isPending || createTaskBatchMutation.isPending}
                 surrogateName={surrogateData?.full_name || "this surrogate"}
             />
             <TaskEditModal

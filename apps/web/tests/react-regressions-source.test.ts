@@ -1149,6 +1149,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const renderReviewValue =")
     })
 
+    it("creates recurring tasks through the batch task mutation", () => {
+        const tasksPageSource = readSource("app/(app)/tasks/page.client.tsx")
+        const surrogateTasksSource = readSource("app/(app)/surrogates/[id]/tasks/page.tsx")
+
+        expect(tasksPageSource).toContain("const createTaskBatch = useCreateTaskBatch()")
+        expect(surrogateTasksSource).toContain("const createTaskBatchMutation = useCreateTaskBatch()")
+        expect(tasksPageSource).toContain("createTaskBatch.mutateAsync(")
+        expect(surrogateTasksSource).toContain("createTaskBatchMutation.mutateAsync(")
+        expect(tasksPageSource).not.toContain("for (const date of dates) {\n            await createTask.mutateAsync")
+        expect(surrogateTasksSource).not.toContain("for (const date of dates) {\n            await createTaskMutation.mutateAsync")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
