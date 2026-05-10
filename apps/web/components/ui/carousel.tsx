@@ -92,6 +92,5 @@ function Carousel({
 }
 
 export {
-  type CarouselApi,
   Carousel,
 }

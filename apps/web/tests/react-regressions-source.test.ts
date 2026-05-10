@@ -307,6 +307,7 @@ describe("React regression guards (source)", () => {
         expect(carouselSource).not.toContain("CarouselPrevious")
         expect(carouselSource).not.toContain("CarouselNext")
         expect(carouselSource).not.toContain("useCarousel")
+        expect(carouselSource).not.toContain("type CarouselApi,")
         expect(chartSource).not.toMatch(/export \{[\s\S]*ChartStyle/)
         expect(fieldSource).not.toContain("FieldLegend")
         expect(fieldSource).not.toContain("FieldSeparator")
