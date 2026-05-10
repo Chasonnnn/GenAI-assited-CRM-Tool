@@ -103,12 +103,15 @@ describe("React regression guards (source)", () => {
     it("keeps palette search and stage keyword matching efficient", () => {
         const paletteSource = readSource("components/forms/FormBuilderPalette.tsx")
         const stageColorSource = readSource("lib/pipeline-stage-colors.ts")
+        const pipelineRemapSource = readSource("lib/pipeline-reset-remaps.ts")
 
         expect(paletteSource).toContain("escapeRegExp")
         expect(paletteSource).toContain("searchPattern.test")
         expect(paletteSource).not.toContain(".toLowerCase().indexOf(normalizedSearch)")
         expect(stageColorSource).toContain("text.includes(keyword)")
         expect(stageColorSource).not.toContain("text.indexOf(keyword)")
+        expect(pipelineRemapSource).toContain("for (const candidate of candidates)")
+        expect(pipelineRemapSource).not.toMatch(/candidates\s*\.filter\(\(candidate\) => candidate\.stage_key\)\s*\.map/)
     })
 
     it("batches support-session popup styles", () => {
