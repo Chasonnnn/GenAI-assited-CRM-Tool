@@ -547,19 +547,12 @@ function normalizeFormMappingOptions(payload: unknown): FormSurrogateFieldOption
 }
 
 export async function listFormMappingOptions(): Promise<FormSurrogateFieldOption[]> {
-    const endpointCandidates = ["/forms/mapping-options"]
-
-    for (const endpoint of endpointCandidates) {
-        try {
-            const response = await api.get<unknown>(endpoint)
-            const normalized = normalizeFormMappingOptions(response)
-            if (normalized.length > 0) return normalized
-        } catch {
-            // Continue trying candidates; caller applies fallback defaults.
-        }
+    try {
+        const response = await api.get<unknown>("/forms/mapping-options")
+        return normalizeFormMappingOptions(response)
+    } catch {
+        return []
     }
-
-    return []
 }
 
 export function setFormMappings(formId: string, mappings: FormFieldMappingItem[]): Promise<FormFieldMappingItem[]> {

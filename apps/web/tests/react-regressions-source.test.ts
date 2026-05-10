@@ -263,6 +263,14 @@ describe("React regression guards (source)", () => {
         expect(analyticsApiSource).not.toContain("exportAnalyticsPDF")
     })
 
+    it("keeps form mapping options on a direct endpoint request", () => {
+        const source = readSource("lib/api/forms.ts")
+
+        expect(source).toContain('api.get<unknown>("/forms/mapping-options")')
+        expect(source).not.toContain("const endpointCandidates")
+        expect(source).not.toContain("for (const endpoint of endpointCandidates)")
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")
