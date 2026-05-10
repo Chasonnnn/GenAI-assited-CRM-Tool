@@ -222,6 +222,14 @@ describe("React regression guards (source)", () => {
         expect(uploadFileSource).toContain("flex items-center gap-2")
     })
 
+    it("uses reducer state for the match task form", () => {
+        const source = readSource("components/matches/AddTaskDialog.tsx")
+
+        expect(source).toContain("useReducer")
+        expect(source).toContain("taskFormReducer")
+        expect(source).not.toContain("useState")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

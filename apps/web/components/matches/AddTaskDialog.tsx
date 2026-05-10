@@ -4,7 +4,7 @@
  * AddTaskDialog - Dialog for creating tasks for Surrogate or IP from Match detail page
  */
 
-import { useState } from "react"
+import { useReducer } from "react"
 import {
     Dialog,
     DialogContent,
@@ -42,6 +42,49 @@ export interface TaskFormData {
     due_date?: string
 }
 
+type TaskTarget = "match" | "surrogate" | "ip"
+
+type TaskFormState = {
+    target: TaskTarget
+    title: string
+    description: string
+    taskType: TaskFormData["task_type"]
+    dueDate: string
+}
+
+type TaskFormAction =
+    | { type: "set_target"; target: TaskTarget }
+    | { type: "set_title"; title: string }
+    | { type: "set_description"; description: string }
+    | { type: "set_task_type"; taskType: TaskFormData["task_type"] }
+    | { type: "set_due_date"; dueDate: string }
+    | { type: "reset" }
+
+const INITIAL_TASK_FORM_STATE: TaskFormState = {
+    target: "match",
+    title: "",
+    description: "",
+    taskType: "other",
+    dueDate: "",
+}
+
+function taskFormReducer(state: TaskFormState, action: TaskFormAction): TaskFormState {
+    switch (action.type) {
+        case "set_target":
+            return { ...state, target: action.target }
+        case "set_title":
+            return { ...state, title: action.title }
+        case "set_description":
+            return { ...state, description: action.description }
+        case "set_task_type":
+            return { ...state, taskType: action.taskType }
+        case "set_due_date":
+            return { ...state, dueDate: action.dueDate }
+        case "reset":
+            return INITIAL_TASK_FORM_STATE
+    }
+}
+
 const TASK_TYPES = [
     { value: "meeting", label: "Appointment" },
     { value: "follow_up", label: "Follow Up" },
@@ -58,39 +101,27 @@ export function AddTaskDialog({
     surrogateName,
     ipName,
 }: AddTaskDialogProps) {
-    const [target, setTarget] = useState<"match" | "surrogate" | "ip">("match")
-    const [title, setTitle] = useState("")
-    const [description, setDescription] = useState("")
-    const [taskType, setTaskType] = useState<TaskFormData["task_type"]>("other")
-    const [dueDate, setDueDate] = useState("")
+    const [formState, dispatchForm] = useReducer(taskFormReducer, INITIAL_TASK_FORM_STATE)
 
     const handleSubmit = async () => {
-        if (!title.trim()) return
+        const title = formState.title.trim()
+        if (!title) return
 
-        const trimmedDescription = description.trim()
-        await onSubmit(target, {
-            title: title.trim(),
-            task_type: taskType,
+        const trimmedDescription = formState.description.trim()
+        await onSubmit(formState.target, {
+            title,
+            task_type: formState.taskType,
             ...(trimmedDescription ? { description: trimmedDescription } : {}),
-            ...(dueDate ? { due_date: dueDate } : {}),
+            ...(formState.dueDate ? { due_date: formState.dueDate } : {}),
         })
 
-        // Reset form
-        setTitle("")
-        setDescription("")
-        setTaskType("other")
-        setDueDate("")
-        setTarget("match")
+        dispatchForm({ type: "reset" })
         onOpenChange(false)
     }
 
     const handleClose = (isOpen: boolean) => {
         if (!isOpen) {
-            setTitle("")
-            setDescription("")
-            setTaskType("other")
-            setDueDate("")
-            setTarget("match")
+            dispatchForm({ type: "reset" })
         }
         onOpenChange(isOpen)
     }
@@ -110,8 +141,10 @@ export function AddTaskDialog({
                     <div className="space-y-2">
                         <Label id="match-task-target-label">Assign to</Label>
                         <RadioGroup
-                            value={target}
-                            onValueChange={(v) => setTarget(v as "match" | "surrogate" | "ip")}
+                            value={formState.target}
+                            onValueChange={(v) =>
+                                dispatchForm({ type: "set_target", target: v as TaskTarget })
+                            }
                             aria-labelledby="match-task-target-label"
                             className="flex flex-col gap-3"
                         >
@@ -141,8 +174,10 @@ export function AddTaskDialog({
                         <Label htmlFor="task-title">Title *</Label>
                         <Input
                             id="task-title"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
+                            value={formState.title}
+                            onChange={(e) =>
+                                dispatchForm({ type: "set_title", title: e.target.value })
+                            }
                             placeholder="Task title..."
                             maxLength={255}
                         />
@@ -151,11 +186,19 @@ export function AddTaskDialog({
                     {/* Task Type */}
                     <div className="space-y-2">
                         <Label htmlFor="match-task-type">Type</Label>
-                        <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskFormData["task_type"])}>
+                        <Select
+                            value={formState.taskType}
+                            onValueChange={(v) =>
+                                dispatchForm({
+                                    type: "set_task_type",
+                                    taskType: v as TaskFormData["task_type"],
+                                })
+                            }
+                        >
                             <SelectTrigger id="match-task-type">
                                 <SelectValue>
                                     {(value: string | null) => {
-                                        const type = TASK_TYPES.find(t => t.value === value)
+                                        const type = TASK_TYPES.find((taskType) => taskType.value === value)
                                         return type?.label ?? "Select type"
                                     }}
                                 </SelectValue>
@@ -176,8 +219,10 @@ export function AddTaskDialog({
                         <Input
                             id="task-due-date"
                             type="date"
-                            value={dueDate}
-                            onChange={(e) => setDueDate(e.target.value)}
+                            value={formState.dueDate}
+                            onChange={(e) =>
+                                dispatchForm({ type: "set_due_date", dueDate: e.target.value })
+                            }
                         />
                     </div>
 
@@ -186,8 +231,13 @@ export function AddTaskDialog({
                         <Label htmlFor="task-description">Description</Label>
                         <Textarea
                             id="task-description"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
+                            value={formState.description}
+                            onChange={(e) =>
+                                dispatchForm({
+                                    type: "set_description",
+                                    description: e.target.value,
+                                })
+                            }
                             placeholder="Optional task details..."
                             rows={3}
                             maxLength={2000}
@@ -205,7 +255,7 @@ export function AddTaskDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={isPending || !title.trim()}
+                        disabled={isPending || !formState.title.trim()}
                     >
                         {isPending ? "Creating..." : "Create Task"}
                     </Button>
