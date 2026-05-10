@@ -31,6 +31,7 @@ import {
     Bell,
     Zap,
     Bot,
+    Sparkles,
     ChevronRightIcon,
     HeartHandshake,
     Search,
@@ -87,6 +88,12 @@ const aiNavigation = {
     title: "AI Assistant",
     url: "/ai-assistant",
     icon: Bot,
+}
+
+const aiStudioNavigation = {
+    title: "AI Studio Preview",
+    url: "/ai-studio",
+    icon: Sparkles,
 }
 
 const tasksNavigation = {
@@ -395,6 +402,14 @@ function AppSidebarContent({
                         </div>
                     )}
 
+                    {user?.ai_enabled && (
+                        <SidebarNavLink
+                            item={aiStudioNavigation}
+                            active={activeState.navItem(aiStudioNavigation)}
+                            isCollapsed={collapsed}
+                        />
+                    )}
+
                     {reportsVisible && (
                         <SidebarNavLink
                             item={reportsNavigation}
@@ -404,13 +419,11 @@ function AppSidebarContent({
                     )}
 
                     {user?.ai_enabled && (
-                        <>
-                            <SidebarNavLink
-                                item={aiNavigation}
-                                active={activeState.navItem(aiNavigation)}
-                                isCollapsed={collapsed}
-                            />
-                        </>
+                        <SidebarNavLink
+                            item={aiNavigation}
+                            active={activeState.navItem(aiNavigation)}
+                            isCollapsed={collapsed}
+                        />
                     )}
 
                     <button

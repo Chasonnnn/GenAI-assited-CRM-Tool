@@ -298,6 +298,36 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.getByLabelText("User menu")).toBeInTheDocument()
     })
 
+    it("places AI Studio Preview directly under Automation when AI access is enabled", async () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                user_id: "user-ai",
+                role: "admin",
+                display_name: "AI User",
+                email: "ai@test.com",
+                org_name: "Org",
+                org_display_name: "Org",
+                ai_enabled: true,
+            },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_reports"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        const automation = await screen.findByRole("button", { name: "Automation" })
+        const studio = screen.getByRole("link", { name: "AI Studio Preview" })
+        const reports = screen.getByRole("link", { name: "Reports" })
+
+        expect(automation.compareDocumentPosition(studio)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+        expect(studio.compareDocumentPosition(reports)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    })
+
     it("hides the visual Navigation heading when collapsed but keeps nav aria-label", async () => {
         document.cookie = "sidebar_state=false"
         mockUseEffectivePermissions.mockReturnValue({
