@@ -49,28 +49,39 @@ import {
 } from "@/lib/hooks/use-forms"
 import { useOrgSignature } from "@/lib/hooks/use-signature"
 
+function collectCriticalFieldValues(options: FormSurrogateFieldOption[]): string[] {
+    const values: string[] = []
+    for (const option of options) {
+        if (option.is_critical) values.push(option.value)
+    }
+    return values
+}
+
 function getMissingCriticalMappings(
     pages: BuilderFormPage[],
     mappingOptions: FormSurrogateFieldOption[],
 ): FormSurrogateFieldOption[] {
     const mappedFields = new Set(buildMappings(pages).map((mapping) => mapping.surrogate_field))
     const fieldKeys = new Set(pages.flatMap((page) => page.fields.map((field) => field.id)))
-    const criticalMappings = mappingOptions.filter((option) => option.is_critical)
+    const mappingCriticalValues = collectCriticalFieldValues(mappingOptions)
     const criticalValues =
-        criticalMappings.length > 0
-            ? criticalMappings.map((option) => option.value)
-            : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.filter((option) => option.is_critical).map((option) => option.value)
+        mappingCriticalValues.length > 0
+            ? mappingCriticalValues
+            : collectCriticalFieldValues(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS)
     const optionByValue = new Map(mappingOptions.map((option) => [option.value, option]))
     const fallbackByValue = new Map(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.map((option) => [option.value, option]))
+    const missingMappings: FormSurrogateFieldOption[] = []
 
-    return criticalValues
-        .filter((value) => !mappedFields.has(value) && !fieldKeys.has(value))
-        .map(
-            (value) =>
-                optionByValue.get(value) ??
+    for (const value of criticalValues) {
+        if (mappedFields.has(value) || fieldKeys.has(value)) continue
+        missingMappings.push(
+            optionByValue.get(value) ??
                 fallbackByValue.get(value) ??
                 ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
         )
+    }
+
+    return missingMappings
 }
 
 function getMissingLeadCaptureMappings(

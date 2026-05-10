@@ -320,6 +320,7 @@ describe("React regression guards (source)", () => {
     it("uses single-pass list normalization for workflow and form option lists", () => {
         const workflowSharedSource = readSource("components/automation/workflow-editor/shared.tsx")
         const formBuilderSource = readSource("components/forms/builder/FormBuilderWorkspace.tsx")
+        const automationFormBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")
 
         expect(workflowSharedSource).toContain("function toTrimmedList")
         expect(workflowSharedSource).toContain("function splitCommaList")
@@ -333,6 +334,7 @@ describe("React regression guards (source)", () => {
         expect(workflowSharedSource).not.toMatch(/\.map\(\(value\) => value\.trim\(\)\)\s*\.filter\(Boolean\)/)
         expect(workflowSharedSource).not.toMatch(/\.filter\(\(option\) => selectedValues\.has\(option\.value\)\)\s*\.map/)
         expect(formBuilderSource).not.toMatch(/\.map\(\(entry\) => entry\.trim\(\)\)\s*\.filter\(Boolean\)/)
+        expect(automationFormBuilderSource).not.toMatch(/\.filter\(\(option\) => option\.is_critical\)\s*\.map/)
     })
 
     it("uses single-pass activity timeline list derivation", () => {
