@@ -54,19 +54,21 @@ export function BulkChangeStageModal({
         [stages],
     )
 
-    React.useEffect(() => {
-        if (open) {
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen) {
             setTargetStageId("")
         }
-    }, [open])
+        onOpenChange(nextOpen)
+    }
 
     const handleSubmit = async () => {
         if (!targetStageId) return
         await onSubmit(targetStageId)
+        setTargetStageId("")
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Change stage</DialogTitle>
@@ -108,7 +110,7 @@ export function BulkChangeStageModal({
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+                    <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
                         Cancel
                     </Button>
                     <Button onClick={handleSubmit} disabled={isPending || !targetStageId}>
