@@ -200,10 +200,10 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: React.forwardRef((props: Record<string, unknown>, _ref) => {
+    RichTextEditor: function MockRichTextEditor(props: Record<string, unknown>) {
         mockRichTextEditorProps(props)
         return <div data-testid="rich-text-editor" />
-    }),
+    },
 }))
 
 describe("EmailTemplatesPage", () => {

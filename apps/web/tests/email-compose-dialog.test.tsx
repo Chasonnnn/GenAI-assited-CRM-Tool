@@ -148,15 +148,16 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/components/email/EmailAttachmentsPanel", () => ({
-    EmailAttachmentsPanel: React.forwardRef(function MockEmailAttachmentsPanel(
+    EmailAttachmentsPanel: function MockEmailAttachmentsPanel(
         {
             onSelectionChange,
             hideUI,
+            ref,
         }: {
             onSelectionChange: (state: typeof mockAttachmentSelectionState) => void
             hideUI?: boolean
-        },
-        ref: React.ForwardedRef<{ uploadFiles: (files: File[]) => Promise<void> }>
+            ref?: React.Ref<{ uploadFiles: (files: File[]) => Promise<void> }>
+        }
     ) {
         React.useImperativeHandle(ref, () => ({
             uploadFiles: mockUploadFilesFromComposeDrop,
@@ -166,7 +167,7 @@ vi.mock("@/components/email/EmailAttachmentsPanel", () => ({
             onSelectionChange(mockAttachmentSelectionState)
         }, [hideUI, onSelectionChange])
         return <div data-testid="email-attachments-panel" />
-    }),
+    },
 }))
 
 const baseSurrogateData = {

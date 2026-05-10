@@ -21,10 +21,10 @@ vi.mock("sonner", () => ({
 }))
 
 vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: React.forwardRef((props: unknown, _ref) => {
+    RichTextEditor: function MockRichTextEditor(props: unknown) {
         richTextEditorSpy(props)
         return <div data-testid="rich-text-editor" />
-    }),
+    },
 }))
 
 const mockCreate = vi.fn()

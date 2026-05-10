@@ -6,10 +6,10 @@ import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page.clie
 const richTextEditorSpy = vi.fn()
 
 vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: React.forwardRef((props: { content?: string }, _ref) => {
+    RichTextEditor: function MockRichTextEditor(props: { content?: string }) {
         richTextEditorSpy(props)
         return <div data-testid="rich-text-editor" />
-    }),
+    },
 }))
 
 vi.mock("@/components/ops/templates/PublishDialog", () => ({
