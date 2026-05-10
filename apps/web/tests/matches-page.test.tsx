@@ -119,7 +119,7 @@ describe('MatchesPage', () => {
             isLoading: true,
         })
         render(<MatchesPage />)
-        expect(screen.getByText('Loading...')).toBeInTheDocument()
+        expect(screen.getByText('Loading…')).toBeInTheDocument()
     })
 
     it('shows empty state when no matches', () => {
