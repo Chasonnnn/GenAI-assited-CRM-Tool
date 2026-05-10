@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import type { ReactNode } from "react"
+import { format } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -15,7 +17,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Loader2 } from "lucide-react"
-import { format } from "date-fns"
+import { UtcDate } from "@/components/ui/time-display"
 import type { OrganizationDetail } from "@/lib/api/platform"
 
 function DetailRow({
@@ -24,7 +26,7 @@ function DetailRow({
     mono = false,
 }: {
     label: string
-    value: string | null | undefined
+    value: ReactNode
     mono?: boolean
 }) {
     return (
@@ -88,10 +90,7 @@ export function AgencyOverviewTab({
                     <DetailRow label="Name" value={org.name} />
                     <DetailRow label="Slug" value={org.slug} mono />
                     <DetailRow label="Timezone" value={org.timezone} />
-                    <DetailRow
-                        label="Created"
-                        value={format(new Date(org.created_at), "MMMM d, yyyy")}
-                    />
+                    <DetailRow label="Created" value={<UtcDate value={org.created_at} month="long" />} />
                 </CardContent>
             </Card>
 

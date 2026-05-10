@@ -9,7 +9,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { formatDistanceToNow } from "date-fns"
+import { RelativeTime } from "@/components/ui/time-display"
 import type { AdminActionLog } from "@/lib/api/platform"
 
 type AgencyAuditTabProps = {
@@ -51,9 +51,7 @@ export function AgencyAuditTab({ actionLogs }: AgencyAuditTabProps) {
                                         {log.metadata ? JSON.stringify(log.metadata) : "-"}
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
-                                        {formatDistanceToNow(new Date(log.created_at), {
-                                            addSuffix: true,
-                                        })}
+                                        <RelativeTime value={log.created_at} />
                                     </TableCell>
                                 </TableRow>
                             ))}

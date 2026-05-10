@@ -23,7 +23,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Loader2, ShieldOff, UserMinus } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
+import { RelativeTime } from "@/components/ui/time-display"
 import type { OrgMember } from "@/lib/api/platform"
 
 type AgencyUsersTabProps = {
@@ -80,11 +80,7 @@ export function AgencyUsersTab({
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
-                                        {member.last_login_at
-                                            ? formatDistanceToNow(new Date(member.last_login_at), {
-                                                  addSuffix: true,
-                                              })
-                                            : "Never"}
+                                        <RelativeTime value={member.last_login_at} fallback="Never" />
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center justify-end gap-2">

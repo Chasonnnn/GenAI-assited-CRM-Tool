@@ -1,10 +1,10 @@
 "use client"
 
 import { AlertTriangle, Loader2 } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { RelativeTime } from "@/components/ui/time-display"
 import {
     Table,
     TableBody,
@@ -90,9 +90,7 @@ export function AgencyAlertsTab({
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
-                                        {formatDistanceToNow(new Date(alert.last_seen_at), {
-                                            addSuffix: true,
-                                        })}
+                                        <RelativeTime value={alert.last_seen_at} />
                                     </TableCell>
                                     <TableCell>
                                         {alert.status !== "resolved" && (
