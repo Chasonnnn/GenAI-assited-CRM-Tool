@@ -159,6 +159,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("KPICardSkeleton")
     })
 
+    it("uses Next Image for journey, AI studio, and platform branding images", () => {
+        const sources = [
+            readSource("components/surrogates/journey/JourneyPrintView.tsx"),
+            readSource("components/surrogates/journey/MilestoneImageSelector.tsx"),
+            readSource("components/surrogates/journey/JourneyMilestoneCard.tsx"),
+            readSource("app/(app)/ai-studio/page.tsx"),
+            readSource("app/ops/templates/system/[systemKey]/page.client.tsx"),
+        ]
+
+        for (const source of sources) {
+            expect(source).toContain('import Image from "next/image"')
+            expect(source).not.toContain("<img\n")
+        }
+    })
+
     it("imports the API client directly from leaf API modules", () => {
         for (const { path, source } of readApiModuleSources()) {
             expect(source, path).not.toMatch(/from ['"]\.\/index['"]/)

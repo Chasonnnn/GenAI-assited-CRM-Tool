@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState } from "react"
 import { format, parseISO } from "date-fns"
 import { ImageIcon, PencilIcon } from "lucide-react"
@@ -102,13 +103,13 @@ export function JourneyMilestoneCard({
                 )}
             >
                 {imageUrl && !imageError ? (
-                    <img
+                    <Image
                         src={imageUrl}
                         alt={`${milestone.label} milestone`}
                         className="size-full object-cover"
-                        width={320}
-                        height={180}
-                        loading="lazy"
+                        fill
+                        sizes="(min-width: 768px) 320px, 100vw"
+                        unoptimized
                         onError={() => setFailedImageUrl(imageUrl)}
                     />
                 ) : (

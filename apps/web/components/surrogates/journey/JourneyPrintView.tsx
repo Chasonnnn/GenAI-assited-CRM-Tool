@@ -1,3 +1,4 @@
+import Image from "next/image"
 import { format, parseISO } from "date-fns"
 import { InfoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -208,10 +209,13 @@ function JourneyPrintMilestoneCard({
             )}
             <div className="relative mt-4 aspect-[16/9] overflow-hidden rounded-lg bg-stone-100">
                 {imageUrl ? (
-                    <img
+                    <Image
                         src={imageUrl}
                         alt={`${milestone.label} milestone`}
                         className="size-full object-cover"
+                        fill
+                        sizes="(min-width: 768px) 420px, 100vw"
+                        unoptimized
                     />
                 ) : (
                     <MilestonePlaceholder slug={milestone.slug} />

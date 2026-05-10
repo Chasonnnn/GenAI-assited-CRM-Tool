@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { type ChangeEvent, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
@@ -987,10 +988,13 @@ export default function PlatformSystemEmailTemplatePage() {
                         <CardContent className="space-y-3">
                             <div className="flex items-center gap-4">
                                 {logoPreviewUrl ? (
-                                    <img
+                                    <Image
                                         src={logoPreviewUrl}
                                         alt="Platform logo"
-                                        className="h-14 w-auto rounded border"
+                                        className="h-14 w-auto rounded border object-contain"
+                                        width={112}
+                                        height={56}
+                                        unoptimized
                                     />
                                 ) : (
                                     <div className="h-14 w-28 rounded border border-dashed flex items-center justify-center text-xs text-muted-foreground">

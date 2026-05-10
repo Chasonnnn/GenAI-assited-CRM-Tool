@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import {
     AlertCircleIcon,
@@ -203,11 +204,14 @@ function DraftPreview({
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
                 {draft.image_url ? (
-                    <div className="overflow-hidden rounded-lg border bg-muted">
-                        <img
+                    <div className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
+                        <Image
                             alt="Generated social media visual"
                             src={draft.image_url}
-                            className="aspect-square w-full object-cover"
+                            className="size-full object-cover"
+                            fill
+                            sizes="(min-width: 1024px) 420px, 100vw"
+                            unoptimized
                         />
                     </div>
                 ) : (

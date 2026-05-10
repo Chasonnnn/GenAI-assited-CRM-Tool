@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useCallback, useEffect, useState } from "react"
 import { CheckIcon, ImageOffIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
@@ -174,10 +175,13 @@ export function MilestoneImageSelector({
                                                 <Loader2Icon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
                                             </div>
                                         ) : (
-                                            <img
+                                            <Image
                                                 src={url}
                                                 alt={attachment.filename}
                                                 className="size-full object-cover"
+                                                fill
+                                                sizes="96px"
+                                                unoptimized
                                             />
                                         )}
                                         {isSelected && (
