@@ -163,10 +163,6 @@ export async function getZapierSettings(): Promise<ZapierSettings> {
     return api.get<ZapierSettings>('/integrations/zapier/settings');
 }
 
-export async function rotateZapierSecret(): Promise<RotateZapierSecretResponse> {
-    return api.post<RotateZapierSecretResponse>('/integrations/zapier/settings/rotate-secret');
-}
-
 export async function createZapierInboundWebhook(
     payload: ZapierInboundWebhookCreateRequest,
 ): Promise<ZapierInboundWebhookCreateResponse> {

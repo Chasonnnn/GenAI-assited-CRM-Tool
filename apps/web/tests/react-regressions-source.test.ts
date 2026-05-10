@@ -529,6 +529,7 @@ describe("React regression guards (source)", () => {
 
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
+        const hookSource = readSource("lib/hooks/use-zapier.ts")
         const privateZapierTypes = [
             "ZapierSettings",
             "ZapierInboundWebhook",
@@ -549,6 +550,8 @@ describe("React regression guards (source)", () => {
         for (const typeName of privateZapierTypes) {
             expectTypeOrInterfaceNotExported(source, typeName)
         }
+        expect(source).not.toContain("export async function rotateZapierSecret")
+        expect(hookSource).not.toContain("export function useRotateZapierSecret")
     })
 
     it("keeps MFA API response shapes private", () => {

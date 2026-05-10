@@ -16,7 +16,6 @@ const mockConnectGoogleCalendar = vi.fn()
 const mockSyncGoogleCalendarNow = vi.fn()
 const mockConnectGcp = vi.fn()
 const mockDisconnectIntegration = vi.fn()
-const mockZapierRotate = vi.fn()
 const mockZapierInboundCreate = vi.fn()
 const mockZapierInboundRotate = vi.fn()
 const mockZapierInboundUpdate = vi.fn()
@@ -361,7 +360,6 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
         data: zapierSettingsData,
         isLoading: false,
     }),
-    useRotateZapierSecret: () => ({ mutateAsync: mockZapierRotate, isPending: false }),
     useCreateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundCreate, isPending: false }),
     useRotateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundRotate, isPending: false }),
     useUpdateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundUpdate, isPending: false }),

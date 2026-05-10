@@ -19,16 +19,6 @@ export function useZapierSettings() {
     });
 }
 
-export function useRotateZapierSecret() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: zapierApi.rotateZapierSecret,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
-        },
-    });
-}
-
 export function useCreateZapierInboundWebhook() {
     const queryClient = useQueryClient();
     return useMutation({
