@@ -1817,5 +1817,3 @@ export function SurrogatesPageClient() {
         </div>
     )
 }
-
-export default SurrogatesPageClient

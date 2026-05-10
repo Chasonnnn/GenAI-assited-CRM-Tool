@@ -164,6 +164,13 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps route client components on a single public export style", () => {
+        const source = readSource("app/(app)/surrogates/page.client.tsx")
+
+        expect(source).toContain("export function SurrogatesPageClient")
+        expect(source).not.toContain("export default SurrogatesPageClient")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
