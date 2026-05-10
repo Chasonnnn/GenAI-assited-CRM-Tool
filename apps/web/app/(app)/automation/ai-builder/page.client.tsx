@@ -83,6 +83,32 @@ function extractTemplateVariables(text: string): string[] {
     return Array.from(new Set(variables))
 }
 
+function getStableKeyValue(value: unknown): string {
+    if (value === null || value === undefined) return String(value)
+    if (typeof value !== "object") return String(value)
+
+    try {
+        return JSON.stringify(value)
+    } catch {
+        return String(value)
+    }
+}
+
+function getWorkflowMessageKey(message: string): string {
+    return message
+}
+
+function getWorkflowConditionKey(condition: GeneratedWorkflow["conditions"][number]): string {
+    return `${condition.field}:${condition.operator}:${getStableKeyValue(condition.value)}`
+}
+
+function getWorkflowActionKey(action: GeneratedWorkflow["actions"][number]): string {
+    return Object.entries(action)
+        .toSorted(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        .map(([key, value]) => `${key}:${getStableKeyValue(value)}`)
+        .join("|")
+}
+
 export default function AIWorkflowBuilderPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -423,9 +449,9 @@ export default function AIWorkflowBuilderPage() {
                         <div className="space-y-2">
                             <p className="text-sm text-muted-foreground">Try these examples:</p>
                             <div className="flex flex-wrap gap-2">
-                                {suggestionList.slice(0, 3).map((suggestion, i) => (
+                                {suggestionList.slice(0, 3).map((suggestion) => (
                                     <button
-                                        key={i}
+                                        key={suggestion}
                                         onClick={() => handleSuggestionClick(suggestion)}
                                         className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
                                     >
@@ -486,8 +512,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Validation Errors</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {workflowErrors.map((error, i) => (
-                                    <li key={i}>{error}</li>
+                                {workflowErrors.map((error) => (
+                                    <li key={getWorkflowMessageKey(error)}>{error}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
@@ -501,8 +527,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Warnings</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {workflowWarnings.map((warning, i) => (
-                                    <li key={i}>{warning}</li>
+                                {workflowWarnings.map((warning) => (
+                                    <li key={getWorkflowMessageKey(warning)}>{warning}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
@@ -554,8 +580,8 @@ export default function AIWorkflowBuilderPage() {
                                         Conditions ({generatedWorkflow.condition_logic})
                                     </p>
                                     <ul className="space-y-1">
-                                        {generatedWorkflow.conditions.map((cond, i) => (
-                                            <li key={i} className="text-sm">
+                                        {generatedWorkflow.conditions.map((cond) => (
+                                            <li key={getWorkflowConditionKey(cond)} className="text-sm">
                                                 <span className="font-mono bg-background px-1 rounded">{cond.field}</span>
                                                 {" "}{cond.operator}{" "}
                                                 <span className="font-mono bg-background px-1 rounded">
@@ -572,7 +598,7 @@ export default function AIWorkflowBuilderPage() {
                                 <p className="text-sm font-medium text-muted-foreground mb-2">Actions</p>
                                 <ul className="space-y-2">
                                     {generatedWorkflow.actions.map((action, i) => (
-                                        <li key={i} className="flex items-start gap-2">
+                                        <li key={getWorkflowActionKey(action)} className="flex items-start gap-2">
                                             <Badge variant="secondary" className="shrink-0">
                                                 {i + 1}
                                             </Badge>
@@ -634,8 +660,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Validation Errors</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {templateErrors.map((error, i) => (
-                                    <li key={i}>{error}</li>
+                                {templateErrors.map((error) => (
+                                    <li key={getWorkflowMessageKey(error)}>{error}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
@@ -648,8 +674,8 @@ export default function AIWorkflowBuilderPage() {
                         <AlertTitle>Warnings</AlertTitle>
                         <AlertDescription>
                             <ul className="list-disc list-inside space-y-1 mt-2">
-                                {templateWarnings.map((warning, i) => (
-                                    <li key={i}>{warning}</li>
+                                {templateWarnings.map((warning) => (
+                                    <li key={getWorkflowMessageKey(warning)}>{warning}</li>
                                 ))}
                             </ul>
                         </AlertDescription>
