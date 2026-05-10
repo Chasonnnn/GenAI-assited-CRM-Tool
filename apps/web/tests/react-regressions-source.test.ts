@@ -78,7 +78,8 @@ describe("React regression guards (source)", () => {
 
         expect(source).not.toContain("const [mounted")
         expect(source).not.toContain("setMounted(true)")
-        expect(source).toContain("if (!editor)")
+        expect(source).not.toContain("useEditor")
+        expect(source).toContain("TrustedSanitizedHtmlContent")
     })
 
     it("delegates match detail tab rendering to a dedicated component", () => {
