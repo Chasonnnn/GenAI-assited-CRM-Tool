@@ -492,7 +492,7 @@ export default function MetaIntegrationPage() {
 
             <div className="flex-1 space-y-6 p-6">
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <CardHeader className="flex flex-row items-center justify-between gap-y-0">
                         <div>
                             <CardTitle>Connections</CardTitle>
                             <CardDescription>

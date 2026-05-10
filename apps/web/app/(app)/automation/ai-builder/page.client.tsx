@@ -795,7 +795,7 @@ export default function AIWorkflowBuilderPage() {
                 {mode === "workflow" && !generatedWorkflow && !isGenerating && (
                     <Card className="bg-muted/30 border-dashed">
                         <CardContent className="py-8">
-                            <div className="flex flex-col items-center text-center space-y-4">
+                            <div className="flex flex-col items-center text-center gap-y-4">
                                 <div className="size-16 rounded-full bg-teal-500/10 flex items-center justify-center">
                                     <SparklesIcon className="size-8 text-teal-500" />
                                 </div>
@@ -820,7 +820,7 @@ export default function AIWorkflowBuilderPage() {
                 {mode === "email_template" && !generatedTemplate && !isGenerating && (
                     <Card className="bg-muted/30 border-dashed">
                         <CardContent className="py-8">
-                            <div className="flex flex-col items-center text-center space-y-4">
+                            <div className="flex flex-col items-center text-center gap-y-4">
                                 <div className="size-16 rounded-full bg-indigo-500/10 flex items-center justify-center">
                                     <MailIcon className="size-8 text-indigo-500" />
                                 </div>

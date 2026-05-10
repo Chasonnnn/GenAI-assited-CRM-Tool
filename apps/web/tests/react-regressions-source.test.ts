@@ -290,6 +290,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("flex flex-row items-center justify-between space-y-0 pb-2")
     })
 
+    it("uses gap spacing for Meta connection and AI builder empty states", () => {
+        const metaSource = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
+        const aiBuilderSource = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+
+        expect(metaSource).toContain("flex flex-row items-center justify-between gap-y-0")
+        expect(metaSource).not.toContain("flex flex-row items-center justify-between space-y-0")
+        expect(aiBuilderSource).toContain("flex flex-col items-center text-center gap-y-4")
+        expect(aiBuilderSource).not.toContain("flex flex-col items-center text-center space-y-4")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 
