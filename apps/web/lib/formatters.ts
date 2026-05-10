@@ -12,6 +12,21 @@ const RELATIVE_UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> =
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" })
 const timeFormatter = new Intl.DateTimeFormat(undefined, { timeStyle: "short" })
+const dateFormatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function getDateFormatter(options: Intl.DateTimeFormatOptions | undefined): Intl.DateTimeFormat {
+  if (!options) return dateFormatter
+
+  const cacheKey = JSON.stringify(
+    Object.entries(options).toSorted(([keyA], [keyB]) => keyA.localeCompare(keyB))
+  )
+  const cached = dateFormatterCache.get(cacheKey)
+  if (cached) return cached
+
+  const formatter = new Intl.DateTimeFormat(undefined, options)
+  dateFormatterCache.set(cacheKey, formatter)
+  return formatter
+}
 
 function toDate(input: Date | string | null | undefined): Date | null {
   if (!input) return null
@@ -46,8 +61,7 @@ export function formatDate(
 ): string {
   const date = toDate(input)
   if (!date) return fallback
-  const formatter = options ? new Intl.DateTimeFormat(undefined, options) : dateFormatter
-  return formatter.format(date)
+  return getDateFormatter(options).format(date)
 }
 
 export function formatDateTime(
