@@ -8,12 +8,16 @@ function readSource(pathFromWebRoot: string): string {
 
 function readApiModuleSources(): Array<{ path: string; source: string }> {
     const apiDir = join(process.cwd(), "lib/api")
-    return readdirSync(apiDir)
-        .filter((fileName) => fileName.endsWith(".ts") && fileName !== "index.ts")
-        .map((fileName) => {
-            const path = `lib/api/${fileName}`
-            return { path, source: readSource(path) }
-        })
+    const sources: Array<{ path: string; source: string }> = []
+
+    for (const fileName of readdirSync(apiDir)) {
+        if (!fileName.endsWith(".ts") || fileName === "index.ts") continue
+
+        const path = `lib/api/${fileName}`
+        sources.push({ path, source: readSource(path) })
+    }
+
+    return sources
 }
 
 describe("React regression guards (source)", () => {
