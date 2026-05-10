@@ -128,11 +128,11 @@ function getActivityConfig(type: string): ActivityTypeConfig {
 // ============================================================================
 
 const activityTimestampFormatter = new Intl.DateTimeFormat(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
 })
 
 function formatActivityTimestamp(value: unknown): string | null {
@@ -151,8 +151,10 @@ function getActivityPreview(activity: SurrogateActivity): string {
     const formatContactMethods = (value: unknown): string | undefined => {
         if (!Array.isArray(value)) return undefined
         return value
-            .map((method) => String(method))
-            .map((method) => method.charAt(0).toUpperCase() + method.slice(1))
+            .map((method) => {
+                const label = String(method)
+                return label.charAt(0).toUpperCase() + label.slice(1)
+            })
             .join(", ")
     }
 
@@ -683,23 +685,43 @@ export function ActivityTimeline({
     // Task categorization
     const { overdueTasks, upcomingTasks } = useMemo(() => {
         const today = startOfToday()
-        const pending = tasks
-            .filter((task) => !task.is_completed && task.due_date)
-            .map((task) => ({
-                task,
-                dueDate: parseISO(task.due_date as string),
-            }))
-            .filter((entry) => !Number.isNaN(entry.dueDate.getTime()))
+        const overdueEntries: Array<{ task: TaskListItem; dueDate: Date }> = []
+        const upcomingEntries: Array<{ task: TaskListItem; dueDate: Date }> = []
 
-        const overdue = pending.filter((entry) => isBefore(entry.dueDate, today))
-        const upcoming = pending.filter((entry) => !isBefore(entry.dueDate, today))
+        for (const task of tasks) {
+            if (task.is_completed || !task.due_date) continue
+            const dueDate = parseISO(task.due_date)
+            if (Number.isNaN(dueDate.getTime())) continue
 
-        const sortByDueDate = (a: { dueDate: Date }, b: { dueDate: Date }) =>
+            const entry = { task, dueDate }
+            if (isBefore(dueDate, today)) {
+                overdueEntries.push(entry)
+            } else {
+                upcomingEntries.push(entry)
+            }
+        }
+
+        const sortByDueDate = (
+            a: { task: TaskListItem; dueDate: Date },
+            b: { task: TaskListItem; dueDate: Date }
+        ) =>
             a.dueDate.getTime() - b.dueDate.getTime()
 
+        const overdueTasks: TaskListItem[] = []
+        for (const entry of overdueEntries.toSorted(sortByDueDate)) {
+            overdueTasks.push(entry.task)
+            if (overdueTasks.length === 3) break
+        }
+
+        const upcomingTasks: TaskListItem[] = []
+        for (const entry of upcomingEntries.toSorted(sortByDueDate)) {
+            upcomingTasks.push(entry.task)
+            if (upcomingTasks.length === 3) break
+        }
+
         return {
-            overdueTasks: overdue.sort(sortByDueDate).map((entry) => entry.task).slice(0, 3),
-            upcomingTasks: upcoming.sort(sortByDueDate).map((entry) => entry.task).slice(0, 3),
+            overdueTasks,
+            upcomingTasks,
         }
     }, [tasks])
 

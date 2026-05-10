@@ -282,6 +282,18 @@ describe("React regression guards (source)", () => {
         expect(formBuilderSource).not.toMatch(/\.map\(\(entry\) => entry\.trim\(\)\)\s*\.filter\(Boolean\)/)
     })
 
+    it("uses single-pass activity timeline list derivation", () => {
+        const source = readSource("components/surrogates/ActivityTimeline.tsx")
+
+        expect(source).toContain("formatContactMethods")
+        expect(source).toContain("const overdueTasks: TaskListItem[] = []")
+        expect(source).toContain("for (const task of tasks)")
+        expect(source).not.toMatch(/\.map\(\(method\) => String\(method\)\)\s*\.map/)
+        expect(source).not.toMatch(/tasks\s*\.filter\(\(task\) => !task\.is_completed && task\.due_date\)\s*\.map/)
+        expect(source).not.toMatch(/overdue\.sort\(sortByDueDate\)\.map/)
+        expect(source).not.toMatch(/upcoming\.sort\(sortByDueDate\)\.map/)
+    })
+
     it("uses single-pass filtered display lists for dashboard and campaign details", () => {
         const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
         const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
