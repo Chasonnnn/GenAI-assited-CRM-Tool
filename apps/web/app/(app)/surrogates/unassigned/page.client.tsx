@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "sonner"
 import { Loader2Icon, UserPlusIcon } from "lucide-react"
@@ -37,23 +37,30 @@ function formatDate(dateString: string | null | undefined): string {
     return unassignedDateFormatter.format(date)
 }
 
-export default function UnassignedSurrogatesPage() {
+type UnassignedSurrogatesPageProps = {
+    initialPageParam: string | null
+    initialSearchParams: string
+}
+
+export default function UnassignedSurrogatesPage({
+    initialPageParam,
+    initialSearchParams,
+}: UnassignedSurrogatesPageProps) {
     const { user } = useAuth()
-    const router = useRouter()
-    const searchParams = useSearchParams()
+    const { push, replace } = useRouter()
 
     const authLoaded = !!user?.role
     const canViewUnassignedQueue = user?.role === "intake_specialist" || user?.role === "developer"
 
-    const urlPage = parsePageParam(searchParams.get("page"))
+    const urlPage = parsePageParam(initialPageParam)
     const page = urlPage
 
     useEffect(() => {
         if (!authLoaded) return
         if (!canViewUnassignedQueue) {
-            router.replace("/surrogates")
+            replace("/surrogates")
         }
-    }, [authLoaded, canViewUnassignedQueue, router])
+    }, [authLoaded, canViewUnassignedQueue, replace])
 
     useEffect(() => {
         if (!authLoaded || !canViewUnassignedQueue) return
@@ -78,29 +85,29 @@ export default function UnassignedSurrogatesPage() {
     const pageEnd = (page - 1) * DEFAULT_PER_PAGE + items.length
 
     const setPageAndUrl = useCallback((nextPage: number) => {
-        const params = new URLSearchParams(searchParams.toString())
+        const params = new URLSearchParams(initialSearchParams)
         if (nextPage > 1) {
             params.set("page", String(nextPage))
         } else {
             params.delete("page")
         }
         const qs = params.toString()
-        router.replace(qs ? `/surrogates/unassigned?${qs}` : "/surrogates/unassigned", { scroll: false })
-    }, [router, searchParams])
+        replace(qs ? `/surrogates/unassigned?${qs}` : "/surrogates/unassigned", { scroll: false })
+    }, [initialSearchParams, replace])
 
     const handleClaim = useCallback(async (surrogateId: string) => {
         setClaimingId(surrogateId)
         try {
             await claimMutation.mutateAsync(surrogateId)
             toast.success("Surrogate claimed")
-            router.push(`/surrogates/${surrogateId}`)
+            push(`/surrogates/${surrogateId}`)
         } catch (e) {
             const message = e instanceof Error ? e.message : "Failed to claim surrogate"
             toast.error(message)
         } finally {
             setClaimingId(null)
         }
-    }, [claimMutation, router])
+    }, [claimMutation, push])
 
     if (authLoaded && !canViewUnassignedQueue) return null
 

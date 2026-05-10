@@ -2,6 +2,27 @@ import { Suspense } from "react"
 
 import UnassignedSurrogatesPageClient from "./page.client"
 
+type SearchParamValue = string | string[] | undefined
+
+function getFirstSearchParam(value: SearchParamValue): string | null {
+    if (Array.isArray(value)) return value[0] ?? null
+    return value ?? null
+}
+
+function serializeSearchParams(searchParams: Record<string, SearchParamValue>): string {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(searchParams)) {
+        if (Array.isArray(value)) {
+            for (const entry of value) {
+                if (entry !== undefined) params.append(key, entry)
+            }
+        } else if (value !== undefined) {
+            params.set(key, value)
+        }
+    }
+    return params.toString()
+}
+
 function UnassignedSurrogatesPageSkeleton() {
     return (
         <div className="space-y-6 p-6">
@@ -20,10 +41,19 @@ function UnassignedSurrogatesPageSkeleton() {
     )
 }
 
-export default function UnassignedSurrogatesPage() {
+export default async function UnassignedSurrogatesPage({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, SearchParamValue>>
+}) {
+    const resolvedSearchParams = await searchParams
+
     return (
         <Suspense fallback={<UnassignedSurrogatesPageSkeleton />}>
-            <UnassignedSurrogatesPageClient />
+            <UnassignedSurrogatesPageClient
+                initialPageParam={getFirstSearchParam(resolvedSearchParams.page)}
+                initialSearchParams={serializeSearchParams(resolvedSearchParams)}
+            />
         </Suspense>
     )
 }
