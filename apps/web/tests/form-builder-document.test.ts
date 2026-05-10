@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { buildFormSchema, createBuilderField, schemaToPages } from "@/lib/forms/form-builder-document"
+import { buildFormSchema, buildMappings, createBuilderField, schemaToPages } from "@/lib/forms/form-builder-document"
 import { PRESET_FIELD_GROUPS } from "@/lib/forms/form-builder-library"
 
 const metadata = {
@@ -62,6 +62,50 @@ describe("form builder journey timing preset", () => {
             { label: "0–3 months", value: "months_0_3" },
             { label: "3–6 months", value: "months_3_6" },
             { label: "Still deciding", value: "still_deciding" },
+        ])
+    })
+})
+
+describe("form builder field mappings", () => {
+    it("collects mapped fields in page and field order", () => {
+        const mappings = buildMappings([
+            {
+                id: 1,
+                name: "Page 1",
+                fields: [
+                    {
+                        id: "full_name",
+                        type: "text",
+                        label: "Full name",
+                        required: true,
+                        surrogateFieldMapping: "full_name",
+                    },
+                    {
+                        id: "notes",
+                        type: "textarea",
+                        label: "Notes",
+                        required: false,
+                    },
+                ],
+            },
+            {
+                id: 2,
+                name: "Page 2",
+                fields: [
+                    {
+                        id: "email",
+                        type: "email",
+                        label: "Email",
+                        required: true,
+                        surrogateFieldMapping: "email",
+                    },
+                ],
+            },
+        ])
+
+        expect(mappings).toEqual([
+            { field_key: "full_name", surrogate_field: "full_name" },
+            { field_key: "email", surrogate_field: "email" },
         ])
     })
 })

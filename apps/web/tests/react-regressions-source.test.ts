@@ -253,6 +253,15 @@ describe("React regression guards (source)", () => {
         expect(dropdownSource).not.toContain("DropdownMenuShortcut")
     })
 
+    it("keeps workflow editor field sets and multiselect private", () => {
+        const source = readSource("components/automation/workflow-editor/shared.tsx")
+
+        expect(source).not.toContain("export const BOOLEAN_FIELDS")
+        expect(source).not.toContain("export const NUMBER_FIELDS")
+        expect(source).not.toContain("export const DATE_FIELDS")
+        expect(source).not.toContain("export function WorkflowMultiSelect")
+    })
+
     it("keeps unused UI primitive inventory out of the bundle", () => {
         const unusedPrimitives = [
             "aspect-ratio",
@@ -620,6 +629,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/stageOptions\s*\.filter\([\s\S]*?\)\s*\.map\(\(stage\) => stage\.id\)/)
         expect(source).not.toContain("stageOptions.find((stage) => stage.id === stageId)")
         expect(source).not.toContain("US_STATES.find((state) => state.value === stateCode)")
+    })
+
+    it("builds form builder mappings in a single pass", () => {
+        const source = readSource("lib/forms/form-builder-document.ts")
+
+        expect(source).toContain("const mappings: { field_key: string; surrogate_field: string }[] = []")
+        expect(source).not.toMatch(/page\.fields\s*\.filter\(\(field\) => field\.surrogateFieldMapping\)\s*\.map/)
     })
 
     it("uses stable keys for report chart cells and parser warnings", () => {

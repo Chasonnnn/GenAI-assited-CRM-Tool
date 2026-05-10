@@ -227,14 +227,17 @@ export function schemaToMetadata(schema?: FormSchema | null): BuilderSchemaMetad
 }
 
 export function buildMappings(pages: BuilderFormPage[]): { field_key: string; surrogate_field: string }[] {
-    return pages.flatMap((page) =>
-        page.fields
-            .filter((field) => field.surrogateFieldMapping)
-            .map((field) => ({
+    const mappings: { field_key: string; surrogate_field: string }[] = []
+    for (const page of pages) {
+        for (const field of page.fields) {
+            if (!field.surrogateFieldMapping) continue
+            mappings.push({
                 field_key: field.id,
                 surrogate_field: field.surrogateFieldMapping,
-            })),
-    )
+            })
+        }
+    }
+    return mappings
 }
 
 export const buildFieldId = () => {
