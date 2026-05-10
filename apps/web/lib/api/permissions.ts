@@ -23,7 +23,7 @@ export interface Member {
     created_at: string
 }
 
-export interface PermissionOverride {
+interface PermissionOverride {
     permission: string
     override_type: "grant" | "revoke"
     label: string
@@ -48,7 +48,7 @@ export interface RoleSummary {
     is_developer: boolean
 }
 
-export interface RolePermission {
+interface RolePermission {
     key: string
     label: string
     description: string

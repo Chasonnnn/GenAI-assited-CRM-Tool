@@ -299,6 +299,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export interface PlatformWorkflowTemplateDraft")
     })
 
+    it("keeps nested permissions API response types private", () => {
+        const source = readSource("lib/api/permissions.ts")
+
+        expect(source).not.toContain("export interface PermissionOverride")
+        expect(source).not.toContain("export interface RolePermission")
+    })
+
     it("keeps form mapping options on a direct endpoint request", () => {
         const source = readSource("lib/api/forms.ts")
 
