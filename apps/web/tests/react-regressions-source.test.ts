@@ -476,6 +476,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const renderPayloadPreview =")
     })
 
+    it("uses functional editing rule draft updates", () => {
+        const source = readSource("app/(app)/settings/intelligent-suggestions-section.tsx")
+
+        expect(source).toContain("setEditingRuleDraft((currentDraft) =>")
+        expect(source).not.toContain("setEditingRuleDraft({ ...editingRuleDraft")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 

@@ -800,8 +800,10 @@ function useIntelligentSuggestionsController() {
       setRules((previous) =>
         previous.map((current) => (current.id === rule.id ? updatedRule : current)),
       )
-      if (editingRuleId === rule.id && editingRuleDraft) {
-        setEditingRuleDraft({ ...editingRuleDraft, enabled: updatedRule.enabled })
+      if (editingRuleId === rule.id) {
+        setEditingRuleDraft((currentDraft) =>
+          currentDraft ? { ...currentDraft, enabled: updatedRule.enabled } : currentDraft,
+        )
       }
       toast.success(`Rule ${updatedRule.enabled ? "enabled" : "disabled"}`)
     } catch (ruleError) {
