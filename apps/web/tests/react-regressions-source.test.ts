@@ -368,6 +368,12 @@ describe("React regression guards (source)", () => {
         expect(noteTypesSource).not.toContain("NoteCreatePayload")
     })
 
+    it("keeps public embed field visibility filtering single pass", () => {
+        const source = readSource("app/embed/forms/[slug]/page.client.tsx")
+
+        expect(source).not.toContain("pages.flatMap((page) => page.fields).filter")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

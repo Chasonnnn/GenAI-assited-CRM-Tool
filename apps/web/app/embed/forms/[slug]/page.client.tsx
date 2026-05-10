@@ -234,7 +234,7 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
 
     const visibleFields = React.useMemo(() => {
         const pages = formConfig?.form_schema.pages || []
-        return pages.flatMap((page) => page.fields).filter((field) => evaluateCondition(field, answers))
+        return pages.flatMap((page) => page.fields.filter((field) => evaluateCondition(field, answers)))
     }, [answers, formConfig])
 
     const updateField = (fieldKey: string, value: PublicFormAnswerValue) => {
