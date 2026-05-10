@@ -265,6 +265,7 @@ async def test_publish_form_auto_generates_default_shared_intake_link(authed_cli
     )
     assert len(links) == 1
     assert links[0].is_active is True
+    assert links[0].tracking_mode == "internal_only"
     assert links[0].slug
 
     list_res = await authed_client.get(f"/forms/{form_id}/intake-links")

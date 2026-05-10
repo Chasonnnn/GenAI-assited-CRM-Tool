@@ -69,6 +69,7 @@ EMBED_ALLOWED_ATTRIBUTION_KEYS = {
 }
 EMBED_URL_ATTRIBUTION_KEYS = {"referrer", "landing_url"}
 DEFAULT_EMBED_TRACKING_MODE = TrackingMode.ENHANCED_MATCH_LEAD.value
+DEFAULT_SHARED_INTAKE_TRACKING_MODE = TrackingMode.INTERNAL_ONLY.value
 META_TRACKING_MODES = {
     TrackingMode.PRIVACY_SAFE_LEAD.value,
     TrackingMode.ENHANCED_MATCH_LEAD.value,
@@ -78,6 +79,12 @@ PRIVACY_SAFE_FIELD_POLICY_MODES = {
     TrackingMode.ENHANCED_MATCH_LEAD.value,
 }
 logger = logging.getLogger(__name__)
+
+
+def _default_tracking_mode_for_form(form: Form) -> str:
+    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+        return DEFAULT_EMBED_TRACKING_MODE
+    return DEFAULT_SHARED_INTAKE_TRACKING_MODE
 
 
 def build_shared_application_link(base_url: str | None, slug: str) -> str:
@@ -190,7 +197,7 @@ def create_intake_link(
         utm_defaults=utm_defaults or None,
         embed_enabled=bool(embed_enabled),
         allowed_embed_origins=embed_policy_service.normalize_allowed_origins(allowed_embed_origins),
-        tracking_mode=tracking_mode or DEFAULT_EMBED_TRACKING_MODE,
+        tracking_mode=tracking_mode or _default_tracking_mode_for_form(form),
         consent_text=(consent_text or "").strip() or None,
         privacy_policy_url=(privacy_policy_url or "").strip() or None,
         thank_you_config=thank_you_config or {},
@@ -714,7 +721,10 @@ def update_intake_link(
             allowed_embed_origins
         )
     if "tracking_mode" in fields_set:
-        link.tracking_mode = tracking_mode or DEFAULT_EMBED_TRACKING_MODE
+        form = form_service.get_form(db, link.organization_id, link.form_id)
+        link.tracking_mode = tracking_mode or (
+            _default_tracking_mode_for_form(form) if form else DEFAULT_EMBED_TRACKING_MODE
+        )
     if "consent_text" in fields_set:
         link.consent_text = (consent_text or "").strip() or None
     if "privacy_policy_url" in fields_set:
