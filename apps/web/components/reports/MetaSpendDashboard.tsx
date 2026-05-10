@@ -61,20 +61,24 @@ const BREAKDOWN_COLORS = [
     "#ec4899", "#f43f5e", "#f97316", "#eab308", "#84cc16"
 ]
 
+const USD_INTEGER_FORMATTER = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+})
+
+const INTEGER_FORMATTER = new Intl.NumberFormat("en-US")
+
 // Format helpers
 const formatCurrency = (value: number | null) => {
     if (value === null || value === undefined) return "—"
-    return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(value)
+    return USD_INTEGER_FORMATTER.format(value)
 }
 
 const formatNumber = (value: number | null) => {
     if (value === null || value === undefined) return "—"
-    return new Intl.NumberFormat("en-US").format(value)
+    return INTEGER_FORMATTER.format(value)
 }
 
 const formatCompact = (value: number | null) => {

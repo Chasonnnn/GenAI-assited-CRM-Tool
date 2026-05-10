@@ -244,6 +244,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("[...data].sort(")
     })
 
+    it("hoists Meta spend dashboard number formatters", () => {
+        const source = readSource("components/reports/MetaSpendDashboard.tsx")
+
+        expect(source).toContain("const USD_INTEGER_FORMATTER = new Intl.NumberFormat")
+        expect(source).toContain("const INTEGER_FORMATTER = new Intl.NumberFormat")
+        expect(source).toContain("return USD_INTEGER_FORMATTER.format(value)")
+        expect(source).toContain("return INTEGER_FORMATTER.format(value)")
+        expect(source).not.toContain("return new Intl.NumberFormat")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 
