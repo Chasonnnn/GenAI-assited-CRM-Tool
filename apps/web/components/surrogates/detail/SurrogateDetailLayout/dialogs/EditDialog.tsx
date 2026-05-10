@@ -79,10 +79,6 @@ function FormSelect({
 }) {
     const [value, setValue] = React.useState(defaultValue ?? "")
 
-    React.useEffect(() => {
-        setValue(defaultValue ?? "")
-    }, [defaultValue])
-
     return (
         <>
             <input type="hidden" name={name} value={value} />
@@ -139,7 +135,7 @@ export function EditDialog() {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent key={surrogate.id} className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Edit Surrogate: #{surrogate.surrogate_number}</DialogTitle>
                 </DialogHeader>

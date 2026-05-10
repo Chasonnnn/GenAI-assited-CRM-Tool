@@ -1126,6 +1126,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("React.useEffect(() => {\n        setDraft(value ?? \"\")")
     })
 
+    it("resets surrogate edit select state by remounting dialog content", () => {
+        const source = readSource("components/surrogates/detail/SurrogateDetailLayout/dialogs/EditDialog.tsx")
+
+        expect(source).toContain("key={surrogate.id}")
+        expect(source).not.toContain("React.useEffect(() => {\n        setValue(defaultValue ?? \"\")")
+    })
+
     it("uses plain punctuation for Meta asset detail labels", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
