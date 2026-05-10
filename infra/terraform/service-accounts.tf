@@ -13,6 +13,12 @@ resource "google_service_account" "worker" {
   display_name = "Surrogacy Force Worker Service Account"
 }
 
+resource "google_service_account" "worker_scaler" {
+  count        = var.worker_schedule_enabled ? 1 : 0
+  account_id   = "crm-worker-scaler-sa"
+  display_name = "Surrogacy Force Worker Scheduler Scaler Service Account"
+}
+
 resource "google_service_account" "cloudbuild" {
   account_id   = "crm-cloudbuild-sa"
   display_name = "Surrogacy Force Cloud Build Service Account"

@@ -31,6 +31,22 @@ def test_api_service_account_can_execute_attachment_scan_job() -> None:
     assert 'member  = "serviceAccount:${google_service_account.api.email}"' in content
 
 
+def test_worker_scale_scheduler_uses_dedicated_scaler_identity() -> None:
+    service_accounts = _read("infra/terraform/service-accounts.tf")
+    schedule = _read("infra/terraform/worker-schedule.tf")
+    clamav_iam = _read("infra/terraform/clamav-iam.tf")
+
+    assert 'resource "google_service_account" "worker_scaler"' in service_accounts
+    assert 'account_id   = "crm-worker-scaler-sa"' in service_accounts
+    assert 'resource "google_project_iam_custom_role" "worker_scaler"' in schedule
+    assert '"run.services.get"' in schedule
+    assert '"run.services.update"' in schedule
+    assert 'resource "google_project_iam_member" "worker_scaler_run_update"' in schedule
+    assert 'resource "google_service_account_iam_member" "worker_scaler_sa_user_worker"' in schedule
+    assert 'service_account_email = google_service_account.worker_scaler[0].email' in schedule
+    assert "(var.clamav_update_enabled || var.worker_schedule_enabled)" not in clamav_iam
+
+
 def test_cloudbuild_updates_attachment_scan_job_image() -> None:
     content = _read("cloudbuild/api.yaml")
     assert "$_ATTACHMENT_SCAN_JOB" in content

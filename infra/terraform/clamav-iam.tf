@@ -20,7 +20,7 @@ resource "google_project_iam_member" "api_run_developer" {
 }
 
 resource "google_service_account_iam_member" "worker_scheduler_impersonate" {
-  count              = (var.clamav_update_enabled || var.worker_schedule_enabled) ? 1 : 0
+  count              = var.clamav_update_enabled ? 1 : 0
   service_account_id = google_service_account.worker.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
