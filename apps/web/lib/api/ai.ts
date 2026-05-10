@@ -2,7 +2,7 @@
  * API client for AI Assistant endpoints.
  */
 
-import { api } from '../api';
+import api from '../api';
 import { streamSSE, type StreamEvent } from './stream';
 import type { JsonObject } from '../types/json';
 

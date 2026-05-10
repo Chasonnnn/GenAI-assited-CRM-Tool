@@ -2,7 +2,7 @@
  * API client for ops endpoints (integration health, alerts).
  */
 
-import { api } from '../api';
+import api from '../api';
 
 // Types
 export interface IntegrationHealth {

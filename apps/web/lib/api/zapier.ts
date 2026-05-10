@@ -2,7 +2,7 @@
  * API client for Zapier webhook settings.
  */
 
-import { api } from '../api';
+import api from '../api';
 
 export type ZapierStageBucket = 'qualified' | 'converted' | 'lost' | 'not_qualified';
 

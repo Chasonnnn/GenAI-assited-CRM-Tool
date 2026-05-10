@@ -329,6 +329,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export async function streamParseSchedule")
     })
 
+    it("keeps the shared API client on a single default export", () => {
+        const source = readSource("lib/api.ts")
+
+        expect(source).toContain("const api =")
+        expect(source).not.toContain("export const api =")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")

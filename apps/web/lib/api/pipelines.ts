@@ -2,7 +2,7 @@
  * API client for Pipelines endpoints.
  */
 
-import { api } from '../api';
+import api from '../api';
 
 // Types
 export type PipelineEntityType = 'surrogate' | 'intended_parent';

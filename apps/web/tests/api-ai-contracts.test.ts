@@ -8,13 +8,12 @@ vi.mock('../lib/api.ts', () => {
         delete: vi.fn(),
     }
     return {
-        api,
         default: api,
         ApiError: class ApiError extends Error {},
     }
 })
 
-import { api } from '../lib/api.ts'
+import api from '../lib/api.ts'
 import { acceptConsent, approveAction, rejectAction, sendChatMessage, testAPIKey } from '../lib/api/ai'
 
 type ApiMock = {

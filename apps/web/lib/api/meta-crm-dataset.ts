@@ -1,4 +1,4 @@
-import { api } from '../api'
+import api from '../api'
 import type { ZapierStageBucket } from './zapier'
 
 export interface MetaCrmDatasetEventMappingItem {

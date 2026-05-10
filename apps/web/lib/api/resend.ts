@@ -2,7 +2,7 @@
  * API client for Resend email configuration endpoints.
  */
 
-import { api } from '../api';
+import api from '../api';
 
 // Types
 export interface ResendSettings {

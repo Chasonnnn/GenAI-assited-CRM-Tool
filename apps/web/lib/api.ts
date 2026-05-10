@@ -116,7 +116,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 // Convenience methods
-export const api = {
+const api = {
     get: <T>(path: string, options?: RequestOptions) =>
         request<T>(path, { method: 'GET', ...options }),
 

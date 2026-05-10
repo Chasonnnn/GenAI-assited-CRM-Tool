@@ -2,7 +2,7 @@
  * API client for system metadata (health, version).
  */
 
-import { api } from '../api';
+import api from '../api';
 
 export interface SystemHealth {
     status: string;

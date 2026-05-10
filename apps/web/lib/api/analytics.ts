@@ -2,7 +2,7 @@
  * API client for analytics endpoints.
  */
 
-import { api } from '../api';
+import api from '../api';
 import type { JsonObject } from '../types/json';
 
 // Types

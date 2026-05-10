@@ -6,7 +6,7 @@ vi.mock('sonner', () => ({
     },
 }))
 
-import { api, RateLimitError } from '../lib/api'
+import api, { RateLimitError } from '../lib/api'
 
 type MockResponse = {
     status: number

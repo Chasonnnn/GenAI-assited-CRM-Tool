@@ -1,4 +1,4 @@
-import { api } from "../api"
+import api from "../api"
 
 export type AIStudioPlatform = "instagram" | "facebook" | "linkedin" | "x" | "tiktok"
 export type AIStudioFormat = "feed" | "story" | "reel" | "carousel" | "ad"
