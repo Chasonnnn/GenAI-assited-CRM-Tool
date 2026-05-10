@@ -323,6 +323,8 @@ def _resource_policy_for_path(path: str) -> str:
     # Public form and logo assets are embedded from separate app/tenant origins.
     if path.startswith("/forms/public/"):
         return "cross-origin"
+    if path.startswith("/ai/studio/assets/"):
+        return "cross-origin"
     if path.startswith("/settings/organization/signature/logo/local/"):
         return "cross-origin"
     if path.startswith("/platform/email/branding/logo/local/"):

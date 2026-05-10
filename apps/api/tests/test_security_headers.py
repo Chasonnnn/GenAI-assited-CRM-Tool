@@ -28,3 +28,10 @@ def test_security_headers_present():
     assert headers["cross-origin-resource-policy"] == "same-origin"
     assert headers["referrer-policy"] == "strict-origin-when-cross-origin"
     assert headers["permissions-policy"] == "geolocation=(), microphone=(), camera=(), payment=()"
+
+
+def test_ai_studio_assets_allow_cross_origin_embedding():
+    """AI Studio images are rendered by the web app from the API origin."""
+    from app.main import _resource_policy_for_path
+
+    assert _resource_policy_for_path("/ai/studio/assets/ai-studio/org-id/image.png") == "cross-origin"
