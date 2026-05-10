@@ -286,6 +286,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export interface FormEmbedHealthCheckRead")
     })
 
+    it("keeps nested platform template and campaign API types private", () => {
+        const source = readSource("lib/api/platform.ts")
+
+        expect(source).not.toContain("export interface PlatformSystemEmailCampaignTarget")
+        expect(source).not.toContain("export interface PlatformSystemEmailCampaignFailure")
+        expect(source).not.toContain("export type TemplateStatus")
+        expect(source).not.toContain("export interface PlatformEmailTemplateDraft")
+        expect(source).not.toContain("export interface PlatformFormTemplateDraft")
+        expect(source).not.toContain("export interface PlatformWorkflowTemplateDraft")
+    })
+
     it("keeps form mapping options on a direct endpoint request", () => {
         const source = readSource("lib/api/forms.ts")
 

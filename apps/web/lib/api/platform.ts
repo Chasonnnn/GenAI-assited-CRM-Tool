@@ -176,7 +176,7 @@ export interface PlatformEmailBranding {
     logo_url: string | null;
 }
 
-export interface PlatformSystemEmailCampaignTarget {
+interface PlatformSystemEmailCampaignTarget {
     org_id: string;
     user_ids: string[];
 }
@@ -185,7 +185,7 @@ export interface PlatformSystemEmailCampaignRequest {
     targets: PlatformSystemEmailCampaignTarget[];
 }
 
-export interface PlatformSystemEmailCampaignFailure {
+interface PlatformSystemEmailCampaignFailure {
     org_id: string;
     user_id: string;
     email?: string;
@@ -539,9 +539,9 @@ export function resolveAlert(alertId: string): Promise<{ id: string; status: str
 // Platform Template Studio
 // =============================================================================
 
-export type TemplateStatus = 'draft' | 'published' | 'archived'
+type TemplateStatus = 'draft' | 'published' | 'archived'
 
-export interface PlatformEmailTemplateDraft {
+interface PlatformEmailTemplateDraft {
     name: string
     subject: string
     body: string
@@ -592,7 +592,7 @@ export interface EmailTemplateTestSendResponse {
     error?: string | null
 }
 
-export interface PlatformFormTemplateDraft {
+interface PlatformFormTemplateDraft {
     name: string
     description?: string | null
     schema_json?: FormSchema | null
@@ -626,7 +626,7 @@ export interface PlatformFormTemplateUpdate {
     expected_version?: number | null
 }
 
-export interface PlatformWorkflowTemplateDraft {
+interface PlatformWorkflowTemplateDraft {
     name: string
     description?: string | null
     icon?: string
