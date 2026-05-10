@@ -6,9 +6,9 @@ import api from '../api'
 
 export type TicketStatus = 'new' | 'open' | 'pending' | 'resolved' | 'closed' | 'spam'
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent'
-export type TicketLinkStatus = 'unlinked' | 'linked' | 'needs_review'
+type TicketLinkStatus = 'unlinked' | 'linked' | 'needs_review'
 
-export interface TicketListItem {
+interface TicketListItem {
     id: string
     ticket_code: string
     status: TicketStatus
@@ -27,7 +27,7 @@ export interface TicketListItem {
     updated_at: string
 }
 
-export interface TicketMessageAttachment {
+interface TicketMessageAttachment {
     id: string
     attachment_id: string
     filename: string | null
@@ -37,7 +37,7 @@ export interface TicketMessageAttachment {
     content_id: string | null
 }
 
-export interface TicketMessageOccurrence {
+interface TicketMessageOccurrence {
     id: string
     mailbox_id: string
     gmail_message_id: string
@@ -53,7 +53,7 @@ export interface TicketMessageOccurrence {
     created_at: string
 }
 
-export interface TicketMessage {
+interface TicketMessage {
     id: string
     message_id: string
     direction: 'inbound' | 'outbound'
@@ -76,7 +76,7 @@ export interface TicketMessage {
     occurrences: TicketMessageOccurrence[]
 }
 
-export interface TicketEvent {
+interface TicketEvent {
     id: string
     actor_user_id: string | null
     event_type: string
@@ -84,7 +84,7 @@ export interface TicketEvent {
     created_at: string
 }
 
-export interface TicketNote {
+interface TicketNote {
     id: string
     author_user_id: string | null
     body_markdown: string
@@ -93,7 +93,7 @@ export interface TicketNote {
     updated_at: string
 }
 
-export interface TicketSurrogateCandidate {
+interface TicketSurrogateCandidate {
     id: string
     surrogate_id: string
     confidence: string
@@ -102,7 +102,7 @@ export interface TicketSurrogateCandidate {
     created_at: string
 }
 
-export interface TicketDetailResponse {
+interface TicketDetailResponse {
     ticket: TicketListItem
     messages: TicketMessage[]
     events: TicketEvent[]
@@ -110,7 +110,7 @@ export interface TicketDetailResponse {
     candidates: TicketSurrogateCandidate[]
 }
 
-export interface TicketListResponse {
+interface TicketListResponse {
     items: TicketListItem[]
     next_cursor: string | null
 }
@@ -154,7 +154,7 @@ export interface TicketComposeRequest {
     idempotency_key?: string
 }
 
-export interface TicketSendResult {
+interface TicketSendResult {
     status: string
     ticket_id: string
     message_id: string
@@ -164,14 +164,14 @@ export interface TicketSendResult {
     job_id?: string | null
 }
 
-export interface TicketSendIdentity {
+interface TicketSendIdentity {
     integration_id: string
     account_email: string
     provider: string
     is_default: boolean
 }
 
-export interface TicketSendIdentityResponse {
+interface TicketSendIdentityResponse {
     items: TicketSendIdentity[]
 }
 

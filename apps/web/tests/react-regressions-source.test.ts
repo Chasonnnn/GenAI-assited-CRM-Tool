@@ -447,6 +447,29 @@ describe("React regression guards (source)", () => {
         expect(workflowMetricsSource).not.toContain("export type WorkflowMetricEventType")
     })
 
+    it("keeps ticket API response subtypes private", () => {
+        const source = readSource("lib/api/tickets.ts")
+        const privateTicketTypes = [
+            "TicketLinkStatus",
+            "TicketListItem",
+            "TicketMessageAttachment",
+            "TicketMessageOccurrence",
+            "TicketMessage",
+            "TicketEvent",
+            "TicketNote",
+            "TicketSurrogateCandidate",
+            "TicketDetailResponse",
+            "TicketListResponse",
+            "TicketSendResult",
+            "TicketSendIdentity",
+            "TicketSendIdentityResponse",
+        ]
+
+        for (const typeName of privateTicketTypes) {
+            expect(source, typeName).not.toMatch(new RegExp(`export (interface|type) ${typeName}\\b`))
+        }
+    })
+
     it("keeps MFA API response shapes private", () => {
         const source = readSource("lib/api/mfa.ts")
         const privateResponses = [
