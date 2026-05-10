@@ -151,6 +151,19 @@ const MEETING_MODE_LABELS = MEETING_MODE_OPTIONS.reduce<Record<string, string>>(
     return acc
 }, {})
 
+type AvailabilityRuleDraft = {
+    day_of_week: number
+    start_time: string
+    end_time: string
+    enabled: boolean
+}
+
+type AvailabilityRulesState = {
+    localRules: AvailabilityRuleDraft[]
+    timezone: string
+    hasChanges: boolean
+}
+
 // =============================================================================
 // Booking Link Card
 // =============================================================================
@@ -225,20 +238,23 @@ function AvailabilityRulesCard() {
     const { user } = useAuth()
     const { data: rules, isLoading } = useAvailabilityRules()
     const setRulesMutation = useSetAvailabilityRules()
-    const [localRules, setLocalRules] = useState<Array<{
-        day_of_week: number
-        start_time: string
-        end_time: string
-        enabled: boolean
-    }>>([])
-    const [timezone, setTimezone] = useState(user?.org_timezone || "America/Los_Angeles")
-    const [hasChanges, setHasChanges] = useState(false)
+    const [availabilityState, setAvailabilityState] = useState<AvailabilityRulesState>(() => ({
+        localRules: [],
+        timezone: user?.org_timezone || "America/Los_Angeles",
+        hasChanges: false,
+    }))
+    const { localRules, timezone, hasChanges } = availabilityState
 
     // Initialize local rules from API data
     useEffect(() => {
-        if (rules && localRules.length === 0) {
+        if (!rules) return
+
+        setAvailabilityState((current) => {
+            if (current.localRules.length > 0) return current
+
+            const rulesByDay = new Map(rules.map((rule) => [rule.day_of_week, rule]))
             const initialRules = DAYS_OF_WEEK.map((day) => {
-                const existing = rules.find((r) => r.day_of_week === day.value)
+                const existing = rulesByDay.get(day.value)
                 return {
                     day_of_week: day.value,
                     start_time: existing?.start_time || "09:00",
@@ -246,44 +262,47 @@ function AvailabilityRulesCard() {
                     enabled: !!existing,
                 }
             })
-            setLocalRules(initialRules)
             const firstRule = rules[0]
-            if (firstRule) {
-                setTimezone(firstRule.timezone)
-            } else if (user?.org_timezone) {
-                setTimezone(user.org_timezone)
+            return {
+                ...current,
+                localRules: initialRules,
+                timezone: firstRule?.timezone ?? user?.org_timezone ?? current.timezone,
             }
-        }
-    }, [rules, localRules.length, user?.org_timezone])
+        })
+    }, [rules, user?.org_timezone])
 
     const toggleDay = (dayValue: number) => {
-        setLocalRules((prev) =>
-            prev.map((r) =>
-                r.day_of_week === dayValue ? { ...r, enabled: !r.enabled } : r
-            )
-        )
-        setHasChanges(true)
+        setAvailabilityState((current) => ({
+            ...current,
+            localRules: current.localRules.map((rule) =>
+                rule.day_of_week === dayValue ? { ...rule, enabled: !rule.enabled } : rule
+            ),
+            hasChanges: true,
+        }))
     }
 
     const updateTime = (dayValue: number, field: "start_time" | "end_time", value: string) => {
-        setLocalRules((prev) =>
-            prev.map((r) =>
-                r.day_of_week === dayValue ? { ...r, [field]: value } : r
-            )
-        )
-        setHasChanges(true)
+        setAvailabilityState((current) => ({
+            ...current,
+            localRules: current.localRules.map((rule) =>
+                rule.day_of_week === dayValue ? { ...rule, [field]: value } : rule
+            ),
+            hasChanges: true,
+        }))
     }
 
     const saveRules = () => {
-        const enabledRules = localRules
-            .filter((r) => r.enabled)
-            .map(({ day_of_week, start_time, end_time }) => ({
-                day_of_week,
-                start_time,
-                end_time,
-            }))
+        const enabledRules: Array<{ day_of_week: number; start_time: string; end_time: string }> = []
+        for (const rule of localRules) {
+            if (!rule.enabled) continue
+            const { day_of_week, start_time, end_time } = rule
+            enabledRules.push({ day_of_week, start_time, end_time })
+        }
+
         setRulesMutation.mutate({ rules: enabledRules, timezone }, {
-            onSuccess: () => setHasChanges(false),
+            onSuccess: () => {
+                setAvailabilityState((current) => ({ ...current, hasChanges: false }))
+            },
         })
     }
 
@@ -377,7 +396,17 @@ function AvailabilityRulesCard() {
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                     <div className="flex items-center gap-2">
                         <Label>Timezone:</Label>
-                        <Select value={timezone} onValueChange={(v) => { if (v) { setTimezone(v); setHasChanges(true) } }}>
+                        <Select
+                            value={timezone}
+                            onValueChange={(v) => {
+                                if (!v) return
+                                setAvailabilityState((current) => ({
+                                    ...current,
+                                    timezone: v,
+                                    hasChanges: true,
+                                }))
+                            }}
+                        >
                             <SelectTrigger className="w-48">
                                 <SelectValue>
                                     {(value: string | null) => {
@@ -514,9 +543,14 @@ function AppointmentTypesCard() {
             return
         }
 
-        const orderedModes = MEETING_MODE_OPTIONS.map((option) => option.value).filter((mode) =>
-            formData.meeting_modes.includes(mode)
-        )
+        const selectedModes = new Set(formData.meeting_modes)
+        const orderedModes: MeetingMode[] = []
+        for (const option of MEETING_MODE_OPTIONS) {
+            if (selectedModes.has(option.value)) {
+                orderedModes.push(option.value)
+            }
+        }
+
         if (orderedModes.length === 0) {
             toast.error("Select at least one appointment format")
             return
@@ -596,7 +630,7 @@ function AppointmentTypesCard() {
                                 <Label>Name</Label>
                                 <Input
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={(e) => setFormData((current) => ({ ...current, name: e.target.value }))}
                                     placeholder="e.g., Initial Consultation"
                                 />
                             </div>
@@ -604,7 +638,7 @@ function AppointmentTypesCard() {
                                 <Label>Description</Label>
                                 <Textarea
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={(e) => setFormData((current) => ({ ...current, description: e.target.value }))}
                                     placeholder="Brief description of this appointment type"
                                 />
                             </div>
@@ -614,7 +648,7 @@ function AppointmentTypesCard() {
                                     <Select
                                         value={String(formData.duration_minutes)}
                                         onValueChange={(v) =>
-                                            v && setFormData({ ...formData, duration_minutes: parseInt(v) })
+                                            v && setFormData((current) => ({ ...current, duration_minutes: parseInt(v) }))
                                         }
                                     >
                                         <SelectTrigger>
@@ -638,7 +672,7 @@ function AppointmentTypesCard() {
                                     <Select
                                         value={String(formData.buffer_after_minutes)}
                                         onValueChange={(v) =>
-                                            v && setFormData({ ...formData, buffer_after_minutes: parseInt(v) })
+                                            v && setFormData((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))
                                         }
                                     >
                                         <SelectTrigger>
@@ -692,7 +726,7 @@ function AppointmentTypesCard() {
                                     <Label>Location</Label>
                                     <Input
                                         value={formData.meeting_location}
-                                        onChange={(e) => setFormData({ ...formData, meeting_location: e.target.value })}
+                                        onChange={(e) => setFormData((current) => ({ ...current, meeting_location: e.target.value }))}
                                         placeholder="e.g., 123 Main St, Suite 4B"
                                     />
                                 </div>
@@ -702,7 +736,7 @@ function AppointmentTypesCard() {
                                     <Label>Dial-in Number</Label>
                                     <Input
                                         value={formData.dial_in_number}
-                                        onChange={(e) => setFormData({ ...formData, dial_in_number: e.target.value })}
+                                        onChange={(e) => setFormData((current) => ({ ...current, dial_in_number: e.target.value }))}
                                         placeholder="e.g., +1 (555) 123-4567"
                                     />
                                 </div>
@@ -711,7 +745,7 @@ function AppointmentTypesCard() {
                                 <Switch
                                     checked={formData.auto_approve}
                                     onCheckedChange={(checked) =>
-                                        setFormData({ ...formData, auto_approve: checked })
+                                        setFormData((current) => ({ ...current, auto_approve: checked }))
                                     }
                                 />
                                 <div>

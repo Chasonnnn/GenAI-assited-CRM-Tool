@@ -204,6 +204,38 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setFormData({ ...formData")
     })
 
+    it("uses functional updates for appointment type form fields", () => {
+        const source = readSource("components/appointments/AppointmentSettings.tsx")
+
+        expect(source).toContain("setFormData((current) => ({ ...current, name: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, description: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, duration_minutes: parseInt(v) }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, meeting_location: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, dial_in_number: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, auto_approve: checked }))")
+        expect(source).not.toContain("setFormData({ ...formData")
+    })
+
+    it("keeps appointment settings availability updates batched and single-pass", () => {
+        const source = readSource("components/appointments/AppointmentSettings.tsx")
+
+        expect(source).toContain("type AvailabilityRuleDraft =")
+        expect(source).toContain("type AvailabilityRulesState =")
+        expect(source).toContain("const [availabilityState, setAvailabilityState] = useState<AvailabilityRulesState>")
+        expect(source).toContain("const rulesByDay = new Map")
+        expect(source).toContain("setAvailabilityState((current) => {")
+        expect(source).toContain("const enabledRules: Array<{ day_of_week: number; start_time: string; end_time: string }> = []")
+        expect(source).toContain("for (const rule of localRules)")
+        expect(source).toContain("const selectedModes = new Set(formData.meeting_modes)")
+        expect(source).toContain("for (const option of MEETING_MODE_OPTIONS)")
+        expect(source).not.toContain("const [localRules, setLocalRules]")
+        expect(source).not.toContain("const [timezone, setTimezone]")
+        expect(source).not.toContain("const [hasChanges, setHasChanges]")
+        expect(source).not.toMatch(/localRules\s*\.filter\(\(r\) => r\.enabled\)\s*\.map/)
+        expect(source).not.toMatch(/MEETING_MODE_OPTIONS\.map\(\(option\) => option\.value\)\.filter/)
+    })
+
     it("derives public booking confirmation state from the response", () => {
         const source = readSource("components/appointments/PublicBookingPage.tsx")
 
