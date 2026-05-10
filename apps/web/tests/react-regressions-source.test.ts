@@ -1256,6 +1256,15 @@ describe("React regression guards (source)", () => {
         expect(intendedParentTimelineSource).not.toContain("const upcoming = pending.filter")
     })
 
+    it("uses functional trigger-config updates in workflow template editing", () => {
+        const source = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+
+        expect(source).toContain("type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>")
+        expect(source).toContain("setTriggerConfig((current) => ({")
+        expect(source).toContain("const currentFields = Array.isArray(current.fields)")
+        expect(source).not.toContain("setTriggerConfig({ ...triggerConfig")
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
