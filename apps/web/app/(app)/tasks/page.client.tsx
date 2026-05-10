@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -77,12 +77,12 @@ export default function TasksPage() {
     const urlOwnerId = searchParams.get("owner_id")
     const canViewOtherOwners = ["admin", "developer"].includes(currentUser?.role || "")
     const ownerOverride = canViewOtherOwners && urlOwnerId ? urlOwnerId : null
+    const handledFocusRef = useRef<FocusTarget | null>(null)
+    const focusTarget = isFocusTarget(urlFocus) ? urlFocus : null
+    const pendingFocus = focusTarget && handledFocusRef.current !== focusTarget ? focusTarget : null
 
     const [filter, setFilter] = useState<FilterType>(
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
-    )
-    const [pendingFocus, setPendingFocus] = useState<FocusTarget | null>(
-        isFocusTarget(urlFocus) ? urlFocus : null
     )
     const [showCompleted, setShowCompleted] = useState(false)
     const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
@@ -95,8 +95,10 @@ export default function TasksPage() {
     })
 
     useEffect(() => {
-        setPendingFocus(isFocusTarget(urlFocus) ? urlFocus : null)
-    }, [urlFocus])
+        if (!focusTarget) {
+            handledFocusRef.current = null
+        }
+    }, [focusTarget])
 
     // Sync state changes back to URL
     const updateUrlParams = useCallback((filterValue: FilterType) => {
@@ -345,7 +347,7 @@ export default function TasksPage() {
         if (!target) return
 
         target.scrollIntoView({ behavior: "smooth", block: "start" })
-        setPendingFocus(null)
+        handledFocusRef.current = pendingFocus
     }, [pendingFocus, view, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
 
     useEffect(() => {

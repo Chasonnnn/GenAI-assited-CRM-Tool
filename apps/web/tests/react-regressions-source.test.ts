@@ -1161,6 +1161,16 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps Tasks page focus coordination out of render state", () => {
+        const source = readSource("app/(app)/tasks/page.client.tsx")
+
+        expect(source).toContain("const handledFocusRef = useRef<FocusTarget | null>(null)")
+        expect(source).toContain("const pendingFocus =")
+        expect(source).toContain("handledFocusRef.current = pendingFocus")
+        expect(source).not.toContain("const [pendingFocus, setPendingFocus]")
+        expect(source).not.toContain("setPendingFocus(")
+    })
+
     it("uses stable content-derived keys in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
