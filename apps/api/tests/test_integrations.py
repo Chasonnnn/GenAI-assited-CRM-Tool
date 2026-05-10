@@ -1040,6 +1040,9 @@ async def test_get_google_events_encodes_calendar_id_in_request(monkeypatch):
             return {"items": []}
 
     class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
@@ -1086,6 +1089,9 @@ async def test_get_google_events_defaults_blank_summary_to_no_title(monkeypatch)
             }
 
     class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 

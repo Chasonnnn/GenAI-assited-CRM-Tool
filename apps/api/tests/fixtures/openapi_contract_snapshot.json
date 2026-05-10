@@ -267,6 +267,39 @@
       "422"
     ]
   },
+  "/ai/studio/assets/{storage_key}": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/studio/drafts": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/studio/drafts/{draft_id}/save": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/studio/generate": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/ai/studio/settings": {
+    "GET": [
+      "200"
+    ],
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
   "/ai/summarize-surrogate": {
     "POST": [
       "200",
