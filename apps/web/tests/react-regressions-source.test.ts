@@ -1064,6 +1064,14 @@ describe("React regression guards (source)", () => {
         expect(changeStageSource).not.toContain(".sort((a, b) => a.order - b.order)")
     })
 
+    it("keeps bulk stage change reset logic in event handlers", () => {
+        const source = readSource("components/surrogates/BulkChangeStageModal.tsx")
+
+        expect(source).toContain("const handleOpenChange =")
+        expect(source).toContain("setTargetStageId(\"\")")
+        expect(source).not.toContain("React.useEffect")
+    })
+
     it("uses immutable sorting in unified calendar derived lists", () => {
         const source = readSource("components/appointments/UnifiedCalendar.tsx")
 

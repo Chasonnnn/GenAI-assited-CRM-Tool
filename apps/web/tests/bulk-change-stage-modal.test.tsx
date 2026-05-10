@@ -145,4 +145,29 @@ describe("BulkChangeStageModal", () => {
 
         await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("s2"))
     })
+
+    it("clears the selected stage after a successful submit", async () => {
+        const onSubmit = vi.fn().mockResolvedValue(undefined)
+
+        render(
+            <BulkChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                selectedCount={2}
+                stages={[...stages]}
+                isPending={false}
+                onSubmit={onSubmit}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("combobox", { name: "Target stage" }))
+        fireEvent.click(screen.getByRole("option", { name: "Contacted" }))
+
+        const submitButton = screen.getByRole("button", { name: "Change stage" })
+        fireEvent.click(submitButton)
+
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("s2"))
+        await waitFor(() => expect(submitButton).toBeDisabled())
+        expect(screen.getByText("Select a stage")).toBeInTheDocument()
+    })
 })
