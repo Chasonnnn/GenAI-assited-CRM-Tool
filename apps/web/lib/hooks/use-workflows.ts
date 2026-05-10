@@ -27,7 +27,7 @@ import {
 // Query Keys
 // =============================================================================
 
-export const workflowKeys = {
+const workflowKeys = {
     all: ["workflows"] as const,
     lists: () => [...workflowKeys.all, "list"] as const,
     list: (filters: ListWorkflowsParams) =>

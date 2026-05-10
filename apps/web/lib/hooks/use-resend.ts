@@ -7,7 +7,7 @@ import * as resendApi from '../api/resend';
 import type { ResendSettingsUpdate } from '../api/resend';
 
 // Query keys
-export const resendKeys = {
+const resendKeys = {
     all: ['resend'] as const,
     settings: () => [...resendKeys.all, 'settings'] as const,
     eligibleSenders: () => [...resendKeys.all, 'eligible-senders'] as const,

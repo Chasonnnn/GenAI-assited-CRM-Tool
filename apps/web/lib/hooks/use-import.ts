@@ -30,7 +30,7 @@ import type { SurrogateSource } from '@/lib/types/surrogate'
 export type { EnhancedImportPreview, ColumnMappingItem, ImportApprovalItem, ImportSubmitResponse, ImportApprovalResponse, ImportActionResponse }
 
 // Query keys
-export const importKeys = {
+const importKeys = {
     all: ['imports'] as const,
     lists: () => [...importKeys.all, 'list'] as const,
     list: () => [...importKeys.lists()] as const,

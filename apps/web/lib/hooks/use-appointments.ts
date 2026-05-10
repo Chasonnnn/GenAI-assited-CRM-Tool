@@ -440,7 +440,7 @@ export function useCancelByManageToken() {
     })
 }
 
-export const bookingPreviewKeys = {
+const bookingPreviewKeys = {
     all: ['booking-preview'] as const,
     page: () => [...bookingPreviewKeys.all, 'page'] as const,
     slots: (
@@ -493,7 +493,7 @@ export function useBookingPreviewSlots(
 // Google Calendar Events
 // =============================================================================
 
-export const calendarKeys = {
+const calendarKeys = {
     googleEvents: (dateStart: string, dateEnd: string, timezone?: string) =>
         ['google-calendar', 'events', { dateStart, dateEnd, timezone }] as const,
 };

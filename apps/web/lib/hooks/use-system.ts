@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as systemApi from '../api/system';
 
-export const systemKeys = {
+const systemKeys = {
     all: ['system'] as const,
     health: () => [...systemKeys.all, 'health'] as const,
 };

@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as surrogateEmailsApi from '../api/surrogate-emails'
 
-export const surrogateEmailKeys = {
+const surrogateEmailKeys = {
     all: ['surrogate-emails'] as const,
     ticketList: (surrogateId: string) => [...surrogateEmailKeys.all, surrogateId, 'tickets'] as const,
     contacts: (surrogateId: string) => [...surrogateEmailKeys.all, surrogateId, 'contacts'] as const,

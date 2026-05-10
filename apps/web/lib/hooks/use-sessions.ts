@@ -16,13 +16,9 @@ import {
 // Query Keys
 // =============================================================================
 
-export const sessionKeys = {
+const sessionKeys = {
     all: ['sessions'] as const,
     list: () => [...sessionKeys.all, 'list'] as const,
-}
-
-export const avatarKeys = {
-    all: ['avatar'] as const,
 }
 
 // =============================================================================

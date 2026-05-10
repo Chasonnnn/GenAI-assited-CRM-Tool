@@ -171,7 +171,7 @@ import {
     PERSON_TYPE_COLORS,
 } from '@/lib/api/matches'
 
-export const matchEventKeys = {
+const matchEventKeys = {
     all: (matchId: string) => ['matches', matchId, 'events'] as const,
     list: (matchId: string) => [...matchEventKeys.all(matchId), 'list'] as const,
     detail: (matchId: string, eventId: string) => [...matchEventKeys.all(matchId), eventId] as const,

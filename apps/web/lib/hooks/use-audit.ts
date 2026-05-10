@@ -15,7 +15,7 @@ import {
 } from '@/lib/api/audit'
 
 // Query keys
-export const auditKeys = {
+const auditKeys = {
     all: ['audit'] as const,
     lists: () => [...auditKeys.all, 'list'] as const,
     list: (filters: AuditLogFilters) => [...auditKeys.lists(), filters] as const,

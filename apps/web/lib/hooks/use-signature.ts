@@ -22,7 +22,7 @@ import {
 // Query Keys
 // =============================================================================
 
-export const signatureKeys = {
+const signatureKeys = {
     all: ['signature'] as const,
     user: () => [...signatureKeys.all, 'user'] as const,
     preview: () => [...signatureKeys.all, 'preview'] as const,

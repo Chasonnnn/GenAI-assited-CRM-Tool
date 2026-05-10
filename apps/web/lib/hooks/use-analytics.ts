@@ -7,7 +7,7 @@ import * as analyticsApi from '../api/analytics';
 import type { DateRangeParams, TrendParams, StatusParams, PerformanceByUserParams } from '../api/analytics';
 
 // Query keys
-export const analyticsKeys = {
+const analyticsKeys = {
     all: ['analytics'] as const,
     summary: (params?: DateRangeParams) => [...analyticsKeys.all, 'summary', params] as const,
     byStatus: (params?: StatusParams) => [...analyticsKeys.all, 'by-status', params] as const,

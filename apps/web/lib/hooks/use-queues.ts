@@ -79,7 +79,7 @@ async function assignSurrogateToQueue(surrogateId: string, queueId: string): Pro
 // Query Keys
 // =============================================================================
 
-export const queueKeys = {
+const queueKeys = {
     all: ['queues'] as const,
     lists: () => [...queueKeys.all, 'list'] as const,
     list: (includeInactive: boolean) => [...queueKeys.lists(), { includeInactive }] as const,

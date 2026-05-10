@@ -15,7 +15,7 @@ import type {
 // Query Keys
 // ============================================================================
 
-export const interviewKeys = {
+const interviewKeys = {
     all: ['interviews'] as const,
     lists: () => [...interviewKeys.all, 'list'] as const,
     forSurrogate: (surrogateId: string) => [...interviewKeys.lists(), surrogateId] as const,

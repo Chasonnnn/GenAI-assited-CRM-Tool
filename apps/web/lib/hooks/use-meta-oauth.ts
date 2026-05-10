@@ -20,7 +20,7 @@ import {
 import { adminMetaAdAccountKeys } from './use-admin-meta'
 
 // Query keys
-export const metaOAuthKeys = {
+const metaOAuthKeys = {
     all: ['meta-oauth'] as const,
     connections: () => [...metaOAuthKeys.all, 'connections'] as const,
     connectionsList: () => [...metaOAuthKeys.connections(), 'list'] as const,

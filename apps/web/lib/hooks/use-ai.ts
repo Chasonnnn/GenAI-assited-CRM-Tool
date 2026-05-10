@@ -8,7 +8,7 @@ import * as aiApi from '../api/ai';
 import type { AISettingsUpdate, ChatRequest } from '../api/ai';
 
 // Query keys
-export const aiKeys = {
+const aiKeys = {
     all: ['ai'] as const,
     settings: () => [...aiKeys.all, 'settings'] as const,
     consent: () => [...aiKeys.all, 'consent'] as const,

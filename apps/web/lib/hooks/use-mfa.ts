@@ -9,7 +9,7 @@ import * as mfaApi from '../api/mfa';
 // Query Keys
 // =============================================================================
 
-export const mfaKeys = {
+const mfaKeys = {
     all: ['mfa'] as const,
     status: () => [...mfaKeys.all, 'status'] as const,
     duoStatus: () => [...mfaKeys.all, 'duo-status'] as const,

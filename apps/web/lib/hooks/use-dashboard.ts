@@ -22,7 +22,7 @@ import {
 // Query Keys
 // =============================================================================
 
-export const dashboardKeys = {
+const dashboardKeys = {
     all: ['dashboard'] as const,
     upcoming: (params?: GetUpcomingParams) => [...dashboardKeys.all, 'upcoming', params] as const,
     attention: (params?: GetAttentionParams) => [...dashboardKeys.all, 'attention', params] as const,

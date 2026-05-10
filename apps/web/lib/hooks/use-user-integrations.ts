@@ -34,7 +34,7 @@ import {
 // Query Keys
 // ============================================================================
 
-export const integrationKeys = {
+const integrationKeys = {
     all: ['user-integrations'] as const,
     list: () => [...integrationKeys.all, 'list'] as const,
     googleCalendarStatus: () => [...integrationKeys.all, 'google-calendar-status'] as const,

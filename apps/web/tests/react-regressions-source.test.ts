@@ -373,13 +373,46 @@ describe("React regression guards (source)", () => {
     })
 
     it("keeps hook query key factories private", () => {
-        const notesSource = readSource("lib/hooks/use-notes.ts")
-        const journeySource = readSource("lib/hooks/use-journey.ts")
-        const profileSource = readSource("lib/hooks/use-profile.ts")
+        const privateKeyFactories = [
+            ["lib/hooks/use-ai-studio.ts", "aiStudioKeys"],
+            ["lib/hooks/use-ai.ts", "aiKeys"],
+            ["lib/hooks/use-analytics.ts", "analyticsKeys"],
+            ["lib/hooks/use-appointments.ts", "bookingPreviewKeys"],
+            ["lib/hooks/use-appointments.ts", "calendarKeys"],
+            ["lib/hooks/use-audit.ts", "auditKeys"],
+            ["lib/hooks/use-campaigns.ts", "campaignKeys"],
+            ["lib/hooks/use-dashboard.ts", "dashboardKeys"],
+            ["lib/hooks/use-email-templates.ts", "emailTemplateKeys"],
+            ["lib/hooks/use-import.ts", "importKeys"],
+            ["lib/hooks/use-interviews.ts", "interviewKeys"],
+            ["lib/hooks/use-journey.ts", "journeyKeys"],
+            ["lib/hooks/use-matches.ts", "matchEventKeys"],
+            ["lib/hooks/use-meta-crm-dataset.ts", "metaCrmDatasetKeys"],
+            ["lib/hooks/use-meta-oauth.ts", "metaOAuthKeys"],
+            ["lib/hooks/use-metadata.ts", "metadataKeys"],
+            ["lib/hooks/use-mfa.ts", "mfaKeys"],
+            ["lib/hooks/use-notes.ts", "noteKeys"],
+            ["lib/hooks/use-notifications.ts", "notificationKeys"],
+            ["lib/hooks/use-ops.ts", "opsKeys"],
+            ["lib/hooks/use-pipelines.ts", "pipelineKeys"],
+            ["lib/hooks/use-platform-templates.ts", "platformTemplateKeys"],
+            ["lib/hooks/use-profile.ts", "profileKeys"],
+            ["lib/hooks/use-queues.ts", "queueKeys"],
+            ["lib/hooks/use-resend.ts", "resendKeys"],
+            ["lib/hooks/use-sessions.ts", "avatarKeys"],
+            ["lib/hooks/use-sessions.ts", "sessionKeys"],
+            ["lib/hooks/use-signature.ts", "signatureKeys"],
+            ["lib/hooks/use-status-change-requests.ts", "statusChangeRequestKeys"],
+            ["lib/hooks/use-surrogate-emails.ts", "surrogateEmailKeys"],
+            ["lib/hooks/use-system.ts", "systemKeys"],
+            ["lib/hooks/use-tickets.ts", "ticketKeys"],
+            ["lib/hooks/use-user-integrations.ts", "integrationKeys"],
+            ["lib/hooks/use-workflows.ts", "workflowKeys"],
+        ]
 
-        expect(notesSource).not.toContain("export const noteKeys")
-        expect(journeySource).not.toContain("export const journeyKeys")
-        expect(profileSource).not.toContain("export const profileKeys")
+        for (const [path, keyFactory] of privateKeyFactories) {
+            expect(readSource(path), keyFactory).not.toContain(`export const ${keyFactory}`)
+        }
     })
 
     it("keeps label map internals private", () => {
@@ -412,6 +445,25 @@ describe("React regression guards (source)", () => {
 
         expect(aiStudioSource).not.toContain("export type AIStudioDraftStatus")
         expect(workflowMetricsSource).not.toContain("export type WorkflowMetricEventType")
+    })
+
+    it("keeps MFA API response shapes private", () => {
+        const source = readSource("lib/api/mfa.ts")
+        const privateResponses = [
+            "MFAStatus",
+            "TOTPSetupResponse",
+            "TOTPSetupCompleteResponse",
+            "RecoveryCodesResponse",
+            "MFAVerifyResponse",
+            "MFACompleteResponse",
+            "DuoStatus",
+            "DuoInitiateResponse",
+            "DuoCallbackResponse",
+        ]
+
+        for (const responseName of privateResponses) {
+            expect(source).not.toContain(`export interface ${responseName}`)
+        }
     })
 
     it("keeps public embed field visibility filtering single pass", () => {

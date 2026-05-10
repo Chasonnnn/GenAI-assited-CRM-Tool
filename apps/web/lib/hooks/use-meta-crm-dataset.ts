@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as metaCrmDatasetApi from '../api/meta-crm-dataset'
 
-export const metaCrmDatasetKeys = {
+const metaCrmDatasetKeys = {
     all: ['meta-crm-dataset'] as const,
     settings: () => [...metaCrmDatasetKeys.all, 'settings'] as const,
     eventsSummary: (windowHours: number) =>

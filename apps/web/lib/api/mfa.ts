@@ -8,7 +8,7 @@ import api from '../api';
 // Types
 // =============================================================================
 
-export interface MFAStatus {
+interface MFAStatus {
     mfa_enabled: boolean;
     totp_enabled: boolean;
     totp_enabled_at: string | null;
@@ -18,24 +18,24 @@ export interface MFAStatus {
     mfa_required: boolean;
 }
 
-export interface TOTPSetupResponse {
+interface TOTPSetupResponse {
     secret: string;
     provisioning_uri: string;
     qr_code_data: string;
 }
 
-export interface TOTPSetupCompleteResponse {
+interface TOTPSetupCompleteResponse {
     success: boolean;
     recovery_codes: string[];
     message: string;
 }
 
-export interface RecoveryCodesResponse {
+interface RecoveryCodesResponse {
     codes: string[];
     count: number;
 }
 
-export interface MFAVerifyResponse {
+interface MFAVerifyResponse {
     valid: boolean;
     method: 'totp' | 'recovery' | null;
 }
@@ -80,7 +80,7 @@ export function verifyMFACode(code: string): Promise<MFAVerifyResponse> {
     return api.post<MFAVerifyResponse>('/mfa/verify', { code });
 }
 
-export interface MFACompleteResponse {
+interface MFACompleteResponse {
     success: boolean;
     message: string;
 }
@@ -104,18 +104,18 @@ export function disableMFA(): Promise<{ message: string }> {
 // Duo API Functions
 // =============================================================================
 
-export interface DuoStatus {
+interface DuoStatus {
     available: boolean;
     enrolled: boolean;
     enrolled_at: string | null;
 }
 
-export interface DuoInitiateResponse {
+interface DuoInitiateResponse {
     auth_url: string;
     state: string;
 }
 
-export interface DuoCallbackResponse {
+interface DuoCallbackResponse {
     success: boolean;
     message: string;
     recovery_codes?: string[];

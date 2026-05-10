@@ -22,7 +22,7 @@ type NotificationListQueryOptions = {
 }
 
 // Query keys
-export const notificationKeys = {
+const notificationKeys = {
     all: ['notifications'] as const,
     list: (options?: NotificationListQueryOptions) =>
         [...notificationKeys.all, 'list', options] as const,

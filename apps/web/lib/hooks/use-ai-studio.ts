@@ -6,7 +6,7 @@ import type {
     AIStudioSettingsUpdate,
 } from "@/lib/api/ai-studio"
 
-export const aiStudioKeys = {
+const aiStudioKeys = {
     all: ["ai-studio"] as const,
     settings: () => [...aiStudioKeys.all, "settings"] as const,
     drafts: () => [...aiStudioKeys.all, "drafts"] as const,

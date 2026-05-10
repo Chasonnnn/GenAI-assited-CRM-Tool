@@ -7,7 +7,7 @@ import * as api from '../api/status-change-requests';
 import type { ListStatusChangeRequestsParams } from '../api/status-change-requests';
 
 // Query keys
-export const statusChangeRequestKeys = {
+const statusChangeRequestKeys = {
     all: ['status-change-requests'] as const,
     lists: () => [...statusChangeRequestKeys.all, 'list'] as const,
     list: (params: ListStatusChangeRequestsParams) => [...statusChangeRequestKeys.lists(), params] as const,

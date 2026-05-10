@@ -9,7 +9,7 @@ import { getErrorMessage } from '../error-utils';
 import type { AlertsListParams } from '../api/ops';
 
 // Query keys
-export const opsKeys = {
+const opsKeys = {
     all: ['ops'] as const,
     health: () => [...opsKeys.all, 'health'] as const,
     alertsSummary: () => [...opsKeys.all, 'alerts-summary'] as const,

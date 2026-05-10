@@ -29,7 +29,7 @@ import {
 // Query Keys
 // =============================================================================
 
-export const campaignKeys = {
+const campaignKeys = {
     all: ["campaigns"] as const,
     lists: () => [...campaignKeys.all, "list"] as const,
     list: (filters?: { status?: string }) => [...campaignKeys.lists(), filters] as const,

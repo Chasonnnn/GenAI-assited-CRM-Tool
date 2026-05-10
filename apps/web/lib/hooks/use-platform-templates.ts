@@ -50,7 +50,7 @@ import {
 } from '@/lib/api/platform'
 import type { TemplateVariableRead } from '@/lib/types/template-variable'
 
-export const platformTemplateKeys = {
+const platformTemplateKeys = {
     all: ['platform-templates'] as const,
     emails: () => [...platformTemplateKeys.all, 'email'] as const,
     emailDetail: (id: string) => [...platformTemplateKeys.emails(), id] as const,

@@ -32,7 +32,7 @@ import type { TemplateVariableRead } from '@/lib/types/template-variable'
 import { invalidateSurrogateCrmCaches } from './use-surrogates'
 
 // Query keys
-export const emailTemplateKeys = {
+const emailTemplateKeys = {
     all: ['email-templates'] as const,
     lists: () => [...emailTemplateKeys.all, 'list'] as const,
     list: (params: ListTemplatesParams) => [...emailTemplateKeys.lists(), params] as const,

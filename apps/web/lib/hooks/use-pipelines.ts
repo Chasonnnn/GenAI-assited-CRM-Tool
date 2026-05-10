@@ -14,7 +14,7 @@ import type {
 } from '../api/pipelines';
 
 // Query keys
-export const pipelineKeys = {
+const pipelineKeys = {
     all: ['pipelines'] as const,
     list: (entityType: PipelineEntityType = 'surrogate') =>
         [...pipelineKeys.all, 'list', entityType] as const,
