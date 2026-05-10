@@ -160,7 +160,7 @@ export function stageUsesPauseBehavior(stage: StageSemanticRef | null | undefine
     return getStageSemantics(stage).pause_behavior === "resume_previous_stage"
 }
 
-export function roleRuleMatchesStage(stage: PipelineStage, rule: RoleStageRule | undefined): boolean {
+function roleRuleMatchesStage(stage: PipelineStage, rule: RoleStageRule | undefined): boolean {
     if (!rule) return false
     const semanticKey = getStageSemanticKey(stage)
     if (stage.stage_type && rule.stage_types.includes(stage.stage_type)) return true
@@ -185,7 +185,7 @@ export function normalizeStageKey(value: string | null | undefined): string | nu
     return LEGACY_STAGE_KEY_ALIASES[normalized] ?? normalized
 }
 
-export function getStageSemanticKey(stage: StageSemanticRef | null | undefined): string | null {
+function getStageSemanticKey(stage: StageSemanticRef | null | undefined): string | null {
     if (!stage) return null
     return normalizeStageKey(stage.stage_key ?? stage.slug ?? stage.stage_slug ?? null)
 }

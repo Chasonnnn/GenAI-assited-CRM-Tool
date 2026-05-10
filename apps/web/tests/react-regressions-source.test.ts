@@ -184,6 +184,15 @@ describe("React regression guards (source)", () => {
         expect(interviewWrapperSource).not.toContain("type FormState")
     })
 
+    it("keeps unused task and stage helper exports out of public modules", () => {
+        const taskTypesSource = readSource("lib/types/task.ts")
+        const stageContextSource = readSource("lib/surrogate-stage-context.ts")
+
+        expect(taskTypesSource).not.toContain("TASK_TYPE_CONFIG")
+        expect(stageContextSource).not.toContain("export function roleRuleMatchesStage")
+        expect(stageContextSource).not.toContain("export function getStageSemanticKey")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
