@@ -153,15 +153,16 @@ export default function MetaFormMappingPage() {
 
     const handleAiHelp = async () => {
         if (!data) return
-        const unmatched = mappings
-            .filter((mapping) => !mapping.surrogate_field && mapping.action !== "custom")
-            .map((mapping) => mapping.csv_column)
+        const unmatched: string[] = []
+        const sampleValues: Record<string, string[]> = {}
+        for (const mapping of mappings) {
+            sampleValues[mapping.csv_column] = mapping.sample_values || []
+            if (!mapping.surrogate_field && mapping.action !== "custom") {
+                unmatched.push(mapping.csv_column)
+            }
+        }
 
         if (unmatched.length === 0) return
-
-        const sampleValues = Object.fromEntries(
-            mappings.map((mapping) => [mapping.csv_column, mapping.sample_values || []])
-        )
 
         try {
             const result = await aiMapMutation.mutateAsync({
@@ -201,11 +202,12 @@ export default function MetaFormMappingPage() {
     }
 
     const ensureRequiredMappings = () => {
-        const mappedFields = new Set(
-            mappings
-                .filter((mapping) => mapping.action === "map" && mapping.surrogate_field)
-                .map((mapping) => mapping.surrogate_field)
-        )
+        const mappedFields = new Set<string>()
+        for (const mapping of mappings) {
+            if (mapping.action === "map" && mapping.surrogate_field) {
+                mappedFields.add(mapping.surrogate_field)
+            }
+        }
 
         if (!mappedFields.has("full_name") || !mappedFields.has("email")) {
             setError("Please map required fields: full_name and email")
