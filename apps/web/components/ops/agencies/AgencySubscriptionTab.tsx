@@ -1,13 +1,13 @@
 "use client"
 
 import { AlertTriangle, CalendarPlus } from "lucide-react"
-import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { UtcDate } from "@/components/ui/time-display"
 import type { OrganizationSubscription } from "@/lib/api/platform"
 import { PLAN_BADGE_VARIANTS, STATUS_BADGE_VARIANTS } from "@/components/ops/agencies/agency-constants"
 
@@ -86,20 +86,14 @@ export function AgencySubscriptionTab({
                             <div>
                                 <Label className="text-muted-foreground">Current Period End</Label>
                                 <p className="mt-1 font-medium">
-                                    {format(
-                                        new Date(subscription.current_period_end),
-                                        "MMMM d, yyyy"
-                                    )}
+                                    <UtcDate value={subscription.current_period_end} month="long" />
                                 </p>
                             </div>
                             {subscription.trial_end && (
                                 <div>
                                     <Label className="text-muted-foreground">Trial End</Label>
                                     <p className="mt-1 font-medium">
-                                        {format(
-                                            new Date(subscription.trial_end),
-                                            "MMMM d, yyyy"
-                                        )}
+                                        <UtcDate value={subscription.trial_end} month="long" />
                                     </p>
                                 </div>
                             )}

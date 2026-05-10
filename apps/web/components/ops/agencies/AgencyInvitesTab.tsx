@@ -41,9 +41,9 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Ban, Loader2, Mail, Plus, RotateCw } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
 import type { OrgInvite, PlatformEmailStatus } from "@/lib/api/platform"
 import Link from "@/components/app-link"
+import { RelativeTime } from "@/components/ui/time-display"
 import {
     INVITE_ROLE_LABELS,
     INVITE_ROLE_OPTIONS,
@@ -173,7 +173,7 @@ export function AgencyInvitesTab({
                         </Link>
                         {platformEmailLoading ? (
                             <span className="text-xs text-muted-foreground">
-                                Loading sender status...
+                                Loading sender status&hellip;
                             </span>
                         ) : platformEmailStatus?.configured ? (
                             <span className="text-xs text-muted-foreground">
@@ -181,7 +181,7 @@ export function AgencyInvitesTab({
                             </span>
                         ) : (
                             <span className="text-xs text-yellow-700 dark:text-yellow-400">
-                                Platform sender not configured — invite emails may fail.
+                                Platform sender not configured; invite emails may fail.
                             </span>
                         )}
                     </div>
@@ -230,10 +230,7 @@ export function AgencyInvitesTab({
                                                 </span>
                                                 {invite.opened_at ? (
                                                     <span className="text-xs">
-                                                        {formatDistanceToNow(
-                                                            new Date(invite.opened_at),
-                                                            { addSuffix: true }
-                                                        )}
+                                                        <RelativeTime value={invite.opened_at} />
                                                     </span>
                                                 ) : null}
                                             </div>
@@ -250,10 +247,7 @@ export function AgencyInvitesTab({
                                                 </span>
                                                 {invite.clicked_at ? (
                                                     <span className="text-xs">
-                                                        {formatDistanceToNow(
-                                                            new Date(invite.clicked_at),
-                                                            { addSuffix: true }
-                                                        )}
+                                                        <RelativeTime value={invite.clicked_at} />
                                                     </span>
                                                 ) : null}
                                             </div>
@@ -262,9 +256,7 @@ export function AgencyInvitesTab({
                                         )}
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
-                                        {formatDistanceToNow(new Date(invite.created_at), {
-                                            addSuffix: true,
-                                        })}
+                                        <RelativeTime value={invite.created_at} />
                                     </TableCell>
                                     <TableCell>
                                         {invite.status === "pending" && (
