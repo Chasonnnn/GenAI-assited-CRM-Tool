@@ -22,6 +22,23 @@ export interface DateTimePickerProps {
     triggerAriaLabelledBy?: string
 }
 
+type DateTimeDraft = {
+    date: Date | undefined
+    time: string
+}
+
+const DEFAULT_DRAFT: DateTimeDraft = {
+    date: undefined,
+    time: "09:00",
+}
+
+function getDraftFromValue(value: Date | undefined): DateTimeDraft {
+    return {
+        date: value,
+        time: value ? format(value, "HH:mm") : "09:00",
+    }
+}
+
 function parseTime(value: string): { hours: number; minutes: number } | null {
     const match = /^(\d{2}):(\d{2})$/.exec(value)
     if (!match) return null
@@ -44,15 +61,14 @@ export function DateTimePicker({
     triggerAriaLabelledBy,
 }: DateTimePickerProps) {
     const [open, setOpen] = React.useState(false)
-    const [draftDate, setDraftDate] = React.useState<Date | undefined>(value)
-    const [draftTime, setDraftTime] = React.useState<string>(value ? format(value, "HH:mm") : "09:00")
+    const [draft, setDraft] = React.useState<DateTimeDraft>(DEFAULT_DRAFT)
     const generatedTimeInputId = React.useId()
     const resolvedTimeInputId = timeInputId ?? generatedTimeInputId
+    const { date: draftDate, time: draftTime } = draft
 
     React.useEffect(() => {
         if (!open) return
-        setDraftDate(value)
-        setDraftTime(value ? format(value, "HH:mm") : "09:00")
+        setDraft(getDraftFromValue(value))
     }, [open, value])
 
     const displayLabel = value ? format(value, "MMM d, yyyy 'at' h:mm a") : placeholder
@@ -87,6 +103,9 @@ export function DateTimePicker({
                         reason === "trigger-press"
                     if (!allowClose) return
                 }
+                if (newOpen) {
+                    setDraft(getDraftFromValue(value))
+                }
                 setOpen(newOpen)
             }}
         >
@@ -118,8 +137,8 @@ export function DateTimePicker({
                     <Calendar
                         mode="single"
                         selected={draftDate}
-                        onSelect={setDraftDate}
-                        defaultMonth={draftDate || new Date()}
+                        onSelect={(date) => setDraft((current) => ({ ...current, date }))}
+                        {...(draftDate ? { defaultMonth: draftDate } : {})}
                         className="rounded-md border shadow-sm"
                     />
 
@@ -132,7 +151,7 @@ export function DateTimePicker({
                             id={resolvedTimeInputId}
                             type="time"
                             value={draftTime}
-                            onChange={(e) => setDraftTime(e.target.value)}
+                            onChange={(e) => setDraft((current) => ({ ...current, time: e.target.value }))}
                         />
                     </div>
 

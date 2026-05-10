@@ -58,6 +58,14 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("function csvUploadReducer(")
     })
 
+    it("keeps DateTimePicker draft state and default month hydration-safe", () => {
+        const source = readSource("components/ui/date-time-picker.tsx")
+
+        expect(source).toContain("function getDraftFromValue(")
+        expect(source).not.toContain("React.useState<Date | undefined>(value)")
+        expect(source).not.toContain("defaultMonth={draftDate || new Date()}")
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 
