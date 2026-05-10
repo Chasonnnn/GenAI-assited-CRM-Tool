@@ -128,6 +128,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("Add your comment...")
     })
 
+    it("keeps InlineDateField draft state tied to edit lifecycle", () => {
+        const source = readSource("components/inline-date-field.tsx")
+
+        expect(source).toContain("inlineDateFieldReducer")
+        expect(source).toContain('type: "startEdit"')
+        expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 

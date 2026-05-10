@@ -18,6 +18,59 @@ interface InlineDateFieldProps {
     disabled?: boolean
 }
 
+type InlineDateFieldState = {
+    isEditing: boolean
+    editValue: string
+    isSaving: boolean
+    error: string | null
+    pickerOpen: boolean
+}
+
+type InlineDateFieldAction =
+    | { type: "startEdit"; value: string }
+    | { type: "cancel" }
+    | { type: "closeWithoutSave" }
+    | { type: "setEditValue"; value: string }
+    | { type: "setError"; error: string | null }
+    | { type: "setPickerOpen"; pickerOpen: boolean }
+    | { type: "startSaving" }
+    | { type: "saveSuccess" }
+    | { type: "saveError"; error: string }
+
+const INITIAL_INLINE_DATE_FIELD_STATE: InlineDateFieldState = {
+    isEditing: false,
+    editValue: "",
+    isSaving: false,
+    error: null,
+    pickerOpen: false,
+}
+
+function inlineDateFieldReducer(
+    state: InlineDateFieldState,
+    action: InlineDateFieldAction,
+): InlineDateFieldState {
+    switch (action.type) {
+        case "startEdit":
+            return { ...state, isEditing: true, editValue: action.value, error: null }
+        case "cancel":
+            return { ...state, isEditing: false, editValue: "", error: null, pickerOpen: false }
+        case "closeWithoutSave":
+            return { ...state, isEditing: false }
+        case "setEditValue":
+            return { ...state, editValue: action.value }
+        case "setError":
+            return { ...state, error: action.error }
+        case "setPickerOpen":
+            return { ...state, pickerOpen: action.pickerOpen }
+        case "startSaving":
+            return { ...state, isSaving: true }
+        case "saveSuccess":
+            return { ...state, isEditing: false, isSaving: false, error: null, pickerOpen: false }
+        case "saveError":
+            return { ...state, isSaving: false, error: action.error }
+    }
+}
+
 export function InlineDateField({
     value,
     onSave,
@@ -27,34 +80,25 @@ export function InlineDateField({
     label,
     disabled = false,
 }: InlineDateFieldProps) {
-    const [isEditing, setIsEditing] = React.useState(false)
-    const [editValue, setEditValue] = React.useState(value || "")
-    const [isSaving, setIsSaving] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-    const [pickerOpen, setPickerOpen] = React.useState(false)
-
-    // Reset edit value when prop value changes
-    React.useEffect(() => {
-        setEditValue(value || "")
-    }, [value])
+    const [state, dispatch] = React.useReducer(
+        inlineDateFieldReducer,
+        INITIAL_INLINE_DATE_FIELD_STATE,
+    )
+    const { isEditing, editValue, isSaving, error, pickerOpen } = state
 
     const handleStartEdit = () => {
         if (disabled) return
-        setIsEditing(true)
-        setError(null)
+        dispatch({ type: "startEdit", value: value || "" })
     }
 
     const handleCancel = () => {
-        setEditValue(value || "")
-        setIsEditing(false)
-        setError(null)
-        setPickerOpen(false)
+        dispatch({ type: "cancel" })
     }
 
     const handleSave = async () => {
         // Only save if value changed
         if (editValue === (value || "")) {
-            setIsEditing(false)
+            dispatch({ type: "closeWithoutSave" })
             return
         }
 
@@ -62,21 +106,20 @@ export function InlineDateField({
         if (editValue) {
             const parsed = parseISO(editValue)
             if (!isValid(parsed)) {
-                setError("Invalid date")
+                dispatch({ type: "setError", error: "Invalid date" })
                 return
             }
         }
 
-        setIsSaving(true)
+        dispatch({ type: "startSaving" })
         try {
             await onSave(editValue || null)
-            setIsEditing(false)
-            setError(null)
-            setPickerOpen(false)
+            dispatch({ type: "saveSuccess" })
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save")
-        } finally {
-            setIsSaving(false)
+            dispatch({
+                type: "saveError",
+                error: err instanceof Error ? err.message : "Failed to save",
+            })
         }
     }
 
@@ -152,7 +195,10 @@ export function InlineDateField({
     return (
         <div className="flex max-w-full flex-col items-start gap-1">
             <div className="min-w-0 max-w-full">
-                <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <Popover
+                    open={pickerOpen}
+                    onOpenChange={(nextOpen) => dispatch({ type: "setPickerOpen", pickerOpen: nextOpen })}
+                >
                     <PopoverTrigger
                         className={cn(
                             "inline-flex h-7 w-40 max-w-full items-center justify-start gap-2 rounded-md border border-input bg-input/30 px-2.5 text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -171,9 +217,12 @@ export function InlineDateField({
                             mode="single"
                             selected={selectedEditDate}
                             onSelect={(date) => {
-                                setEditValue(date ? format(date, "yyyy-MM-dd") : "")
-                                setError(null)
-                                setPickerOpen(false)
+                                dispatch({
+                                    type: "setEditValue",
+                                    value: date ? format(date, "yyyy-MM-dd") : "",
+                                })
+                                dispatch({ type: "setError", error: null })
+                                dispatch({ type: "setPickerOpen", pickerOpen: false })
                             }}
                             {...(selectedEditDate ? { defaultMonth: selectedEditDate } : {})}
                         />
@@ -183,9 +232,9 @@ export function InlineDateField({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                    setEditValue("")
-                                    setError(null)
-                                    setPickerOpen(false)
+                                    dispatch({ type: "setEditValue", value: "" })
+                                    dispatch({ type: "setError", error: null })
+                                    dispatch({ type: "setPickerOpen", pickerOpen: false })
                                 }}
                             >
                                 Clear
@@ -194,7 +243,7 @@ export function InlineDateField({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setPickerOpen(false)}
+                                onClick={() => dispatch({ type: "setPickerOpen", pickerOpen: false })}
                             >
                                 Close calendar
                             </Button>
