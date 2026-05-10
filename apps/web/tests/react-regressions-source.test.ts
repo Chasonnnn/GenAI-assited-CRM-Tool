@@ -237,6 +237,13 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("flex items-start gap-3 rounded-md border border-border p-3")
     })
 
+    it("uses immutable sorting in the team performance table", () => {
+        const source = readSource("components/reports/TeamPerformanceTable.tsx")
+
+        expect(source).toContain("data.toSorted(")
+        expect(source).not.toContain("[...data].sort(")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 
