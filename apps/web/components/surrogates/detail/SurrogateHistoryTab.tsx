@@ -123,8 +123,10 @@ function addAiPrefix(lines: string[], details: Record<string, unknown>): string[
 function formatContactMethods(value: unknown): string | null {
     if (!Array.isArray(value) || value.length === 0) return null
     return value
-        .map((method) => String(method))
-        .map((method) => method.charAt(0).toUpperCase() + method.slice(1))
+        .map((method) => {
+            const normalizedMethod = String(method)
+            return normalizedMethod.charAt(0).toUpperCase() + normalizedMethod.slice(1)
+        })
         .join(", ")
 }
 
