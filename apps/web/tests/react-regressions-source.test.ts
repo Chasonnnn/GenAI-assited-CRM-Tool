@@ -10,6 +10,44 @@ function sourceExists(pathFromWebRoot: string): boolean {
     return existsSync(join(process.cwd(), pathFromWebRoot))
 }
 
+function stripTemplateLiteralBodies(source: string): string {
+    let stripped = ""
+    let inTemplateLiteral = false
+    let escaped = false
+
+    for (const char of source) {
+        if (!inTemplateLiteral) {
+            stripped += char
+            if (char === "`") {
+                inTemplateLiteral = true
+            }
+            continue
+        }
+
+        if (escaped) {
+            stripped += char === "\n" ? "\n" : " "
+            escaped = false
+            continue
+        }
+
+        if (char === "\\") {
+            stripped += " "
+            escaped = true
+            continue
+        }
+
+        if (char === "`") {
+            stripped += char
+            inTemplateLiteral = false
+            continue
+        }
+
+        stripped += char === "\n" ? "\n" : " "
+    }
+
+    return stripped
+}
+
 function expectTypeOrInterfaceNotExported(source: string, typeName: string): void {
     expect(source, typeName).not.toContain(`export interface ${typeName} {`)
     expect(source, typeName).not.toContain(`export type ${typeName} =`)
@@ -170,7 +208,7 @@ describe("React regression guards (source)", () => {
 
         for (const source of sources) {
             expect(source).toContain('import Image from "next/image"')
-            expect(source).not.toContain("<img\n")
+            expect(stripTemplateLiteralBodies(source)).not.toMatch(/^\s*<img\b/m)
         }
     })
 
