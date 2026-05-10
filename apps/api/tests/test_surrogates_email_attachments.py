@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -55,6 +55,21 @@ def _create_attachment(db, test_org, test_user, surrogate_id):
     attachment.quarantined = False
     db.flush()
     return attachment
+
+
+def _configure_org_resend(db, test_org, test_user) -> None:
+    from app.services import resend_settings_service
+
+    resend_settings_service.update_resend_settings(
+        db,
+        test_org.id,
+        test_user.id,
+        email_provider="resend",
+        api_key="re_test_key",
+        from_email="no-reply@example.com",
+        from_name="Test Org",
+        verified_domain="example.com",
+    )
 
 
 @pytest.mark.asyncio
@@ -180,7 +195,7 @@ async def test_send_email_gmail_passes_attachments_and_logs_activity_details(
 
 
 @pytest.mark.asyncio
-async def test_send_email_resend_links_attachments_to_email_log(
+async def test_send_email_resend_provider_is_rejected_for_manual_attachment_send(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     from app.services import oauth_service
@@ -191,7 +206,7 @@ async def test_send_email_resend_links_attachments_to_email_log(
     db.commit()
 
     monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: None)
-    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    _configure_org_resend(db, test_org, test_user)
 
     response = await authed_client.post(
         f"/surrogates/{surrogate.id}/send-email",
@@ -204,15 +219,16 @@ async def test_send_email_resend_links_attachments_to_email_log(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["success"] is True, data
-    assert data["email_log_id"] is not None
-    email_log_id = UUID(data["email_log_id"])
-
-    links = (
-        db.query(EmailLogAttachment).filter(EmailLogAttachment.email_log_id == email_log_id).all()
+    assert data["success"] is False, data
+    assert data["email_log_id"] is None
+    assert (
+        data["error"]
+        == "Manual case email sends use personal Gmail only. Connect Gmail in "
+        "Settings > Integrations."
     )
-    assert len(links) == 1
-    assert links[0].attachment_id == attachment.id
+
+    links = db.query(EmailLogAttachment).all()
+    assert links == []
 
     activity = (
         db.query(SurrogateActivityLog)

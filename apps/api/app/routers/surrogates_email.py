@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Annotated
 
 import logging
-import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -85,8 +84,8 @@ async def send_surrogate_email(
 ):
     """Send email to surrogate contact using template.
 
-    Keeps legacy provider behavior (auto/gmail/resend) and writes ticketing
-    metadata on successful Gmail sends.
+    Sends manual case emails through the user's connected Gmail account and
+    writes ticketing metadata on successful sends.
     """
     from app.services import (
         email_composition_service,
@@ -166,54 +165,23 @@ async def send_surrogate_email(
     if provider not in {"auto", "gmail", "resend"}:
         return SendEmailResponse(
             success=False,
-            error="Invalid email provider. Supported options are auto, gmail, or resend.",
+            error="Invalid email provider. Supported options are auto or gmail.",
+        )
+
+    if provider == "resend":
+        return SendEmailResponse(
+            success=False,
+            error=(
+                "Manual case email sends use personal Gmail only. Connect Gmail in "
+                "Settings > Integrations."
+            ),
         )
 
     gmail_connected = oauth_service.get_user_integration(db, session.user_id, "gmail") is not None
-    resend_configured = bool(os.getenv("RESEND_API_KEY"))
-
-    resolved_provider = provider
-    if provider == "auto":
-        if gmail_connected:
-            resolved_provider = "gmail"
-        elif resend_configured:
-            resolved_provider = "resend"
-        else:
-            return SendEmailResponse(
-                success=False,
-                error=(
-                    "No email provider is available. Connect Gmail or configure "
-                    "Resend (RESEND_API_KEY)."
-                ),
-            )
-
-    if resolved_provider == "gmail" and not gmail_connected:
+    if not gmail_connected:
         return SendEmailResponse(
             success=False,
             error="Gmail not connected. Connect Gmail in Settings > Integrations.",
-        )
-    if resolved_provider == "resend" and not resend_configured:
-        return SendEmailResponse(
-            success=False,
-            error="Resend not configured. Set RESEND_API_KEY for non-Gmail sends.",
-        )
-
-    if resolved_provider == "resend":
-        email_log, _job = email_service.send_email(
-            db=db,
-            org_id=session.org_id,
-            template_id=data.template_id,
-            recipient_email=surrogate.email,
-            subject=subject,
-            body=body,
-            surrogate_id=surrogate_id,
-            attachments=selected_attachments,
-            sender_user_id=session.user_id,
-        )
-        return SendEmailResponse(
-            success=True,
-            email_log_id=email_log.id,
-            provider_used="resend",
         )
 
     gmail_kwargs = {

@@ -252,7 +252,7 @@ export interface SurrogateSendEmailPayload {
     template_id: string;
     subject?: string;
     body?: string;
-    provider?: 'auto' | 'gmail' | 'resend';
+    provider?: 'auto' | 'gmail';
     idempotency_key?: string;
     attachment_ids?: string[];
 }

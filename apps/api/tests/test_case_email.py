@@ -5,6 +5,21 @@ from httpx import AsyncClient
 from uuid import uuid4
 
 
+def _configure_org_resend(db, test_org, test_user) -> None:
+    from app.services import resend_settings_service
+
+    resend_settings_service.update_resend_settings(
+        db,
+        test_org.id,
+        test_user.id,
+        email_provider="resend",
+        api_key="re_test_key",
+        from_email="no-reply@example.com",
+        from_name="Test Org",
+        verified_domain="example.com",
+    )
+
+
 @pytest.mark.asyncio
 async def test_send_email_requires_auth(client: AsyncClient):
     """Test send email endpoint requires authentication."""
@@ -89,10 +104,10 @@ async def test_send_email_template_not_found(authed_client: AsyncClient, db, tes
 
 
 @pytest.mark.asyncio
-async def test_send_email_auto_falls_back_to_resend_when_gmail_disconnected(
+async def test_send_email_auto_requires_personal_gmail_even_with_org_resend(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
-    """Auto provider should use Resend when Gmail is disconnected."""
+    """Manual auto sends should fail fast instead of falling back to org Resend."""
     from app.services import surrogate_service, email_service
     from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
@@ -115,7 +130,7 @@ async def test_send_email_auto_falls_back_to_resend_when_gmail_disconnected(
         body="<p>Welcome {{full_name}}!</p>",
     )
 
-    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    _configure_org_resend(db, test_org, test_user)
     from app.services import oauth_service
 
     monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: None)
@@ -128,16 +143,107 @@ async def test_send_email_auto_falls_back_to_resend_when_gmail_disconnected(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["success"] is True
-    assert data["provider_used"] == "resend"
-    assert data["email_log_id"]
+    assert data["success"] is False
+    assert data["provider_used"] is None
+    assert data["email_log_id"] is None
+    assert data["error"] == "Gmail not connected. Connect Gmail in Settings > Integrations."
 
 
 @pytest.mark.asyncio
-async def test_send_email_allows_resend_provider_for_surrogate_send(
+async def test_send_email_auto_requires_personal_gmail(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
-    """Surrogate email sends should allow explicit Resend provider selection."""
+    """Auto provider should not fall back to any Resend configuration."""
+    from app.services import surrogate_service, email_service, oauth_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
+
+    case = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="No Provider Case",
+            email="no-provider@example.com",
+            source=SurrogateSource.MANUAL,
+        ),
+    )
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="No Provider Template",
+        subject="Hello {{full_name}}",
+        body="<p>Welcome {{full_name}}!</p>",
+    )
+    _configure_org_resend(db, test_org, test_user)
+    monkeypatch.setenv("RESEND_API_KEY", "legacy-global-key-should-not-be-used")
+    monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: None)
+
+    response = await authed_client.post(
+        f"/surrogates/{case.id}/send-email",
+        json={"template_id": str(template.id), "provider": "auto"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert data["email_log_id"] is None
+    assert data["error"] == "Gmail not connected. Connect Gmail in Settings > Integrations."
+
+
+@pytest.mark.asyncio
+async def test_send_email_auto_uses_connected_gmail_even_with_org_resend(
+    authed_client: AsyncClient, db, test_org, test_user, monkeypatch
+):
+    """Auto provider should resolve to the user's Gmail for manual sends."""
+    from app.services import surrogate_service, email_service, gmail_service, oauth_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
+
+    _configure_org_resend(db, test_org, test_user)
+    case = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Gmail Preferred Case",
+            email="gmail-preferred@example.com",
+            source=SurrogateSource.MANUAL,
+        ),
+    )
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Gmail Preferred Template",
+        subject="Hello {{full_name}}",
+        body="<p>Welcome {{full_name}}!</p>",
+    )
+
+    monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: object())
+
+    async def fake_send_email_logged(**_kwargs):
+        return {"success": True, "message_id": "gmail_123", "email_log_id": str(uuid4())}
+
+    monkeypatch.setattr(gmail_service, "send_email_logged", fake_send_email_logged)
+
+    response = await authed_client.post(
+        f"/surrogates/{case.id}/send-email",
+        json={"template_id": str(template.id), "provider": "auto"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["provider_used"] == "gmail"
+
+
+@pytest.mark.asyncio
+async def test_send_email_rejects_resend_provider_for_surrogate_manual_send(
+    authed_client: AsyncClient, db, test_org, test_user, monkeypatch
+):
+    """Manual surrogate email sends should not use org Resend even when configured."""
     from app.services import surrogate_service, email_service
     from app.schemas.surrogate import SurrogateCreate
     from app.db.enums import SurrogateSource
@@ -158,9 +264,8 @@ async def test_send_email_allows_resend_provider_for_surrogate_send(
         body="<p>Welcome {{full_name}}!</p>",
     )
 
-    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    _configure_org_resend(db, test_org, test_user)
 
-    # Gmail connection should not matter when provider is explicitly set to resend.
     from app.services import oauth_service
 
     monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: object())
@@ -172,9 +277,14 @@ async def test_send_email_allows_resend_provider_for_surrogate_send(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["success"] is True
-    assert data["provider_used"] == "resend"
-    assert data["email_log_id"]
+    assert data["success"] is False
+    assert data["provider_used"] is None
+    assert data["email_log_id"] is None
+    assert (
+        data["error"]
+        == "Manual case email sends use personal Gmail only. Connect Gmail in "
+        "Settings > Integrations."
+    )
 
 
 @pytest.mark.asyncio
