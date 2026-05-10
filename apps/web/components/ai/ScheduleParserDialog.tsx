@@ -62,6 +62,10 @@ export interface ScheduleParserDialogProps {
     entityName?: string
 }
 
+function getWarningKey(warning: string) {
+    return warning
+}
+
 export function ScheduleParserDialog({
     open,
     onOpenChange,
@@ -195,6 +199,7 @@ export function ScheduleParserDialog({
 
     const selectedCount = editableTasks.filter((t) => t.selected).length
     const allSelected = editableTasks.length > 0 && selectedCount === editableTasks.length
+    const uniqueWarnings = Array.from(new Set(warnings))
 
     const getConfidenceBadge = (confidence: number) => {
         if (confidence >= 0.8) return <Badge variant="secondary" className="bg-green-100 text-green-800">High</Badge>
@@ -246,13 +251,13 @@ Medication Schedule:
                             />
                         </div>
 
-                        {warnings.length > 0 && (
+                        {uniqueWarnings.length > 0 && (
                             <Alert variant="destructive">
                                 <AlertTriangleIcon className="size-4" />
                                 <AlertDescription>
                                     <ul className="list-disc pl-4">
-                                        {warnings.map((w, i) => (
-                                            <li key={i}>{w}</li>
+                                        {uniqueWarnings.map((warning) => (
+                                            <li key={getWarningKey(warning)}>{warning}</li>
                                         ))}
                                     </ul>
                                 </AlertDescription>
@@ -269,13 +274,13 @@ Medication Schedule:
                             </div>
                         )}
 
-                        {warnings.length > 0 && (
+                        {uniqueWarnings.length > 0 && (
                             <Alert>
                                 <AlertTriangleIcon className="size-4" />
                                 <AlertDescription>
                                     <ul className="list-disc pl-4 text-sm">
-                                        {warnings.map((w, i) => (
-                                            <li key={i}>{w}</li>
+                                        {uniqueWarnings.map((warning) => (
+                                            <li key={getWarningKey(warning)}>{warning}</li>
                                         ))}
                                     </ul>
                                 </AlertDescription>
