@@ -71,11 +71,12 @@ export function useCreateTaskBatch() {
             Promise.all(tasks.map((task) => tasksApi.createTask(task))),
         onSuccess: (createdTasks) => {
             queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
-            const surrogateIds = new Set(
-                createdTasks
-                    .map((task) => task.surrogate_id)
-                    .filter((surrogateId): surrogateId is string => Boolean(surrogateId))
-            );
+            const surrogateIds = new Set<string>();
+            for (const task of createdTasks) {
+                if (task.surrogate_id) {
+                    surrogateIds.add(task.surrogate_id);
+                }
+            }
             for (const surrogateId of surrogateIds) {
                 invalidateSurrogateActivity(queryClient, surrogateId);
             }
