@@ -243,6 +243,14 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
         return fields
     }, [answers, formConfig])
 
+    const renderableFields = React.useMemo(() => {
+        const fields: FormField[] = []
+        for (const field of visibleFields) {
+            if (field.type !== "file") fields.push(field)
+        }
+        return fields
+    }, [visibleFields])
+
     const updateField = (fieldKey: string, value: PublicFormAnswerValue) => {
         setAnswers((current) => ({ ...current, [fieldKey]: value }))
         postToParent({ type: "sf:form:started" })
@@ -339,18 +347,16 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                     </div>
 
                     <div className="space-y-5">
-                        {visibleFields
-                            .filter((field) => field.type !== "file")
-                            .map((field) => (
-                                <PublicFormFieldRenderer
-                                    key={field.key}
-                                    field={field}
-                                    value={answers[field.key]}
-                                    updateField={updateField}
-                                    datePickerOpen={datePickerOpen}
-                                    setDatePickerOpen={setDatePickerOpen}
-                                />
-                            ))}
+                        {renderableFields.map((field) => (
+                            <PublicFormFieldRenderer
+                                key={field.key}
+                                field={field}
+                                value={answers[field.key]}
+                                updateField={updateField}
+                                datePickerOpen={datePickerOpen}
+                                setDatePickerOpen={setDatePickerOpen}
+                            />
+                        ))}
 
                         {formConfig.consent.text ? (
                             <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4">

@@ -598,7 +598,9 @@ describe("React regression guards (source)", () => {
     it("keeps public embed field visibility filtering single pass", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
 
+        expect(source).toContain("const renderableFields = React.useMemo")
         expect(source).not.toContain("pages.flatMap((page) => page.fields).filter")
+        expect(source).not.toMatch(/visibleFields\s*\.filter\(\(field\) => field\.type !== "file"\)\s*\.map/)
     })
 
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
