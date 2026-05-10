@@ -87,8 +87,8 @@ describe('CSVImportPage', () => {
         imported_count: 8,
         skipped_count: 0,
         error_count: 2,
-        created_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
+        created_at: '2026-05-08T12:00:00.000Z',
+        completed_at: '2026-05-08T12:01:00.000Z',
     }
 
     beforeEach(() => {
