@@ -630,7 +630,7 @@ function BookingForm({
                     <Input
                         id="name"
                         value={formData.client_name}
-                        onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                        onChange={(e) => setFormData((current) => ({ ...current, client_name: e.target.value }))}
                         placeholder="Your full name"
                         className={errors.client_name ? "border-destructive" : ""}
                     />
@@ -645,7 +645,7 @@ function BookingForm({
                         id="email"
                         type="email"
                         value={formData.client_email}
-                        onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
+                        onChange={(e) => setFormData((current) => ({ ...current, client_email: e.target.value }))}
                         placeholder="your@email.com"
                         className={errors.client_email ? "border-destructive" : ""}
                     />
@@ -660,7 +660,7 @@ function BookingForm({
                         id="phone"
                         type="tel"
                         value={formData.client_phone}
-                        onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
+                        onChange={(e) => setFormData((current) => ({ ...current, client_phone: e.target.value }))}
                         placeholder="(555) 123-4567"
                         className={errors.client_phone ? "border-destructive" : ""}
                     />
@@ -674,7 +674,7 @@ function BookingForm({
                     <Textarea
                         id="notes"
                         value={formData.client_notes}
-                        onChange={(e) => setFormData({ ...formData, client_notes: e.target.value })}
+                        onChange={(e) => setFormData((current) => ({ ...current, client_notes: e.target.value }))}
                         placeholder="Any additional information you'd like to share..."
                         rows={3}
                     />

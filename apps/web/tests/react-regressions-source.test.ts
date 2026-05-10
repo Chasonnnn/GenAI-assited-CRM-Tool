@@ -194,6 +194,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("key={i}")
     })
 
+    it("uses functional updates for public booking form fields", () => {
+        const source = readSource("components/appointments/PublicBookingPage.tsx")
+
+        expect(source).toContain("setFormData((current) => ({ ...current, client_name: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, client_email: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, client_phone: e.target.value }))")
+        expect(source).toContain("setFormData((current) => ({ ...current, client_notes: e.target.value }))")
+        expect(source).not.toContain("setFormData({ ...formData")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 
