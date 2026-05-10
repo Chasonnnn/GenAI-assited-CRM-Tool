@@ -241,6 +241,7 @@ describe("React regression guards (source)", () => {
 
     it("keeps unused task and stage helper exports out of public modules", () => {
         const taskTypesSource = readSource("lib/types/task.ts")
+        const taskApiSource = readSource("lib/api/tasks.ts")
         const stageContextSource = readSource("lib/surrogate-stage-context.ts")
 
         expect(taskTypesSource).toContain("export type { TaskListItem }")
@@ -251,6 +252,7 @@ describe("React regression guards (source)", () => {
         expect(taskTypesSource).not.toContain("TaskCreatePayload")
         expect(taskTypesSource).not.toContain("TaskUpdatePayload")
         expect(taskTypesSource).not.toContain("TASK_TYPE_CONFIG")
+        expect(taskApiSource).not.toContain("export type TaskType")
         expect(stageContextSource).not.toContain("export function roleRuleMatchesStage")
         expect(stageContextSource).not.toContain("export function getStageSemanticKey")
     })

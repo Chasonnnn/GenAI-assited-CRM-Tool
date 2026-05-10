@@ -5,7 +5,7 @@
 import api from '../api';
 
 // Task type enum - matches backend apps/api/app/db/enums/*
-export type TaskType =
+type TaskType =
     | 'meeting'
     | 'follow_up'
     | 'contact'
