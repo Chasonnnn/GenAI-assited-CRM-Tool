@@ -18,26 +18,9 @@ interface MFAStatus {
     mfa_required: boolean;
 }
 
-interface TOTPSetupResponse {
-    secret: string;
-    provisioning_uri: string;
-    qr_code_data: string;
-}
-
-interface TOTPSetupCompleteResponse {
-    success: boolean;
-    recovery_codes: string[];
-    message: string;
-}
-
 interface RecoveryCodesResponse {
     codes: string[];
     count: number;
-}
-
-interface MFAVerifyResponse {
-    valid: boolean;
-    method: 'totp' | 'recovery' | null;
 }
 
 // =============================================================================
@@ -52,32 +35,10 @@ export function getMFAStatus(): Promise<MFAStatus> {
 }
 
 /**
- * Start TOTP setup - generates a new secret and QR code URI.
- */
-export function setupTOTP(): Promise<TOTPSetupResponse> {
-    return api.post<TOTPSetupResponse>('/mfa/totp/setup');
-}
-
-/**
- * Complete TOTP setup by verifying the first code.
- * Returns recovery codes on success (one-time display).
- */
-export function verifyTOTPSetup(code: string): Promise<TOTPSetupCompleteResponse> {
-    return api.post<TOTPSetupCompleteResponse>('/mfa/totp/verify', { code });
-}
-
-/**
  * Regenerate recovery codes (invalidates previous codes).
  */
 export function regenerateRecoveryCodes(): Promise<RecoveryCodesResponse> {
     return api.post<RecoveryCodesResponse>('/mfa/recovery/regenerate');
-}
-
-/**
- * Verify an MFA code during login.
- */
-export function verifyMFACode(code: string): Promise<MFAVerifyResponse> {
-    return api.post<MFAVerifyResponse>('/mfa/verify', { code });
 }
 
 interface MFACompleteResponse {
@@ -126,13 +87,6 @@ interface DuoCallbackResponse {
  */
 export function getDuoStatus(): Promise<DuoStatus> {
     return api.get<DuoStatus>('/mfa/duo/status');
-}
-
-/**
- * Check Duo API connectivity.
- */
-export function checkDuoHealth(): Promise<{ healthy: boolean; message: string }> {
-    return api.get<{ healthy: boolean; message: string }>('/mfa/duo/health');
 }
 
 /**

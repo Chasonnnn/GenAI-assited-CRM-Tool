@@ -544,6 +544,22 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps unused MFA setup and health helpers out of public modules", () => {
+        const apiSource = readSource("lib/api/mfa.ts")
+        const hookSource = readSource("lib/hooks/use-mfa.ts")
+
+        expect(apiSource).not.toContain("export function setupTOTP")
+        expect(apiSource).not.toContain("export function verifyTOTPSetup")
+        expect(apiSource).not.toContain("export function verifyMFACode")
+        expect(apiSource).not.toContain("export function checkDuoHealth")
+        expect(apiSource).not.toContain("interface TOTPSetupResponse")
+        expect(apiSource).not.toContain("interface TOTPSetupCompleteResponse")
+        expect(apiSource).not.toContain("interface MFAVerifyResponse")
+        expect(hookSource).not.toContain("export function useSetupTOTP")
+        expect(hookSource).not.toContain("export function useVerifyTOTPSetup")
+        expect(hookSource).not.toContain("export function useVerifyMFACode")
+    })
+
     it("keeps intended-parent subtype aliases private", () => {
         const source = readSource("lib/types/intended-parent.ts")
         const privateAliases = ["IntendedParentStatus", "EmbryoEggSource", "EmbryoSpermSource"]

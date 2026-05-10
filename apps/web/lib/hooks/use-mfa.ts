@@ -42,29 +42,6 @@ export function useDuoStatus() {
 }
 
 /**
- * Start TOTP setup (generates secret and QR code).
- */
-export function useSetupTOTP() {
-    return useMutation({
-        mutationFn: mfaApi.setupTOTP,
-    });
-}
-
-/**
- * Complete TOTP setup by verifying the first code.
- */
-export function useVerifyTOTPSetup() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: mfaApi.verifyTOTPSetup,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
-        },
-    });
-}
-
-/**
  * Regenerate recovery codes.
  */
 export function useRegenerateRecoveryCodes() {
@@ -75,15 +52,6 @@ export function useRegenerateRecoveryCodes() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
         },
-    });
-}
-
-/**
- * Verify MFA code during login.
- */
-export function useVerifyMFACode() {
-    return useMutation({
-        mutationFn: mfaApi.verifyMFACode,
     });
 }
 
