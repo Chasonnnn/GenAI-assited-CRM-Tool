@@ -604,6 +604,17 @@ describe("React regression guards (source)", () => {
         expect(embedSource).not.toContain("pages.flatMap((page) => page.fields.filter")
     })
 
+    it("uses indexed lookups for campaign selected filter labels", () => {
+        const source = readSource("app/(app)/automation/campaigns/page.tsx")
+
+        expect(source).toContain("function getStageIdsByPredicate")
+        expect(source).toContain("const stageLabelById = new Map<string, string>(")
+        expect(source).toContain("const stateLabelByCode = new Map<string, string>(")
+        expect(source).not.toMatch(/stageOptions\s*\.filter\([\s\S]*?\)\s*\.map\(\(stage\) => stage\.id\)/)
+        expect(source).not.toContain("stageOptions.find((stage) => stage.id === stageId)")
+        expect(source).not.toContain("US_STATES.find((state) => state.value === stateCode)")
+    })
+
     it("uses stable keys for report chart cells and parser warnings", () => {
         const teamChartSource = readSource("components/reports/TeamPerformanceChart.tsx")
         const metaSpendSource = readSource("components/reports/MetaSpendDashboard.tsx")
