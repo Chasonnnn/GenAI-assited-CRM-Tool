@@ -103,6 +103,13 @@ describe('Shared Intake Public Page', () => {
         expect(getSharedPublicFormDraft).not.toHaveBeenCalled()
     })
 
+    it('does not persist an empty draft session before answers are saved', async () => {
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
+        expect(window.localStorage.getItem('intake-draft-session:event-abc')).toBeNull()
+    })
+
     it('restores a saved draft when a draft session already exists', async () => {
         window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
 

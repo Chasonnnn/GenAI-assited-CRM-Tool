@@ -571,7 +571,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         const storageKey = `intake-draft-session:${slug}`
         const existing = window.localStorage.getItem(storageKey)
         if (existing) {
-            setDraftSessionExists(createdDraftSessionRef.current !== existing)
+            createdDraftSessionRef.current = existing
+            setDraftSessionExists(true)
             setDraftSessionId(existing)
             return
         }
@@ -580,7 +581,6 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 ? window.crypto.randomUUID()
                 : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
         createdDraftSessionRef.current = nextSessionId
-        window.localStorage.setItem(storageKey, nextSessionId)
         setDraftSessionExists(false)
         setDraftSessionId(nextSessionId)
     }, [slug])
@@ -620,6 +620,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     } catch (error) {
                         if (error instanceof ApiError && error.status === 404) {
                             window.localStorage.removeItem(`intake-draft-session:${token}`)
+                            setDraftSessionExists(false)
                         } else {
                             setDraftSaveState("error")
                         }
@@ -752,6 +753,13 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         [],
     )
 
+    const persistDraftSession = React.useCallback((sessionId: string) => {
+        if (!token) return
+        window.localStorage.setItem(`intake-draft-session:${token}`, sessionId)
+        createdDraftSessionRef.current = sessionId
+        setDraftSessionExists(true)
+    }, [token])
+
     const saveDraftNow = React.useCallback(async () => {
         if (!token || !formConfig || !draftSessionId) return
         if (!hasAnyDraftAnswer(answers)) return
@@ -759,6 +767,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         setDraftSaveState("saving")
         try {
             const res = await saveSharedPublicFormDraft(token, draftSessionId, answers)
+            persistDraftSession(draftSessionId)
             setDraftUpdatedAt(res.updated_at)
             setDraftSaveState("saved")
         } catch (error) {
@@ -768,7 +777,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             }
             setDraftSaveState("error")
         }
-    }, [answers, draftSessionId, formConfig, hasAnyDraftAnswer, token])
+    }, [answers, draftSessionId, formConfig, hasAnyDraftAnswer, persistDraftSession, token])
 
     const handleContinuePreviousApplication = React.useCallback(async () => {
         if (!resumePrompt || !draftSessionId || !formConfig) return
@@ -782,6 +791,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             const nextAnswers = filterDraftAnswersForSchema(formConfig.form_schema, restored.answers)
             skipNextAutosaveRef.current = true
             setAnswers(nextAnswers)
+            persistDraftSession(draftSessionId)
             setDraftUpdatedAt(restored.updated_at)
             setDraftSaveState("saved")
             setDraftRestored(true)
@@ -793,7 +803,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         } finally {
             setIsRestoringResume(false)
         }
-    }, [draftSessionId, formConfig, resumePrompt, token])
+    }, [draftSessionId, formConfig, persistDraftSession, resumePrompt, token])
 
     const handleStartNewApplication = React.useCallback(() => {
         if (!resumePrompt) return
