@@ -252,8 +252,8 @@ describe("PublicFormFieldRenderer", () => {
             "@xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)]",
             "@xl/table-row:items-start",
         )
-        expect(within(diabetesRow).getByRole("radio", { name: "Yes" })).toHaveClass("rounded-xl", "px-3", "py-2.5")
-        const detailsInput = within(diabetesRow).getByPlaceholderText("If yes, explain")
+        expect(within(diabetesRow).getByRole("radio", { name: "Yes" })).toHaveClass("rounded-md", "px-3", "py-2.5")
+        const detailsInput = within(diabetesRow).getByPlaceholderText("Share any relevant details")
         expect(detailsInput.tagName).toBe("INPUT")
         expect(detailsInput).toHaveClass("h-11")
         fireEvent.click(within(diabetesRow).getByRole("radio", { name: "Yes" }))
