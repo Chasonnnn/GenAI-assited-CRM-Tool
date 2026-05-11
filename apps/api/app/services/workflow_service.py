@@ -727,47 +727,37 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
 
-    # Total and enabled counts
-    total = (
-        db.query(func.count(AutomationWorkflow.id))
-        .filter(AutomationWorkflow.organization_id == org_id)
-        .scalar()
-        or 0
-    )
-
-    enabled = (
-        db.query(func.count(AutomationWorkflow.id))
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.is_enabled.is_(True),
+    (
+        total,
+        enabled,
+        org_workflows,
+        personal_workflows,
+    ) = (
+        db.query(
+            func.count(AutomationWorkflow.id),
+            func.count(AutomationWorkflow.id).filter(AutomationWorkflow.is_enabled.is_(True)),
+            func.count(AutomationWorkflow.id).filter(AutomationWorkflow.scope == "org"),
+            func.count(AutomationWorkflow.id).filter(AutomationWorkflow.scope == "personal"),
         )
-        .scalar()
-        or 0
+        .filter(AutomationWorkflow.organization_id == org_id)
+        .one()
     )
 
-    # Executions in last 24h
-    executions_24h = (
-        db.query(func.count(WorkflowExecution.id))
+    executions_24h, successes = (
+        db.query(
+            func.count(WorkflowExecution.id),
+            func.count(WorkflowExecution.id).filter(
+                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
+            ),
+        )
         .filter(
             WorkflowExecution.organization_id == org_id,
             WorkflowExecution.executed_at >= day_ago,
         )
-        .scalar()
-        or 0
+        .one()
     )
 
-    # Success rate
     if executions_24h > 0:
-        successes = (
-            db.query(func.count(WorkflowExecution.id))
-            .filter(
-                WorkflowExecution.organization_id == org_id,
-                WorkflowExecution.executed_at >= day_ago,
-                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
-            )
-            .scalar()
-            or 0
-        )
         success_rate = round(successes / executions_24h * 100, 1)
     else:
         success_rate = 0.0
@@ -784,69 +774,47 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
     for trigger_type, count in trigger_counts:
         by_trigger[trigger_type] = count
 
-    # By scope
-    org_workflows = (
-        db.query(func.count(AutomationWorkflow.id))
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.scope == "org",
-        )
-        .scalar()
-        or 0
-    )
-    personal_workflows = (
-        db.query(func.count(AutomationWorkflow.id))
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.scope == "personal",
-        )
-        .scalar()
-        or 0
-    )
-
     # ==========================================================================
     # Approval Metrics
     # ==========================================================================
 
-    # Pending approvals count
-    pending_approvals = (
-        db.query(func.count(Task.id))
+    pending_statuses = [TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]
+    approved_filter = and_(
+        Task.status == TaskStatus.COMPLETED.value,
+        Task.updated_at >= day_ago,
+    )
+    (
+        pending_approvals,
+        approved_24h,
+        denied_24h,
+        expired_24h,
+        avg_latency,
+    ) = (
+        db.query(
+            func.count(Task.id).filter(Task.status.in_(pending_statuses)),
+            func.count(Task.id).filter(approved_filter),
+            func.count(Task.id).filter(
+                Task.status == TaskStatus.DENIED.value,
+                Task.updated_at >= day_ago,
+            ),
+            func.count(Task.id).filter(
+                Task.status == TaskStatus.EXPIRED.value,
+                Task.updated_at >= day_ago,
+            ),
+            func.avg(func.extract("epoch", Task.completed_at - Task.created_at) / 3600).filter(
+                approved_filter,
+                Task.completed_at.isnot(None),
+            ),
+        )
         .filter(
             Task.organization_id == org_id,
             Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
-            Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
         )
-        .scalar()
-        or 0
+        .one()
     )
 
-    # Resolved approvals in last 24h (completed, denied, expired)
-    resolved_statuses = [
-        TaskStatus.COMPLETED.value,
-        TaskStatus.DENIED.value,
-        TaskStatus.EXPIRED.value,
-    ]
-
-    # Get counts by status for resolved approvals in 24h
-    resolved_counts = (
-        db.query(Task.status, func.count(Task.id))
-        .filter(
-            Task.organization_id == org_id,
-            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
-            Task.status.in_(resolved_statuses),
-            Task.updated_at >= day_ago,
-        )
-        .group_by(Task.status)
-        .all()
-    )
-
-    resolved_by_status = {status: count for status, count in resolved_counts}
-    approved_24h = resolved_by_status.get(TaskStatus.COMPLETED.value, 0)
-    denied_24h = resolved_by_status.get(TaskStatus.DENIED.value, 0)
-    expired_24h = resolved_by_status.get(TaskStatus.EXPIRED.value, 0)
     total_resolved_24h = approved_24h + denied_24h + expired_24h
 
-    # Calculate rates
     if total_resolved_24h > 0:
         approval_rate = round(approved_24h / total_resolved_24h * 100, 1)
         denial_rate = round(denied_24h / total_resolved_24h * 100, 1)
@@ -855,19 +823,6 @@ def get_workflow_stats(db: Session, org_id: UUID) -> WorkflowStats:
         approval_rate = 0.0
         denial_rate = 0.0
         expiry_rate = 0.0
-
-    # Average approval latency (for approved tasks only, in hours)
-    avg_latency = (
-        db.query(func.avg(func.extract("epoch", Task.completed_at - Task.created_at) / 3600))
-        .filter(
-            Task.organization_id == org_id,
-            Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
-            Task.status == TaskStatus.COMPLETED.value,
-            Task.completed_at.isnot(None),
-            Task.updated_at >= day_ago,
-        )
-        .scalar()
-    )
 
     return WorkflowStats(
         total_workflows=total,
@@ -1301,62 +1256,36 @@ def get_execution_stats(db: Session, org_id: UUID) -> dict:
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(hours=24)
 
-    # Total in last 24h
-    total_24h = (
-        db.query(func.count(WorkflowExecution.id))
+    total_24h, failed_24h, successes, avg_duration = (
+        db.query(
+            func.count(WorkflowExecution.id),
+            func.count(WorkflowExecution.id).filter(
+                WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value
+            ),
+            func.count(WorkflowExecution.id).filter(
+                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
+            ),
+            func.avg(WorkflowExecution.duration_ms).filter(
+                WorkflowExecution.duration_ms.isnot(None)
+            ),
+        )
         .filter(
             WorkflowExecution.organization_id == org_id,
             WorkflowExecution.executed_at >= day_ago,
         )
-        .scalar()
-        or 0
+        .one()
     )
 
-    # Failed in last 24h
-    failed_24h = (
-        db.query(func.count(WorkflowExecution.id))
-        .filter(
-            WorkflowExecution.organization_id == org_id,
-            WorkflowExecution.executed_at >= day_ago,
-            WorkflowExecution.status == WorkflowExecutionStatus.FAILED.value,
-        )
-        .scalar()
-        or 0
-    )
-
-    # Success rate
     if total_24h > 0:
-        successes = (
-            db.query(func.count(WorkflowExecution.id))
-            .filter(
-                WorkflowExecution.organization_id == org_id,
-                WorkflowExecution.executed_at >= day_ago,
-                WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value,
-            )
-            .scalar()
-            or 0
-        )
         success_rate = round(successes / total_24h * 100, 1)
     else:
         success_rate = 0.0
-
-    # Average duration
-    avg_duration = (
-        db.query(func.avg(WorkflowExecution.duration_ms))
-        .filter(
-            WorkflowExecution.organization_id == org_id,
-            WorkflowExecution.executed_at >= day_ago,
-            WorkflowExecution.duration_ms.isnot(None),
-        )
-        .scalar()
-        or 0
-    )
 
     return {
         "total_24h": total_24h,
         "failed_24h": failed_24h,
         "success_rate": success_rate,
-        "avg_duration_ms": int(avg_duration),
+        "avg_duration_ms": int(avg_duration or 0),
     }
 
 
