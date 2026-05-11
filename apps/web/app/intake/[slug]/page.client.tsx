@@ -148,6 +148,10 @@ function ReviewValue({
 
 const publicFormPageClassName =
     "public-form-light min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100/70 text-stone-900"
+const publicFormCardClassName =
+    "gap-0 rounded-lg border border-stone-200/80 bg-white py-0 shadow-[0_18px_45px_rgba(15,23,42,0.06)]"
+const publicFormCardHeaderClassName = "border-b border-stone-100 px-5 py-4 md:px-6"
+const publicFormCardContentClassName = "space-y-5 px-5 py-5 md:px-6 md:py-6"
 
 function formatSavedDateTime(value: string | null): string {
     if (!value) return ""
@@ -255,8 +259,12 @@ function filterDraftAnswersForSchema(schema: FormSchema, rawAnswers: unknown): A
 
 function shortenStepLabel(label: string): string {
     const words = label.replace(/&/g, " ").split(/\s+/).filter(Boolean)
-    if (words.length <= 2) return label
-    return `${words[0]} ${words[1]}`
+    const firstWord = words[0] ?? label
+    const secondWord = words[1] ?? ""
+    if (words.length <= 1) return label
+    if (words.length === 2 && label.length <= 16) return label.replace(/\s*&\s*/g, " ")
+    if (words.length === 2) return firstWord
+    return secondWord ? `${firstWord} ${secondWord}` : firstWord
 }
 
 // Progress Stepper Component
@@ -269,8 +277,8 @@ function ProgressStepper({
 }) {
     const totalSteps = steps.length
     const currentLabel = steps[currentStep - 1]?.label ?? ""
-    const progress =
-        totalSteps <= 1 ? 0 : ((currentStep - 1) / (totalSteps - 1)) * 100
+    const progressValue =
+        totalSteps <= 0 ? 0 : Math.round((currentStep / totalSteps) * 100)
     const maxVisible = 5
     let start = Math.max(0, currentStep - 1 - Math.floor(maxVisible / 2))
     let end = start + maxVisible - 1
@@ -281,56 +289,51 @@ function ProgressStepper({
     const visibleSteps = steps.slice(start, end + 1)
 
     return (
-        <>
-            {/* Desktop Stepper */}
-            <div className="hidden md:flex flex-col items-center gap-4 rounded-2xl border border-stone-200/70 bg-stone-50/80 px-6 py-5">
-                <div className="text-[11px] uppercase tracking-[0.3em] text-stone-400">
+        <div className="space-y-3">
+            <div className="text-center">
+                <div className="text-[11px] font-medium uppercase tracking-[0.22em] text-stone-500">
                     Step {currentStep} of {totalSteps}
                 </div>
-                <div className="text-base font-medium text-stone-900">{currentLabel}</div>
-                <div className="w-full max-w-xl">
-                    <div className="h-1.5 w-full rounded-full bg-stone-200">
-                        <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </div>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-stone-400">
-                    {start > 0 && <span className="px-1">…</span>}
-                    {visibleSteps.map((step) => (
+                <div className="mt-1 text-sm font-semibold text-stone-950">{currentLabel}</div>
+            </div>
+            <div
+                role="progressbar"
+                aria-label="Application progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressValue}
+                className="h-1.5 w-full overflow-hidden rounded-full bg-stone-200"
+            >
+                <div
+                    className="h-full rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-violet-600 transition-[width] duration-300 ease-out"
+                    style={{ width: `${progressValue}%` }}
+                />
+            </div>
+            <div className="flex items-center justify-between gap-2 text-xs text-stone-500">
+                {start > 0 && <span className="shrink-0 px-1">…</span>}
+                {visibleSteps.map((step) => (
+                    <div key={step.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
                         <span
-                            key={step.id}
                             className={cn(
-                                "transition-colors",
+                                "size-1.5 rounded-full transition-colors",
+                                step.id <= currentStep ? "bg-blue-500" : "bg-stone-300",
+                            )}
+                        />
+                        <span
+                            className={cn(
+                                "max-w-full truncate transition-colors",
                                 step.id === currentStep
-                                    ? "text-primary font-semibold"
-                                    : "text-stone-400"
+                                    ? "font-semibold text-stone-950"
+                                    : "text-stone-500",
                             )}
                         >
                             {step.shortLabel}
                         </span>
-                    ))}
-                    {end < totalSteps - 1 && <span className="px-1">…</span>}
-                </div>
+                    </div>
+                ))}
+                {end < totalSteps - 1 && <span className="shrink-0 px-1">…</span>}
             </div>
-
-            {/* Mobile Stepper */}
-            <div className="md:hidden rounded-xl border border-stone-200 bg-white px-4 py-3 text-center">
-                <div className="text-xs uppercase tracking-[0.25em] text-stone-400">
-                    Step {currentStep} of {totalSteps}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-stone-900">
-                    {steps[currentStep - 1]?.shortLabel}
-                </div>
-                <div className="mt-3 h-1 w-full rounded-full bg-stone-200">
-                    <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${progress}%` }}
-                    />
-                </div>
-            </div>
-        </>
+        </div>
     )
 }
 
@@ -425,11 +428,11 @@ function FileUploadZone({
                 }}
                 onDragLeave={() => setIsDragging(false)}
                 className={cn(
-                    "flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-6 cursor-pointer transition-all",
-                    "hover:border-primary/60 hover:bg-primary/5",
+                    "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 transition-all",
+                    "hover:border-blue-300 hover:bg-sky-50",
                     "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
                     isDragging
-                        ? "border-primary bg-primary/10"
+                        ? "border-blue-400 bg-sky-50"
                         : "border-stone-300 bg-white"
                 )}
             >
@@ -466,7 +469,7 @@ function FileUploadZone({
                     {files.map((file, index) => (
                         <div
                             key={getUploadFileKey(file)}
-                            className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-3"
+                            className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 p-3"
                         >
                             <div className="flex items-center gap-3">
                                 <FileTextIcon className="size-5 text-stone-400" />
@@ -1362,8 +1365,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     if (formError) {
         return (
             <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
-                <Card className="max-w-md w-full rounded-3xl border border-stone-200 bg-white shadow-sm">
-                    <CardContent className="pt-8 pb-8 text-center">
+                <Card className={cn(publicFormCardClassName, "w-full max-w-md")}>
+                    <CardContent className="px-6 py-8 text-center">
                         <AlertTriangleIcon className="size-16 text-amber-500 mx-auto mb-4" />
                         <h1 className="text-xl font-semibold text-stone-900 mb-2">
                             Form Not Available
@@ -1386,10 +1389,10 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
 
         return (
             <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
-                <Card className="max-w-md w-full rounded-3xl border border-stone-200 bg-white shadow-sm">
-                    <CardContent className="pt-12 pb-12 text-center">
-                        <div className="flex size-20 items-center justify-center rounded-full bg-primary/20 mx-auto mb-6">
-                            <CheckCircle2Icon className="size-10 text-primary" />
+                <Card className={cn(publicFormCardClassName, "w-full max-w-md")}>
+                    <CardContent className="px-6 py-10 text-center">
+                        <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-emerald-50">
+                            <CheckCircle2Icon className="size-10 text-emerald-600" />
                         </div>
                         <h1 className="text-2xl font-semibold text-stone-900 mb-3">
                             Application Submitted!
@@ -1404,8 +1407,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     }
 
     return (
-        <div className={cn(publicFormPageClassName, "pb-28")}>
-            <div className="h-0.5 w-full bg-primary/80" />
+        <div className={cn(publicFormPageClassName, "pb-12")}>
             <PublicFormHeader
                 publicTitle={publicTitle}
                 description={formConfig?.description}
@@ -1431,7 +1433,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     </div>
                 )}
                 {!isPreview && resumePrompt && (
-                    <div className="mx-auto mt-3 w-full max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
+                    <div className="mx-auto w-full max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
                         <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                                 <div className="font-medium">Continue previous application?</div>
@@ -1469,47 +1471,50 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                         </div>
                     </div>
                 )}
-                <div className="mt-8">
-                            <ProgressStepper currentStep={currentStep} steps={steps} />
-                            {!isPreview && hasAnyFileFields && (
-                                <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-left text-sm text-amber-950/80">
-                                    <LockIcon className="mt-0.5 size-4 text-amber-700" />
-                                    <div>
-                                        <div className="font-medium">Uploads aren&apos;t saved yet</div>
-                                        <div className="text-xs text-amber-950/70">
-                                            File uploads are only sent when you submit the application.
-                                        </div>
-                                    </div>
+                <div className="space-y-4">
+                    <ProgressStepper currentStep={currentStep} steps={steps} />
+                    {!isPreview && hasAnyFileFields && (
+                        <div
+                            data-slot="public-upload-note"
+                            className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-left text-sm text-sky-950"
+                        >
+                            <UploadIcon className="mt-0.5 size-4 text-sky-600" />
+                            <div>
+                                <div className="font-medium">Uploads aren&apos;t saved yet</div>
+                                <div className="text-xs text-sky-900/75">
+                                    File uploads are only sent when you submit the application.
                                 </div>
-                            )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </PublicFormHeader>
 
             {/* Form Content */}
             <div className="max-w-3xl mx-auto px-4">
                 {!formConfig ? (
-                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
-                        <CardContent className="pt-8 pb-8 text-center">
+                    <Card className={publicFormCardClassName}>
+                        <CardContent className="px-6 py-8 text-center">
                             <p className="text-stone-600">Form configuration is unavailable.</p>
                         </CardContent>
                     </Card>
                 ) : isReviewStep ? (
-                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
-                        <CardHeader className="pb-4 border-b border-stone-100">
-                            <CardTitle className="text-xl">Review Your Application</CardTitle>
+                    <Card className={publicFormCardClassName}>
+                        <CardHeader className={publicFormCardHeaderClassName}>
+                            <CardTitle className="text-lg text-stone-950">Review Your Application</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6 pt-4">
+                        <CardContent className={publicFormCardContentClassName}>
                             <p className="text-stone-600 text-sm">
                                 Please review your information before submitting.
                             </p>
 
                             {pages.length === 0 ? (
-                                <div className="rounded-xl border border-stone-200 p-4 text-sm text-stone-500">
+                                <div className="rounded-lg border border-stone-200 p-4 text-sm text-stone-500">
                                     No form pages available for review.
                                 </div>
                             ) : (
                                 visibleReviewPages.map(({ page, fieldGroups }, index) => (
-                                    <div key={getPageKey(page)} className="rounded-xl border border-stone-200 p-4">
+                                    <div key={getPageKey(page)} className="rounded-lg border border-stone-200 p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <h3 className="font-semibold text-stone-900">
                                                 {page.title || `Page ${index + 1}`}
@@ -1547,7 +1552,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                 ))
                             )}
 
-                            <div className="flex items-start gap-3 p-4 rounded-xl bg-stone-50">
+                            <div className="flex items-start gap-3 rounded-lg bg-stone-50 p-4">
                                 <Checkbox
                                     id="agree"
                                     checked={agreed}
@@ -1568,15 +1573,15 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                         </CardContent>
                     </Card>
                 ) : currentPage ? (
-                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
-                        <CardHeader className="pb-4 border-b border-stone-100">
-                            <CardTitle className="text-xl">
+                    <Card className={publicFormCardClassName}>
+                        <CardHeader className={publicFormCardHeaderClassName}>
+                            <CardTitle className="text-lg text-stone-950">
                                 {currentPage.title || `Step ${currentStep}`}
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-6 pt-4">
+                        <CardContent className={publicFormCardContentClassName}>
                             {currentVisibleFields.standardFields.length === 0 ? (
-                                <div className="rounded-xl border border-stone-200 p-4 text-sm text-stone-500">
+                                <div className="rounded-lg border border-stone-200 p-4 text-sm text-stone-500">
                                     No fields on this page.
                                 </div>
                             ) : (
@@ -1584,7 +1589,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                             )}
 
                             {currentVisibleFields.fileFields.map((field) => (
-                                <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                                <div key={field.key} className="space-y-2 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4">
                                     <Label className="text-sm font-medium">
                                         {field.label} {field.required && <span className="text-red-500">*</span>}
                                     </Label>
@@ -1605,18 +1610,18 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                         </CardContent>
                     </Card>
                 ) : (
-                    <Card className="rounded-3xl border border-stone-200 bg-white shadow-sm">
-                        <CardContent className="pt-8 pb-8 text-center">
+                    <Card className={publicFormCardClassName}>
+                        <CardContent className="px-6 py-8 text-center">
                             <p className="text-stone-600">This page is unavailable.</p>
                         </CardContent>
                     </Card>
                 )}
             </div>
             {/* Navigation Buttons */}
-            <div className="sticky bottom-0 z-20 mt-10">
-                <div className="bg-gradient-to-b from-transparent via-stone-50/90 to-stone-50 pb-6 pt-4">
+            <div className="mt-8">
+                <div>
                     <div className="max-w-3xl mx-auto px-4">
-                        <div className="flex items-center justify-center gap-3 rounded-2xl border border-stone-200/80 bg-white/95 px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.06)] backdrop-blur">
+                        <div className="flex items-center justify-end gap-3 rounded-lg border border-stone-200/80 bg-white/95 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur md:shadow-sm">
                             <Button
                                 variant="ghost"
                                 onClick={handleBack}
