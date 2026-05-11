@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.22](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.21...surrogacy-crm-platform-v0.91.22) (2026-05-11)
+
+
+### Features
+
+* Polish public intake form layout ([3eb2975](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3eb2975aefeef490f440907b1e70d79e64377d74))
+* Refine public intake field controls ([2a7d0e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2a7d0e98100748ee96c32c83ecda911f5b398d7a))
+
+
+### Bug Fixes
+
+* Avoid empty public intake draft sessions ([0d9b47d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0d9b47dd900090516a80ee39ca8913867ef1a4bd))
+* optimize workflow stats aggregates ([8928f0a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8928f0a7222dd02c5379a324590c5bdd8e620cea))
+
 ## [0.91.21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.20...surrogacy-crm-platform-v0.91.21) (2026-05-10)
 
 
