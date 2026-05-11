@@ -956,8 +956,16 @@ function SsnField({
                     placeholder="XXX-XX-XXXX"
                     className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
                 />
-                <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => void save()} disabled={isSaving}>
-                    <CheckIcon className="size-3.5" />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    onClick={() => void save()}
+                    disabled={isSaving}
+                    aria-label={`Save ${label}`}
+                >
+                    <CheckIcon className="size-3.5" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -969,8 +977,9 @@ function SsnField({
                         setIsEditing(false)
                     }}
                     disabled={isSaving}
+                    aria-label={`Cancel ${label}`}
                 >
-                    <XIcon className="size-3.5" />
+                    <XIcon className="size-3.5" aria-hidden="true" />
                 </Button>
             </div>
         )
@@ -991,7 +1000,7 @@ function SsnField({
                     disabled={isRevealPending}
                     aria-label={`Reveal ${label}`}
                 >
-                    <EyeIcon className="size-3.5" />
+                    <EyeIcon className="size-3.5" aria-hidden="true" />
                 </Button>
             )}
             <Button
@@ -1002,7 +1011,7 @@ function SsnField({
                 onClick={() => setIsEditing(true)}
                 aria-label={`Edit ${label}`}
             >
-                <PencilIcon className="size-3.5" />
+                <PencilIcon className="size-3.5" aria-hidden="true" />
             </Button>
         </div>
     )
