@@ -36,6 +36,44 @@ function formatDate(value: string | null): string {
     return formatLocalDate(parseDateInput(value))
 }
 
+const publicFieldShellClassName = "space-y-2"
+const publicFieldGroupShellClassName = "space-y-3 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4"
+const publicControlClassName = "h-11 rounded-md border-stone-200 bg-white shadow-none"
+
+function getFieldPlaceholder(field: { key: string; label: string; type: string }): string {
+    const key = field.key.trim().toLowerCase()
+    const label = field.label.trim().toLowerCase()
+    const searchable = `${key} ${label}`
+
+    if (field.type === "email" || searchable.includes("email")) {
+        return "e.g. jane@example.com"
+    }
+    if (field.type === "phone" || searchable.includes("phone")) {
+        return "e.g. (555) 123-4567"
+    }
+    if (field.type === "textarea") {
+        if (/(note|comment|detail|describe|about)/.test(searchable)) {
+            return "Share any relevant details"
+        }
+        return "Enter your response"
+    }
+    if (field.type === "number") {
+        if (searchable.includes("weight")) return "e.g. 150 lb"
+        if (searchable.includes("age")) return "e.g. 32"
+        if (/(child|children|pregnanc|birth|cycle|attempt|count)/.test(searchable)) return "e.g. 2"
+        return "e.g. 123"
+    }
+    if (/(full[_\s-]?name|legal[_\s-]?name)/.test(searchable)) return "e.g. Jane Smith"
+    if (/(first[_\s-]?name|given[_\s-]?name)/.test(searchable)) return "e.g. Jane"
+    if (/(last[_\s-]?name|family[_\s-]?name|surname)/.test(searchable)) return "e.g. Smith"
+    if (searchable.includes("city")) return "e.g. Chicago"
+    if (searchable.includes("state")) return "e.g. CA"
+    if (/(zip|postal)/.test(searchable)) return "e.g. 60614"
+    if (searchable.includes("address")) return "e.g. 123 Main St"
+
+    return "Enter your answer"
+}
+
 function isDobField(field: FormField): boolean {
     const key = field.key.trim().toLowerCase()
     const label = field.label.trim().toLowerCase()
@@ -112,7 +150,7 @@ function FixedTableFieldInput({
 
     if (columns.length === 0 || (field.rows?.length ?? 0) === 0) {
         return (
-            <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div key={field.key} className={publicFieldGroupShellClassName}>
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
@@ -122,7 +160,7 @@ function FixedTableFieldInput({
     }
 
     return (
-        <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+        <div key={field.key} className={publicFieldGroupShellClassName}>
             <div className="space-y-1">
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
@@ -142,7 +180,7 @@ function FixedTableFieldInput({
                             key={rowKey || rowLabel}
                             role="group"
                             aria-label={`${rowLabel} row`}
-                            className="rounded-2xl border border-stone-200 bg-white p-4 @container/table-row @xl/table-row:grid @xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)] @xl/table-row:items-start @xl/table-row:gap-4"
+                            className="rounded-lg border border-stone-200 bg-white p-4 @container/table-row @xl/table-row:grid @xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)] @xl/table-row:items-start @xl/table-row:gap-4"
                         >
                             <div className="mb-4 space-y-1 @xl/table-row:mb-0 @xl/table-row:pr-2">
                                 <div className="text-base font-semibold text-stone-900">{rowLabel}</div>
@@ -184,7 +222,7 @@ function FixedTableFieldInput({
                                             </div>
                                         ) : column.type === "select" ? (
                                             <select
-                                                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                                                className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
                                                 value={normalizedValue}
                                                 onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
                                             >
@@ -200,8 +238,8 @@ function FixedTableFieldInput({
                                                 type="text"
                                                 value={normalizedValue}
                                                 onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
-                                                placeholder={column.label}
-                                                className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                                                placeholder={getFieldPlaceholder(column)}
+                                                className={publicControlClassName}
                                             />
                                         ) : (
                                             <Input
@@ -214,8 +252,8 @@ function FixedTableFieldInput({
                                                 }
                                                 value={normalizedValue}
                                                 onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
-                                                placeholder={column.label}
-                                                className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                                                placeholder={getFieldPlaceholder(column)}
+                                                className={publicControlClassName}
                                             />
                                         )}
                                     </div>
@@ -267,7 +305,7 @@ function HeightFieldInput({
     }
 
     return (
-        <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+        <div key={field.key} className="space-y-3">
             <Label className="text-sm font-medium">
                 {field.label} {requiredMark}
             </Label>
@@ -277,16 +315,16 @@ function HeightFieldInput({
                         htmlFor={`${field.key}_ft`}
                         className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500"
                     >
-                        {field.label} Feet
+                        Feet
                     </Label>
                     <select
                         id={`${field.key}_ft`}
                         aria-label={`${field.label} Feet`}
                         value={feetValue}
                         onChange={(event) => syncHeight(event.target.value, inchesValue)}
-                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                        className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
                     >
-                        <option value="">ft</option>
+                        <option value="">e.g. 5 ft</option>
                         {Array.from({ length: 9 }, (_, value) => value).map((value) => (
                             <option key={`feet-${value}`} value={value}>
                                 {value} ft
@@ -299,16 +337,16 @@ function HeightFieldInput({
                         htmlFor={`${field.key}_in`}
                         className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500"
                     >
-                        {field.label} Inches
+                        Inches
                     </Label>
                     <select
                         id={`${field.key}_in`}
                         aria-label={`${field.label} Inches`}
                         value={inchesValue}
                         onChange={(event) => syncHeight(feetValue, event.target.value)}
-                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm shadow-none"
+                        className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
                     >
-                        <option value="">in</option>
+                        <option value="">e.g. 6 in</option>
                         {Array.from({ length: 12 }, (_, value) => value).map((value) => (
                             <option key={`inches-${value}`} value={value}>
                                 {value} in
@@ -343,10 +381,10 @@ function OptionCard({
             onClick={onClick}
             className={cn(
                 "w-full border border-stone-200 bg-white text-left transition-all",
-                size === "compact" ? "rounded-xl px-3 py-2.5" : "rounded-2xl p-4",
-                "hover:border-primary/60 hover:bg-primary/5",
+                size === "compact" ? "rounded-md px-3 py-2.5" : "rounded-lg p-4",
+                "hover:border-blue-300 hover:bg-sky-50",
                 "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
-                selected ? "border-primary bg-primary/10" : "border-stone-200",
+                selected ? "border-blue-500 bg-sky-50 shadow-[0_0_0_1px_rgba(59,130,246,0.18)]" : "border-stone-200",
             )}
         >
             <div className="flex items-center gap-3">
@@ -354,7 +392,7 @@ function OptionCard({
                     className={cn(
                         "flex items-center justify-center rounded-full border-2 transition-all",
                         size === "compact" ? "size-5" : "size-6",
-                        selected ? "border-primary bg-primary" : "border-stone-300 bg-white",
+                        selected ? "border-blue-600 bg-blue-600" : "border-stone-300 bg-white",
                     )}
                 >
                     {selected && <CheckIcon className={cn("text-white", size === "compact" ? "size-3.5" : "size-4")} />}
@@ -378,7 +416,7 @@ export function PublicFormFieldRenderer({
 
     if (field.type === "textarea") {
         return (
-            <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div key={field.key} className={publicFieldShellClassName}>
                 <Label htmlFor={field.key} className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
@@ -386,8 +424,8 @@ export function PublicFormFieldRenderer({
                     id={field.key}
                     value={typeof value === "string" ? value : ""}
                     onChange={(event) => updateField(field.key, event.target.value)}
-                    placeholder={field.label}
-                    className="min-h-24 rounded-xl border-stone-200 bg-white shadow-none"
+                    placeholder={getFieldPlaceholder(field)}
+                    className="min-h-24 rounded-md border-stone-200 bg-white shadow-none"
                 />
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </div>
@@ -400,7 +438,7 @@ export function PublicFormFieldRenderer({
         const usesDobPickerNavigation = isDobField(field)
 
         return (
-            <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div key={field.key} className={publicFieldShellClassName}>
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
@@ -415,7 +453,7 @@ export function PublicFormFieldRenderer({
                             <Button
                                 variant="outline"
                                 className={cn(
-                                    "h-11 w-full justify-start rounded-xl border-stone-200 bg-white text-left font-normal shadow-none",
+                                    "h-11 w-full justify-start rounded-md border-stone-200 bg-white text-left font-normal shadow-none",
                                     !value && "text-stone-500",
                                 )}
                             >
@@ -474,7 +512,7 @@ export function PublicFormFieldRenderer({
         const options = field.options || []
 
         return (
-            <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div key={field.key} className={publicFieldGroupShellClassName}>
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
@@ -504,7 +542,7 @@ export function PublicFormFieldRenderer({
             : []
 
         return (
-            <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div key={field.key} className={publicFieldGroupShellClassName}>
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
@@ -538,7 +576,7 @@ export function PublicFormFieldRenderer({
 
     if (field.type === "checkbox") {
         return (
-            <div key={field.key} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <div key={field.key} className={publicFieldGroupShellClassName}>
                 <div className="flex items-start gap-3">
                     <Checkbox
                         id={field.key}
@@ -567,7 +605,7 @@ export function PublicFormFieldRenderer({
                     : "text"
 
     return (
-        <div key={field.key} className="space-y-2 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+        <div key={field.key} className={publicFieldShellClassName}>
             <Label htmlFor={field.key} className="text-sm font-medium">
                 {field.label} {requiredMark}
             </Label>
@@ -576,8 +614,8 @@ export function PublicFormFieldRenderer({
                 type={inputType}
                 value={typeof value === "string" ? value : value ? String(value) : ""}
                 onChange={(event) => updateField(field.key, event.target.value)}
-                placeholder={field.label}
-                className="h-11 rounded-xl border-stone-200 bg-white shadow-none"
+                placeholder={getFieldPlaceholder(field)}
+                className={publicControlClassName}
             />
             {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
         </div>

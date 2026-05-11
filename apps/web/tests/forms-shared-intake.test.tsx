@@ -147,6 +147,97 @@ describe('Shared Intake Public Page', () => {
         expect(shell).toHaveClass('text-stone-900')
     })
 
+    it('renders the first intake step as active progress', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                        ],
+                    },
+                    {
+                        title: 'Medical & Preferences',
+                        fields: [
+                            { key: 'height', label: 'Height', type: 'height', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
+        expect(screen.getByRole('progressbar', { name: /application progress/i })).toHaveAttribute(
+            'aria-valuenow',
+            '33',
+        )
+    })
+
+    it('treats unsaved uploads as an informational note', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            { key: 'documents', label: 'Documents', type: 'file', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        const uploadNote = await screen.findByText("Uploads aren't saved yet")
+        expect(uploadNote.closest('[data-slot="public-upload-note"]')).toHaveClass('border-sky-200')
+    })
+
+    it('uses example placeholders instead of repeating field labels', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                            { key: 'phone', label: 'Phone', type: 'phone', required: true },
+                            { key: 'email', label: 'Email', type: 'email', required: true },
+                            { key: 'weight', label: 'Weight', type: 'number', required: false },
+                            { key: 'height', label: 'Height', type: 'height', required: false },
+                            { key: 'notes', label: 'Notes', type: 'textarea', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('e.g. Jane Smith')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('e.g. (555) 123-4567')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('e.g. jane@example.com')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('e.g. 150 lb')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('Share any relevant details')).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'e.g. 5 ft' })).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'e.g. 6 in' })).toBeInTheDocument()
+        expect(screen.queryByPlaceholderText('Full Name')).not.toBeInTheDocument()
+        expect(screen.queryByPlaceholderText('Phone')).not.toBeInTheDocument()
+        expect(screen.queryByPlaceholderText('Email')).not.toBeInTheDocument()
+        expect(screen.queryByPlaceholderText('Weight')).not.toBeInTheDocument()
+    })
+
     it('submits shared intake and shows lead-created success state', async () => {
         render(<PublicIntakeFormClient slug="event-abc" />)
 
