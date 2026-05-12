@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.22...surrogacy-crm-platform-v0.91.23) (2026-05-12)
+
+
+### Bug Fixes
+
+* bump urllib3 security floor ([9bcd499](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9bcd499185ce030cc5476cf6d76f05776b6c501d))
+* Move AI Studio image paste into composer ([189c519](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/189c5197473876d5de64cff81d030afc8d89c23f))
+* preserve invite context through google sso ([0e40f68](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0e40f68ff3a16c557b1e889c225d7d2d448b56a0))
+
 ## [0.91.22](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.21...surrogacy-crm-platform-v0.91.22) (2026-05-11)
 
 
