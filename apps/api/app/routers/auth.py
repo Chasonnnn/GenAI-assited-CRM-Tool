@@ -65,6 +65,7 @@ def google_login(
     request: Request,
     login_hint: str | None = None,
     return_to: str = "app",
+    invite_id: str | None = None,
 ) -> object:
     """
     Initiate Google OAuth flow.
@@ -92,7 +93,20 @@ def google_login(
     nonce = generate_oauth_nonce()
     user_agent = request.headers.get("user-agent", "")
 
-    state_payload = create_oauth_state_payload(state, nonce, user_agent, return_to=return_to)
+    normalized_invite_id = None
+    if invite_id:
+        try:
+            normalized_invite_id = str(UUIDType(str(invite_id)))
+        except ValueError:
+            normalized_invite_id = None
+
+    state_payload = create_oauth_state_payload(
+        state,
+        nonce,
+        user_agent,
+        return_to=return_to,
+        invite_id=normalized_invite_id,
+    )
 
     # Build Google auth URL
     # Note: We skip access_type=offline and prompt=consent since we only

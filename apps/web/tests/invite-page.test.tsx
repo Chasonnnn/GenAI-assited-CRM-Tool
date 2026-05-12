@@ -21,6 +21,7 @@ describe('InvitePage', () => {
     beforeEach(() => {
         mockApiGet.mockResolvedValue({
             id: 'inv-123',
+            organization_id: 'org-123',
             organization_name: 'Test Org',
             role: 'intake_specialist',
             inviter_name: 'Test User',
@@ -46,7 +47,7 @@ describe('InvitePage', () => {
         fireEvent.click(button)
 
         expect(window.location.assign).toHaveBeenCalledWith(
-            'https://api.example.com/auth/google/login?return_to=app'
+            'https://api.example.com/auth/google/login?return_to=app&invite_id=inv-123'
         )
     })
 })

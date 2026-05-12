@@ -182,7 +182,11 @@ def hash_user_agent(user_agent: str) -> str:
 
 
 def create_oauth_state_payload(
-    state: str, nonce: str, user_agent: str, return_to: str | None = None
+    state: str,
+    nonce: str,
+    user_agent: str,
+    return_to: str | None = None,
+    invite_id: str | None = None,
 ) -> str:
     """
     Create JSON payload for OAuth state cookie.
@@ -192,6 +196,7 @@ def create_oauth_state_payload(
     - nonce: Replay protection (verified in ID token)
     - ua_hash: User-agent binding
     - return_to: Target app after auth ("app" or "ops")
+    - invite_id: Optional clicked organization invite context
     """
     payload = {
         "state": state,
@@ -200,6 +205,8 @@ def create_oauth_state_payload(
     }
     if return_to:
         payload["return_to"] = return_to
+    if invite_id:
+        payload["invite_id"] = invite_id
     return json.dumps(payload)
 
 

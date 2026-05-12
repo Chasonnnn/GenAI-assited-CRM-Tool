@@ -1,5 +1,9 @@
 """Tests for Authentication."""
 
+import json
+from http.cookies import SimpleCookie
+from uuid import uuid4
+
 import pytest
 from httpx import AsyncClient
 
@@ -21,6 +25,24 @@ async def test_login_redirects_to_google(client: AsyncClient):
     assert response.status_code in [302, 307]
     location = response.headers.get("location", "")
     assert "accounts.google.com" in location or "google" in location.lower()
+
+
+@pytest.mark.asyncio
+async def test_login_preserves_invite_id_in_oauth_state(client: AsyncClient):
+    """Invite SSO should carry the clicked invite through Google's redirect."""
+    invite_id = uuid4()
+
+    response = await client.get(
+        f"/auth/google/login?return_to=app&invite_id={invite_id}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code in [302, 307]
+    cookies = SimpleCookie()
+    cookies.load(response.headers["set-cookie"])
+    assert "oauth_state" in cookies
+    payload = json.loads(cookies["oauth_state"].value)
+    assert payload["invite_id"] == str(invite_id)
 
 
 @pytest.mark.asyncio

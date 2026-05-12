@@ -256,6 +256,7 @@ def accept_invite(
     db: Session,
     invite_id: uuid.UUID,
     user_id: uuid.UUID,
+    verified_email: str | None = None,
 ) -> dict:
     """Accept an invitation and create membership."""
     invite = get_invite_by_id(db, invite_id)
@@ -274,7 +275,9 @@ def accept_invite(
     if not user:
         raise ValueError("User not found")
 
-    if user.email.lower() != invite.email.lower():
+    invite_email = invite.email.lower()
+    accepted_email = (verified_email or user.email).lower()
+    if accepted_email != invite_email:
         raise PermissionError("This invite was sent to a different email address")
 
     role_value = validate_invite_role(invite.role)

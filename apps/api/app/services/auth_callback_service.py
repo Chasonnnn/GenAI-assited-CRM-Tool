@@ -141,7 +141,13 @@ async def handle_google_callback(
     except ValueError:
         return _error_response("domain_not_allowed", return_to=return_to)
 
-    session_token, error_code = resolve_user_and_create_session(db, google_user, request=request)
+    invite_id = stored_payload.get("invite_id")
+    session_token, error_code = resolve_user_and_create_session(
+        db,
+        google_user,
+        request=request,
+        invite_id=invite_id if isinstance(invite_id, str) else None,
+    )
     if error_code:
         return _error_response(error_code, return_to=return_to)
 

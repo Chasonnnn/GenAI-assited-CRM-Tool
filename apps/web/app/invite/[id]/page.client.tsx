@@ -74,7 +74,11 @@ export default function InviteAcceptPageClient() {
 
     const handleSignIn = () => {
         try {
-            window.location.assign(`${apiBase}/auth/google/login?return_to=app`)
+            const params = new URLSearchParams({ return_to: "app" })
+            if (inviteId) {
+                params.set("invite_id", inviteId)
+            }
+            window.location.assign(`${apiBase}/auth/google/login?${params.toString()}`)
         } catch {
             // Ignore navigation errors in non-browser runtimes.
         }

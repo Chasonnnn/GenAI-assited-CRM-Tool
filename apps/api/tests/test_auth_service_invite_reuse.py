@@ -66,6 +66,68 @@ def test_existing_user_can_accept_invite_when_membership_inactive(db, test_org):
     assert invite.accepted_at is not None
 
 
+def test_existing_google_identity_accepts_invite_using_verified_email(db, test_org):
+    """Existing Google identities should use Google's verified email for invite matching."""
+    from app.db.enums import AuthProvider, Role
+    from app.db.models import AuthIdentity, Membership, OrgInvite, User
+    from app.services.auth_service import resolve_user_and_create_session
+    from app.services.google_oauth import GoogleUserInfo
+
+    user = User(
+        id=uuid.uuid4(),
+        email="stale-address@example.com",
+        display_name="Invited User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    identity = AuthIdentity(
+        user_id=user.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject="google-sub-email-changed",
+        email=user.email,
+    )
+    db.add(identity)
+
+    invite = OrgInvite(
+        organization_id=test_org.id,
+        email="invited-user@example.com",
+        role=Role.CASE_MANAGER.value,
+        invited_by_user_id=None,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="google-sub-email-changed",
+        email=invite.email,
+        name="Invited User",
+        picture=None,
+        hd=None,
+    )
+
+    token, error_code = resolve_user_and_create_session(db, google_user, invite_id=str(invite.id))
+    assert error_code is None
+    assert token is not None
+
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == user.id,
+            Membership.organization_id == test_org.id,
+        )
+        .one_or_none()
+    )
+
+    db.refresh(invite)
+    assert membership is not None
+    assert membership.role == Role.CASE_MANAGER.value
+    assert invite.accepted_at is not None
+
+
 def test_existing_user_without_invite_returns_no_membership(db, test_org):
     """Existing users without a valid invite should still fail with no_membership."""
     from app.db.enums import AuthProvider

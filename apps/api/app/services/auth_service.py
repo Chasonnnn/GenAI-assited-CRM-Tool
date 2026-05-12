@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import logging
+from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -49,6 +50,30 @@ def get_valid_invite(db: Session, email: str) -> OrgInvite | None:
             or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
         )
         .order_by(OrgInvite.created_at.desc())
+        .first()
+    )
+
+
+def get_valid_invite_by_id_for_email(
+    db: Session, invite_id: str | UUID | None, email: str
+) -> OrgInvite | None:
+    """Find a valid pending invite by clicked invite ID and verified email."""
+    if not invite_id:
+        return None
+    try:
+        normalized_invite_id = UUID(str(invite_id))
+    except ValueError:
+        return None
+
+    return (
+        db.query(OrgInvite)
+        .filter(
+            OrgInvite.id == normalized_invite_id,
+            func.lower(OrgInvite.email) == email.lower(),
+            OrgInvite.accepted_at.is_(None),
+            OrgInvite.revoked_at.is_(None),
+            or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
+        )
         .first()
     )
 
@@ -128,13 +153,14 @@ def resolve_user_and_create_session(
     db: Session,
     google_user: GoogleUserInfo,
     request: Request | None = None,
+    invite_id: str | UUID | None = None,
 ) -> tuple[str | None, str | None]:
     """
     Find or create user based on Google identity.
 
     Flow:
     1. Check if user already exists (has auth identity)
-    2. If not, check for valid invite
+    2. If not, check for the clicked invite, then any valid invite by verified email
     3. Create user from invite if found
     4. Return session token or error code
 
@@ -179,12 +205,19 @@ def resolve_user_and_create_session(
             return None, "account_disabled"
 
         if not membership:
-            invite = get_valid_invite(db, google_user.email)
+            invite = get_valid_invite_by_id_for_email(db, invite_id, google_user.email)
+            if not invite:
+                invite = get_valid_invite(db, google_user.email)
             if invite:
                 try:
                     from app.services import invite_service, membership_service
 
-                    invite_service.accept_invite(db, invite.id, user.id)
+                    invite_service.accept_invite(
+                        db,
+                        invite.id,
+                        user.id,
+                        verified_email=google_user.email,
+                    )
                     membership = (
                         db.query(Membership)
                         .filter(
@@ -250,7 +283,9 @@ def resolve_user_and_create_session(
         return token, None
 
     # New user - check for valid invite
-    invite = get_valid_invite(db, google_user.email)
+    invite = get_valid_invite_by_id_for_email(db, invite_id, google_user.email)
+    if not invite:
+        invite = get_valid_invite(db, google_user.email)
 
     if not invite:
         expired = get_expired_invite(db, google_user.email)
