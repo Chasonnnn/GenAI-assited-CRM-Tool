@@ -28,6 +28,7 @@ def test_dependency_pins_match_security_fixes():
         "pyjwt": "2.12.0",
         "python-dotenv": "1.2.2",
         "requests": "2.33.0",
+        "urllib3": "2.7.0",
     }
     expected_exact_pins = {
         "pillow": "12.2.0",

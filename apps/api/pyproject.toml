@@ -33,6 +33,7 @@ dependencies = [
     "google-auth==2.48.0",
     "google-genai==1.61.0",
     "requests==2.33.0",
+    "urllib3==2.7.0",
     "email-validator==2.3.0",
     # Security
     "nh3==0.3.2",
