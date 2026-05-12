@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.24](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.23...surrogacy-crm-platform-v0.91.24) (2026-05-12)
+
+
+### Bug Fixes
+
+* bump next security patch ([24f69f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24f69f5f63f976ccce9b987bb6161d4dc2e5f0f9))
+* hard deprovision removed members ([c426f7b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c426f7b65bdfa29270557c88c627e67a5caef299))
+* prevent reused google identity from reviving removed users ([e57f681](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e57f6813d6a452e0ed7bb3faa56119ef7acf3c83))
+
 ## [0.91.23](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.22...surrogacy-crm-platform-v0.91.23) (2026-05-12)
 
 
