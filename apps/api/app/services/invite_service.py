@@ -281,6 +281,7 @@ def accept_invite(
         raise PermissionError("This invite was sent to a different email address")
 
     role_value = validate_invite_role(invite.role)
+    user.is_active = True
 
     existing = (
         db.query(Membership)

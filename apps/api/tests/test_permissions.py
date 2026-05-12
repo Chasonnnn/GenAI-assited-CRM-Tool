@@ -10,10 +10,20 @@ Tests cover:
 - Org scoping
 """
 
+from datetime import datetime, timedelta, timezone
 import uuid
 import pytest
 from app.db.enums import Role
-from app.db.models import User, Membership, RolePermission, UserPermissionOverride
+from app.db.models import (
+    AuthIdentity,
+    Membership,
+    Queue,
+    QueueMember,
+    RolePermission,
+    User,
+    UserPermissionOverride,
+    UserSession,
+)
 from app.services import permission_service
 
 
@@ -209,6 +219,62 @@ def test_developer_bypass_ignores_explicit_revoke(db, org_a, developer_user):
         "view_post_approval_surrogates",
     )
     assert result is True, "Developer should bypass even explicit revokes"
+
+
+def test_deprovision_member_removes_auth_surface_and_membership(db, org_a, case_manager_user):
+    """Removing a member should detach login state, not leave a reactivatable identity."""
+    from app.db.enums import AuthProvider
+
+    membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == case_manager_user.id,
+            Membership.organization_id == org_a.id,
+        )
+        .one()
+    )
+    identity = AuthIdentity(
+        user_id=case_manager_user.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject="old-google-subject",
+        email=case_manager_user.email,
+    )
+    queue = Queue(organization_id=org_a.id, name="Escalations", is_active=True)
+    override = UserPermissionOverride(
+        id=uuid.uuid4(),
+        organization_id=org_a.id,
+        user_id=case_manager_user.id,
+        permission="view_post_approval_surrogates",
+        override_type="grant",
+    )
+    session = UserSession(
+        user_id=case_manager_user.id,
+        organization_id=org_a.id,
+        session_token_hash="old-session-token-hash",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    db.add_all([identity, queue, override, session])
+    db.flush()
+    queue_member = QueueMember(queue_id=queue.id, user_id=case_manager_user.id)
+    db.add(queue_member)
+    db.commit()
+
+    permission_service.deprovision_member(db, org_a.id, membership, case_manager_user)
+    db.commit()
+
+    assert db.get(Membership, membership.id) is None
+    assert db.query(AuthIdentity).filter(AuthIdentity.user_id == case_manager_user.id).count() == 0
+    assert db.query(UserSession).filter(UserSession.user_id == case_manager_user.id).count() == 0
+    assert (
+        db.query(UserPermissionOverride)
+        .filter(UserPermissionOverride.user_id == case_manager_user.id)
+        .count()
+        == 0
+    )
+    assert db.query(QueueMember).filter(QueueMember.user_id == case_manager_user.id).count() == 0
+    db.refresh(case_manager_user)
+    assert case_manager_user.is_active is False
+    assert case_manager_user.token_version == 2
 
 
 # =============================================================================

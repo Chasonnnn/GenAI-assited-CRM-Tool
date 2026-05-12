@@ -394,6 +394,66 @@ def delete_user_overrides(
     return count
 
 
+def deprovision_member(
+    db: Session,
+    org_id: uuid.UUID,
+    membership,
+    user,
+) -> None:
+    """
+    Remove a member's organization access and login bindings.
+
+    User rows are retained for audit references, but membership, provider identity,
+    active sessions, queue memberships, and permission overrides are removed.
+    """
+    from app.db.models import AuthIdentity, Queue, QueueMember, UserSession
+    from app.services import session_service
+
+    delete_user_overrides(db, org_id, user.id)
+
+    queue_ids = db.query(Queue.id).filter(Queue.organization_id == org_id)
+    (
+        db.query(QueueMember)
+        .filter(
+            QueueMember.user_id == user.id,
+            QueueMember.queue_id.in_(queue_ids),
+        )
+        .delete(synchronize_session=False)
+    )
+
+    token_hashes = [
+        token_hash
+        for token_hash in db.query(UserSession.session_token_hash)
+        .filter(
+            UserSession.user_id == user.id,
+            UserSession.organization_id == org_id,
+        )
+        .all()
+    ]
+    (
+        db.query(UserSession)
+        .filter(
+            UserSession.user_id == user.id,
+            UserSession.organization_id == org_id,
+        )
+        .delete(synchronize_session=False)
+    )
+
+    (
+        db.query(AuthIdentity)
+        .filter(AuthIdentity.user_id == user.id)
+        .delete(synchronize_session=False)
+    )
+
+    user.is_active = False
+    user.token_version += 1
+    db.delete(membership)
+    db.flush()
+
+    for (token_hash,) in token_hashes:
+        session_service._publish_session_revoked(token_hash)
+
+
 def list_members(
     db: Session,
     org_id: uuid.UUID,

@@ -116,3 +116,47 @@ async def test_platform_create_invite_reuses_expired_pending_invite(
     db.refresh(existing)
     assert existing.expires_at is not None
     assert existing.expires_at > datetime.now(timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_platform_create_invite_allows_inactive_prior_member(
+    authed_client, db, test_org, test_user, monkeypatch
+):
+    from app.db.enums import Role
+    from app.db.models import Membership, User
+    from app.services import invite_email_service
+    from app.services import platform_email_service
+
+    test_user.is_platform_admin = True
+    prior_user = User(
+        email="former-member@example.com",
+        display_name="Former Member",
+        is_active=False,
+    )
+    db.add(prior_user)
+    db.flush()
+    db.add(
+        Membership(
+            user_id=prior_user.id,
+            organization_id=test_org.id,
+            role=Role.CASE_MANAGER.value,
+            is_active=False,
+        )
+    )
+    db.commit()
+
+    async def fake_send_invite_email(*_args, **_kwargs):
+        return {"success": True}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fake_send_invite_email)
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    response = await authed_client.post(
+        f"/platform/orgs/{test_org.id}/invites",
+        json={"email": "former-member@example.com", "role": "admin"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["email"] == "former-member@example.com"
+    assert payload["role"] == Role.ADMIN.value

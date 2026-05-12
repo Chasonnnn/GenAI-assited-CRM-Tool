@@ -110,32 +110,38 @@ def create_user_from_invite(
 
     Marks the invite as accepted.
     """
-    # Create user
-    user = User(
-        email=google_user.email,
-        display_name=google_user.name or google_user.email.split("@")[0],
-        avatar_url=google_user.picture,
-    )
-    db.add(user)
-    db.flush()  # Get user.id
+    user = _get_or_create_user_for_verified_email(db, google_user)
 
-    # Create auth identity
-    identity = AuthIdentity(
-        user_id=user.id,
-        provider=AuthProvider.GOOGLE.value,
-        provider_subject=google_user.sub,
-        email=google_user.email,
-    )
-    db.add(identity)
+    identity = find_identity_by_subject(db, AuthProvider.GOOGLE, google_user.sub)
+    if identity:
+        if identity.user_id != user.id:
+            raise ValueError("Google identity is already linked to a different user")
+        identity.email = _normalized_email(google_user.email)
+    else:
+        identity = AuthIdentity(
+            user_id=user.id,
+            provider=AuthProvider.GOOGLE.value,
+            provider_subject=google_user.sub,
+            email=_normalized_email(google_user.email),
+        )
+        db.add(identity)
 
-    # Create membership
-    membership = Membership(
-        user_id=user.id,
-        organization_id=invite.organization_id,
-        role=invite.role,
-        is_active=True,
-    )
-    db.add(membership)
+    existing_membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+    if existing_membership:
+        if existing_membership.is_active:
+            raise ValueError("Already a member of an organization")
+        existing_membership.organization_id = invite.organization_id
+        existing_membership.role = invite.role
+        existing_membership.is_active = True
+        membership = existing_membership
+    else:
+        membership = Membership(
+            user_id=user.id,
+            organization_id=invite.organization_id,
+            role=invite.role,
+            is_active=True,
+        )
+        db.add(membership)
 
     # Mark invite as accepted
     invite.accepted_at = datetime.now(timezone.utc)
@@ -182,6 +188,10 @@ def _get_or_create_user_for_verified_email(db: Session, google_user: GoogleUserI
     email = _normalized_email(google_user.email)
     user = db.query(User).filter(func.lower(User.email) == email).first()
     if user:
+        user.is_active = True
+        user.display_name = google_user.name or user.display_name or email.split("@")[0]
+        if google_user.picture:
+            user.avatar_url = google_user.picture
         return user
 
     user = User(
@@ -202,11 +212,9 @@ def _transfer_identity_to_invited_user(
     previous_user: User | None = None,
 ) -> tuple[User, Membership]:
     """Bind a reused Google identity to the user represented by the verified invite email."""
-    from app.services import invite_service, membership_service
+    from app.services import invite_service, membership_service, permission_service
 
     user = _get_or_create_user_for_verified_email(db, google_user)
-    if not user.is_active:
-        raise ValueError("Invited user account is disabled")
 
     role_value = invite_service.validate_invite_role(invite.role)
     now = datetime.now(timezone.utc)
@@ -235,6 +243,7 @@ def _transfer_identity_to_invited_user(
     identity.user_id = user.id
     identity.email = _normalized_email(google_user.email)
     invite.accepted_at = now
+    db.flush()
 
     if previous_user and previous_user.id != user.id:
         previous_membership = (
@@ -246,8 +255,12 @@ def _transfer_identity_to_invited_user(
             .first()
         )
         if previous_membership:
-            previous_membership.is_active = False
-            previous_user.token_version += 1
+            permission_service.deprovision_member(
+                db,
+                invite.organization_id,
+                previous_membership,
+                previous_user,
+            )
 
     membership_service.ensure_surrogate_pool_membership(
         db=db,
@@ -390,13 +403,8 @@ def resolve_user_and_create_session(
 
         # Existing user - validate and create session
         membership = _get_active_membership(db, user.id)
-        if not user.is_active:
-            _log_login_failed(
-                membership.organization_id if membership else None, "account_disabled"
-            )
-            return None, "account_disabled"
 
-        if not membership:
+        if not membership or not user.is_active:
             invite = get_valid_invite_by_id_for_email(db, invite_id, google_user.email)
             if not invite:
                 invite = get_valid_invite(db, google_user.email)
@@ -429,6 +437,11 @@ def resolve_user_and_create_session(
                     logger.warning("Failed to accept invite for existing user: %s", exc)
                     _log_login_failed(invite.organization_id if invite else None, "invite_invalid")
                     return None, "no_membership"
+            elif not user.is_active:
+                _log_login_failed(
+                    membership.organization_id if membership else None, "account_disabled"
+                )
+                return None, "account_disabled"
             if not membership:
                 return None, "no_membership"
 

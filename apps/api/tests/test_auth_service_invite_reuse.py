@@ -66,6 +66,73 @@ def test_existing_user_can_accept_invite_when_membership_inactive(db, test_org):
     assert invite.accepted_at is not None
 
 
+def test_deprovisioned_same_email_identity_can_accept_new_invite(db, test_org):
+    """A prior account binding for the same email should not block a fresh invite."""
+    from app.db.enums import AuthProvider, Role
+    from app.db.models import AuthIdentity, Membership, OrgInvite, User
+    from app.core.security import decode_session_token
+    from app.services.auth_service import resolve_user_and_create_session
+    from app.services.google_oauth import GoogleUserInfo
+
+    user = User(
+        id=uuid.uuid4(),
+        email="serenaguillen@ewifamilyglobal.com",
+        display_name="Serena Guillen",
+        token_version=2,
+        is_active=False,
+    )
+    db.add(user)
+    db.flush()
+
+    identity = AuthIdentity(
+        user_id=user.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject="serena-existing-google-sub",
+        email=user.email,
+    )
+    db.add(identity)
+
+    membership = Membership(
+        user_id=user.id,
+        organization_id=test_org.id,
+        role=Role.CASE_MANAGER.value,
+        is_active=False,
+    )
+    db.add(membership)
+
+    invite = OrgInvite(
+        organization_id=test_org.id,
+        email=user.email,
+        role=Role.ADMIN.value,
+        invited_by_user_id=None,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="serena-existing-google-sub",
+        email=user.email,
+        name="Serena Guillen",
+        picture=None,
+        hd=None,
+    )
+
+    token, error_code = resolve_user_and_create_session(db, google_user, invite_id=str(invite.id))
+
+    assert error_code is None
+    assert token is not None
+    payload = decode_session_token(token)
+    db.refresh(user)
+    db.refresh(membership)
+    db.refresh(invite)
+    assert payload["sub"] == str(user.id)
+    assert user.is_active is True
+    assert membership.is_active is True
+    assert membership.role == Role.ADMIN.value
+    assert invite.accepted_at is not None
+
+
 def test_reused_google_identity_invite_creates_invited_user_not_removed_member(db, test_org):
     """Reused Google accounts must not reactivate a removed different-email member."""
     from app.db.enums import AuthProvider, Role
@@ -109,6 +176,7 @@ def test_reused_google_identity_invite_creates_invited_user_not_removed_member(d
     )
     db.add(invite)
     db.commit()
+    removed_membership_id = removed_membership.id
 
     google_user = GoogleUserInfo(
         sub="workspace-account-reused",
@@ -136,7 +204,6 @@ def test_reused_google_identity_invite_creates_invited_user_not_removed_member(d
     )
 
     db.refresh(identity)
-    db.refresh(removed_membership)
     db.refresh(invite)
     payload = decode_session_token(token)
     assert payload["sub"] == str(invited_user.id)
@@ -144,7 +211,7 @@ def test_reused_google_identity_invite_creates_invited_user_not_removed_member(d
     assert identity.email == invite.email
     assert invited_membership is not None
     assert invited_membership.role == Role.CASE_MANAGER.value
-    assert removed_membership.is_active is False
+    assert db.get(Membership, removed_membership_id) is None
     assert invite.accepted_at is not None
 
 
@@ -240,6 +307,7 @@ def test_reused_google_identity_invite_deactivates_existing_different_email_memb
     )
     db.add(invite)
     db.commit()
+    existing_membership_id = existing_membership.id
 
     google_user = GoogleUserInfo(
         sub="workspace-account-reused-with-invite",
@@ -265,11 +333,11 @@ def test_reused_google_identity_invite_deactivates_existing_different_email_memb
         )
         .one()
     )
-    db.refresh(existing_membership)
     db.refresh(existing_user)
     assert invited_membership.is_active is True
     assert invited_membership.role == Role.ADMIN.value
-    assert existing_membership.is_active is False
+    assert db.get(Membership, existing_membership_id) is None
+    assert existing_user.is_active is False
     assert existing_user.token_version == 2
 
 

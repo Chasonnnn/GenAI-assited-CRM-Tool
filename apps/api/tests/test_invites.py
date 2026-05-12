@@ -47,6 +47,59 @@ def test_accept_invite_creates_membership(db, test_org):
     assert result["organization_id"] == str(test_org.id)
 
 
+def test_accept_invite_reuses_deprovisioned_user_with_same_email(db, test_org):
+    """A removed user's old account row must not block a fresh invite for that email."""
+    from app.db.models import User, OrgInvite, Membership, AuthIdentity
+    from app.db.enums import AuthProvider, Role
+    from app.services import auth_service
+    from app.services.google_oauth import GoogleUserInfo
+
+    user = User(
+        id=uuid4(),
+        email="serena@example.com",
+        display_name="Former Serena",
+        token_version=2,
+        is_active=False,
+    )
+    db.add(user)
+    db.flush()
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_org.id,
+        email=user.email,
+        role=Role.CASE_MANAGER.value,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="new-google-subject-for-serena",
+        email="serena@example.com",
+        name="Serena Guillen",
+        picture="https://example.com/avatar.png",
+        hd=None,
+    )
+
+    accepted_user, membership = auth_service.create_user_from_invite(db, invite, google_user)
+
+    db.refresh(user)
+    identity = db.query(AuthIdentity).filter(AuthIdentity.user_id == user.id).one()
+    assert accepted_user.id == user.id
+    assert user.is_active is True
+    assert user.display_name == "Serena Guillen"
+    assert user.avatar_url == "https://example.com/avatar.png"
+    assert membership.user_id == user.id
+    assert membership.organization_id == test_org.id
+    assert membership.role == Role.CASE_MANAGER.value
+    assert membership.is_active is True
+    assert identity.provider == AuthProvider.GOOGLE.value
+    assert identity.provider_subject == "new-google-subject-for-serena"
+    assert invite.accepted_at is not None
+    assert db.query(Membership).filter(Membership.user_id == user.id).count() == 1
+
+
 def test_create_invite_rejects_invalid_role(db, test_org, test_user):
     """Invalid invite roles should be rejected."""
     from app.services import invite_service

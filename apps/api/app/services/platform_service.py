@@ -1180,7 +1180,7 @@ def create_invite(
             )
             .first()
         )
-        if existing_membership:
+        if existing_membership and existing_membership.is_active:
             raise ValueError(f"{email} is already a member of this organization")
 
     if invite is None:

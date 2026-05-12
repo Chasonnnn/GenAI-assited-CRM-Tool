@@ -450,11 +450,6 @@ def remove_member(
     if user.id == session.user_id:
         raise HTTPException(403, "Cannot remove yourself from the organization")
 
-    # Delete overrides
-    permission_service.delete_user_overrides(db, session.org_id, user.id)
-
-    # Deactivate membership (soft remove)
-    membership.is_active = False
     from app.services import audit_service
 
     audit_service.log_user_deactivated(
@@ -465,6 +460,7 @@ def remove_member(
         reason="removed_from_org",
         request=request,
     )
+    permission_service.deprovision_member(db, session.org_id, membership, user)
     db.commit()
 
     return {"removed": True, "user_id": str(user.id)}
