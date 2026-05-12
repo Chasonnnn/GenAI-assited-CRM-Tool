@@ -83,6 +83,7 @@ dependencies = [
     "proto-plus==1.27.0",
     "pypdf==6.10.2",
     "openai>=2.36.0",
+    "urllib3==2.7.0",
 ]
 
 [project.optional-dependencies]
