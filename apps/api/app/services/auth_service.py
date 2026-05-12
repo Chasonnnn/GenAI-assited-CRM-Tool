@@ -21,6 +21,14 @@ def find_user_by_identity(
     db: Session, provider: AuthProvider, provider_subject: str
 ) -> User | None:
     """Find user by their external identity provider credentials."""
+    identity = find_identity_by_subject(db, provider, provider_subject)
+    return identity.user if identity else None
+
+
+def find_identity_by_subject(
+    db: Session, provider: AuthProvider, provider_subject: str
+) -> AuthIdentity | None:
+    """Find an external identity provider credential row."""
     identity = (
         db.query(AuthIdentity)
         .filter(
@@ -29,7 +37,7 @@ def find_user_by_identity(
         )
         .first()
     )
-    return identity.user if identity else None
+    return identity
 
 
 def get_valid_invite(db: Session, email: str) -> OrgInvite | None:
@@ -149,6 +157,154 @@ def create_user_from_invite(
     return user, membership
 
 
+def _normalized_email(email: str) -> str:
+    return email.lower().strip()
+
+
+def _emails_match(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    return _normalized_email(left) == _normalized_email(right)
+
+
+def _get_active_membership(db: Session, user_id: UUID) -> Membership | None:
+    return (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == user_id,
+            Membership.is_active.is_(True),
+        )
+        .first()
+    )
+
+
+def _get_or_create_user_for_verified_email(db: Session, google_user: GoogleUserInfo) -> User:
+    email = _normalized_email(google_user.email)
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    if user:
+        return user
+
+    user = User(
+        email=email,
+        display_name=google_user.name or email.split("@")[0],
+        avatar_url=google_user.picture,
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
+def _transfer_identity_to_invited_user(
+    db: Session,
+    identity: AuthIdentity,
+    invite: OrgInvite,
+    google_user: GoogleUserInfo,
+    previous_user: User | None = None,
+) -> tuple[User, Membership]:
+    """Bind a reused Google identity to the user represented by the verified invite email."""
+    from app.services import invite_service, membership_service
+
+    user = _get_or_create_user_for_verified_email(db, google_user)
+    if not user.is_active:
+        raise ValueError("Invited user account is disabled")
+
+    role_value = invite_service.validate_invite_role(invite.role)
+    now = datetime.now(timezone.utc)
+
+    existing_membership = (
+        db.query(Membership)
+        .filter(
+            Membership.user_id == user.id,
+            Membership.organization_id == invite.organization_id,
+        )
+        .first()
+    )
+    if existing_membership:
+        existing_membership.role = role_value
+        existing_membership.is_active = True
+        membership = existing_membership
+    else:
+        membership = Membership(
+            user_id=user.id,
+            organization_id=invite.organization_id,
+            role=role_value,
+            is_active=True,
+        )
+        db.add(membership)
+
+    identity.user_id = user.id
+    identity.email = _normalized_email(google_user.email)
+    invite.accepted_at = now
+
+    if previous_user and previous_user.id != user.id:
+        previous_membership = (
+            db.query(Membership)
+            .filter(
+                Membership.user_id == previous_user.id,
+                Membership.organization_id == invite.organization_id,
+            )
+            .first()
+        )
+        if previous_membership:
+            previous_membership.is_active = False
+            previous_user.token_version += 1
+
+    membership_service.ensure_surrogate_pool_membership(
+        db=db,
+        org_id=invite.organization_id,
+        user_id=user.id,
+        role=role_value,
+    )
+
+    db.commit()
+    db.refresh(user)
+    db.refresh(membership)
+    return user, membership
+
+
+def _create_login_session(
+    db: Session,
+    user: User,
+    membership: Membership,
+    request: Request | None = None,
+) -> str:
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # MFA is required for all users. A fresh Google login still needs Duo/TOTP verification.
+    token = create_session_token(
+        user.id,
+        membership.organization_id,
+        membership.role,
+        user.token_version,
+        mfa_verified=False,
+        mfa_required=True,
+    )
+
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=token,
+        request=request,
+    )
+
+    try:
+        from app.services import audit_service
+
+        audit_service.log_login_success(
+            db=db,
+            org_id=membership.organization_id,
+            user_id=user.id,
+            request=request,
+            provider="google",
+        )
+        db.commit()
+    except Exception as exc:
+        logger.warning("Failed to log login success: %s", exc)
+    return token
+
+
 def resolve_user_and_create_session(
     db: Session,
     google_user: GoogleUserInfo,
@@ -186,18 +342,54 @@ def resolve_user_and_create_session(
             logger.warning("Failed to log login failure: %s", exc)
 
     # Check for existing auth identity
-    user = find_user_by_identity(db, AuthProvider.GOOGLE, google_user.sub)
+    identity = find_identity_by_subject(db, AuthProvider.GOOGLE, google_user.sub)
+    user = identity.user if identity else None
 
     if user:
-        # Existing user - validate and create session
-        membership = (
-            db.query(Membership)
-            .filter(
-                Membership.user_id == user.id,
-                Membership.is_active.is_(True),
+        if not _emails_match(user.email, google_user.email):
+            invite = get_valid_invite_by_id_for_email(db, invite_id, google_user.email)
+            if not invite:
+                invite = get_valid_invite(db, google_user.email)
+            if invite and identity:
+                try:
+                    from app.services.audit_service import hash_email
+
+                    logger.warning(
+                        "Transferring reused Google identity from user=%s email=%s "
+                        "to invited email=%s invite=%s",
+                        user.id,
+                        hash_email(user.email),
+                        hash_email(google_user.email),
+                        invite.id,
+                    )
+                    invited_user, invited_membership = _transfer_identity_to_invited_user(
+                        db,
+                        identity,
+                        invite,
+                        google_user,
+                        previous_user=user,
+                    )
+                    token = _create_login_session(
+                        db,
+                        invited_user,
+                        invited_membership,
+                        request=request,
+                    )
+                    return token, None
+                except (PermissionError, ValueError) as exc:
+                    logger.warning("Failed to transfer reused Google identity: %s", exc)
+                    _log_login_failed(invite.organization_id, "identity_email_mismatch")
+                    return None, "no_membership"
+
+            active_membership = _get_active_membership(db, user.id)
+            _log_login_failed(
+                active_membership.organization_id if active_membership else None,
+                "identity_email_mismatch",
             )
-            .first()
-        )
+            return None, "no_membership"
+
+        # Existing user - validate and create session
+        membership = _get_active_membership(db, user.id)
         if not user.is_active:
             _log_login_failed(
                 membership.organization_id if membership else None, "account_disabled"
@@ -240,46 +432,7 @@ def resolve_user_and_create_session(
             if not membership:
                 return None, "no_membership"
 
-        # Track last login time
-        user.last_login_at = datetime.now(timezone.utc)
-        db.commit()
-
-        # Check MFA status - if MFA is enabled, user needs to complete challenge
-        # If MFA not yet set up but required, they need to set it up
-        mfa_required = True  # MFA required for all users
-        mfa_verified = False  # User hasn't verified MFA yet in this session
-
-        token = create_session_token(
-            user.id,
-            membership.organization_id,
-            membership.role,
-            user.token_version,
-            mfa_verified=mfa_verified,
-            mfa_required=mfa_required,
-        )
-
-        # Create session record in database (enables revocation)
-        session_service.create_session(
-            db=db,
-            user_id=user.id,
-            org_id=membership.organization_id,
-            token=token,
-            request=request,
-        )
-
-        try:
-            from app.services import audit_service
-
-            audit_service.log_login_success(
-                db=db,
-                org_id=membership.organization_id,
-                user_id=user.id,
-                request=request,
-                provider="google",
-            )
-            db.commit()
-        except Exception as exc:
-            logger.warning("Failed to log login success: %s", exc)
+        token = _create_login_session(db, user, membership, request=request)
         return token, None
 
     # New user - check for valid invite
@@ -305,40 +458,5 @@ def resolve_user_and_create_session(
     # Create user from invite
     user, membership = create_user_from_invite(db, invite, google_user)
 
-    # Track last login time for new users
-    user.last_login_at = datetime.now(timezone.utc)
-    db.commit()
-
-    # New users need to set up MFA
-    token = create_session_token(
-        user.id,
-        membership.organization_id,
-        membership.role,
-        user.token_version,
-        mfa_verified=False,
-        mfa_required=True,
-    )
-
-    # Create session record in database (enables revocation)
-    session_service.create_session(
-        db=db,
-        user_id=user.id,
-        org_id=membership.organization_id,
-        token=token,
-        request=request,
-    )
-
-    try:
-        from app.services import audit_service
-
-        audit_service.log_login_success(
-            db=db,
-            org_id=membership.organization_id,
-            user_id=user.id,
-            request=request,
-            provider="google",
-        )
-        db.commit()
-    except Exception as exc:
-        logger.warning("Failed to log login success: %s", exc)
+    token = _create_login_session(db, user, membership, request=request)
     return token, None
