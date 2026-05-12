@@ -1,17 +1,16 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { type ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import {
     AlertCircleIcon,
     CheckIcon,
-    ClipboardPasteIcon,
     ImageIcon,
+    PaperclipIcon,
     RefreshCwIcon,
     SaveIcon,
     Settings2Icon,
     SparklesIcon,
-    UploadCloudIcon,
     XIcon,
 } from "lucide-react"
 
@@ -392,17 +391,21 @@ function SavedDraftsPanel({
     )
 }
 
-function ReferenceImagesField({
+function BriefComposer({
+    value,
+    onChange,
     images,
     isAdding,
     errorMessage,
     onFiles,
     onRemove,
 }: {
+    value: string
+    onChange: (value: string) => void
     images: ReferenceImageDraft[]
     isAdding: boolean
     errorMessage: string
-    onFiles: (files: File[]) => void
+    onFiles: (files: File[]) => void | Promise<void>
     onRemove: (id: string) => void
 }) {
     const inputRef = useRef<HTMLInputElement | null>(null)
@@ -413,32 +416,25 @@ function ReferenceImagesField({
         onFiles(fileList)
     }
 
+    const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+        const pastedFiles = Array.from(event.clipboardData.files).filter((file) =>
+            file.type.startsWith("image/")
+        )
+        if (pastedFiles.length === 0) return
+        event.preventDefault()
+        handleFiles(pastedFiles)
+    }
+
     return (
         <Field>
-            <div className="flex items-center justify-between gap-3">
-                <FieldLabel htmlFor="ai-studio-reference-images">Sample pictures</FieldLabel>
-                <Badge variant="outline">
-                    {images.length}/{maxReferenceImages}
-                </Badge>
-            </div>
+            <FieldLabel htmlFor="ai-studio-brief">Brief</FieldLabel>
             <div
-                data-testid="ai-studio-reference-dropzone"
-                tabIndex={0}
-                onPaste={(event) => {
-                    const pastedFiles = Array.from(event.clipboardData.files).filter((file) =>
-                        file.type.startsWith("image/")
-                    )
-                    if (pastedFiles.length === 0) return
-                    event.preventDefault()
-                    handleFiles(pastedFiles)
-                }}
                 onDrop={(event) => {
                     event.preventDefault()
                     handleFiles(event.dataTransfer.files)
                 }}
                 onDragOver={(event) => event.preventDefault()}
-                className="rounded-lg border border-dashed bg-muted/20 p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Paste, drop, or upload sample pictures"
+                className="overflow-hidden rounded-lg border bg-input/30 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
             >
                 <input
                     ref={inputRef}
@@ -453,75 +449,65 @@ function ReferenceImagesField({
                         event.target.value = ""
                     }}
                 />
-                <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-3 rounded-md bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-3">
-                            <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
-                                <ClipboardPasteIcon className="size-4" />
+                {images.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto border-b bg-background/60 p-3">
+                        {images.map((image) => (
+                            <div
+                                key={image.id}
+                                className="relative size-16 shrink-0 overflow-visible rounded-lg border bg-background shadow-xs"
+                            >
+                                <Image
+                                    alt={image.filename}
+                                    src={image.dataUrl}
+                                    fill
+                                    className="rounded-lg object-cover"
+                                    sizes="64px"
+                                    unoptimized
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label={`Remove ${image.filename}`}
+                                    onClick={() => onRemove(image.id)}
+                                    className="absolute -right-2 -top-2 size-6 rounded-full bg-background p-0"
+                                >
+                                    <XIcon />
+                                </Button>
                             </div>
-                            <div className="flex flex-col gap-1">
-                                <div className="text-sm font-medium">
-                                    Paste or upload samples
-                                </div>
-                                <p className="text-xs leading-5 text-muted-foreground">
-                                    Samples guide image style and audience detection.
-                                </p>
-                            </div>
-                        </div>
+                        ))}
+                    </div>
+                )}
+                <Textarea
+                    id="ai-studio-brief"
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
+                    onPaste={handlePaste}
+                    placeholder="Launch announcement, patient education topic, campaign hook..."
+                    className="min-h-32 resize-none rounded-none border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                />
+                <div className="flex items-center justify-between gap-3 border-t bg-background/40 px-3 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
                         <Button
                             type="button"
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Attach sample pictures"
                             onClick={() => inputRef.current?.click()}
                         >
-                            <UploadCloudIcon data-icon="inline-start" />
-                            Upload
+                            <PaperclipIcon />
                         </Button>
+                        <span className="truncate text-xs text-muted-foreground">
+                            Paste images here or attach up to {maxReferenceImages}
+                        </span>
                     </div>
-
-                    {images.length > 0 && (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                            {images.map((image) => (
-                                <div
-                                    key={image.id}
-                                    className="flex min-w-0 items-center gap-3 rounded-md border bg-background p-2"
-                                >
-                                    <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-muted">
-                                        <Image
-                                            alt={image.filename}
-                                            src={image.dataUrl}
-                                            fill
-                                            className="object-cover"
-                                            sizes="48px"
-                                            unoptimized
-                                        />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="truncate text-sm font-medium">
-                                            {image.filename}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                            {Math.max(1, Math.round(image.size_bytes / 1024))} KB
-                                        </div>
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        aria-label={`Remove ${image.filename}`}
-                                        onClick={() => onRemove(image.id)}
-                                    >
-                                        <XIcon />
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <Badge variant="outline">
+                        {images.length}/{maxReferenceImages}
+                    </Badge>
                 </div>
             </div>
             <FieldDescription>
-                Up to four PNG, JPEG, or WebP images. Samples are sent for generation only and
-                only sample details are stored with the draft.
+                Include the goal, offer, and any wording constraints. Audience can be detected.
             </FieldDescription>
             {isAdding && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -773,26 +759,9 @@ export default function AIStudioPage() {
                                         </CardHeader>
                                         <CardContent>
                                             <FieldGroup>
-                                                <Field>
-                                                    <FieldLabel htmlFor="ai-studio-brief">
-                                                        Brief
-                                                    </FieldLabel>
-                                                    <Textarea
-                                                        id="ai-studio-brief"
-                                                        value={brief}
-                                                        onChange={(event) =>
-                                                            setBrief(event.target.value)
-                                                        }
-                                                        placeholder="Launch announcement, patient education topic, campaign hook..."
-                                                        className="min-h-32 resize-none"
-                                                    />
-                                                    <FieldDescription>
-                                                        Include the goal, offer, and any wording
-                                                        constraints. Audience can be detected.
-                                                    </FieldDescription>
-                                                </Field>
-
-                                                <ReferenceImagesField
+                                                <BriefComposer
+                                                    value={brief}
+                                                    onChange={setBrief}
                                                     images={referenceImages}
                                                     isAdding={isAddingReferenceImage}
                                                     errorMessage={referenceImageError}

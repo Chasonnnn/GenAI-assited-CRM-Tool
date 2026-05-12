@@ -125,7 +125,7 @@ describe("AIStudioPage", () => {
         expect(await screen.findByText("Saved")).toBeInTheDocument()
     })
 
-    it("adds pasted sample pictures to the generation payload", async () => {
+    it("adds pictures pasted into the brief composer to the generation payload", async () => {
         mockGenerate.mockResolvedValue({
             ...generatedDraft,
             audience: "clinic partners",
@@ -136,13 +136,16 @@ describe("AIStudioPage", () => {
 
         render(<AIStudioPage />)
 
+        expect(screen.queryByText("Sample pictures")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("ai-studio-reference-dropzone")).not.toBeInTheDocument()
+
         const file = new File(["reference-image"], "clinic-reference.png", {
             type: "image/png",
         })
-        fireEvent.paste(screen.getByTestId("ai-studio-reference-dropzone"), {
+        fireEvent.paste(screen.getByLabelText(/brief/i), {
             clipboardData: { files: [file] },
         })
-        expect(await screen.findByText("clinic-reference.png")).toBeInTheDocument()
+        expect(await screen.findByAltText("clinic-reference.png")).toBeInTheDocument()
 
         fireEvent.change(screen.getByLabelText(/brief/i), {
             target: { value: "Campaign announcement" },
