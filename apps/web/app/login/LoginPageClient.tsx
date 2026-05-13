@@ -1,16 +1,65 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2Icon, ShieldCheck } from "lucide-react"
+import Link from "next/link"
+import { AlertCircle, ArrowLeft, Loader2Icon, ShieldCheck } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getAuthApiBase } from "@/lib/auth-utils"
 
-export default function LoginPageClient() {
+type LoginErrorMessage = {
+  title: string
+  description: string
+}
+
+const LOGIN_ERROR_MESSAGES: Record<string, LoginErrorMessage> = {
+  no_membership: {
+    title: "Access not available",
+    description:
+      "This Google account is not currently a member of an organization. Use the Google account that received the latest invite link, or ask your administrator to resend it.",
+  },
+  not_invited: {
+    title: "Invite required",
+    description:
+      "No active invitation was found for this Google account. Ask your administrator to send or resend an invitation.",
+  },
+  invite_expired: {
+    title: "Invite expired",
+    description: "This invite link is no longer active. Ask your administrator to resend it.",
+  },
+  invalid_invite_role: {
+    title: "Invite cannot be used",
+    description:
+      "This invitation has an invalid role. Ask your administrator to resend it before trying again.",
+  },
+  account_disabled: {
+    title: "Account disabled",
+    description: "This account has been disabled. Contact your administrator before trying again.",
+  },
+}
+
+const FALLBACK_LOGIN_ERROR: LoginErrorMessage = {
+  title: "Sign-in could not continue",
+  description: "Try signing in again. If this keeps happening, contact your administrator.",
+}
+
+function getLoginErrorMessage(errorCode: string | null | undefined) {
+  const normalizedCode = errorCode?.trim()
+  if (!normalizedCode) return null
+  return LOGIN_ERROR_MESSAGES[normalizedCode] ?? FALLBACK_LOGIN_ERROR
+}
+
+type LoginPageClientProps = {
+  authError?: string | null
+}
+
+export default function LoginPageClient({ authError = null }: LoginPageClientProps) {
   const [isLoading, setIsLoading] = useState(false)
 
   const apiBase = getAuthApiBase()
+  const errorMessage = getLoginErrorMessage(authError)
 
   const getReturnTo = () =>
     typeof window !== "undefined" &&
@@ -86,6 +135,30 @@ export default function LoginPageClient() {
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {errorMessage && (
+            <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-950">
+              <AlertCircle className="size-4" aria-hidden="true" />
+              <AlertTitle>{errorMessage.title}</AlertTitle>
+              <AlertDescription className="text-red-800">
+                {errorMessage.description}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {errorMessage && (
+            <Link
+              href="/login"
+              className={buttonVariants({
+                variant: "outline",
+                className:
+                  "h-11 w-full rounded-full border-red-200 bg-white/70 font-semibold text-red-950 hover:bg-white hover:text-red-950",
+              })}
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Back to login
+            </Link>
+          )}
+
           <Button
             onClick={handleGoogleLogin}
             className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-teal-950 text-white hover:bg-teal-900"

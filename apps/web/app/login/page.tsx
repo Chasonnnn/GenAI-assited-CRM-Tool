@@ -7,6 +7,19 @@ export const metadata: Metadata = {
   description: "Sign in to Surrogacy Force with Google SSO and complete Duo verification.",
 }
 
-export default function LoginPage() {
-  return <LoginPageClient />
+type LoginSearchParams = {
+  error?: string | string[]
+}
+
+type LoginPageProps = {
+  searchParams?: Promise<LoginSearchParams>
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps = {}) {
+  const params = searchParams ? await searchParams : {}
+  return <LoginPageClient authError={firstSearchParam(params.error)} />
 }
