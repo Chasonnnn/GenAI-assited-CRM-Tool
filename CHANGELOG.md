@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.26...surrogacy-crm-platform-v0.91.27) (2026-05-13)
+
+
+### Bug Fixes
+
+* Refresh safe Google email renames ([ace2d7b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ace2d7b4913ae94f693b3bce7f44c6626a5c811c))
+* Surface selected Google account on auth errors ([af153fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/af153faa1d6e11b1ae9f6482263a34e011d558f4))
+
 ## [0.91.26](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.25...surrogacy-crm-platform-v0.91.26) (2026-05-13)
 
 
