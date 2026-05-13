@@ -143,6 +143,187 @@ async def test_authed_me_profile_complete_true_when_display_name_and_title_set(
     assert data["profile_complete"] is True
 
 
+def test_existing_google_identity_refreshes_email_for_active_member(db, test_org):
+    """A Workspace email rename should not strand an active member."""
+    from app.db.enums import AuditEventType, AuthProvider, Role
+    from app.db.models import AuditLog, AuthIdentity, Membership, User, UserSession
+    from app.services import auth_service
+    from app.services.audit_service import hash_email
+    from app.services.google_oauth import GoogleUserInfo
+
+    user = User(
+        id=uuid4(),
+        email="katievanderbur@example.com",
+        display_name="Katie Vanderbur",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    membership = Membership(
+        id=uuid4(),
+        user_id=user.id,
+        organization_id=test_org.id,
+        role=Role.CASE_MANAGER.value,
+        is_active=True,
+    )
+    identity = AuthIdentity(
+        id=uuid4(),
+        user_id=user.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject="stable-google-subject",
+        email=user.email,
+    )
+    db.add_all([membership, identity])
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="stable-google-subject",
+        email="katiev@example.com",
+        name="Katie Vanderbur",
+        picture="https://example.com/avatar.png",
+        hd="example.com",
+    )
+
+    token, error = auth_service.resolve_user_and_create_session(db, google_user)
+
+    assert token is not None
+    assert error is None
+    db.refresh(user)
+    db.refresh(identity)
+    assert user.email == "katiev@example.com"
+    assert identity.email == "katiev@example.com"
+    assert user.display_name == "Katie Vanderbur"
+    assert user.avatar_url == "https://example.com/avatar.png"
+    assert (
+        db.query(UserSession)
+        .filter(
+            UserSession.user_id == user.id,
+            UserSession.organization_id == test_org.id,
+        )
+        .count()
+        == 1
+    )
+
+    audit_log = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.event_type == AuditEventType.AUTH_IDENTITY_EMAIL_REFRESHED.value,
+            AuditLog.target_id == user.id,
+        )
+        .one()
+    )
+    assert audit_log.details == {
+        "provider": AuthProvider.GOOGLE.value,
+        "old_email_hash": hash_email("katievanderbur@example.com"),
+        "new_email_hash": hash_email("katiev@example.com"),
+    }
+
+
+def test_existing_google_identity_email_refresh_rejects_claimed_email(db, test_org):
+    """An email refresh must not take an email already attached to another user."""
+    from app.db.enums import AuthProvider, Role
+    from app.db.models import AuthIdentity, Membership, User
+    from app.services import auth_service
+    from app.services.google_oauth import GoogleUserInfo
+
+    member = User(
+        id=uuid4(),
+        email="active.member.old@example.com",
+        display_name="Active Member",
+        token_version=1,
+        is_active=True,
+    )
+    claimed = User(
+        id=uuid4(),
+        email="claimed.member@example.com",
+        display_name="Claimed Member",
+        token_version=1,
+        is_active=True,
+    )
+    db.add_all([member, claimed])
+    db.flush()
+    membership = Membership(
+        id=uuid4(),
+        user_id=member.id,
+        organization_id=test_org.id,
+        role=Role.CASE_MANAGER.value,
+        is_active=True,
+    )
+    identity = AuthIdentity(
+        id=uuid4(),
+        user_id=member.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject="stable-google-subject-conflict",
+        email=member.email,
+    )
+    db.add_all([membership, identity])
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="stable-google-subject-conflict",
+        email="claimed.member@example.com",
+        name="Active Member",
+        picture=None,
+        hd="example.com",
+    )
+
+    token, error = auth_service.resolve_user_and_create_session(db, google_user)
+
+    assert token is None
+    assert error == "no_membership"
+    db.refresh(member)
+    db.refresh(identity)
+    assert member.email == "active.member.old@example.com"
+    assert identity.email == "active.member.old@example.com"
+
+
+def test_existing_google_identity_email_refresh_rejects_deprovisioned_user(db):
+    """A stale identity row must not reactivate a removed member without an invite."""
+    from app.db.enums import AuthProvider
+    from app.db.models import AuthIdentity, User, UserSession
+    from app.services import auth_service
+    from app.services.google_oauth import GoogleUserInfo
+
+    removed_user = User(
+        id=uuid4(),
+        email="removed.member.old@example.com",
+        display_name="Removed Member",
+        token_version=2,
+        is_active=False,
+    )
+    db.add(removed_user)
+    db.flush()
+    identity = AuthIdentity(
+        id=uuid4(),
+        user_id=removed_user.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject="stale-google-subject",
+        email=removed_user.email,
+    )
+    db.add(identity)
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="stale-google-subject",
+        email="removed.member.new@example.com",
+        name="Removed Member",
+        picture=None,
+        hd="example.com",
+    )
+
+    token, error = auth_service.resolve_user_and_create_session(db, google_user)
+
+    assert token is None
+    assert error == "no_membership"
+    db.refresh(removed_user)
+    db.refresh(identity)
+    assert removed_user.is_active is False
+    assert removed_user.email == "removed.member.old@example.com"
+    assert identity.email == "removed.member.old@example.com"
+    assert db.query(UserSession).filter(UserSession.user_id == removed_user.id).count() == 0
+
+
 @pytest.mark.asyncio
 async def test_google_callback_rate_limited(client: AsyncClient, rate_limiter_reset):
     for _ in range(5):

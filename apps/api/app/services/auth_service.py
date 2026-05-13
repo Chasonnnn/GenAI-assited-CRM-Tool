@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import logging
+import re
 from uuid import UUID
 
 from sqlalchemy import func, or_
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from fastapi import Request
 
 from app.core.security import create_session_token
-from app.db.enums import AuthProvider, Role
+from app.db.enums import AuditEventType, AuthProvider, Role
 from app.db.models import AuthIdentity, Membership, OrgInvite, User
 from app.services.google_oauth import GoogleUserInfo
 from app.services import session_service
@@ -220,6 +221,102 @@ def _bind_identity_to_existing_member(
     return identity
 
 
+def _email_claimed_by_another_principal(
+    db: Session,
+    user_id: UUID,
+    email: str,
+) -> bool:
+    normalized_email = _normalized_email(email)
+    conflicting_user = (
+        db.query(User.id)
+        .filter(
+            func.lower(User.email) == normalized_email,
+            User.id != user_id,
+        )
+        .first()
+    )
+    if conflicting_user:
+        return True
+
+    conflicting_identity = (
+        db.query(AuthIdentity.id)
+        .filter(
+            func.lower(AuthIdentity.email) == normalized_email,
+            AuthIdentity.user_id != user_id,
+        )
+        .first()
+    )
+    return conflicting_identity is not None
+
+
+def _canonical_email_parts(email: str) -> tuple[str, str]:
+    local, domain = _normalized_email(email).split("@", 1)
+    return re.sub(r"[^a-z0-9]", "", local), domain
+
+
+def _is_conservative_workspace_email_refresh(old_email: str, new_email: str) -> bool:
+    if "@" not in old_email or "@" not in new_email:
+        return False
+    old_local, old_domain = _canonical_email_parts(old_email)
+    new_local, new_domain = _canonical_email_parts(new_email)
+    if old_domain != new_domain:
+        return False
+    if min(len(old_local), len(new_local)) < 4:
+        return False
+    return old_local.startswith(new_local) or new_local.startswith(old_local)
+
+
+def _refresh_email_for_existing_google_member(
+    db: Session,
+    identity: AuthIdentity,
+    user: User,
+    membership: Membership | None,
+    google_user: GoogleUserInfo,
+) -> Membership | None:
+    if not membership or not user.is_active:
+        return None
+    if identity.user_id != user.id:
+        return None
+    if _email_claimed_by_another_principal(db, user.id, google_user.email):
+        return None
+    if not _is_conservative_workspace_email_refresh(user.email, google_user.email):
+        return None
+
+    from app.services import audit_service
+
+    old_email = _normalized_email(user.email)
+    new_email = _normalized_email(google_user.email)
+    logger.warning(
+        "Refreshing Google identity email for active member: user=%s old_email=%s new_email=%s",
+        user.id,
+        audit_service.hash_email(old_email),
+        audit_service.hash_email(new_email),
+    )
+
+    user.email = new_email
+    user.display_name = google_user.name or user.display_name or new_email.split("@")[0]
+    if google_user.picture:
+        user.avatar_url = google_user.picture
+    user.updated_at = datetime.now(timezone.utc)
+    identity.email = new_email
+
+    audit_service.log_event(
+        db=db,
+        org_id=membership.organization_id,
+        event_type=AuditEventType.AUTH_IDENTITY_EMAIL_REFRESHED,
+        actor_user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        details={
+            "provider": AuthProvider.GOOGLE.value,
+            "old_email_hash": audit_service.hash_email(old_email),
+            "new_email_hash": audit_service.hash_email(new_email),
+        },
+    )
+    db.flush()
+    return membership
+
+
 def _get_or_create_user_for_verified_email(db: Session, google_user: GoogleUserInfo) -> User:
     email = _normalized_email(google_user.email)
     user = db.query(User).filter(func.lower(User.email) == email).first()
@@ -396,6 +493,23 @@ def resolve_user_and_create_session(
 
     if user:
         if not _emails_match(user.email, google_user.email):
+            active_membership = _get_active_membership(db, user.id)
+            refreshed_membership = _refresh_email_for_existing_google_member(
+                db,
+                identity,
+                user,
+                active_membership,
+                google_user,
+            )
+            if refreshed_membership:
+                token = _create_login_session(
+                    db,
+                    user,
+                    refreshed_membership,
+                    request=request,
+                )
+                return token, None
+
             invite = get_valid_invite_by_id_for_email(db, invite_id, google_user.email)
             if not invite:
                 invite = get_valid_invite(db, google_user.email)
@@ -430,7 +544,6 @@ def resolve_user_and_create_session(
                     _log_login_failed(invite.organization_id, "identity_email_mismatch")
                     return None, "no_membership"
 
-            active_membership = _get_active_membership(db, user.id)
             _log_login_failed(
                 active_membership.organization_id if active_membership else None,
                 "identity_email_mismatch",

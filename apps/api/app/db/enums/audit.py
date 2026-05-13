@@ -21,6 +21,7 @@ class AuditEventType(str, Enum):
     AUTH_LOGIN_FAILED = "auth_login_failed"
     AUTH_LOGOUT = "auth_logout"
     AUTH_SESSION_REVOKED = "auth_session_revoked"
+    AUTH_IDENTITY_EMAIL_REFRESHED = "auth_identity_email_refreshed"
 
     # Settings changes
     SETTINGS_ORG_UPDATED = "settings_org_updated"
