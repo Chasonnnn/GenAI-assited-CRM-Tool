@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.26](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.25...surrogacy-crm-platform-v0.91.26) (2026-05-13)
+
+
+### Bug Fixes
+
+* Allow existing members to bind Google login ([c3884fc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c3884fc0d81d77b61bac4279910511418ad834b2))
+* Force Google account selection on login ([a57feed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a57feed74c443afbd63bdba49f8f086725953a69))
+
 ## [0.91.25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.24...surrogacy-crm-platform-v0.91.25) (2026-05-13)
 
 
