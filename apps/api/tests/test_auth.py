@@ -18,6 +18,45 @@ def rate_limiter_reset():
     limiter.reset()
 
 
+def test_auth_error_response_sets_masked_account_hint_cookie():
+    from app.services.auth_callback_service import (
+        AUTH_ERROR_ACCOUNT_HINT_COOKIE,
+        _error_response,
+    )
+    from app.services.audit_service import hash_email
+
+    response = _error_response(
+        "no_membership",
+        return_to="app",
+        selected_email="renamed.member@example.com",
+    )
+
+    location = response.headers["location"]
+    assert "renamed.member" not in location
+    assert hash_email("renamed.member@example.com") not in location
+
+    cookies = _response_cookies(response)
+    assert cookies[AUTH_ERROR_ACCOUNT_HINT_COOKIE].value == "ren...@example.com"
+
+
+def test_auth_error_response_clears_account_hint_without_selected_email():
+    from app.services.auth_callback_service import AUTH_ERROR_ACCOUNT_HINT_COOKIE, _error_response
+
+    response = _error_response("state_expired", return_to="app")
+
+    cookies = _response_cookies(response)
+    assert AUTH_ERROR_ACCOUNT_HINT_COOKIE in cookies
+    assert cookies[AUTH_ERROR_ACCOUNT_HINT_COOKIE]["max-age"] == "0"
+
+
+def _response_cookies(response) -> SimpleCookie:
+    cookies = SimpleCookie()
+    for key, value in response.raw_headers:
+        if key.lower() == b"set-cookie":
+            cookies.load(value.decode())
+    return cookies
+
+
 @pytest.mark.asyncio
 async def test_login_redirects_to_google(client: AsyncClient):
     """GET /auth/google/login should redirect to Google."""

@@ -53,9 +53,13 @@ function getLoginErrorMessage(errorCode: string | null | undefined) {
 
 type LoginPageClientProps = {
   authError?: string | null
+  authAccountHint?: string | null
 }
 
-export default function LoginPageClient({ authError = null }: LoginPageClientProps) {
+export default function LoginPageClient({
+  authError = null,
+  authAccountHint = null,
+}: LoginPageClientProps) {
   const [isLoading, setIsLoading] = useState(false)
 
   const apiBase = getAuthApiBase()
@@ -141,6 +145,11 @@ export default function LoginPageClient({ authError = null }: LoginPageClientPro
               <AlertTitle>{errorMessage.title}</AlertTitle>
               <AlertDescription className="text-red-800">
                 {errorMessage.description}
+                {authAccountHint && (
+                  <span className="mt-2 block font-semibold text-red-950">
+                    Google selected: {authAccountHint}
+                  </span>
+                )}
               </AlertDescription>
             </Alert>
           )}

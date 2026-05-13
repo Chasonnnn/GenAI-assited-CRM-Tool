@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID as UUIDType
 
 from fastapi import Request
@@ -18,6 +19,7 @@ from app.core.security import (
 )
 from app.services import org_service
 from app.services.auth_service import resolve_user_and_create_session
+from app.services.audit_service import hash_email
 from app.services.google_oauth import (
     exchange_code_for_tokens,
     validate_email_domain,
@@ -25,7 +27,10 @@ from app.services.google_oauth import (
 )
 
 OAUTH_STATE_COOKIE = "oauth_state"
+AUTH_ERROR_ACCOUNT_HINT_COOKIE = "auth_error_account_hint"
+AUTH_ERROR_ACCOUNT_HINT_MAX_AGE = 300
 ALLOWED_RETURN_TO = {"app", "ops"}
+logger = logging.getLogger(__name__)
 
 
 def get_success_redirect(
@@ -83,12 +88,50 @@ def get_error_redirect(
     return _join(f"/login?error={error_code}")
 
 
-def _error_response(error_code: str, return_to: str) -> RedirectResponse:
+def _mask_email_for_login_hint(email: str | None) -> str | None:
+    if not email or "@" not in email:
+        return None
+    local, domain = email.strip().lower().split("@", 1)
+    if not local or not domain:
+        return None
+    prefix = local[:3] if len(local) >= 3 else local[:1]
+    return f"{prefix}...@{domain}"
+
+
+def _set_or_clear_account_hint_cookie(
+    response: RedirectResponse,
+    selected_email: str | None,
+) -> None:
+    cookie_domain = settings.COOKIE_DOMAIN or None
+    masked_email = _mask_email_for_login_hint(selected_email)
+    if not masked_email:
+        response.delete_cookie(AUTH_ERROR_ACCOUNT_HINT_COOKIE, domain=cookie_domain, path="/")
+        response.delete_cookie(AUTH_ERROR_ACCOUNT_HINT_COOKIE, path="/")
+        return
+
+    response.set_cookie(
+        key=AUTH_ERROR_ACCOUNT_HINT_COOKIE,
+        value=masked_email,
+        max_age=AUTH_ERROR_ACCOUNT_HINT_MAX_AGE,
+        secure=settings.cookie_secure,
+        httponly=False,
+        samesite=settings.cookie_samesite,
+        domain=cookie_domain,
+        path="/",
+    )
+
+
+def _error_response(
+    error_code: str,
+    return_to: str,
+    selected_email: str | None = None,
+) -> RedirectResponse:
     response = RedirectResponse(
         url=get_error_redirect(error_code, return_to=return_to),
         status_code=302,
     )
     response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
+    _set_or_clear_account_hint_cookie(response, selected_email)
     return response
 
 
@@ -139,7 +182,15 @@ async def handle_google_callback(
     try:
         validate_email_domain(google_user.email)
     except ValueError:
-        return _error_response("domain_not_allowed", return_to=return_to)
+        logger.warning(
+            "Google OAuth callback rejected: reason=domain_not_allowed selected_email=%s",
+            hash_email(google_user.email),
+        )
+        return _error_response(
+            "domain_not_allowed",
+            return_to=return_to,
+            selected_email=google_user.email,
+        )
 
     invite_id = stored_payload.get("invite_id")
     session_token, error_code = resolve_user_and_create_session(
@@ -149,7 +200,16 @@ async def handle_google_callback(
         invite_id=invite_id if isinstance(invite_id, str) else None,
     )
     if error_code:
-        return _error_response(error_code, return_to=return_to)
+        logger.warning(
+            "Google OAuth callback rejected: reason=%s selected_email=%s",
+            error_code,
+            hash_email(google_user.email),
+        )
+        return _error_response(
+            error_code,
+            return_to=return_to,
+            selected_email=google_user.email,
+        )
 
     base_url = None
     mfa_pending = False
@@ -177,6 +237,7 @@ async def handle_google_callback(
         status_code=302,
     )
     success_response.delete_cookie(OAUTH_STATE_COOKIE, path="/auth")
+    _set_or_clear_account_hint_cookie(success_response, None)
 
     success_response.set_cookie(
         key="auth_return_to",

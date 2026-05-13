@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { cookies } from "next/headers"
 
 import LoginPageClient from "./LoginPageClient"
 
@@ -11,6 +12,8 @@ type LoginSearchParams = {
   error?: string | string[]
 }
 
+const AUTH_ERROR_ACCOUNT_HINT_COOKIE = "auth_error_account_hint"
+
 type LoginPageProps = {
   searchParams?: Promise<LoginSearchParams>
 }
@@ -21,5 +24,11 @@ function firstSearchParam(value: string | string[] | undefined) {
 
 export default async function LoginPage({ searchParams }: LoginPageProps = {}) {
   const params = searchParams ? await searchParams : {}
-  return <LoginPageClient authError={firstSearchParam(params.error)} />
+  const authError = firstSearchParam(params.error)
+  const cookieStore = await cookies()
+  const accountHint = authError
+    ? cookieStore.get(AUTH_ERROR_ACCOUNT_HINT_COOKIE)?.value ?? null
+    : null
+
+  return <LoginPageClient authError={authError} authAccountHint={accountHint} />
 }

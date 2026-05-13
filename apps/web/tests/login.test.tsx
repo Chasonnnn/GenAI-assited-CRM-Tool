@@ -1,10 +1,23 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { cookies } from 'next/headers'
 import LoginPage from '../app/login/page'
+
+vi.mock('next/headers', () => ({
+    cookies: vi.fn(),
+}))
 
 type LoginSearchParams = Record<string, string | string[] | undefined>
 
+function mockAuthHint(value?: string) {
+    vi.mocked(cookies).mockResolvedValue({
+        get: (name: string) =>
+            name === 'auth_error_account_hint' && value ? { value } : undefined,
+    } as Awaited<ReturnType<typeof cookies>>)
+}
+
 async function renderLoginPage(searchParams: LoginSearchParams = {}) {
+    mockAuthHint()
     const page = await LoginPage({ searchParams: Promise.resolve(searchParams) })
     return render(page)
 }
@@ -26,6 +39,16 @@ describe('LoginPage', () => {
         expect(alert).toHaveTextContent('selected by your browser')
         expect(alert).toHaveTextContent('team membership')
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
+    })
+
+    it('shows the selected Google account hint when one is available', async () => {
+        mockAuthHint('mem...@example.com')
+        const page = await LoginPage({ searchParams: Promise.resolve({ error: 'no_membership' }) })
+        render(page)
+
+        const alert = screen.getByRole('alert')
+        expect(alert).toHaveTextContent('Google selected')
+        expect(alert).toHaveTextContent('mem...@example.com')
     })
 
     it('offers a normal login link when an auth error is shown', async () => {
