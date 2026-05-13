@@ -108,9 +108,8 @@ def google_login(
         invite_id=normalized_invite_id,
     )
 
-    # Build Google auth URL
-    # Note: We skip access_type=offline and prompt=consent since we only
-    # need login, not refresh tokens. This reduces friction.
+    # Build Google auth URL. Force account selection so shared browsers do not
+    # silently reuse a stale Google account that has no active membership.
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_REDIRECT_URI,
@@ -118,6 +117,7 @@ def google_login(
         "scope": "openid email profile",
         "state": state,
         "nonce": nonce,
+        "prompt": "select_account",
     }
     if login_hint and "@" in login_hint:
         params["login_hint"] = login_hint

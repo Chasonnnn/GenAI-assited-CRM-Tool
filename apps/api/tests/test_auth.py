@@ -2,6 +2,7 @@
 
 import json
 from http.cookies import SimpleCookie
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
@@ -25,6 +26,8 @@ async def test_login_redirects_to_google(client: AsyncClient):
     assert response.status_code in [302, 307]
     location = response.headers.get("location", "")
     assert "accounts.google.com" in location or "google" in location.lower()
+    params = parse_qs(urlparse(location).query)
+    assert params["prompt"] == ["select_account"]
 
 
 @pytest.mark.asyncio

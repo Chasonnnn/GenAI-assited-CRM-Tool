@@ -18,7 +18,7 @@ const LOGIN_ERROR_MESSAGES: Record<string, LoginErrorMessage> = {
   no_membership: {
     title: "Access not available",
     description:
-      "This Google account is not currently a member of an organization. Use the Google account that received the latest invite link, or ask your administrator to resend it.",
+      "The Google account selected by your browser is not connected to an active team membership. Go back to login and choose the account your team uses for Surrogacy Force.",
   },
   not_invited: {
     title: "Invite required",

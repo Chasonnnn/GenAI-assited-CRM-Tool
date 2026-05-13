@@ -23,8 +23,8 @@ describe('LoginPage', () => {
 
         const alert = screen.getByRole('alert')
         expect(alert).toHaveTextContent('Access not available')
-        expect(alert).toHaveTextContent('not currently a member of an organization')
-        expect(alert).toHaveTextContent('latest invite link')
+        expect(alert).toHaveTextContent('selected by your browser')
+        expect(alert).toHaveTextContent('team membership')
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
     })
 
