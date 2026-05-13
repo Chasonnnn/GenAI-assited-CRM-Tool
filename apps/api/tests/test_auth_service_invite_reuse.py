@@ -341,6 +341,61 @@ def test_reused_google_identity_invite_deactivates_existing_different_email_memb
     assert existing_user.token_version == 2
 
 
+def test_existing_active_member_without_identity_can_bind_google_login(db, test_org):
+    """An active member record should not need an invite for first Google login."""
+    from app.db.enums import AuthProvider, Role
+    from app.db.models import AuthIdentity, Membership, User
+    from app.core.security import decode_session_token
+    from app.services.auth_service import resolve_user_and_create_session
+    from app.services.google_oauth import GoogleUserInfo
+
+    user = User(
+        id=uuid.uuid4(),
+        email="active-member@example.com",
+        display_name="Active Member",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    membership = Membership(
+        user_id=user.id,
+        organization_id=test_org.id,
+        role=Role.CASE_MANAGER.value,
+        is_active=True,
+    )
+    db.add(membership)
+    db.commit()
+
+    google_user = GoogleUserInfo(
+        sub="active-member-google-sub",
+        email=user.email,
+        name="Active Member",
+        picture="https://example.com/member.png",
+        hd=None,
+    )
+
+    token, error_code = resolve_user_and_create_session(db, google_user)
+
+    assert error_code is None
+    assert token is not None
+    payload = decode_session_token(token)
+    db.refresh(user)
+    identity = (
+        db.query(AuthIdentity)
+        .filter(
+            AuthIdentity.provider == AuthProvider.GOOGLE.value,
+            AuthIdentity.provider_subject == google_user.sub,
+        )
+        .one()
+    )
+    assert payload["sub"] == str(user.id)
+    assert identity.user_id == user.id
+    assert identity.email == user.email
+    assert user.avatar_url == "https://example.com/member.png"
+
+
 def test_existing_user_without_invite_returns_no_membership(db, test_org):
     """Existing users without a valid invite should still fail with no_membership."""
     from app.db.enums import AuthProvider

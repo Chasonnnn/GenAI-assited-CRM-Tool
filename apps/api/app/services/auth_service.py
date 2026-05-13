@@ -184,6 +184,42 @@ def _get_active_membership(db: Session, user_id: UUID) -> Membership | None:
     )
 
 
+def _get_active_member_by_email(db: Session, email: str) -> tuple[User, Membership] | None:
+    normalized_email = _normalized_email(email)
+    result = (
+        db.query(User, Membership)
+        .join(Membership, Membership.user_id == User.id)
+        .filter(
+            func.lower(User.email) == normalized_email,
+            User.is_active.is_(True),
+            Membership.is_active.is_(True),
+        )
+        .first()
+    )
+    if not result:
+        return None
+    return result
+
+
+def _bind_identity_to_existing_member(
+    db: Session,
+    user: User,
+    google_user: GoogleUserInfo,
+) -> AuthIdentity:
+    identity = AuthIdentity(
+        user_id=user.id,
+        provider=AuthProvider.GOOGLE.value,
+        provider_subject=google_user.sub,
+        email=_normalized_email(google_user.email),
+    )
+    db.add(identity)
+    user.display_name = google_user.name or user.display_name or user.email.split("@")[0]
+    if google_user.picture:
+        user.avatar_url = google_user.picture
+    db.flush()
+    return identity
+
+
 def _get_or_create_user_for_verified_email(db: Session, google_user: GoogleUserInfo) -> User:
     email = _normalized_email(google_user.email)
     user = db.query(User).filter(func.lower(User.email) == email).first()
@@ -445,6 +481,13 @@ def resolve_user_and_create_session(
             if not membership:
                 return None, "no_membership"
 
+        token = _create_login_session(db, user, membership, request=request)
+        return token, None
+
+    existing_active_member = _get_active_member_by_email(db, google_user.email)
+    if existing_active_member:
+        user, membership = existing_active_member
+        _bind_identity_to_existing_member(db, user, google_user)
         token = _create_login_session(db, user, membership, request=request)
         return token, None
 
