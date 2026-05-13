@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.25](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.24...surrogacy-crm-platform-v0.91.25) (2026-05-13)
+
+
+### Bug Fixes
+
+* Clarify login auth error states ([cbeefc1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cbeefc13406da8889532cd515157da46f77d2e35))
+
 ## [0.91.24](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.23...surrogacy-crm-platform-v0.91.24) (2026-05-12)
 
 
