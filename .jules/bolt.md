@@ -1,0 +1,3 @@
+## 2024-05-17 - [Single DB Roundtrip for Multiple Counts]
+**Learning:** We can calculate both total counts and conditionally filtered counts (like pending vs overdue tasks) on the same table in a single DB query using SQLAlchemy conditional aggregation, such as `db.query(func.count(Model.id), func.count(Model.id).filter(condition))`. This avoids the overhead of executing separate `.count()` queries for every statistic in dashboard and analytics endpoints.
+**Action:** When calculating multiple summary statistics for the same base entity, always use conditional aggregation (or sum/grouping) to collapse them into a single database roundtrip.

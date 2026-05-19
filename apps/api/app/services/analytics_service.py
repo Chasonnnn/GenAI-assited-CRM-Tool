@@ -85,28 +85,22 @@ def get_pdf_export_data(
         )
         qualification_rate = (qualified_count / total_surrogates) * 100
 
-    pending_tasks = (
-        db.query(func.count(Task.id))
+    # ⚡ Bolt Optimization: Use conditional aggregation to fetch both pending
+    # and overdue task counts in a single DB roundtrip rather than two separate queries.
+    task_counts = (
+        db.query(
+            func.count(Task.id),
+            func.count(Task.id).filter(Task.due_date < datetime.now(timezone.utc).date()),
+        )
         .filter(
             Task.organization_id == organization_id,
             Task.is_completed.is_(False),
             Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
-        .scalar()
-        or 0
+        .one()
     )
-
-    overdue_tasks = (
-        db.query(func.count(Task.id))
-        .filter(
-            Task.organization_id == organization_id,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-            Task.due_date < datetime.now(timezone.utc).date(),
-        )
-        .scalar()
-        or 0
-    )
+    pending_tasks = task_counts[0] or 0
+    overdue_tasks = task_counts[1] or 0
 
     summary = {
         "total_surrogates": total_surrogates,
