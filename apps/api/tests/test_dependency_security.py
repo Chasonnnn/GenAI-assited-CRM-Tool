@@ -31,6 +31,7 @@ def test_dependency_pins_match_security_fixes():
         "urllib3": "2.7.0",
     }
     expected_exact_pins = {
+        "idna": "3.15",
         "pillow": "12.2.0",
         "pypdf": "6.10.2",
         "python-multipart": "0.0.27",
