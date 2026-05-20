@@ -1,0 +1,3 @@
+## 2024-05-20 - [Combine multiple counting queries with conditional aggregation]
+**Learning:** In SQLAlchemy, multiple `func.count(Model.id)` queries with different conditions on the same table can be combined into a single database round-trip using conditional aggregation (`func.count(Model.id).filter(condition)`). This avoids N+1 style query issues and redundant database scans, especially for analytics endpoints calculating multiple metrics.
+**Action:** Always check if multiple counts or statistics against the same base table can be merged into one single `SELECT` statement with conditional aggregation instead of firing multiple `.scalar()` requests.
