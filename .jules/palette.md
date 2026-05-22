@@ -1,0 +1,3 @@
+## 2024-06-25 - Add Contextual ARIA Labels to Dynamically Rendered Actions
+**Learning:** Icon-only action buttons rendered inside iterative/mapped components (like list items, rows, or generic input components like `SsnField`) often lack descriptive, context-specific accessible names. A static `aria-label="Save"` is not enough when there are multiple "Save" buttons on the screen.
+**Action:** When adding `aria-label`s to action buttons within reusable or mapped field components, always dynamically include the contextual entity name or field label in the string (e.g., `aria-label={\`Save ${label}\`}` or `aria-label={\`Import actions for ${imp.filename}\`}`).

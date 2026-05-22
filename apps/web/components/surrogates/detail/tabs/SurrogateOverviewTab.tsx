@@ -956,7 +956,7 @@ function SsnField({
                     placeholder="XXX-XX-XXXX"
                     className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
                 />
-                <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => void save()} disabled={isSaving}>
+                <Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => void save()} disabled={isSaving} aria-label={`Save ${label}`}>
                     <CheckIcon className="size-3.5" />
                 </Button>
                 <Button
@@ -969,6 +969,7 @@ function SsnField({
                         setIsEditing(false)
                     }}
                     disabled={isSaving}
+                    aria-label={`Cancel editing ${label}`}
                 >
                     <XIcon className="size-3.5" />
                 </Button>
