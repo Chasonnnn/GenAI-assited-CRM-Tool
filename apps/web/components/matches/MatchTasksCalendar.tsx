@@ -511,7 +511,7 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
             {/* Header with navigation and filters */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => navigate("prev")}>
+                    <Button variant="outline" size="sm" onClick={() => navigate("prev")} aria-label="Previous period">
                         <ChevronLeftIcon className="size-4" />
                     </Button>
                     <h2 className="text-base font-semibold min-w-[160px] text-center">
@@ -519,7 +519,7 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
                         {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
                         {viewType === "day" && format(currentDate, "MMM d, yyyy")}
                     </h2>
-                    <Button variant="outline" size="sm" onClick={() => navigate("next")}>
+                    <Button variant="outline" size="sm" onClick={() => navigate("next")} aria-label="Next period">
                         <ChevronRightIcon className="size-4" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={goToToday}>
