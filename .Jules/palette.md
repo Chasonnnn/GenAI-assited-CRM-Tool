@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2025-05-20 - Calendar Navigation Accessibility
+**Learning:** Calendar component headers often contain icon-only navigation buttons (previous/next) without accessible names. When a user clicks these buttons, the month changes but the screen reader remains silent, leaving the user unaware of the context change.
+**Action:** Always add descriptive `aria-label`s to calendar navigation buttons, hide their inner icons with `aria-hidden="true"`, and apply `aria-live="polite"` to the current month/period text display so it announces the updated state automatically upon navigation.
