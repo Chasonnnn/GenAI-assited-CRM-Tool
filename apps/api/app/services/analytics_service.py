@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.db.enums import TaskType
@@ -85,28 +85,25 @@ def get_pdf_export_data(
         )
         qualification_rate = (qualified_count / total_surrogates) * 100
 
-    pending_tasks = (
-        db.query(func.count(Task.id))
+    task_stats = (
+        db.query(
+            func.count(Task.id).label("pending"),
+            func.coalesce(
+                func.sum(
+                    case((Task.due_date < datetime.now(timezone.utc).date(), 1), else_=0)
+                ),
+                0,
+            ).label("overdue"),
+        )
         .filter(
             Task.organization_id == organization_id,
             Task.is_completed.is_(False),
             Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
-        .scalar()
-        or 0
+        .first()
     )
-
-    overdue_tasks = (
-        db.query(func.count(Task.id))
-        .filter(
-            Task.organization_id == organization_id,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-            Task.due_date < datetime.now(timezone.utc).date(),
-        )
-        .scalar()
-        or 0
-    )
+    pending_tasks = task_stats.pending if task_stats else 0
+    overdue_tasks = task_stats.overdue if task_stats else 0
 
     summary = {
         "total_surrogates": total_surrogates,
