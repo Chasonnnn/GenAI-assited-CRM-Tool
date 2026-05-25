@@ -31,9 +31,12 @@ def test_dependency_pins_match_security_fixes():
         "urllib3": "2.7.0",
     }
     expected_exact_pins = {
+        "fastapi": "0.136.3",
+        "idna": "3.15",
         "pillow": "12.2.0",
         "pypdf": "6.10.2",
         "python-multipart": "0.0.27",
+        "starlette": "1.0.1",
     }
     expected_test_exact_pins = {"pytest": "9.0.3"}
 
