@@ -214,7 +214,7 @@ function BookingLinkCard() {
                         value={link?.full_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/book/${link?.public_slug || ''}`}
                         className="font-mono text-sm"
                     />
-                    <Button variant="outline" onClick={copyLink}>
+                    <Button variant="outline" onClick={copyLink} aria-label="Copy booking link">
                         {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
                     </Button>
                 </div>
