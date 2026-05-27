@@ -164,8 +164,8 @@ describe("EmbedFormPageClient", () => {
         })
 
         window.dispatchEvent(initMessage)
-        await new Promise((resolve) => window.setTimeout(resolve, 0))
-
-        expect(createEmbedFormSession).toHaveBeenCalledTimes(1)
+        await waitFor(() => {
+            expect(createEmbedFormSession).toHaveBeenCalledTimes(1)
+        })
     })
 })

@@ -8,7 +8,7 @@ overrides:
   '@types/react': 19.2.10
   '@types/react-dom': 19.2.3
   ajv: 6.14.0
-  brace-expansion: 5.0.5
+  brace-expansion: '>=5.0.6'
   d3-color: '>=3.1.0'
   flatted: 3.4.2
   markdown-it: 14.1.1
@@ -16,6 +16,8 @@ overrides:
   picomatch: 4.0.4
   rollup: 4.59.0
   vite: 7.3.2
+  postcss: '>=8.5.10'
+  ws: '>=8.20.1'
 
 packageExtensionsChecksum: sha256-/naV9nD9rxAizcYxShQYbBCjoY54SBewM6VpsE7iHio=
 
@@ -76,7 +78,7 @@ importers:
         version: 3.0.6
       autoprefixer:
         specifier: ^10.4.24
-        version: 10.4.24(postcss@8.5.6)
+        version: 10.4.24(postcss@8.5.15)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -93,8 +95,8 @@ importers:
         specifier: 4.1.0
         version: 4.1.0
       dompurify:
-        specifier: ^3.3.3
-        version: 3.3.3
+        specifier: ^3.4.6
+        version: 3.4.6
       embla-carousel-react:
         specifier: 8.6.0
         version: 8.6.0(react@19.2.4)
@@ -202,8 +204,8 @@ importers:
         specifier: ^2.12.7
         version: 2.12.7(@types/node@25.1.0)(typescript@5.9.3)
       postcss:
-        specifier: ^8.5.6
-        version: 8.5.6
+        specifier: '>=8.5.10'
+        version: 8.5.15
       tailwindcss:
         specifier: ^4.1.18
         version: 4.1.18
@@ -1847,7 +1849,7 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
     hasBin: true
     peerDependencies:
-      postcss: ^8.1.0
+      postcss: '>=8.5.10'
 
   balanced-match@4.0.3:
     resolution: {integrity: sha512-1pHv8LX9CpKut1Zp4EXey7Z8OfH11ONNH6Dhi2WDUt31VVZFXZzKwXcysBgqSumFCmR+0dqjMK5v5JiFHzi0+g==}
@@ -1865,8 +1867,8 @@ packages:
   bidi-js@1.0.3:
     resolution: {integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==}
 
-  brace-expansion@5.0.5:
-    resolution: {integrity: sha512-VZznLgtwhn+Mact9tfiwx64fA9erHH/MCXEUfB/0bX/6Fz6ny5EGTXYltMocqg4xFAQZtnO3DHWWXi8RiuN7cQ==}
+  brace-expansion@5.0.6:
+    resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
     engines: {node: 18 || 20 || >=22}
 
   browserslist@4.28.1:
@@ -2082,8 +2084,8 @@ packages:
   dom-accessibility-api@0.6.3:
     resolution: {integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==}
 
-  dompurify@3.3.3:
-    resolution: {integrity: sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA==}
+  dompurify@3.4.6:
+    resolution: {integrity: sha512-+7gzEI8trIIQkVCvQ3ucGtNfH3nOmDgVTzc62rAAOlMxLth78pwpPoZCPc7CyRzAQF89MqcfPdEWkDwnjgqktg==}
 
   duplexer@0.1.2:
     resolution: {integrity: sha512-jtD6YG370ZCIi/9GTaJKQxWTZD045+4R4hTk/x1UyoqadyJ9x9CgSi1RlVDQF8U2sxLLSnFkCaMihqljHIWgMg==}
@@ -2584,8 +2586,8 @@ packages:
     resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
     engines: {node: ^18.17.0 || >=20.5.0}
 
-  nanoid@3.3.11:
-    resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
+  nanoid@3.3.12:
+    resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -2682,12 +2684,8 @@ packages:
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
 
-  postcss@8.4.31:
-    resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
-    engines: {node: ^10 || ^12 || >=14}
-
-  postcss@8.5.6:
-    resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
+  postcss@8.5.15:
+    resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
 
   preact@10.12.1:
@@ -3290,20 +3288,8 @@ packages:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
 
-  ws@7.5.10:
-    resolution: {integrity: sha512-+dbF1tHwZpXcbOJdVOkzLDxZP1ailvSxM6ZweXTegylPny803bFhA+vqBYw4s31NSAk4S2Qz+AKXK9a4wkdjcQ==}
-    engines: {node: '>=8.3.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: ^5.0.2
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
-  ws@8.19.0:
-    resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
+  ws@8.21.0:
+    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -4260,7 +4246,7 @@ snapshots:
       '@alloc/quick-lru': 5.2.0
       '@tailwindcss/node': 4.1.18
       '@tailwindcss/oxide': 4.1.18
-      postcss: 8.5.6
+      postcss: 8.5.15
       tailwindcss: 4.1.18
 
   '@tanstack/query-core@5.90.20': {}
@@ -4789,13 +4775,13 @@ snapshots:
 
   attr-accept@2.2.5: {}
 
-  autoprefixer@10.4.24(postcss@8.5.6):
+  autoprefixer@10.4.24(postcss@8.5.15):
     dependencies:
       browserslist: 4.28.1
       caniuse-lite: 1.0.30001766
       fraction.js: 5.3.4
       picocolors: 1.1.1
-      postcss: 8.5.6
+      postcss: 8.5.15
       postcss-value-parser: 4.2.0
 
   balanced-match@4.0.3: {}
@@ -4808,7 +4794,7 @@ snapshots:
     dependencies:
       require-from-string: 2.0.2
 
-  brace-expansion@5.0.5:
+  brace-expansion@5.0.6:
     dependencies:
       balanced-match: 4.0.3
 
@@ -5010,7 +4996,7 @@ snapshots:
 
   dom-accessibility-api@0.6.3: {}
 
-  dompurify@3.3.3:
+  dompurify@3.4.6:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -5339,7 +5325,7 @@ snapshots:
       webidl-conversions: 8.0.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 15.1.0
-      ws: 8.19.0
+      ws: 8.21.0
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - '@noble/hashes'
@@ -5464,7 +5450,7 @@ snapshots:
 
   minimatch@10.2.3:
     dependencies:
-      brace-expansion: 5.0.5
+      brace-expansion: 5.0.6
 
   mrmime@2.0.1: {}
 
@@ -5497,7 +5483,7 @@ snapshots:
 
   mute-stream@2.0.0: {}
 
-  nanoid@3.3.11: {}
+  nanoid@3.3.12: {}
 
   natural-compare@1.4.0: {}
 
@@ -5512,7 +5498,7 @@ snapshots:
       '@swc/helpers': 0.5.15
       baseline-browser-mapping: 2.10.18
       caniuse-lite: 1.0.30001787
-      postcss: 8.4.31
+      postcss: 8.5.15
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
       styled-jsx: 5.1.6(@babel/core@7.28.6)(react@19.2.4)
@@ -5581,15 +5567,9 @@ snapshots:
 
   postcss-value-parser@4.2.0: {}
 
-  postcss@8.4.31:
+  postcss@8.5.15:
     dependencies:
-      nanoid: 3.3.11
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
-  postcss@8.5.6:
-    dependencies:
-      nanoid: 3.3.11
+      nanoid: 3.3.12
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -6125,7 +6105,7 @@ snapshots:
       esbuild: 0.27.2
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
-      postcss: 8.5.6
+      postcss: 8.5.15
       rollup: 4.59.0
       tinyglobby: 0.2.15
     optionalDependencies:
@@ -6194,7 +6174,7 @@ snapshots:
       opener: 1.5.2
       picocolors: 1.1.1
       sirv: 2.0.4
-      ws: 7.5.10
+      ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -6231,9 +6211,7 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
-  ws@7.5.10: {}
-
-  ws@8.19.0: {}
+  ws@8.21.0: {}
 
   xml-name-validator@5.0.0: {}
 
