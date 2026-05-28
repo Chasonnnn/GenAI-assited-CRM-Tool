@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, date, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, text, and_, case
+from sqlalchemy import func, text, and_, case, or_
 from sqlalchemy.orm import Session
 
 from app.core.pipeline_stage_colors import resolve_stage_color
@@ -24,6 +24,7 @@ from app.services.analytics_shared import (
     _apply_date_range_filters,
     _get_default_pipeline_stages,
     _get_or_compute_snapshot,
+    _normalize_date_bounds,
     get_analytics_stage_configuration,
     get_funnel_stage_keys,
 )
@@ -741,45 +742,6 @@ def get_summary_kpis(
     prev_start = start_date - timedelta(days=period_days)
     prev_end = start_date - timedelta(days=1)
 
-    current_query = db.query(func.count(Surrogate.id)).filter(
-        Surrogate.organization_id == organization_id,
-        Surrogate.is_archived.is_(False),
-    )
-    current_query = _apply_date_range_filters(
-        current_query,
-        Surrogate.created_at,
-        start_date,
-        end_date,
-    )
-    current = current_query.scalar() or 0
-
-    previous_query = db.query(func.count(Surrogate.id)).filter(
-        Surrogate.organization_id == organization_id,
-        Surrogate.is_archived.is_(False),
-    )
-    previous_query = _apply_date_range_filters(
-        previous_query,
-        Surrogate.created_at,
-        prev_start,
-        prev_end,
-    )
-    previous = previous_query.scalar() or 0
-
-    if previous > 0:
-        change_pct = round((current - previous) / previous * 100, 1)
-    else:
-        change_pct = 100 if current > 0 else 0
-
-    total_active = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.is_archived.is_(False),
-        )
-        .scalar()
-        or 0
-    )
-
     stale_date = datetime.now(timezone.utc) - timedelta(days=7)
     stages = _get_default_pipeline_stages(db, organization_id)
     stage_by_slug = {s.slug: s for s in stages if s.is_active}
@@ -794,17 +756,80 @@ def get_summary_kpis(
     if not attention_stage_ids and stages:
         attention_stage_ids = [s.id for s in sorted(stages, key=lambda s: s.order)[:2]]
 
-    needs_attention = (
-        db.query(func.count(Surrogate.id))
+    current_start_dt, current_end_dt = _normalize_date_bounds(start_date, end_date)
+    previous_start_dt, previous_end_dt = _normalize_date_bounds(prev_start, prev_end)
+    assert current_start_dt is not None
+    assert current_end_dt is not None
+    assert previous_start_dt is not None
+    assert previous_end_dt is not None
+
+    metrics = (
+        db.query(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Surrogate.created_at >= current_start_dt,
+                                Surrogate.created_at < current_end_dt,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("current_count"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Surrogate.created_at >= previous_start_dt,
+                                Surrogate.created_at < previous_end_dt,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("previous_count"),
+            func.count(Surrogate.id).label("total_active"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Surrogate.stage_id.in_(attention_stage_ids),
+                                or_(
+                                    Surrogate.last_contacted_at.is_(None),
+                                    Surrogate.last_contacted_at < stale_date,
+                                ),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("needs_attention"),
+        )
         .filter(
             Surrogate.organization_id == organization_id,
             Surrogate.is_archived.is_(False),
-            Surrogate.stage_id.in_(attention_stage_ids),
-            (Surrogate.last_contacted_at.is_(None)) | (Surrogate.last_contacted_at < stale_date),
         )
-        .scalar()
-        or 0
+        .one()
     )
+    current = int(metrics.current_count or 0)
+    previous = int(metrics.previous_count or 0)
+    total_active = int(metrics.total_active or 0)
+    needs_attention = int(metrics.needs_attention or 0)
+
+    if previous > 0:
+        change_pct = round((current - previous) / previous * 100, 1)
+    else:
+        change_pct = 100 if current > 0 else 0
 
     return {
         "new_surrogates": current,

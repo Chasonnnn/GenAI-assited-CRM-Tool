@@ -85,28 +85,21 @@ def get_pdf_export_data(
         )
         qualification_rate = (qualified_count / total_surrogates) * 100
 
-    pending_tasks = (
-        db.query(func.count(Task.id))
+    today = datetime.now(timezone.utc).date()
+    task_counts = (
+        db.query(
+            func.count(Task.id).label("pending_tasks"),
+            func.count(Task.id).filter(Task.due_date < today).label("overdue_tasks"),
+        )
         .filter(
             Task.organization_id == organization_id,
             Task.is_completed.is_(False),
             Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         )
-        .scalar()
-        or 0
+        .one()
     )
-
-    overdue_tasks = (
-        db.query(func.count(Task.id))
-        .filter(
-            Task.organization_id == organization_id,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-            Task.due_date < datetime.now(timezone.utc).date(),
-        )
-        .scalar()
-        or 0
-    )
+    pending_tasks = int(task_counts.pending_tasks or 0)
+    overdue_tasks = int(task_counts.overdue_tasks or 0)
 
     summary = {
         "total_surrogates": total_surrogates,
