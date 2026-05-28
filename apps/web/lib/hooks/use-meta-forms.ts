@@ -17,10 +17,11 @@ export const metaFormsKeys = {
     unconvertedLeads: (formId: string) => [...metaFormsKeys.all, 'unconverted-leads', formId] as const,
 }
 
-export function useMetaForms() {
+export function useMetaForms(enabled = true) {
     return useQuery({
         queryKey: metaFormsKeys.list(),
         queryFn: listMetaForms,
+        enabled,
     })
 }
 

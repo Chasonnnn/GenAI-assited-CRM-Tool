@@ -17,10 +17,11 @@ const resendKeys = {
 // Settings Hooks
 // ============================================================================
 
-export function useResendSettings() {
+export function useResendSettings(enabled = true) {
     return useQuery({
         queryKey: resendKeys.settings(),
         queryFn: resendApi.getResendSettings,
+        enabled,
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }

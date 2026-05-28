@@ -18,10 +18,11 @@ export const adminMetaAdAccountKeys = {
     list: () => [...adminMetaAdAccountKeys.lists()] as const,
 }
 
-export function useAdminMetaAdAccounts() {
+export function useAdminMetaAdAccounts(enabled = true) {
     return useQuery({
         queryKey: adminMetaAdAccountKeys.list(),
         queryFn: listMetaAdAccounts,
+        enabled,
     })
 }
 

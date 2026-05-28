@@ -28,10 +28,11 @@ export function invalidateAIUsageCaches(queryClient: QueryClient) {
 // Settings Hooks
 // ============================================================================
 
-export function useAISettings() {
+export function useAISettings(enabled = true) {
     return useQuery({
         queryKey: aiKeys.settings(),
         queryFn: aiApi.getAISettings,
+        enabled,
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }

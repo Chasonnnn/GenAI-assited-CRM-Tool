@@ -43,13 +43,14 @@ export function useMetaConnectUrl() {
 /**
  * List OAuth connections for the organization
  */
-export function useMetaConnections() {
+export function useMetaConnections(enabled = true) {
     return useQuery({
         queryKey: metaOAuthKeys.connectionsList(),
         queryFn: async () => {
             const response = await listMetaConnections()
             return response.connections
         },
+        enabled,
     })
 }
 

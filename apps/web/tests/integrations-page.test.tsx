@@ -10,6 +10,13 @@ const mockRefetch = vi.fn()
 const mockUseIntegrationHealth = vi.fn()
 const mockUseUserIntegrations = vi.fn()
 const mockUseGoogleCalendarStatus = vi.fn()
+const mockUseAISettingsQuery = vi.fn()
+const mockUseResendSettingsQuery = vi.fn()
+const mockUseZapierSettingsQuery = vi.fn()
+const mockUseMetaFormsQuery = vi.fn()
+const mockUseMetaConnectionsQuery = vi.fn()
+const mockUseAdminMetaAdAccountsQuery = vi.fn()
+const mockUseMetaCrmDatasetSettingsQuery = vi.fn()
 const mockConnectZoom = vi.fn()
 const mockConnectGmail = vi.fn()
 const mockConnectGoogleCalendar = vi.fn()
@@ -286,7 +293,7 @@ const createPipelineData = (...stages: Array<{
 ]
 
 vi.mock('@/lib/hooks/use-ops', () => ({
-    useIntegrationHealth: () => mockUseIntegrationHealth(),
+    useIntegrationHealth: (enabled?: boolean) => mockUseIntegrationHealth(enabled),
 }))
 
 vi.mock('@/lib/auth-context', () => ({
@@ -298,7 +305,7 @@ vi.mock('@/lib/hooks/use-permissions', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-pipelines', () => ({
-    usePipelines: () => mockUsePipelines(),
+    usePipelines: (entityType?: string, enabled?: boolean) => mockUsePipelines(entityType, enabled),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -340,7 +347,7 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
-    useAISettings: () => ({ data: aiSettingsData, isLoading: false }),
+    useAISettings: (enabled?: boolean) => mockUseAISettingsQuery(enabled),
     useAIConsent: () => ({ data: { consent_text: 'Consent', consent_accepted_at: aiSettingsData.consent_accepted_at, consent_accepted_by: 'Admin' }, isLoading: false }),
     useAcceptConsent: () => ({ mutateAsync: mockAcceptConsent, isPending: false }),
     useUpdateAISettings: () => ({ mutateAsync: mockUpdateAISettings, isPending: false }),
@@ -348,7 +355,7 @@ vi.mock('@/lib/hooks/use-ai', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-resend', () => ({
-    useResendSettings: () => ({ data: resendSettingsData, isLoading: false }),
+    useResendSettings: (enabled?: boolean) => mockUseResendSettingsQuery(enabled),
     useUpdateResendSettings: () => ({ mutateAsync: mockUpdateResendSettings, isPending: false }),
     useTestResendKey: () => ({ mutateAsync: mockTestResendKey, isPending: false }),
     useRotateWebhook: () => ({ mutateAsync: mockRotateWebhook, isPending: false }),
@@ -356,10 +363,7 @@ vi.mock('@/lib/hooks/use-resend', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-zapier', () => ({
-    useZapierSettings: () => ({
-        data: zapierSettingsData,
-        isLoading: false,
-    }),
+    useZapierSettings: (enabled?: boolean) => mockUseZapierSettingsQuery(enabled),
     useCreateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundCreate, isPending: false }),
     useRotateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundRotate, isPending: false }),
     useUpdateZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundUpdate, isPending: false }),
@@ -374,22 +378,19 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-meta-oauth', () => ({
-    useMetaConnections: () => ({ data: metaConnectionsData, isLoading: false }),
+    useMetaConnections: (enabled?: boolean) => mockUseMetaConnectionsQuery(enabled),
     useMetaConnectUrl: () => ({ mutateAsync: mockMetaConnectUrl, isPending: false }),
     useDisconnectMetaConnection: () => ({ mutateAsync: mockDisconnectMetaConnection, isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-admin-meta', () => ({
-    useAdminMetaAdAccounts: () => ({ data: metaAdAccountsData, isLoading: false }),
+    useAdminMetaAdAccounts: (enabled?: boolean) => mockUseAdminMetaAdAccountsQuery(enabled),
     useUpdateMetaAdAccount: () => ({ mutateAsync: mockUpdateMetaAdAccount, isPending: false }),
     useDeleteMetaAdAccount: () => ({ mutateAsync: mockDeleteMetaAdAccount, isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-meta-crm-dataset', () => ({
-    useMetaCrmDatasetSettings: () => ({
-        data: metaCrmDatasetSettingsData,
-        isLoading: false,
-    }),
+    useMetaCrmDatasetSettings: (enabled?: boolean) => mockUseMetaCrmDatasetSettingsQuery(enabled),
     useUpdateMetaCrmDatasetSettings: () => ({
         mutateAsync: mockUpdateMetaCrmDatasetSettings,
         isPending: false,
@@ -413,12 +414,20 @@ vi.mock('@/lib/hooks/use-meta-crm-dataset', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-meta-forms', () => ({
-    useMetaForms: () => ({ data: metaFormsData, isLoading: false }),
+    useMetaForms: (enabled?: boolean) => mockUseMetaFormsQuery(enabled),
 }))
 
 describe('IntegrationsPage', () => {
     beforeEach(() => {
+        mockUseIntegrationHealth.mockReset()
         mockUsePipelines.mockReset()
+        mockUseAISettingsQuery.mockReset()
+        mockUseResendSettingsQuery.mockReset()
+        mockUseZapierSettingsQuery.mockReset()
+        mockUseMetaFormsQuery.mockReset()
+        mockUseMetaConnectionsQuery.mockReset()
+        mockUseAdminMetaAdAccountsQuery.mockReset()
+        mockUseMetaCrmDatasetSettingsQuery.mockReset()
         zapierSettingsData = createZapierSettingsData()
         zapierEventsSummaryData = {
             total_count: 3,
@@ -522,6 +531,31 @@ describe('IntegrationsPage', () => {
             data: { permissions: ['manage_integrations'] },
         })
         mockUsePipelines.mockReturnValue({ data: pipelineData, isLoading: false })
+        mockUseAISettingsQuery.mockImplementation(() => ({
+            data: aiSettingsData,
+            isLoading: false,
+        }))
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: resendSettingsData,
+            isLoading: false,
+        }))
+        mockUseZapierSettingsQuery.mockImplementation(() => ({
+            data: zapierSettingsData,
+            isLoading: false,
+        }))
+        mockUseMetaFormsQuery.mockImplementation(() => ({ data: metaFormsData, isLoading: false }))
+        mockUseMetaConnectionsQuery.mockImplementation(() => ({
+            data: metaConnectionsData,
+            isLoading: false,
+        }))
+        mockUseAdminMetaAdAccountsQuery.mockImplementation(() => ({
+            data: metaAdAccountsData,
+            isLoading: false,
+        }))
+        mockUseMetaCrmDatasetSettingsQuery.mockImplementation(() => ({
+            data: metaCrmDatasetSettingsData,
+            isLoading: false,
+        }))
         mockUseUserIntegrations.mockReturnValue({ data: [], isLoading: false })
         mockUseGoogleCalendarStatus.mockReturnValue({
             data: {
@@ -1026,5 +1060,24 @@ describe('IntegrationsPage', () => {
         expect(screen.queryByRole('button', { name: /configure email/i })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /configure zapier/i })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /configure meta/i })).not.toBeInTheDocument()
+    })
+
+    it('does not load admin-only organization integration data for personal integration users', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'u3' } })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: [] },
+        })
+
+        render(<IntegrationsPage />)
+
+        expect(mockUseIntegrationHealth).toHaveBeenCalledWith(false)
+        expect(mockUseAISettingsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseResendSettingsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseZapierSettingsQuery).toHaveBeenCalledWith(false)
+        expect(mockUsePipelines).toHaveBeenCalledWith('surrogate', false)
+        expect(mockUseMetaFormsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseMetaConnectionsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseAdminMetaAdAccountsQuery).toHaveBeenCalledWith(false)
+        expect(mockUseMetaCrmDatasetSettingsQuery).toHaveBeenCalledWith(false)
     })
 })

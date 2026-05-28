@@ -12,10 +12,11 @@ export const zapierKeys = {
         [...zapierKeys.all, 'outbound-events', params] as const,
 };
 
-export function useZapierSettings() {
+export function useZapierSettings(enabled = true) {
     return useQuery({
         queryKey: zapierKeys.settings(),
         queryFn: zapierApi.getZapierSettings,
+        enabled,
     });
 }
 

@@ -41,10 +41,11 @@ const pipelineKeys = {
 // Queries
 // ============================================================================
 
-export function usePipelines(entityType: PipelineEntityType = 'surrogate') {
+export function usePipelines(entityType: PipelineEntityType = 'surrogate', enabled = true) {
     return useQuery({
         queryKey: pipelineKeys.list(entityType),
         queryFn: () => pipelinesApi.listPipelinesForEntity(entityType),
+        enabled,
     });
 }
 

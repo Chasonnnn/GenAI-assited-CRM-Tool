@@ -19,10 +19,11 @@ const opsKeys = {
 /**
  * Fetch integration health status.
  */
-export function useIntegrationHealth() {
+export function useIntegrationHealth(enabled = true) {
     return useQuery({
         queryKey: opsKeys.health(),
         queryFn: opsApi.getIntegrationHealth,
+        enabled,
         staleTime: 30 * 1000, // 30 seconds
     });
 }

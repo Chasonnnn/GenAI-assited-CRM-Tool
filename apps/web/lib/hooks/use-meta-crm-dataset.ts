@@ -10,10 +10,11 @@ const metaCrmDatasetKeys = {
         [...metaCrmDatasetKeys.all, 'events', params] as const,
 }
 
-export function useMetaCrmDatasetSettings() {
+export function useMetaCrmDatasetSettings(enabled = true) {
     return useQuery({
         queryKey: metaCrmDatasetKeys.settings(),
         queryFn: metaCrmDatasetApi.getMetaCrmDatasetSettings,
+        enabled,
     })
 }
 

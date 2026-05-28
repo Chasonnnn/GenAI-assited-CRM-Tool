@@ -3659,17 +3659,29 @@ export default function IntegrationsPage() {
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
     const canManageOrganizationIntegrations =
         isDeveloper || (effectivePermissions?.permissions ?? []).includes("manage_integrations")
-    const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth()
+    const organizationIntegrationsEnabled = canManageOrganizationIntegrations
+    const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth(
+        organizationIntegrationsEnabled
+    )
     const { data: userIntegrations } = useUserIntegrations()
     const { data: googleCalendarStatus } = useGoogleCalendarStatus(true)
-    const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings()
-    const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings()
-    const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings()
-    const { data: pipelines } = usePipelines()
-    const { data: metaFormsData } = useMetaForms()
-    const { data: metaConnectionsData } = useMetaConnections()
-    const { data: metaAdAccountsData } = useAdminMetaAdAccounts()
-    const { data: metaCrmDatasetSettings, isLoading: metaCrmDatasetSettingsLoading } = useMetaCrmDatasetSettings()
+    const { data: aiSettings, isLoading: aiSettingsLoading } = useAISettings(
+        organizationIntegrationsEnabled
+    )
+    const { data: resendSettings, isLoading: resendSettingsLoading } = useResendSettings(
+        organizationIntegrationsEnabled
+    )
+    const { data: zapierSettings, isLoading: zapierSettingsLoading } = useZapierSettings(
+        organizationIntegrationsEnabled
+    )
+    const { data: pipelines } = usePipelines("surrogate", organizationIntegrationsEnabled)
+    const { data: metaFormsData } = useMetaForms(organizationIntegrationsEnabled)
+    const { data: metaConnectionsData } = useMetaConnections(organizationIntegrationsEnabled)
+    const { data: metaAdAccountsData } = useAdminMetaAdAccounts(organizationIntegrationsEnabled)
+    const {
+        data: metaCrmDatasetSettings,
+        isLoading: metaCrmDatasetSettingsLoading,
+    } = useMetaCrmDatasetSettings(organizationIntegrationsEnabled)
     const metaForms = metaFormsData ?? []
     const metaConnections = metaConnectionsData ?? []
     const metaAdAccounts = metaAdAccountsData ?? []
@@ -3781,7 +3793,14 @@ export default function IntegrationsPage() {
             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center justify-between px-6">
                     <h1 className="text-2xl font-semibold">Integrations</h1>
-                    <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            if (organizationIntegrationsEnabled) void refetch()
+                        }}
+                        disabled={!organizationIntegrationsEnabled || isFetching}
+                    >
                         <RefreshCwIcon className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`} aria-hidden="true" />
                         Refresh
                     </Button>
