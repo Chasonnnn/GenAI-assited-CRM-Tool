@@ -357,8 +357,9 @@ export function RichTextEditor({
                     onClick={() => editor.chain().focus().undo().run()}
                     disabled={!editor.can().undo()}
                     className="size-8 p-0"
+                    aria-label="Undo"
                 >
-                    <Undo2Icon className="size-4" />
+                    <Undo2Icon className="size-4" aria-hidden="true" />
                 </Button>
                 <Button
                     variant="ghost"
@@ -366,8 +367,9 @@ export function RichTextEditor({
                     onClick={() => editor.chain().focus().redo().run()}
                     disabled={!editor.can().redo()}
                     className="size-8 p-0"
+                    aria-label="Redo"
                 >
-                    <Redo2Icon className="size-4" />
+                    <Redo2Icon className="size-4" aria-hidden="true" />
                 </Button>
 
                 {onSubmit && (

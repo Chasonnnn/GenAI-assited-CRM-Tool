@@ -437,6 +437,35 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('987-65-4321')).toBeInTheDocument()
     })
 
+    it('labels SSN edit save and cancel buttons', () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'Pending-DocuSign',
+                stage_id: 's1b',
+                stage_key: 'pending_docusign',
+                stage_slug: 'pending_docusign',
+                sensitive_info_available: true,
+                ssn_masked: '***-**-6789',
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit surrogate SSN' }))
+
+        expect(screen.getByRole('button', { name: 'Save surrogate SSN' })).toBeInTheDocument()
+        expect(
+            screen.getByRole('button', { name: 'Cancel editing surrogate SSN' }),
+        ).toBeInTheDocument()
+    })
+
     it('updates personal information fields from the overview section', async () => {
         mockUpdateSurrogate.mockResolvedValue({
             ...baseSurrogateData,

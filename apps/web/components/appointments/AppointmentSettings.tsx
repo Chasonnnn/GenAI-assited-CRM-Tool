@@ -214,8 +214,12 @@ function BookingLinkCard() {
                         value={link?.full_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/book/${link?.public_slug || ''}`}
                         className="font-mono text-sm"
                     />
-                    <Button variant="outline" onClick={copyLink}>
-                        {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                    <Button variant="outline" onClick={copyLink} aria-label="Copy booking link">
+                        {copied ? (
+                            <CheckIcon className="size-4" aria-hidden="true" />
+                        ) : (
+                            <CopyIcon className="size-4" aria-hidden="true" />
+                        )}
                     </Button>
                 </div>
                 <Button variant="outline" size="sm" onClick={openPreview}>

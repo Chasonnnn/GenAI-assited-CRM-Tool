@@ -73,6 +73,18 @@ describe('MatchTasksCalendar', () => {
         expect(screen.getByText('Today')).toBeInTheDocument()
     })
 
+    it('labels calendar navigation controls and announces period changes politely', () => {
+        render(<MatchTasksCalendar surrogateId="surrogate1" />)
+        const currentMonthYear = format(new Date(), 'MMMM yyyy')
+
+        expect(screen.getByRole('button', { name: 'Previous period' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Next period' })).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: currentMonthYear })).toHaveAttribute(
+            'aria-live',
+            'polite',
+        )
+    })
+
     it('renders filter buttons', () => {
         render(<MatchTasksCalendar surrogateId="surrogate1" />)
         expect(screen.getByText('All')).toBeInTheDocument()

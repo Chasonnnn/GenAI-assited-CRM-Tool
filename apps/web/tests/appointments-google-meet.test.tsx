@@ -208,6 +208,11 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByText(/Google Meet/i)).toBeInTheDocument()
     })
 
+    it("labels the booking link copy button", () => {
+        render(<AppointmentSettings />)
+        expect(screen.getByRole("button", { name: "Copy booking link" })).toBeInTheDocument()
+    })
+
     it("uses an accessible icon button for deleting appointment types", () => {
         mockUseAppointmentTypes.mockReturnValue({
             data: [

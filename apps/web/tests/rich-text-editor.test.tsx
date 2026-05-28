@@ -106,6 +106,17 @@ describe("RichTextEditor", () => {
         expect(screen.queryByLabelText("Insert Emoji")).not.toBeInTheDocument()
     })
 
+    it("labels undo and redo toolbar buttons", async () => {
+        render(<RichTextEditor content="<p>hello</p>" />)
+
+        await waitFor(() => {
+            expect(screen.getByLabelText("Bold")).toBeInTheDocument()
+        })
+
+        expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Redo" })).toBeInTheDocument()
+    })
+
     it("inserts selected emoji into the editor", async () => {
         render(<RichTextEditor content="<p>hello</p>" enableEmojiPicker />)
 
