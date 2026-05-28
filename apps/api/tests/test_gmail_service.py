@@ -1,5 +1,6 @@
 """Tests for Gmail service logging/idempotency."""
 
+import logging
 from io import BytesIO
 from uuid import UUID, uuid4
 
@@ -9,6 +10,10 @@ from app.db.enums import EmailStatus, SurrogateSource
 from app.db.models import EmailLog, EmailLogAttachment, EmailSuppression
 from app.schemas.surrogate import SurrogateCreate
 from app.services import gmail_service
+
+
+def _ops_records(caplog, message: str):
+    return [record for record in caplog.records if record.name == "app.ops" and record.message == message]
 
 
 @pytest.mark.asyncio
@@ -169,6 +174,99 @@ async def test_send_email_logged_with_attachment_ids_loads_bytes_and_persists_li
 
 
 @pytest.mark.asyncio
+async def test_send_email_logged_emits_safe_attempt_and_success_logs(
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+    caplog,
+):
+    async def fake_send_email(*_args, **_kwargs):
+        return {
+            "success": True,
+            "message_id": "gmail-msg-safe-log",
+            "thread_id": "thread-safe-log",
+            "provider_status_code": 200,
+        }
+
+    monkeypatch.setattr(gmail_service, "send_email", fake_send_email)
+
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        result = await gmail_service.send_email_logged(
+            db=db,
+            org_id=test_org.id,
+            user_id=str(test_user.id),
+            to="niki.gmail@example.com",
+            subject="Secret Subject",
+            body="<p>Secret body with {{token}}</p>",
+            html=True,
+            attachments=[{"filename": "safe.pdf", "content_bytes": b"secret"}],
+        )
+
+    assert result["success"] is True
+    attempt = _ops_records(caplog, "email_send_attempt")[-1]
+    success = _ops_records(caplog, "email_send_success")[-1]
+
+    assert attempt.email_log_id == str(result["email_log_id"])
+    assert attempt.provider == "gmail"
+    assert attempt.org_id == str(test_org.id)
+    assert attempt.user_id == str(test_user.id)
+    assert attempt.attachment_count == 1
+    assert attempt.recipient_email_hash
+    assert success.email_log_id == str(result["email_log_id"])
+    assert success.provider_status_code == 200
+
+    rendered_records = " ".join(str(record.__dict__) for record in (attempt, success))
+    assert "niki.gmail@example.com" not in rendered_records
+    assert "Secret Subject" not in rendered_records
+    assert "Secret body" not in rendered_records
+    assert "{{token}}" not in rendered_records
+
+
+@pytest.mark.asyncio
+async def test_send_email_logged_emits_safe_failure_log(
+    db,
+    test_org,
+    test_user,
+    monkeypatch,
+    caplog,
+):
+    async def fake_send_email(*_args, **_kwargs):
+        return {
+            "success": False,
+            "error": "Gmail API error: 403 (insufficientPermissions)",
+            "provider_status_code": 403,
+            "provider_error_reason": "insufficientPermissions",
+        }
+
+    monkeypatch.setattr(gmail_service, "send_email", fake_send_email)
+
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        result = await gmail_service.send_email_logged(
+            db=db,
+            org_id=test_org.id,
+            user_id=str(test_user.id),
+            to="niki.failure@example.com",
+            subject="Failure Subject",
+            body="Failure body",
+            html=False,
+        )
+
+    assert result["success"] is False
+    failure = _ops_records(caplog, "email_send_failure")[-1]
+    assert failure.email_log_id == str(result["email_log_id"])
+    assert failure.provider == "gmail"
+    assert failure.provider_status_code == 403
+    assert failure.provider_error_reason == "insufficientPermissions"
+    assert failure.recipient_email_hash
+
+    rendered_record = str(failure.__dict__)
+    assert "niki.failure@example.com" not in rendered_record
+    assert "Failure Subject" not in rendered_record
+    assert "Failure body" not in rendered_record
+
+
+@pytest.mark.asyncio
 async def test_send_email_logged_attachment_idempotency_reuses_existing_log(
     db, test_org, test_user, monkeypatch
 ):
@@ -243,3 +341,4 @@ async def test_send_email_logged_attachment_idempotency_reuses_existing_log(
         db.query(EmailLogAttachment).filter(EmailLogAttachment.email_log_id == email_log_id).all()
     )
     assert len(links) == 1
+    assert links[0].attachment_id == attachment.id

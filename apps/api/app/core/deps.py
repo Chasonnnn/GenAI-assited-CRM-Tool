@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.permissions import PermissionKey
 from app.core.security import decode_session_token
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
+from app.core.structured_logging import build_request_log_context, log_structured_event
 from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -310,6 +311,8 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         request.state.support_session_id = support_session.id
         request.state.support_role = support_session.role_override
         request.state.support_mode = support_session.mode
+        if support_org:
+            request.state.org_slug = support_org.slug
         request.state.user_session = session
         return session
 
@@ -388,6 +391,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         if not _is_mfa_bypass_allowed(request):
             raise HTTPException(status_code=403, detail="MFA verification required")
 
+    request.state.org_slug = org.slug
     request.state.user_session = session
     return session
 
@@ -418,6 +422,25 @@ def _normalize_permission(permission: str | PermissionKey) -> str:
     return permission.value if isinstance(permission, PermissionKey) else permission
 
 
+def _emit_permission_denied(
+    request: Request,
+    permission: str,
+    *,
+    missing_permissions: list[str] | None = None,
+) -> None:
+    request.state.error_code = "permission_denied"
+    request.state.permission = permission
+    context = build_request_log_context(
+        request,
+        status=403,
+        error_code="permission_denied",
+        permission=permission,
+    )
+    if missing_permissions:
+        context["missing_permissions"] = missing_permissions
+    log_structured_event("permission_denied", **context)
+
+
 def require_permission(permission: str | PermissionKey):
     """
     Dependency factory for permission-based authorization.
@@ -440,6 +463,11 @@ def require_permission(permission: str | PermissionKey):
         if not permission_service.check_permission(
             db, session.org_id, session.user_id, session.role.value, permission_key
         ):
+            _emit_permission_denied(
+                request,
+                permission_key,
+                missing_permissions=[permission_key],
+            )
             raise HTTPException(status_code=403, detail=f"Missing permission: {permission_key}")
         return session
 
@@ -474,6 +502,11 @@ def require_any_permissions(permissions: list[str | PermissionKey]):
             db, session.org_id, session.user_id, session.role.value
         )
         if not any(key in effective for key in permission_keys):
+            _emit_permission_denied(
+                request,
+                ",".join(permission_keys),
+                missing_permissions=permission_keys,
+            )
             raise HTTPException(
                 status_code=403,
                 detail=f"Missing one of permissions: {', '.join(permission_keys)}",
@@ -501,6 +534,11 @@ def require_all_permissions(permissions: list[str | PermissionKey]):
         )
         missing = [key for key in permission_keys if key not in effective]
         if missing:
+            _emit_permission_denied(
+                request,
+                ",".join(missing),
+                missing_permissions=missing,
+            )
             raise HTTPException(
                 status_code=403, detail=f"Missing permissions: {', '.join(missing)}"
             )

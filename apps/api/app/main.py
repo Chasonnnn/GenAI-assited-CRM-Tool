@@ -26,7 +26,13 @@ from app.core.request_audit_context import (
     reset_request_audit_context,
     start_request_audit_context,
 )
-from app.core.structured_logging import build_log_context
+from app.core.structured_logging import (
+    build_log_context,
+    build_request_log_context,
+    extract_request_id,
+    extract_trace_id,
+    log_structured_event,
+)
 from app.core.rate_limit import limiter
 from app.core.redis_client import get_redis_url, get_sync_redis_client
 from app.core.telemetry import configure_telemetry
@@ -490,7 +496,7 @@ app.add_middleware(
     allow_origin_regex=tenant_origin_regex,
     allow_credentials=True,  # Required for cookies
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", CSRF_HEADER, "X-Dev-Secret"],
+    allow_headers=["Content-Type", "Authorization", CSRF_HEADER, "X-Dev-Secret", "X-Request-ID"],
     expose_headers=["X-Request-ID", "Content-Disposition", "Content-Type"],
 )
 
@@ -539,6 +545,41 @@ async def security_headers_middleware(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.middleware("http")
+async def structured_request_logging_middleware(request: Request, call_next):
+    start = perf_counter()
+    request.state.request_id = extract_request_id(request)
+    request.state.trace_id = extract_trace_id(request)
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    response: Response | None = None
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except HTTPException as exc:
+        status_code = exc.status_code
+        raise
+    except RateLimitExceeded:
+        status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        raise
+    except Exception:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise
+    finally:
+        latency_ms = int((perf_counter() - start) * 1000)
+        if response is not None:
+            response.headers["X-Request-ID"] = request.state.request_id
+        log_structured_event(
+            "api_request_completed",
+            **build_request_log_context(
+                request,
+                status=status_code,
+                latency_ms=latency_ms,
+            ),
+        )
 
 
 # ============================================================================

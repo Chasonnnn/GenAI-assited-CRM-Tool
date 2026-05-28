@@ -17,6 +17,7 @@ import httpx
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.structured_logging import hash_email_for_log, log_structured_event
 from app.db.enums import EmailStatus
 from app.db.models import Attachment, EmailLog
 from app.services import oauth_service
@@ -95,6 +96,51 @@ def _format_gmail_api_error(response: httpx.Response) -> str:
     return base[:500]
 
 
+def _extract_gmail_error_reason(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict):
+                errors_val = err.get("errors")
+                if isinstance(errors_val, list) and errors_val:
+                    first = errors_val[0]
+                    if isinstance(first, dict):
+                        reason_val = first.get("reason")
+                        if isinstance(reason_val, str) and reason_val.strip():
+                            return reason_val.strip()[:120]
+                status_val = err.get("status")
+                if isinstance(status_val, str) and status_val.strip():
+                    return status_val.strip()[:120]
+    except Exception:
+        pass
+    return f"http_{response.status_code}"
+
+
+def _email_log_event_context(
+    *,
+    email_log: EmailLog,
+    org_id: uuid.UUID,
+    user_id: str,
+    recipient_email: str,
+    attachment_count: int,
+    provider_status_code: int | None = None,
+    provider_error_reason: str | None = None,
+) -> dict[str, object]:
+    return {
+        "email_log_id": str(email_log.id),
+        "provider": "gmail",
+        "provider_status_code": provider_status_code,
+        "provider_error_reason": provider_error_reason,
+        "org_id": str(org_id),
+        "user_id": str(user_id),
+        "surrogate_id": str(email_log.surrogate_id) if email_log.surrogate_id else None,
+        "template_id": str(email_log.template_id) if email_log.template_id else None,
+        "attachment_count": attachment_count,
+        "recipient_email_hash": hash_email_for_log(recipient_email),
+    }
+
+
 async def send_email(
     db: Session,
     user_id: str,
@@ -121,7 +167,11 @@ async def send_email(
     # Get access token
     access_token = await oauth_service.get_access_token_async(db, uuid.UUID(user_id), "gmail")
     if not access_token:
-        return {"success": False, "error": "Gmail not connected"}
+        return {
+            "success": False,
+            "error": "Gmail not connected",
+            "provider_error_reason": "gmail_not_connected",
+        }
 
     # Get sender email
     integration = oauth_service.get_user_integration(db, uuid.UUID(user_id), "gmail")
@@ -197,12 +247,16 @@ async def send_email(
             return {
                 "success": False,
                 "error": "Gmail token expired. Please reconnect.",
+                "provider_status_code": 401,
+                "provider_error_reason": "token_expired",
             }
 
         if response.status_code in DEFAULT_RETRY_STATUSES:
             return {
                 "success": False,
                 "error": f"Gmail API error: {response.status_code}",
+                "provider_status_code": response.status_code,
+                "provider_error_reason": "retryable_status",
             }
 
         response.raise_for_status()
@@ -212,16 +266,26 @@ async def send_email(
             "success": True,
             "message_id": data.get("id"),
             "thread_id": data.get("threadId"),
+            "provider_status_code": response.status_code,
         }
     except httpx.RequestError as e:
         logger.error("Gmail API request failed: %s", e)
-        return {"success": False, "error": "Gmail API request failed"}
+        return {
+            "success": False,
+            "error": "Gmail API request failed",
+            "provider_error_reason": "request_error",
+        }
     except httpx.HTTPStatusError as e:
         logger.error("Gmail API error: status=%s", e.response.status_code)
-        return {"success": False, "error": _format_gmail_api_error(e.response)}
+        return {
+            "success": False,
+            "error": _format_gmail_api_error(e.response),
+            "provider_status_code": e.response.status_code,
+            "provider_error_reason": _extract_gmail_error_reason(e.response),
+        }
     except Exception as e:
         logger.exception("Gmail send error")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "provider_error_reason": "unexpected_error"}
 
 
 async def send_email_logged(
@@ -285,6 +349,16 @@ async def send_email_logged(
         db.add(email_log)
         db.commit()
         db.refresh(email_log)
+        event_context = _email_log_event_context(
+            email_log=email_log,
+            org_id=org_id,
+            user_id=user_id,
+            recipient_email=to,
+            attachment_count=len(resolved_attachments or provider_attachments or []),
+            provider_error_reason="suppressed",
+        )
+        log_structured_event("email_send_attempt", **event_context)
+        log_structured_event("email_send_failure", **event_context)
         return {
             "success": False,
             "error": "Email suppressed",
@@ -344,6 +418,18 @@ async def send_email_logged(
             base_url=org_service.get_org_portal_base_url(org),
         )
 
+    attachment_count = len(resolved_attachments or provider_attachments or [])
+    log_structured_event(
+        "email_send_attempt",
+        **_email_log_event_context(
+            email_log=email_log,
+            org_id=org_id,
+            user_id=user_id,
+            recipient_email=to,
+            attachment_count=attachment_count,
+        ),
+    )
+
     result = await send_email(
         db=db,
         user_id=user_id,
@@ -365,6 +451,19 @@ async def send_email_logged(
         email_log.error = result.get("error")
 
     db.commit()
+    event_context = _email_log_event_context(
+        email_log=email_log,
+        org_id=org_id,
+        user_id=user_id,
+        recipient_email=to,
+        attachment_count=attachment_count,
+        provider_status_code=result.get("provider_status_code"),
+        provider_error_reason=result.get("provider_error_reason"),
+    )
+    log_structured_event(
+        "email_send_success" if result.get("success") else "email_send_failure",
+        **event_context,
+    )
     return {
         **result,
         "email_log_id": email_log.id,
