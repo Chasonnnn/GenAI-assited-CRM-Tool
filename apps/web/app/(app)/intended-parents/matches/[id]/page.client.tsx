@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { PermissionDeniedState } from "@/components/error-state"
 import {
     MailIcon,
     PhoneIcon,
@@ -38,6 +39,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { parseDateInput } from "@/lib/utils/date"
+import { isPermissionError } from "@/lib/error-utils"
 
 const USD_WHOLE_DOLLAR_FORMATTER = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -69,7 +71,13 @@ export default function MatchDetailPage() {
     const { user } = useAuth()
     const queryClient = useQueryClient()
 
-    const { data: match, isLoading: matchLoading } = useMatch(matchId)
+    const {
+        data: match,
+        isLoading: matchLoading,
+        isError: matchIsError,
+        error: matchError,
+        refetch: refetchMatch,
+    } = useMatch(matchId)
     const acceptMatchMutation = useAcceptMatch()
     const rejectMatchMutation = useRejectMatch()
     const cancelMatchMutation = useCancelMatch()
@@ -295,6 +303,18 @@ export default function MatchDetailPage() {
             <div className="flex min-h-screen items-center justify-center">
                 <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
             </div>
+        )
+    }
+
+    if (matchIsError && isPermissionError(matchError)) {
+        return (
+            <PermissionDeniedState
+                className="min-h-screen"
+                description="Your account does not have permission to view this match. Ask an admin to update your role or permissions."
+                onRetry={() => refetchMatch()}
+                secondaryHref="/intended-parents/matches"
+                secondaryLabel="Back to matches"
+            />
         )
     }
 

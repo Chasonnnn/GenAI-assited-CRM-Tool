@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchesPage from '../app/(app)/intended-parents/matches/page'
+import { ApiError } from '@/lib/api'
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -130,6 +131,22 @@ describe('MatchesPage', () => {
         render(<MatchesPage />)
         expect(screen.getByText('No matches found')).toBeInTheDocument()
         expect(screen.getByText('Matches will appear here when surrogates are paired with intended parents')).toBeInTheDocument()
+    })
+
+    it('shows a permission message when matches are forbidden', () => {
+        mockUseMatches.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(403, 'Forbidden', 'Forbidden'),
+            refetch: vi.fn(),
+        })
+
+        render(<MatchesPage />)
+
+        expect(screen.getByText('Permission required')).toBeInTheDocument()
+        expect(screen.getByText(/account does not have permission to view matches/i)).toBeInTheDocument()
+        expect(screen.queryByText('Unable to load matches')).not.toBeInTheDocument()
     })
 
     it('links match names to detail pages', () => {

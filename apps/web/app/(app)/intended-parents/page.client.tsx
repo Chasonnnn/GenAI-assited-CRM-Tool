@@ -61,6 +61,8 @@ import {
 import type { IntendedParentListItem } from "@/lib/types/intended-parent"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
+import { PermissionDeniedState } from "@/components/error-state"
+import { isPermissionError } from "@/lib/error-utils"
 import { toast } from "sonner"
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
@@ -279,7 +281,7 @@ export default function IntendedParentsPage() {
         ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
         ...(sortBy ? { sort_by: sortBy } : {}),
     }
-    const { data, isLoading, isError, refetch } = useIntendedParents(filters)
+    const { data, isLoading, isError, error, refetch } = useIntendedParents(filters)
     const { data: availableCreatedDateKeys } = useIntendedParentCreatedDates({
         ...(debouncedSearch ? { q: debouncedSearch } : {}),
         ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
@@ -429,6 +431,11 @@ export default function IntendedParentsPage() {
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                                 <span className="ml-2 text-muted-foreground">Loading…</span>
                             </div>
+                        ) : isPermissionError(error) ? (
+                            <PermissionDeniedState
+                                description="Your account does not have permission to view intended parents. Ask an admin to update your role or permissions."
+                                onRetry={() => refetch()}
+                            />
                         ) : isError ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
                                 <AlertCircleIcon className="size-12 text-destructive mb-4" />

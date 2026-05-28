@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "@/components/app-link"
-import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronUp, ShieldAlert } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
     Empty,
@@ -11,6 +11,7 @@ import {
     EmptyTitle,
     EmptyDescription,
 } from "@/components/ui/empty"
+import { cn } from "@/lib/utils"
 
 interface ErrorStateProps {
     error: Error & { digest?: string }
@@ -18,6 +19,15 @@ interface ErrorStateProps {
     showDetails?: boolean
     secondaryHref?: string
     secondaryLabel?: string
+}
+
+interface PermissionDeniedStateProps {
+    title?: string
+    description: string
+    onRetry?: () => void
+    secondaryHref?: string
+    secondaryLabel?: string
+    className?: string
 }
 
 /**
@@ -89,6 +99,47 @@ export function ErrorState({
                                     </pre>
                                 )}
                             </div>
+                        )}
+                    </div>
+                )}
+            </Empty>
+        </div>
+    )
+}
+
+export function PermissionDeniedState({
+    title = "Permission required",
+    description,
+    onRetry,
+    secondaryHref,
+    secondaryLabel = "Go to Dashboard",
+    className,
+}: PermissionDeniedStateProps) {
+    return (
+        <div className={cn("flex min-h-[18rem] items-center justify-center p-6", className)}>
+            <Empty>
+                <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                        <ShieldAlert className="size-6 text-amber-600" />
+                    </EmptyMedia>
+                    <EmptyTitle>{title}</EmptyTitle>
+                    <EmptyDescription>{description}</EmptyDescription>
+                </EmptyHeader>
+
+                {(onRetry || secondaryHref) && (
+                    <div className="flex items-center gap-2">
+                        {onRetry && (
+                            <Button variant="outline" onClick={onRetry}>
+                                Try again
+                            </Button>
+                        )}
+                        {secondaryHref && (
+                            <Link
+                                href={secondaryHref}
+                                className={buttonVariants({ variant: "outline" })}
+                            >
+                                {secondaryLabel}
+                            </Link>
                         )}
                     </div>
                 )}

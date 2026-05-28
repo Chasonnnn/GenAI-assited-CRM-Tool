@@ -9,3 +9,7 @@ export function getErrorMessage(error: unknown, fallback: string): string {
     }
     return fallback
 }
+
+export function isPermissionError(error: unknown): boolean {
+    return error instanceof ApiError && error.status === 403
+}

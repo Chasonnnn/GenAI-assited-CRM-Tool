@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page.client'
+import { ApiError } from '@/lib/api'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -253,6 +254,21 @@ describe('MatchDetailPage', () => {
         })
         const { container } = render(<MatchDetailPage />)
         expect(container).toBeEmptyDOMElement()
+    })
+
+    it('shows a permission message when the match detail is forbidden', () => {
+        mockUseMatch.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(403, 'Forbidden', 'Forbidden'),
+            refetch: vi.fn(),
+        })
+
+        render(<MatchDetailPage />)
+
+        expect(screen.getByText('Permission required')).toBeInTheDocument()
+        expect(screen.getByText(/account does not have permission to view this match/i)).toBeInTheDocument()
     })
 
     it('shows upload button in files tab', () => {

@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { PaginationJump } from "@/components/ui/pagination-jump"
+import { PermissionDeniedState } from "@/components/error-state"
 import {
     HeartHandshakeIcon,
     Loader2Icon,
@@ -38,6 +39,7 @@ import {
     isMatchStatus,
     MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
+import { isPermissionError } from "@/lib/error-utils"
 
 type MatchStatusFilter = MatchStatus | "all"
 
@@ -149,7 +151,7 @@ export default function MatchesPage() {
             : {}),
         ...(debouncedSearch ? { q: debouncedSearch } : {}),
     } satisfies ListMatchesParams
-    const { data, isLoading, isError } = useMatches(filters)
+    const { data, isLoading, isError, error, refetch } = useMatches(filters)
     const { data: stats } = useMatchStats()
 
     const formatDate = (dateStr: string) => {
@@ -244,6 +246,11 @@ export default function MatchesPage() {
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                                 <span className="ml-2 text-muted-foreground">Loading…</span>
                             </div>
+                        ) : isPermissionError(error) ? (
+                            <PermissionDeniedState
+                                description="Your account does not have permission to view matches. Ask an admin to update your role or permissions."
+                                onRetry={() => refetch()}
+                            />
                         ) : isError ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
                                 <HeartHandshakeIcon className="size-12 text-muted-foreground mb-4" />

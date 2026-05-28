@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import IntendedParentsPage from '../app/(app)/intended-parents/page'
+import { ApiError } from '@/lib/api'
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -156,6 +157,22 @@ describe('IntendedParentsPage', () => {
                 page: 4,
             })
         )
+    })
+
+    it('shows a permission message when the intended parent list is forbidden', () => {
+        mockUseIntendedParents.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(403, 'Forbidden', 'Forbidden'),
+            refetch: vi.fn(),
+        })
+
+        render(<IntendedParentsPage />)
+
+        expect(screen.getByText('Permission required')).toBeInTheDocument()
+        expect(screen.getByText(/account does not have permission to view intended parents/i)).toBeInTheDocument()
+        expect(screen.queryByText('Failed to load intended parents')).not.toBeInTheDocument()
     })
 
     it('creates an intended parent without requiring address or IVF clinic details', async () => {
