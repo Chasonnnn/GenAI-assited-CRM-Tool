@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 type PackageJson = {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
     pnpm?: {
         overrides?: Record<string, string>
     }
@@ -45,7 +47,40 @@ describe("Dependency security guards", () => {
         const braceExpansionOverride = packageJson.pnpm?.overrides?.["brace-expansion"]
 
         expect(braceExpansionOverride).toBeDefined()
-        expect(compareVersions(braceExpansionOverride!, "5.0.5")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(braceExpansionOverride!, "5.0.6")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins DOMPurify to a non-vulnerable version", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const dompurifyVersion = packageJson.dependencies?.dompurify?.replace(/^[^\d]*/, "")
+
+        expect(dompurifyVersion).toBeDefined()
+        expect(compareVersions(dompurifyVersion!, "3.4.6")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins PostCSS to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const postcssOverride = packageJson.pnpm?.overrides?.postcss
+
+        expect(postcssOverride).toBeDefined()
+        expect(compareVersions(postcssOverride!, "8.5.10")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins ws to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const wsOverride = packageJson.pnpm?.overrides?.ws
+
+        expect(wsOverride).toBeDefined()
+        expect(compareVersions(wsOverride!, "8.20.1")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins picomatch to a non-vulnerable version in pnpm overrides", () => {
@@ -94,7 +129,35 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "5.0.5")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "5.0.6")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable PostCSS versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}postcss@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "8.5.10")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable ws versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}ws@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "8.20.1")).toBeGreaterThanOrEqual(0)
         }
     })
 
