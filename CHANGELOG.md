@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.28](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.27...surrogacy-crm-platform-v0.91.28) (2026-05-28)
+
+
+### Bug Fixes
+
+* label icon-only controls ([619a6a3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/619a6a3feb8f059604c84dfbe0937acf37f882c0))
+* reduce analytics count queries ([2a58eb4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2a58eb42bfad4f2a717b7972af024123e6a407ea))
+* update security dependency pins ([b631752](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b6317521d8f4e260f337a60d2abca43efe4cadbf))
+
 ## [0.91.27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.26...surrogacy-crm-platform-v0.91.27) (2026-05-13)
 
 
