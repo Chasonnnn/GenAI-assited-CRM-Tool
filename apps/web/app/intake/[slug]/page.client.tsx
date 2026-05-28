@@ -1669,6 +1669,15 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 >
                     Privacy Policy
                 </Link>
+                <span className="mx-2 text-stone-300" aria-hidden="true">
+                    |
+                </span>
+                <Link
+                    href="/terms"
+                    className="text-sm text-stone-500 hover:text-primary underline underline-offset-2"
+                >
+                    Terms
+                </Link>
             </footer>
         </div>
     )

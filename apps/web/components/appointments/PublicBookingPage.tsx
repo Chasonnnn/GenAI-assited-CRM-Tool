@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -938,6 +939,26 @@ function ConfirmationView({
     )
 }
 
+function PublicBookingFooter() {
+    return (
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+            Powered by Surrogacy Force{" "}
+            <span aria-hidden="true" className="mx-1">
+                |
+            </span>{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+                Privacy Policy
+            </Link>
+            <span aria-hidden="true" className="mx-1">
+                |
+            </span>{" "}
+            <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+                Terms
+            </Link>
+        </p>
+    )
+}
+
 // =============================================================================
 // Main Export
 // =============================================================================
@@ -1263,10 +1284,7 @@ export function PublicBookingPage({
                     </CardContent>
                 </Card>
 
-                {/* Footer */}
-                <p className="text-center text-xs text-muted-foreground mt-6">
-                    Powered by Surrogacy Force
-                </p>
+                <PublicBookingFooter />
             </div>
         </div>
     )

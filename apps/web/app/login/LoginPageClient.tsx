@@ -188,7 +188,16 @@ export default function LoginPageClient({
               </p>
             </div>
             <div className="text-center">
-              <p className="text-xs text-zinc-400">© 2025 Surrogacy Force. All rights reserved.</p>
+              <p className="text-xs text-zinc-400">
+                © 2026 Surrogacy Force. All rights reserved.{" "}
+                <Link href="/privacy" className="underline underline-offset-2 hover:text-zinc-600">
+                  Privacy Policy
+                </Link>
+                {" "}·{" "}
+                <Link href="/terms" className="underline underline-offset-2 hover:text-zinc-600">
+                  Terms
+                </Link>
+              </p>
             </div>
           </div>
         </CardContent>

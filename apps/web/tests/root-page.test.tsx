@@ -1,22 +1,32 @@
-import { describe, expect, it, vi } from "vitest"
+import { render, screen } from "@testing-library/react"
+import "@testing-library/jest-dom"
+import { describe, expect, it } from "vitest"
 
-const mockRedirect = vi.fn(() => {
-    throw new Error("NEXT_REDIRECT")
-})
-
-vi.mock("next/navigation", async () => {
-    const actual = await vi.importActual("next/navigation")
-    return {
-        ...actual,
-        redirect: (...args: unknown[]) => mockRedirect(...args),
-    }
-})
-
-import RootPage from "../app/page"
+import RootPage, { metadata } from "../app/page"
 
 describe("RootPage", () => {
-    it("redirects the root route to dashboard", () => {
-        expect(() => RootPage()).toThrow("NEXT_REDIRECT")
-        expect(mockRedirect).toHaveBeenCalledWith("/dashboard")
+    it("renders a public homepage for OAuth review", () => {
+        render(<RootPage />)
+
+        expect(
+            screen.getByRole("heading", { name: "Surrogacy Force" }),
+        ).toBeInTheDocument()
+        expect(screen.getByText("Run every journey from one trusted workspace.")).toBeInTheDocument()
+        expect(
+            screen.getByText(/A private CRM for surrogacy teams to manage intake/i),
+        ).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login")
+        expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy")
+        expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms")
+    })
+
+    it("allows indexing for the public homepage", () => {
+        expect(metadata).toMatchObject({
+            title: "Surrogacy Force | Private CRM for surrogacy teams",
+            robots: {
+                index: true,
+                follow: true,
+            },
+        })
     })
 })

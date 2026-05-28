@@ -28,6 +28,11 @@ describe('LoginPage', () => {
 
         expect(screen.getByText('Welcome Back')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
+            'href',
+            '/privacy'
+        )
+        expect(screen.getByRole('link', { name: /terms/i })).toHaveAttribute('href', '/terms')
         expect(screen.queryByText('Other sign-in methods')).not.toBeInTheDocument()
     })
 

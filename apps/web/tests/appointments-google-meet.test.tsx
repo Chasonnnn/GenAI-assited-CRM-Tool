@@ -285,6 +285,11 @@ describe("Appointments Google Meet UI", () => {
 
         render(<PublicBookingPage publicSlug="preview" preview />)
         expect(screen.getByText(/Google Meet/i)).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: /privacy policy/i })).toHaveAttribute(
+            "href",
+            "/privacy"
+        )
+        expect(screen.getByRole("link", { name: /terms/i })).toHaveAttribute("href", "/terms")
     })
 
     it("requires a meeting format selection when multiple modes are available", () => {
