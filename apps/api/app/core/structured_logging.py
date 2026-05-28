@@ -184,4 +184,10 @@ def build_request_log_context(
 
 def log_structured_event(event_name: str, *, level: int = logging.INFO, **context: Any) -> None:
     """Emit an ops structured log event."""
-    ops_logger.log(level, event_name, extra=build_log_context(**context))
+    log_context = build_log_context(**context)
+    json_fields = {
+        "message": event_name,
+        "event": event_name,
+        **log_context,
+    }
+    ops_logger.log(level, event_name, extra={**log_context, "json_fields": json_fields})

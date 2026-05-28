@@ -1,5 +1,6 @@
 """Tests for structured logging helpers."""
 
+import logging
 from types import SimpleNamespace
 
 from app.core.structured_logging import (
@@ -7,6 +8,7 @@ from app.core.structured_logging import (
     extract_safe_path_entity_ids,
     extract_trace_id,
     hash_email_for_log,
+    log_structured_event,
 )
 
 
@@ -89,4 +91,31 @@ def test_extract_safe_path_entity_ids_only_allows_known_ids():
     assert extract_safe_path_entity_ids(request) == {
         "surrogate_id": "surrogate-1",
         "match_id": "match-1",
+    }
+
+
+def test_log_structured_event_adds_cloud_logging_json_fields(caplog):
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        log_structured_event(
+            "email_send_success",
+            user_id="user-1",
+            org_id="org-1",
+            surrogate_id="surrogate-1",
+            recipient_email_hash="email-hash",
+        )
+
+    record = next(
+        record
+        for record in caplog.records
+        if record.name == "app.ops" and record.message == "email_send_success"
+    )
+
+    assert record.user_id == "user-1"
+    assert record.json_fields == {
+        "message": "email_send_success",
+        "event": "email_send_success",
+        "user_id": "user-1",
+        "org_id": "org-1",
+        "surrogate_id": "surrogate-1",
+        "recipient_email_hash": "email-hash",
     }
