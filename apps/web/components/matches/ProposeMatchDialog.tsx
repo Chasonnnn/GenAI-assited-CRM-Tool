@@ -9,8 +9,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircleIcon, Loader2Icon, UsersIcon } from "lucide-react"
 import { toast } from "sonner"
+import { useAuth } from "@/lib/auth-context"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 
 interface ProposeMatchDialogProps {
     open: boolean
@@ -31,7 +33,17 @@ export function ProposeMatchDialog({
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
-    const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
+    const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = permissionsQuery.data?.permissions ?? []
+    const permissionsLoaded = !permissionsQuery.isLoading
+    const canViewIntendedParents = permissions.includes("view_intended_parents")
+    const canLoadIntendedParents = open && canViewIntendedParents
+
+    const { data: ipsData, isLoading: ipsLoading } = useIntendedParents(
+        { per_page: 100 },
+        { enabled: canLoadIntendedParents }
+    )
     const createMatch = useCreateMatch()
 
     const handleSubmit = async () => {
@@ -83,7 +95,14 @@ export function ProposeMatchDialog({
                     )}
                     <div className="space-y-2">
                         <Label htmlFor="ip-select">Intended Parent(s)</Label>
-                        {ipsLoading ? (
+                        {!canViewIntendedParents && permissionsLoaded ? (
+                            <Alert>
+                                <AlertCircleIcon className="size-4" />
+                                <AlertDescription>
+                                    Your account does not have permission to view intended parents. Ask an admin to update your role or permissions.
+                                </AlertDescription>
+                            </Alert>
+                        ) : ipsLoading || permissionsQuery.isLoading ? (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Loader2Icon className="size-4 animate-spin" />
                                 Loading&hellip;
@@ -125,7 +144,7 @@ export function ProposeMatchDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!selectedIpId || createMatch.isPending}
+                        disabled={!canViewIntendedParents || !selectedIpId || createMatch.isPending}
                     >
                         {createMatch.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
                         Propose Match

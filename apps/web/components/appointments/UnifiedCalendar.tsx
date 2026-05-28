@@ -52,8 +52,10 @@ import {
 } from "lucide-react"
 import { useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
+import { useAuth } from "@/lib/auth-context"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { AppointmentDetailDialog as AppointmentManagementDialog } from "@/components/appointments/AppointmentsList"
 import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
@@ -334,10 +336,19 @@ function AppointmentDetailDialog({
     const [logOutcomeOpen, setLogOutcomeOpen] = useState(false)
 
     const updateLinkMutation = useUpdateAppointmentLink()
+    const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = permissionsQuery.data?.permissions ?? []
+    const permissionsLoaded = !permissionsQuery.isLoading
+    const canViewIntendedParents = permissions.includes("view_intended_parents")
+    const canLoadIntendedParents = open && showLinkSection && canViewIntendedParents
 
     // Fetch surrogates and IPs for linking
     const { data: surrogatesData } = useSurrogates({ per_page: 100 })
-    const { data: ipsData } = useIntendedParents({ per_page: 100 })
+    const { data: ipsData } = useIntendedParents(
+        { per_page: 100 },
+        { enabled: canLoadIntendedParents }
+    )
 
     const surrogates = surrogatesData?.items || []
     const ips = ipsData?.items || []
@@ -567,23 +578,31 @@ function AppointmentDetailDialog({
 
                                 <div>
                                     <p className="text-xs text-muted-foreground">Link to Intended Parent</p>
-                                    <Select
-                                        value={selectedIpId || "none"}
-                                        onValueChange={(val) => setSelectedIpId(val === "none" ? null : val)}
-                                    >
-                                        <SelectTrigger className="mt-1">
-                                            <SelectValue placeholder="Select an IP..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">None</SelectItem>
-                                            {ips.map((ip) => (
-                                                <SelectItem key={ip.id} value={ip.id}>
-                                                    {ip.intended_parent_number ? `#${ip.intended_parent_number} - ` : ""}
-                                                    {ip.full_name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    {!canViewIntendedParents && permissionsLoaded ? (
+                                        <Alert className="mt-1">
+                                            <AlertDescription>
+                                                Your account does not have permission to view intended parents. Ask an admin to update your role or permissions.
+                                            </AlertDescription>
+                                        </Alert>
+                                    ) : (
+                                        <Select
+                                            value={selectedIpId || "none"}
+                                            onValueChange={(val) => setSelectedIpId(val === "none" ? null : val)}
+                                        >
+                                            <SelectTrigger className="mt-1">
+                                                <SelectValue placeholder="Select an IP..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                {ips.map((ip) => (
+                                                    <SelectItem key={ip.id} value={ip.id}>
+                                                        {ip.intended_parent_number ? `#${ip.intended_parent_number} - ` : ""}
+                                                        {ip.full_name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center gap-2 pt-2">

@@ -8,6 +8,8 @@ const mockMutate = vi.fn()
 const mockUseUnifiedCalendarData = vi.fn()
 const mockUseAppointment = vi.fn()
 const mockUseRescheduleSlots = vi.fn()
+const mockUseIntendedParents = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 
 const now = new Date()
 const appointmentStartLocal = new Date(
@@ -40,7 +42,21 @@ vi.mock("@/lib/hooks/use-surrogates", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-intended-parents", () => ({
-    useIntendedParents: () => ({ data: { items: [] } }),
+    useIntendedParents: (filters: unknown, options: unknown) =>
+        mockUseIntendedParents(filters, options),
+}))
+
+vi.mock("@/lib/auth-context", () => ({
+    useAuth: () => ({
+        user: {
+            user_id: "user-1",
+            role: "case_manager",
+        },
+    }),
+}))
+
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: (userId: string | null) => mockUseEffectivePermissions(userId),
 }))
 
 vi.mock("@/lib/hooks/use-appointments", () => ({
@@ -73,6 +89,11 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
 describe("UnifiedCalendar drag-to-reschedule", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockUseIntendedParents.mockReturnValue({ data: { items: [] } })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_intended_parents"] },
+            isLoading: false,
+        })
 
         mockUseUnifiedCalendarData.mockReturnValue({
             appointments: [
@@ -145,6 +166,15 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
             isLoading: false,
             isError: false,
         })
+    })
+
+    it("does not fetch intended parents before appointment link editing starts", () => {
+        render(<UnifiedCalendar />)
+
+        expect(mockUseIntendedParents).toHaveBeenCalledWith(
+            { per_page: 100 },
+            { enabled: false }
+        )
     })
 
     it("opens reschedule selection flow on drop instead of rescheduling immediately", () => {

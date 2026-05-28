@@ -43,10 +43,14 @@ export const intendedParentKeys = {
 }
 
 // List hook
-export function useIntendedParents(filters: IntendedParentFilters = {}) {
+export function useIntendedParents(
+    filters: IntendedParentFilters = {},
+    options: { enabled?: boolean } = {},
+) {
     return useQuery({
         queryKey: intendedParentKeys.list(filters),
         queryFn: () => listIntendedParents(filters),
+        enabled: options.enabled ?? true,
     })
 }
 
