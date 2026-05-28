@@ -107,6 +107,25 @@ function setOrgCookies(
     response.cookies.set(ORG_COOKIE_NAME, org.name, baseOptions);
 }
 
+function createTenantRootRedirect(
+    request: NextRequest,
+    org: OrgRecord,
+    secure: boolean
+): NextResponse | null {
+    if (request.nextUrl.pathname !== '/') {
+        return null;
+    }
+
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    loginUrl.search = '';
+    loginUrl.hash = '';
+
+    const response = NextResponse.redirect(loginUrl);
+    setOrgCookies(response, org, secure);
+    return response;
+}
+
 function clearOrgCookies(response: NextResponse, secure: boolean) {
     const baseOptions = {
         httpOnly: true,
@@ -373,6 +392,11 @@ export async function proxy(request: NextRequest) {
     const secureCookies = request.nextUrl.protocol === 'https:';
     const cookieOrg = getCookieOrg(request);
     if (cookieOrg) {
+        const redirect = createTenantRootRedirect(request, cookieOrg, secureCookies);
+        if (redirect) {
+            return redirect;
+        }
+
         const { response } = attachOrgHeaders(request, cookieOrg);
         return response;
     }
@@ -383,6 +407,11 @@ export async function proxy(request: NextRequest) {
             const response = createHardFailureResponse(404, 'Organization not found');
             clearOrgCookies(response, secureCookies);
             return response;
+        }
+
+        const redirect = createTenantRootRedirect(request, cachedEntry.value, secureCookies);
+        if (redirect) {
+            return redirect;
         }
 
         const { response } = attachOrgHeaders(request, cachedEntry.value);
@@ -423,6 +452,11 @@ export async function proxy(request: NextRequest) {
 
         const org = (await res.json()) as OrgRecord;
         setCachedOrg(hostname, org, now, ORG_CACHE_TTL_MS);
+
+        const redirect = createTenantRootRedirect(request, org, secureCookies);
+        if (redirect) {
+            return redirect;
+        }
 
         // Pass org context via request headers for server components
         const { response } = attachOrgHeaders(request, org);

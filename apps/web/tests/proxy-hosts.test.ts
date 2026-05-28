@@ -2,7 +2,11 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 
 import { getServerApiBaseUrl, isPlatformRootHost, proxy } from '../proxy'
 
-function createRequest(url: string, headersInit?: HeadersInit) {
+function createRequest(
+    url: string,
+    headersInit?: HeadersInit,
+    cookieValues: Record<string, string> = {},
+) {
     const nextUrl = new URL(url) as URL & { clone: () => URL }
     nextUrl.clone = () => new URL(nextUrl.toString())
 
@@ -10,7 +14,10 @@ function createRequest(url: string, headersInit?: HeadersInit) {
         headers: new Headers(headersInit),
         nextUrl,
         cookies: {
-            get: () => undefined,
+            get: (name: string) => {
+                const value = cookieValues[name]
+                return value ? { name, value } : undefined
+            },
         },
     }
 }
@@ -82,6 +89,65 @@ describe('proxy hard-fail behavior', () => {
         )
 
         expect(response.status).toBe(200)
+        expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('keeps the public homepage on the www platform host', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+        const response = await proxy(
+            createRequest('https://www.surrogacyforce.com/', {
+                host: 'www.surrogacyforce.com',
+            }) as never,
+        )
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get('location')).toBeNull()
+        expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('redirects a resolved tenant root domain to login instead of the public homepage', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+            Response.json({
+                id: 'org-tenant-root',
+                slug: 'tenant-root',
+                name: 'Tenant Root',
+            }),
+        )
+
+        const response = await proxy(
+            createRequest('https://tenant-root.surrogacyforce.com/', {
+                host: 'tenant-root.surrogacyforce.com',
+            }) as never,
+        )
+
+        expect(response.status).toBe(307)
+        expect(response.headers.get('location')).toBe(
+            'https://tenant-root.surrogacyforce.com/login',
+        )
+    })
+
+    it('redirects a tenant root domain with org cookies to login without resolving again', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+        const response = await proxy(
+            createRequest(
+                'https://ewi.surrogacyforce.com/',
+                {
+                    host: 'ewi.surrogacyforce.com',
+                },
+                {
+                    sf_org_id: 'org-ewi',
+                    sf_org_slug: 'ewi',
+                    sf_org_name: 'EWI Family Global',
+                },
+            ) as never,
+        )
+
+        expect(response.status).toBe(307)
+        expect(response.headers.get('location')).toBe(
+            'https://ewi.surrogacyforce.com/login',
+        )
         expect(fetchSpy).not.toHaveBeenCalled()
     })
 
