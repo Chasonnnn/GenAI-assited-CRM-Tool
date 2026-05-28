@@ -76,7 +76,20 @@ function formatInfoEditedValue(field: string, value: unknown): string {
         }
     }
 
-    return String(value)
+    if (isRecord(value) && typeof value.action === "string") {
+        const action = value.action.trim().toLowerCase()
+        if (action === "updated" || action === "cleared" || action === "revealed") {
+            return action
+        }
+    }
+
+    if (typeof value === "string" && value.trim().toLowerCase() === "[redacted]") {
+        return "updated"
+    }
+
+    if (value === null || value === undefined) return "cleared"
+    if (typeof value === "string" && value.trim() === "") return "cleared"
+    return "updated"
 }
 
 function getQueueName(
@@ -186,6 +199,15 @@ function formatActivityDetails(
                 return aiPrefix ? `AI-generated · ${changes}` : changes
             }
             return aiOnly()
+        case "sensitive_info_revealed": {
+            if (Array.isArray(details.fields) && details.fields.length > 0) {
+                const revealed = details.fields
+                    .map((field) => `${formatInfoEditedFieldLabel(String(field))}: revealed`)
+                    .join(", ")
+                return aiPrefix ? `AI-generated · ${revealed}` : revealed
+            }
+            return aiPrefix ? "AI-generated · Sensitive info revealed" : "Sensitive info revealed"
+        }
         case "assigned":
             {
                 const toUser = getUserDisplayName(details, "to_user_name", "to_user_id")

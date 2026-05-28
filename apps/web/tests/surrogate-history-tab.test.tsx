@@ -279,4 +279,77 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText(/height: 5 ft 7 in/i)).toBeInTheDocument()
         expect(screen.getByText(/weight: 142 lb/i)).toBeInTheDocument()
     })
+
+    it("renders sensitive edit action summaries without redacted value noise", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-sensitive-edit",
+                        activity_type: "info_edited",
+                        actor_name: "Niki",
+                        created_at: "2024-01-06T00:00:00Z",
+                        details: {
+                            changes: {
+                                email: { action: "updated" },
+                                ssn: { action: "cleared" },
+                            },
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/email: updated/i)).toBeInTheDocument()
+        expect(screen.getByText(/ssn: cleared/i)).toBeInTheDocument()
+        expect(screen.queryByText(/redacted/i)).not.toBeInTheDocument()
+    })
+
+    it("renders old scalar redacted activity rows as updated", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-old-redacted",
+                        activity_type: "info_edited",
+                        actor_name: "Niki",
+                        created_at: "2024-01-07T00:00:00Z",
+                        details: {
+                            changes: {
+                                email: "[redacted]",
+                            },
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText(/email: updated/i)).toBeInTheDocument()
+        expect(screen.queryByText(/redacted/i)).not.toBeInTheDocument()
+    })
+
+    it("renders sensitive reveal events without field values", () => {
+        render(
+            <SurrogateHistoryTab
+                activities={[
+                    {
+                        id: "a-reveal",
+                        activity_type: "sensitive_info_revealed",
+                        actor_name: "Niki",
+                        created_at: "2024-01-08T00:00:00Z",
+                        details: {
+                            fields: ["ssn", "date_of_birth"],
+                        },
+                    },
+                ]}
+                formatDateTime={formatDateTime}
+            />
+        )
+
+        expect(screen.getByText("Sensitive Info Revealed")).toBeInTheDocument()
+        expect(screen.getByText(/ssn: revealed/i)).toBeInTheDocument()
+        expect(screen.getByText(/date of birth: revealed/i)).toBeInTheDocument()
+    })
 })

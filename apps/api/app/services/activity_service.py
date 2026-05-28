@@ -9,6 +9,8 @@ from app.db.models import SurrogateActivityLog
 
 
 REDACTED_VALUE = "[redacted]"
+ACTION_UPDATED = {"action": "updated"}
+ACTION_CLEARED = {"action": "cleared"}
 
 
 def _sanitize_preview(html: str, max_chars: int = 120) -> str:
@@ -31,11 +33,21 @@ def _sanitize_preview(html: str, max_chars: int = 120) -> str:
     return text[:max_chars] + ("..." if len(text) > max_chars else "")
 
 
+def _action_summary(value: object) -> dict[str, str]:
+    if value is None:
+        return ACTION_CLEARED.copy()
+    if isinstance(value, str) and value.strip() == "":
+        return ACTION_CLEARED.copy()
+    if isinstance(value, (list, tuple, set, dict)) and len(value) == 0:
+        return ACTION_CLEARED.copy()
+    return ACTION_UPDATED.copy()
+
+
 def _redact_changes(changes: dict[str, any]) -> dict[str, object]:
-    """Redact change values except display-safe anthropometric fields."""
+    """Store action summaries for sensitive changes, preserving only display-safe values."""
     display_safe_fields = {"height_ft", "weight_lb"}
     return {
-        field: value if field in display_safe_fields else REDACTED_VALUE
+        field: value if field in display_safe_fields else _action_summary(value)
         for field, value in changes.items()
     }
 
@@ -97,7 +109,7 @@ def log_info_edited(
     actor_user_id: UUID,
     changes: dict[str, any],  # {"field_name": "new_value"}
 ) -> SurrogateActivityLog:
-    """Log surrogate info edit with redacted values."""
+    """Log surrogate info edit with value-free summaries for sensitive fields."""
     return log_activity(
         db=db,
         surrogate_id=surrogate_id,
