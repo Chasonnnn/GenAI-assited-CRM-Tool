@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.28...surrogacy-crm-platform-v0.91.29) (2026-05-28)
+
+
+### Features
+
+* Add structured ops request and email logs ([465c8b2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/465c8b234e9753b0a879d538ee03b6b4da6d31e9))
+* Publish OAuth review pages ([8339d8d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8339d8de23fa92c32fa985f869c2f2452e033f87))
+
+
+### Bug Fixes
+
+* Clarify sensitive history activity summaries ([bc61a71](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bc61a710f86cda117f23a5b2b60cc823de920d27))
+* Gate organization integration queries by permission ([0a7b6e1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0a7b6e18f8c3b833c94a2e1814a347e68692adef))
+* Redirect tenant roots to login ([5943d70](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5943d707eb1c773e94a49b82265bf6abfaaf476e))
+* Show permission-specific load errors ([0ba66d0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ba66d04b73b6c1fbaa36f7fae299d9f77f58110))
+
+
+### Maintenance
+
+* Ignore generated Playwright MCP snapshots ([8ffa031](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8ffa0310ce69ca8fe66b750be81b4e2518cc33c7))
+
 ## [0.91.28](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.27...surrogacy-crm-platform-v0.91.28) (2026-05-28)
 
 
