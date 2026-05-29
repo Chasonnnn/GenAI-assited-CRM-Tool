@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.30](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.29...surrogacy-crm-platform-v0.91.30) (2026-05-29)
+
+
+### Bug Fixes
+
+* Emit structured ops log fields ([ad644da](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ad644da4949f83ed1289ffaa3795c6ef79b968e9))
+* Gate intended parent dialog lookups ([0fce48b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0fce48bc87d087ec69f779ea95fbb8dc2f9078b5))
+* prevent workflow templates in case emails ([b6fc703](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b6fc703df7e739a15438176884ced5afa0d0d733))
+
 ## [0.91.29](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.28...surrogacy-crm-platform-v0.91.29) (2026-05-28)
 
 
