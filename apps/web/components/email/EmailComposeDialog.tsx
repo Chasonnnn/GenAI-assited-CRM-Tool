@@ -270,6 +270,24 @@ function replaceTemplateVariables(text: string, previewVariableValues: Record<st
     })
 }
 
+function findUnresolvedTemplateVariables(
+    texts: string[],
+    previewVariableValues: Record<string, string>
+) {
+    const unresolved = new Set<string>()
+
+    for (const text of texts) {
+        text.replace(TEMPLATE_TOKEN_RE, (match: string, variableName: string) => {
+            if (!Object.prototype.hasOwnProperty.call(previewVariableValues, variableName)) {
+                unresolved.add(variableName)
+            }
+            return match
+        })
+    }
+
+    return Array.from(unresolved).sort()
+}
+
 function buildPreviewMessageHtml(body: string, previewVariableValues: Record<string, string>) {
     if (!body) return ""
 
@@ -356,7 +374,10 @@ export function EmailComposeDialog({
     const attachmentsPanelRef = React.useRef<EmailAttachmentsPanelHandle | null>(null)
     const dragDepthRef = React.useRef(0)
 
-    const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({ activeOnly: true })
+    const { data: templates = [], isLoading: templatesLoading } = useEmailTemplates({
+        activeOnly: true,
+        usageContext: "manual",
+    })
     const { data: fullTemplate } = useEmailTemplate(selectedTemplate || null)
     const { data: personalSignaturePreview } = useSignaturePreview()
     const sendEmailMutation = useSendSurrogateEmail()
@@ -389,6 +410,10 @@ export function EmailComposeDialog({
         () => buildPreviewVariableValues(surrogateData, resolvedTemplateVariables),
         [resolvedTemplateVariables, surrogateData]
     )
+    const unresolvedTemplateVariables = React.useMemo(
+        () => findUnresolvedTemplateVariables([subject, body], previewVariableValues),
+        [body, previewVariableValues, subject]
+    )
 
     const readSanitizedPreviewEditorHtml = React.useCallback(() => {
         const editor = previewEditorRef.current
@@ -413,6 +438,9 @@ export function EmailComposeDialog({
     const handleSend = async () => {
         try {
             const bodyForSend = isPreview ? syncPreviewEditorToBody() : body
+            if (findUnresolvedTemplateVariables([subject, bodyForSend], previewVariableValues).length > 0) {
+                return
+            }
             if (!idempotencyKeyRef.current) {
                 idempotencyKeyRef.current =
                     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -576,6 +604,7 @@ export function EmailComposeDialog({
                     subject={subject}
                     body={body}
                     attachmentSelection={attachmentSelection}
+                    unresolvedTemplateVariables={unresolvedTemplateVariables}
                     isPending={sendEmailMutation.isPending}
                     onCancel={handleCancel}
                     onSend={handleSend}
@@ -934,6 +963,7 @@ interface ComposeDialogActionsProps {
     subject: string
     body: string
     attachmentSelection: EmailAttachmentSelectionState
+    unresolvedTemplateVariables: string[]
     isPending: boolean
     onCancel: () => void
     onSend: () => void
@@ -944,6 +974,7 @@ function ComposeDialogActions({
     subject,
     body,
     attachmentSelection,
+    unresolvedTemplateVariables,
     isPending,
     onCancel,
     onSend,
@@ -953,36 +984,45 @@ function ComposeDialogActions({
         !subject ||
         !body ||
         attachmentSelection.hasBlockingAttachments ||
+        unresolvedTemplateVariables.length > 0 ||
         isPending
 
     return (
-        <DialogFooter>
-            <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={isPending}
-            >
-                Cancel
-            </Button>
-            <Button
-                type="button"
-                onClick={onSend}
-                disabled={sendDisabled}
-                className="gap-2"
-            >
-                {isPending ? (
-                    <>
-                        <Loader2Icon className="size-4 animate-spin" />
-                        Sending&hellip;
-                    </>
-                ) : (
-                    <>
-                        <SendIcon className="size-4" />
-                        Send Email
-                    </>
-                )}
-            </Button>
-        </DialogFooter>
+        <div className="space-y-3">
+            {unresolvedTemplateVariables.length > 0 && (
+                <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    This template includes unsupported template fields: {unresolvedTemplateVariables.join(", ")}.
+                    Choose a different template or remove those fields before sending.
+                </p>
+            )}
+            <DialogFooter>
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onCancel}
+                    disabled={isPending}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    type="button"
+                    onClick={onSend}
+                    disabled={sendDisabled}
+                    className="gap-2"
+                >
+                    {isPending ? (
+                        <>
+                            <Loader2Icon className="size-4 animate-spin" />
+                            Sending&hellip;
+                        </>
+                    ) : (
+                        <>
+                            <SendIcon className="size-4" />
+                            Send Email
+                        </>
+                    )}
+                </Button>
+            </DialogFooter>
+        </div>
     )
 }

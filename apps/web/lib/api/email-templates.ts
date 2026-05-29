@@ -122,11 +122,12 @@ export interface ListTemplatesParams {
     activeOnly?: boolean
     scope?: EmailTemplateScope | null
     showAllPersonal?: boolean
+    usageContext?: 'all' | 'manual'
 }
 
 // API functions
 export async function listTemplates(params: ListTemplatesParams = {}): Promise<EmailTemplateListItem[]> {
-    const { activeOnly = true, scope, showAllPersonal = false } = params
+    const { activeOnly = true, scope, showAllPersonal = false, usageContext } = params
     const searchParams = new URLSearchParams()
     searchParams.set('active_only', String(activeOnly))
     if (scope) {
@@ -134,6 +135,9 @@ export async function listTemplates(params: ListTemplatesParams = {}): Promise<E
     }
     if (showAllPersonal) {
         searchParams.set('show_all_personal', 'true')
+    }
+    if (usageContext) {
+        searchParams.set('usage_context', usageContext)
     }
     return api.get<EmailTemplateListItem[]>(`/email-templates?${searchParams.toString()}`)
 }

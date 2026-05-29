@@ -288,7 +288,7 @@ export function SurrogateApplicationTab({
     const { data: draftStatus } = useSurrogateFormDraftStatus(effectiveFormId || null, surrogateId)
     const { data: intakeLinks = [] } = useFormIntakeLinks(effectiveFormId || null, true)
     const sendIntakeLinkMutation = useSendFormIntakeLink()
-    const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true })
+    const { data: emailTemplates = [] } = useEmailTemplates({ activeOnly: true, usageContext: "manual" })
     const approveMutation = useApproveFormSubmission()
     const rejectMutation = useRejectFormSubmission()
     const updateAnswersMutation = useUpdateSubmissionAnswers()

@@ -128,6 +128,18 @@ async def send_surrogate_email(
     body_template = data.body if data.body is not None else template.body
 
     body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(body_template)
+    unresolved_variables = email_service.find_unresolved_template_variables(
+        [subject_template, body_template],
+        variables,
+    )
+    if unresolved_variables:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Email template contains unsupported fields for case email: "
+                + ", ".join(unresolved_variables)
+            ),
+        )
     subject, body = email_service.render_template(subject_template, body_template, variables)
 
     org = org_service.get_org_by_id(db, session.org_id)

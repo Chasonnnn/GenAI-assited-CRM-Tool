@@ -759,6 +759,80 @@ describe("EmailComposeDialog", () => {
         })
     })
 
+    it("blocks sending templates with unresolved variables", async () => {
+        const templateId = "tpl-appointment-confirmed"
+        const mutateAsync = vi.fn().mockResolvedValue({ success: true })
+        mockUseSendSurrogateEmail.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+            isError: false,
+            isSuccess: false,
+            error: null,
+        })
+
+        mockUseEmailTemplates.mockReturnValue({
+            data: [
+                {
+                    id: templateId,
+                    name: "appointment_confirmed",
+                    subject: "Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
+                    from_email: null,
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    is_system_template: false,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseEmailTemplate.mockImplementation((id: string | null) => {
+            if (id !== templateId) return { data: null, isLoading: false }
+            return {
+                data: {
+                    id: templateId,
+                    organization_id: "org-1",
+                    created_by_user_id: null,
+                    name: "appointment_confirmed",
+                    subject: "Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
+                    from_email: null,
+                    body: "<p>Hello {{client_name}}, your case is {{surrogate_number}}.</p>",
+                    is_active: true,
+                    scope: "org",
+                    owner_user_id: null,
+                    owner_name: null,
+                    source_template_id: null,
+                    is_system_template: false,
+                    current_version: 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                },
+                isLoading: false,
+            }
+        })
+
+        render(
+            <EmailComposeDialog
+                open
+                onOpenChange={vi.fn()}
+                surrogateData={baseSurrogateData}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "appointment_confirmed" }))
+
+        await waitFor(() => {
+            expect(screen.getByText(/unsupported template fields/i)).toBeInTheDocument()
+            expect(screen.getByText(/appointment_type, client_name, scheduled_date/)).toBeInTheDocument()
+            expect(screen.getByRole("button", { name: /send email/i })).toBeDisabled()
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: /send email/i }))
+        expect(mutateAsync).not.toHaveBeenCalled()
+    })
+
     it("uploads dropped files when dragging onto the preview message body", async () => {
         const templateId = "tpl-body-drop-preview"
 

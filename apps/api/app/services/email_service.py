@@ -32,6 +32,14 @@ VARIABLE_PATTERN = _TEMPLATE_VARIABLE_PATTERN
 
 ENTITY_TYPE = "email_template"
 
+APPOINTMENT_WORKFLOW_TEMPLATE_NAMES = {
+    "appointment_requested",
+    "appointment_confirmed",
+    "appointment_rescheduled",
+    "appointment_cancelled",
+    "appointment_reminder",
+}
+
 ALLOWED_TEMPLATE_TAGS = {
     "a",
     "b",
@@ -430,6 +438,7 @@ def list_templates_for_user(
     scope_filter: str | None = None,
     show_all_personal: bool = False,
     active_only: bool = True,
+    usage_context: str = "all",
 ) -> list[EmailTemplate]:
     """
     List email templates visible to a user with scope-based filtering.
@@ -442,6 +451,7 @@ def list_templates_for_user(
         scope_filter: Optional 'org' or 'personal' filter
         show_all_personal: Admin-only flag to view all personal templates (read-only)
         active_only: Only return active templates
+        usage_context: 'manual' excludes workflow-only templates from manual compose lists
 
     Returns:
         List of templates the user can see
@@ -462,6 +472,19 @@ def list_templates_for_user(
                 EmailTemplate.system_key.is_(None),
                 EmailTemplate.system_key.notin_(platform_system_keys),
             )
+        )
+
+    if usage_context == "manual":
+        query = query.filter(
+            or_(
+                EmailTemplate.category.is_(None),
+                func.lower(EmailTemplate.category) != "appointment",
+            ),
+            or_(
+                EmailTemplate.system_key.is_(None),
+                func.lower(EmailTemplate.system_key).notin_(APPOINTMENT_WORKFLOW_TEMPLATE_NAMES),
+            ),
+            func.lower(EmailTemplate.name).notin_(APPOINTMENT_WORKFLOW_TEMPLATE_NAMES),
         )
 
     if scope_filter == "org":
@@ -740,6 +763,20 @@ def render_template(
     rendered_subject = VARIABLE_PATTERN.sub(replace_subject_var, subject)
     rendered_body = VARIABLE_PATTERN.sub(replace_body_var, body)
     return rendered_subject, rendered_body
+
+
+def find_unresolved_template_variables(
+    texts: list[str],
+    variables: dict[str, str],
+) -> list[str]:
+    """Return template variables that are not available for this render context."""
+    unresolved: set[str] = set()
+    for text in texts:
+        for match in VARIABLE_PATTERN.finditer(text):
+            variable_name = match.group(1)
+            if variable_name not in variables:
+                unresolved.add(variable_name)
+    return sorted(unresolved)
 
 
 def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:

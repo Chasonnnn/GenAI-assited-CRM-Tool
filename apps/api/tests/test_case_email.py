@@ -104,6 +104,50 @@ async def test_send_email_template_not_found(authed_client: AsyncClient, db, tes
 
 
 @pytest.mark.asyncio
+async def test_send_email_rejects_template_with_unresolved_case_variables(
+    authed_client: AsyncClient, db, test_org, test_user, monkeypatch
+):
+    """Manual case sends should fail clearly if a template needs non-case variables."""
+    from unittest.mock import AsyncMock
+
+    from app.services import surrogate_service, email_service, gmail_service
+    from app.schemas.surrogate import SurrogateCreate
+    from app.db.enums import SurrogateSource
+
+    case_data = SurrogateCreate(
+        full_name="Appointment Template Case",
+        email="appointment-template@example.com",
+        source=SurrogateSource.MANUAL,
+    )
+    case = surrogate_service.create_surrogate(db, test_org.id, test_user.id, case_data)
+
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="appointment_confirmed",
+        subject="Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
+        body="<p>Hello {{client_name}}, your case is {{surrogate_number}}.</p>",
+    )
+
+    send_email_logged = AsyncMock()
+    monkeypatch.setattr(gmail_service, "send_email_logged", send_email_logged)
+
+    response = await authed_client.post(
+        f"/surrogates/{case.id}/send-email",
+        json={"template_id": str(template.id), "provider": "auto"},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "unsupported fields" in detail
+    assert "appointment_type" in detail
+    assert "client_name" in detail
+    assert "scheduled_date" in detail
+    send_email_logged.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_send_email_auto_requires_personal_gmail_even_with_org_resend(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
@@ -237,6 +281,122 @@ async def test_send_email_auto_uses_connected_gmail_even_with_org_resend(
     data = response.json()
     assert data["success"] is True
     assert data["provider_used"] == "gmail"
+
+
+@pytest.mark.asyncio
+async def test_intake_assignee_can_send_email_at_interview_scheduled(
+    db, test_org, monkeypatch
+):
+    """Intake owner can send a manual Gmail email from Interview Scheduled."""
+    from httpx import ASGITransport
+
+    from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+    from app.core.deps import COOKIE_NAME, get_db
+    from app.core.security import create_session_token
+    from app.db.enums import Role, SurrogateSource
+    from app.db.models import Membership, User
+    from app.main import app
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import email_service, gmail_service, oauth_service, pipeline_service
+    from app.services import session_service, surrogate_service
+
+    intake_user = User(
+        id=uuid4(),
+        email=f"intake-{uuid4().hex[:8]}@test.com",
+        display_name="Intake User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(intake_user)
+    db.flush()
+    db.add(
+        Membership(
+            id=uuid4(),
+            user_id=intake_user.id,
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST,
+        )
+    )
+    db.flush()
+
+    case = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        intake_user.id,
+        SurrogateCreate(
+            full_name="Interview Scheduled Case",
+            email="interview-send@example.com",
+            source=SurrogateSource.MANUAL,
+        ),
+    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, intake_user.id)
+    interview_stage = pipeline_service.get_stage_by_key(
+        db, pipeline.id, "interview_scheduled"
+    )
+    assert interview_stage is not None
+    case.stage_id = interview_stage.id
+    case.status_label = interview_stage.label
+
+    template = email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=intake_user.id,
+        name="Interview Scheduled Email",
+        subject="Hello {{full_name}}",
+        body="<p>Welcome {{full_name}}!</p>",
+    )
+
+    monkeypatch.setattr(oauth_service, "get_user_integration", lambda *_args, **_kwargs: object())
+
+    captured: dict[str, object] = {}
+
+    async def fake_send_email_logged(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "message_id": "gmail_123", "email_log_id": str(uuid4())}
+
+    monkeypatch.setattr(gmail_service, "send_email_logged", fake_send_email_logged)
+
+    token = create_session_token(
+        user_id=intake_user.id,
+        org_id=test_org.id,
+        role=Role.INTAKE_SPECIALIST.value,
+        token_version=intake_user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=intake_user.id,
+        org_id=test_org.id,
+        token=token,
+        request=None,
+    )
+    csrf_token = generate_csrf_token()
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+            headers={CSRF_HEADER: csrf_token},
+        ) as intake_client:
+            response = await intake_client.post(
+                f"/surrogates/{case.id}/send-email",
+                json={"template_id": str(template.id), "provider": "auto"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["provider_used"] == "gmail"
+    assert captured["user_id"] == str(intake_user.id)
+    assert captured["surrogate_id"] == case.id
 
 
 @pytest.mark.asyncio

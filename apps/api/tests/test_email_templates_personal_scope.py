@@ -186,6 +186,55 @@ async def test_org_templates_exclude_platform_system_keys(db, test_org):
 
 
 @pytest.mark.asyncio
+async def test_manual_template_list_excludes_appointment_workflow_templates(db, test_org):
+    admin = create_user_with_role(db, test_org.id, Role.ADMIN)
+
+    org_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=admin.id,
+        name="Initial Outreach",
+        subject="Hello {{full_name}}",
+        body="<p>Body</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+        is_system_template=False,
+        system_key=None,
+        category=None,
+    )
+    legacy_appointment_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=admin.id,
+        name="appointment_confirmed",
+        subject="Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
+        body="<p>Hello {{client_name}}</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+        is_system_template=False,
+        system_key=None,
+        category=None,
+    )
+    db.add_all([org_template, legacy_appointment_template])
+    db.commit()
+
+    async with authed_client_for_user(db, test_org.id, admin, Role.ADMIN) as client:
+        all_res = await client.get("/email-templates?scope=org")
+        assert all_res.status_code == 200
+        all_names = {item["name"] for item in all_res.json()}
+        assert "Initial Outreach" in all_names
+        assert "appointment_confirmed" in all_names
+
+        manual_res = await client.get("/email-templates?scope=org&usage_context=manual")
+        assert manual_res.status_code == 200
+        manual_names = {item["name"] for item in manual_res.json()}
+        assert "Initial Outreach" in manual_names
+        assert "appointment_confirmed" not in manual_names
+
+
+@pytest.mark.asyncio
 async def test_copy_org_template_to_personal(db, test_org):
     user = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
 

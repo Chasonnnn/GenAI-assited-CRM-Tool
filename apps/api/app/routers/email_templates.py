@@ -115,6 +115,9 @@ def list_templates(
     show_all_personal: Annotated[bool, "fastapi_param"] = Query(
         False, description="Admin-only: view all users' personal templates (read-only)"
     ),
+    usage_context: Annotated[Literal["all", "manual"], "fastapi_param"] = Query(
+        "all", description="Use 'manual' to exclude workflow-only templates from compose pickers"
+    ),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -137,6 +140,7 @@ def list_templates(
         scope_filter=scope,
         show_all_personal=show_all_personal if is_admin else False,
         active_only=active_only,
+        usage_context=usage_context,
     )
 
     return [_build_template_response(db, t, include_body=False) for t in templates]
