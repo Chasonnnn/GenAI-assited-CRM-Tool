@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.31](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.30...surrogacy-crm-platform-v0.91.31) (2026-05-30)
+
+
+### Bug Fixes
+
+* keep manual appointment templates visible ([3eaa43c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3eaa43c3fad1f26df2e3bacda918e84f80dbce16))
+
 ## [0.91.30](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.29...surrogacy-crm-platform-v0.91.30) (2026-05-29)
 
 
