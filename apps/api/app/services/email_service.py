@@ -477,10 +477,6 @@ def list_templates_for_user(
     if usage_context == "manual":
         query = query.filter(
             or_(
-                EmailTemplate.category.is_(None),
-                func.lower(EmailTemplate.category) != "appointment",
-            ),
-            or_(
                 EmailTemplate.system_key.is_(None),
                 func.lower(EmailTemplate.system_key).notin_(APPOINTMENT_WORKFLOW_TEMPLATE_NAMES),
             ),

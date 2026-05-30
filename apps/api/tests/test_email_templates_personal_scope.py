@@ -235,6 +235,49 @@ async def test_manual_template_list_excludes_appointment_workflow_templates(db, 
 
 
 @pytest.mark.asyncio
+async def test_manual_template_list_keeps_personal_appointment_category_templates(db, test_org):
+    user = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+
+    personal_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=user.id,
+        name="scheduled",
+        subject="Your application call",
+        body="<p>Hi {{first_name}}, here is your appointment link: {{appointment_link}}</p>",
+        scope="personal",
+        owner_user_id=user.id,
+        is_active=True,
+        is_system_template=False,
+        system_key=None,
+        category="appointment",
+    )
+    workflow_template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=user.id,
+        name="Appointment Confirmed",
+        subject="Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
+        body="<p>Hello {{client_name}}</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+        is_system_template=True,
+        system_key="appointment_confirmed",
+        category="appointment",
+    )
+    db.add_all([personal_template, workflow_template])
+    db.commit()
+
+    async with authed_client_for_user(db, test_org.id, user, Role.CASE_MANAGER) as client:
+        manual_res = await client.get("/email-templates?usage_context=manual")
+        assert manual_res.status_code == 200
+        manual_names = {item["name"] for item in manual_res.json()}
+        assert "scheduled" in manual_names
+        assert "Appointment Confirmed" not in manual_names
+
+
+@pytest.mark.asyncio
 async def test_copy_org_template_to_personal(db, test_org):
     user = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
 
