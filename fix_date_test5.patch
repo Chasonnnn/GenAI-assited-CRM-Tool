@@ -1,0 +1,20 @@
+--- apps/web/tests/change-stage-modal.test.tsx
++++ apps/web/tests/change-stage-modal.test.tsx
+@@ -235,7 +235,7 @@
+             .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
+
+         if (!dayButton) {
+-            fireEvent.click(screen.getByRole("button", { name: /go to next month/i }))
++            fireEvent.click(screen.getByRole("button", { name: /next month/i }))
+             const nextMonthDayButton = screen
+                 .getAllByText(format(interviewDate, "d"))
+                 .map((element) => element.closest("button"))
+@@ -293,7 +293,7 @@
+             .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
+
+         if (!dayButton) {
+-            fireEvent.click(screen.getByRole("button", { name: /go to next month/i }))
++            fireEvent.click(screen.getByRole("button", { name: /next month/i }))
+             const nextMonthDayButton = screen
+                 .getAllByText(format(interviewDate, "d"))
+                 .map((element) => element.closest("button"))

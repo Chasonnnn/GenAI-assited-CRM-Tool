@@ -1,0 +1,22 @@
+--- apps/web/tests/change-stage-modal.test.tsx
++++ apps/web/tests/change-stage-modal.test.tsx
+@@ -226,9 +226,6 @@
+         expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
+
+         const interviewDate = addDays(new Date(), 7)
+-        if (interviewDate.getMonth() !== new Date().getMonth()) {
+-            fireEvent.click(screen.getByRole("button", { name: /go to next month/i }))
+-        }
+         fireEvent.click(screen.getByRole("button", { name: /select date/i }))
+         const dayButton = screen
+             .getAllByText(format(interviewDate, "d"))
+@@ -289,9 +286,6 @@
+         expect(screen.queryByRole("button", { name: "PM" })).not.toBeInTheDocument()
+
+         const interviewDate = addDays(new Date(), 7)
+-        if (interviewDate.getMonth() !== new Date().getMonth()) {
+-            fireEvent.click(screen.getByRole("button", { name: /go to next month/i }))
+-        }
+         fireEvent.click(screen.getByRole("button", { name: /select date/i }))
+         const dayButton = screen
+             .getAllByText(format(interviewDate, "d"))

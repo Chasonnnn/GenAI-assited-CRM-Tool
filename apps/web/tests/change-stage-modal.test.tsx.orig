@@ -233,7 +233,7 @@ describe("ChangeStageModal", () => {
             .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
 
         if (!dayButton) {
-            fireEvent.click(screen.getByRole("button", { name: /next month/i }))
+            fireEvent.click(screen.getByRole("button", { name: /go to next month/i }))
             const nextMonthDayButton = screen
                 .getAllByText(format(interviewDate, "d"))
                 .map((element) => element.closest("button"))
@@ -293,7 +293,7 @@ describe("ChangeStageModal", () => {
             .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
 
         if (!dayButton) {
-            fireEvent.click(screen.getByRole("button", { name: /next month/i }))
+            fireEvent.click(screen.getByRole("button", { name: /go to next month/i }))
             const nextMonthDayButton = screen
                 .getAllByText(format(interviewDate, "d"))
                 .map((element) => element.closest("button"))
