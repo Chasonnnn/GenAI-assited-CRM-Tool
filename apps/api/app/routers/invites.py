@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_session, get_db, require_permission, require_csrf_header
 from app.core.policies import POLICIES
+from app.core.rate_limit import limiter
 
 from app.schemas.auth import UserSession
 from app.services import invite_service
@@ -241,7 +243,9 @@ class InviteDetailsRead(BaseModel):
 
 
 @router.get("/accept/{invite_id}", response_model=InviteDetailsRead)
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def get_invite_details(
+    request: Request,
     invite_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
@@ -264,7 +268,9 @@ def get_invite_details(
 
 
 @router.post("/accept/{invite_id}", dependencies=[Depends(require_csrf_header)])
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def accept_invite(
+    request: Request,
     invite_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),

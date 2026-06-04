@@ -6,6 +6,15 @@ from uuid import uuid4
 import pytest
 
 
+@pytest.fixture
+def rate_limiter_reset():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
 def test_accept_invite_creates_membership(db, test_org):
     """Accepting an invite should not access missing user fields."""
     from app.db.models import User, OrgInvite, Membership
@@ -319,3 +328,52 @@ async def test_create_invite_reuses_expired_pending_invite(
     db.refresh(existing)
     assert existing.expires_at is not None
     assert existing.expires_at > datetime.now(timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_invite_accept_details_rate_limited(client, db, test_org, rate_limiter_reset):
+    from app.db.models import OrgInvite
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_org.id,
+        email="limited-get@example.com",
+        role="case_manager",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    for _ in range(5):
+        response = await client.get(f"/settings/invites/accept/{invite.id}")
+        assert response.status_code != 429
+
+    blocked = await client.get(f"/settings/invites/accept/{invite.id}")
+    assert blocked.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_invite_accept_post_rate_limited(
+    authed_client,
+    db,
+    test_auth,
+    rate_limiter_reset,
+):
+    from app.db.models import OrgInvite
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_auth.org.id,
+        email=test_auth.user.email,
+        role="case_manager",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    for index in range(6):
+        response = await authed_client.post(f"/settings/invites/accept/{invite.id}")
+        if index < 5:
+            assert response.status_code != 429
+        else:
+            assert response.status_code == 429
