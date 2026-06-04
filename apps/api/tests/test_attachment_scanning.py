@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import uuid
 
@@ -362,6 +362,7 @@ def test_dispatch_attachment_scan_if_needed_dispatches_pending_remote_scan(
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.PENDING.value,
         payload={"attachment_id": str(attachment_id)},
+        run_at=datetime.now(timezone.utc) + timedelta(seconds=1),
         attempts=0,
         max_attempts=3,
     )
@@ -406,6 +407,7 @@ def test_dispatch_submission_file_scan_if_needed_dispatches_pending_remote_scan(
         job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
         status=JobStatus.PENDING.value,
         payload={"submission_file_id": str(submission_file_id)},
+        run_at=datetime.now(timezone.utc) + timedelta(seconds=1),
         attempts=0,
         max_attempts=3,
     )

@@ -547,6 +547,9 @@ def dispatch_submission_file_scan_if_needed(
             run_at=now,
             commit=True,
         )
+    elif selected_job.status == JobStatus.PENDING.value and selected_job.run_at > now:
+        selected_job.run_at = now
+        db.flush()
     elif selected_job.status == JobStatus.RUNNING.value:
         if selected_job.run_at > now - timedelta(seconds=stale_after_seconds):
             return False
