@@ -4,3 +4,6 @@
 ## 2024-05-24 - CI Pip Audit Error Resolved
 **Learning:** CI pip-audit checks can block performance optimizations.
 **Action:** When a PR triggers a `pip-audit` failure, fix the dependency version exactly in `pyproject.toml` using `uv add` and update the test mappings in `apps/api/tests/test_dependency_security.py` to match the exact newly pinned versions.
+## 2024-05-24 - CI pnpm Audit Error Resolved
+**Learning:** `pnpm audit` checks fail if dependencies have newly discovered CVEs.
+**Action:** Explicitly update the affected package to a secure version in `apps/web/package.json` (e.g. `pnpm i <pkg>@<secure_version>`) to pass security scans without regressions.
