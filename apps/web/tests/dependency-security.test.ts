@@ -105,6 +105,17 @@ describe("Dependency security guards", () => {
         expect(compareVersions(viteOverride!, "7.3.2")).toBeGreaterThanOrEqual(0)
     })
 
+    it("pins Vitest to a non-vulnerable version", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const vitestVersion = packageJson.devDependencies?.vitest?.replace(/^[^\d]*/, "")
+
+        expect(vitestVersion).toBeDefined()
+        expect(compareVersions(vitestVersion!, "4.1.0")).toBeGreaterThanOrEqual(0)
+    })
+
     it("resolves only non-vulnerable flatted versions in pnpm-lock.yaml", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
@@ -186,6 +197,20 @@ describe("Dependency security guards", () => {
 
         for (const resolvedVersion of resolvedVersions) {
             expect(compareVersions(resolvedVersion, "7.3.2")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable Vitest versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}vitest@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "4.1.0")).toBeGreaterThanOrEqual(0)
         }
     })
 })
