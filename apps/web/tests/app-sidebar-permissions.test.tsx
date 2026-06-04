@@ -6,6 +6,9 @@ import { AppSidebar } from "../components/app-sidebar"
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
+const mockNavigationState = vi.hoisted(() => ({
+    pathname: "/settings/team",
+}))
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -16,7 +19,7 @@ vi.mock("@/lib/hooks/use-permissions", () => ({
 }))
 
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/settings/team",
+    usePathname: () => mockNavigationState.pathname,
     useSearchParams: () => ({
         get: () => null,
     }),
@@ -93,6 +96,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 
 describe("AppSidebar permission visibility", () => {
     beforeEach(() => {
+        mockNavigationState.pathname = "/settings/team"
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-1",
@@ -104,6 +108,32 @@ describe("AppSidebar permission visibility", () => {
                 ai_enabled: false,
             },
         })
+    })
+
+    it("marks only Matches active on the matches route", async () => {
+        mockNavigationState.pathname = "/intended-parents/matches"
+        mockUseEffectivePermissions.mockReturnValue({
+            data: {
+                permissions: [
+                    "view_dashboard",
+                    "view_surrogates",
+                    "view_intended_parents",
+                    "view_matches",
+                ],
+            },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        const intendedParents = await screen.findByRole("link", { name: "Intended Parents" })
+        const matches = screen.getByRole("link", { name: "Matches" })
+
+        expect(matches).toHaveClass("bg-sidebar-accent")
+        expect(intendedParents).not.toHaveClass("bg-sidebar-accent")
     })
 
     it("hides Team settings when manage_team permission is missing", async () => {

@@ -702,10 +702,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const openSearch = useCallback(() => dispatch({ type: "setSearchOpen", searchOpen: true }), [])
     useSearchHotkey(openSearch)
 
-    const isNavItemActive = (item: NavLinkItem) =>
-        activeNavUrl === item.url ||
-        pathname === item.url ||
-        Boolean(pathname?.startsWith(item.url + "/"))
+    const isNavItemActive = (item: NavLinkItem) => activeNavUrl === item.url
 
     const sidebarContent = (
         <AppSidebarContent
