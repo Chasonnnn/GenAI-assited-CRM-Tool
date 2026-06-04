@@ -5,8 +5,8 @@ from sqlalchemy import event
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import TaskType
-from app.db.models import Surrogate, Task
-from app.services import analytics_service, analytics_surrogate_service
+from app.db.models import MetaLead, Pipeline, PipelineStage, Surrogate, Task
+from app.services import analytics_meta_service, analytics_service, analytics_surrogate_service
 
 
 def _collect_sql_statements(db):
@@ -142,6 +142,117 @@ def test_get_summary_kpis_uses_single_surrogates_count_query(
         "needs_attention": 2,
         "period_days": 7,
     }
+
+
+def test_get_meta_performance_uses_single_meta_leads_count_query(db, test_org, test_user):
+    now = datetime.now(timezone.utc)
+    pipeline = Pipeline(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name="Analytics Efficiency Pipeline",
+        is_default=True,
+        current_version=1,
+    )
+    db.add(pipeline)
+    db.flush()
+
+    stages = {}
+    for stage_key, label, order in [
+        ("contacted", "Contacted", 1),
+        ("pre_qualified", "Pre-Qualified", 2),
+        ("application_submitted", "Application Submitted", 3),
+    ]:
+        stage = PipelineStage(
+            id=uuid.uuid4(),
+            pipeline_id=pipeline.id,
+            stage_key=stage_key,
+            slug=stage_key,
+            label=label,
+            color="#3b82f6",
+            stage_type="intake",
+            order=order,
+            is_active=True,
+        )
+        db.add(stage)
+        stages[stage_key] = stage
+    db.flush()
+
+    converted_surrogates = []
+    for index, stage_key in enumerate(["pre_qualified", "application_submitted"]):
+        email = f"meta-efficiency-{index}@example.com"
+        phone = f"555-02{index:02d}"
+        surrogate = Surrogate(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            stage_id=stages[stage_key].id,
+            full_name=f"Meta Efficiency {index}",
+            status_label=stages[stage_key].label,
+            email=email,
+            email_hash=hash_email(email),
+            phone=phone,
+            phone_hash=hash_phone(phone),
+            source="meta",
+            surrogate_number=f"S97{index:03d}",
+            created_by_user_id=test_user.id,
+            owner_type="user",
+            owner_id=test_user.id,
+            created_at=now - timedelta(days=2),
+        )
+        db.add(surrogate)
+        converted_surrogates.append(surrogate)
+    db.flush()
+
+    db.add(
+        MetaLead(
+            id=uuid.uuid4(),
+            organization_id=test_org.id,
+            meta_page_id="page",
+            meta_lead_id=f"lead-{uuid.uuid4().hex}",
+            meta_created_time=now - timedelta(days=3),
+            received_at=now - timedelta(days=3),
+            is_converted=False,
+            status="processed",
+        )
+    )
+    for index, surrogate in enumerate(converted_surrogates):
+        db.add(
+            MetaLead(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                meta_page_id="page",
+                meta_lead_id=f"lead-{uuid.uuid4().hex}",
+                meta_created_time=now - timedelta(days=index + 1),
+                received_at=now - timedelta(days=index + 1),
+                is_converted=True,
+                converted_surrogate_id=surrogate.id,
+                converted_at=now,
+                status="converted",
+            )
+        )
+    db.flush()
+
+    statements, listener = _collect_sql_statements(db)
+    try:
+        data = analytics_meta_service.get_meta_performance(
+            db,
+            test_org.id,
+            start=now - timedelta(days=7),
+            end=now + timedelta(days=1),
+        )
+    finally:
+        _remove_sql_listener(db, listener)
+
+    meta_leads_count_selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().lower().startswith("select")
+        and "from meta_leads" in statement.lower()
+        and "count(" in statement.lower()
+    ]
+    assert len(meta_leads_count_selects) == 1
+    assert data["leads_received"] == 3
+    assert data["leads_qualified"] == 2
+    assert data["leads_converted"] == 1
 
 
 def test_get_pdf_export_data_batches_pending_and_overdue_task_counts(

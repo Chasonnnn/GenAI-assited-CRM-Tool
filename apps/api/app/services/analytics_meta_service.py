@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, date, timezone
 from typing import Any
 
-from sqlalchemy import func, text
+from sqlalchemy import func, literal, text
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -61,67 +61,49 @@ def get_meta_performance(
         ]
 
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
-    leads_received = (
-        db.query(MetaLead)
+    qualified_count = (
+        func.count(MetaLead.id)
+        .filter(
+            MetaLead.is_converted.is_(True),
+            Surrogate.stage_id.in_(qualified_or_later_ids),
+        )
+        if qualified_or_later_ids
+        else literal(0)
+    )
+
+    converted_count = (
+        func.count(MetaLead.id)
+        .filter(
+            MetaLead.is_converted.is_(True),
+            Surrogate.stage_id.in_(converted_or_later_ids),
+        )
+        if converted_or_later_ids
+        else literal(0)
+    )
+
+    counts = (
+        db.query(
+            func.count(MetaLead.id).label("leads_received"),
+            qualified_count.label("leads_qualified"),
+            converted_count.label("leads_converted"),
+        )
+        .outerjoin(Surrogate, MetaLead.converted_surrogate_id == Surrogate.id)
         .filter(
             MetaLead.organization_id == organization_id,
             lead_time >= start,
             lead_time < end,
         )
-        .count()
+        .first()
     )
 
-    leads_qualified = 0
-    if qualified_or_later_ids:
-        leads_qualified = (
-            db.execute(
-                text(
-                    """
-                SELECT COUNT(*)
-                FROM meta_leads ml
-                JOIN surrogates c ON ml.converted_surrogate_id = c.id
-                WHERE ml.organization_id = :org_id
-                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
-                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
-                  AND ml.is_converted = true
-                  AND c.stage_id = ANY(:stage_ids)
-            """
-                ),
-                {
-                    "org_id": organization_id,
-                    "start": start,
-                    "end": end,
-                    "stage_ids": qualified_or_later_ids,
-                },
-            ).scalar()
-            or 0
-        )
-
-    leads_converted = 0
-    if converted_or_later_ids:
-        leads_converted = (
-            db.execute(
-                text(
-                    """
-                SELECT COUNT(*)
-                FROM meta_leads ml
-                JOIN surrogates c ON ml.converted_surrogate_id = c.id
-                WHERE ml.organization_id = :org_id
-                  AND COALESCE(ml.meta_created_time, ml.received_at) >= :start
-                  AND COALESCE(ml.meta_created_time, ml.received_at) < :end
-                  AND ml.is_converted = true
-                  AND c.stage_id = ANY(:stage_ids)
-            """
-                ),
-                {
-                    "org_id": organization_id,
-                    "start": start,
-                    "end": end,
-                    "stage_ids": converted_or_later_ids,
-                },
-            ).scalar()
-            or 0
-        )
+    if counts is None:
+        leads_received = 0
+        leads_qualified = 0
+        leads_converted = 0
+    else:
+        leads_received = counts.leads_received or 0
+        leads_qualified = counts.leads_qualified or 0
+        leads_converted = counts.leads_converted or 0
 
     qualified_rate = (leads_qualified / leads_received * 100) if leads_received > 0 else 0.0
     conversion_rate = (leads_converted / leads_received * 100) if leads_received > 0 else 0.0
