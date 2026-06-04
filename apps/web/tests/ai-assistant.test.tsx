@@ -76,6 +76,41 @@ describe('AIAssistantPage', () => {
         expect(await screen.findByText('approved')).toBeInTheDocument()
     })
 
+    it("renders streamed assistant Markdown as rich text", async () => {
+        mockStreamMessage.mockImplementationOnce(async (_request, onEvent) => {
+            const content = [
+                "Conversion is **0.5%**.",
+                "",
+                "### Funnel Actions",
+                "* **Data:** 6 contacted leads",
+                "* **Suggestion:** Start bulk assignment",
+            ].join("\n")
+
+            onEvent({ type: "start", data: { status: "thinking" } })
+            onEvent({ type: "delta", data: { text: content } })
+            onEvent({
+                type: "done",
+                data: {
+                    content,
+                    proposed_actions: [],
+                    tokens_used: { prompt: 1, completion: 1, total: 2 },
+                },
+            })
+        })
+
+        const { container } = render(<AIAssistantPage />)
+
+        const input = screen.getByRole("textbox")
+        fireEvent.change(input, { target: { value: "Analyze conversion" } })
+        fireEvent.keyDown(input, { key: "Enter", shiftKey: false })
+
+        expect(await screen.findByText("0.5%", { selector: "strong" })).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 3, name: "Funnel Actions" })).toBeInTheDocument()
+        expect(screen.getByText("Data:", { selector: "strong" })).toBeInTheDocument()
+        expect(container).not.toHaveTextContent(/\*\*0\.5%\*\*/)
+        expect(container).not.toHaveTextContent("### Funnel Actions")
+    })
+
     it("adds an accessible label to reject action buttons", async () => {
         render(<AIAssistantPage />)
 

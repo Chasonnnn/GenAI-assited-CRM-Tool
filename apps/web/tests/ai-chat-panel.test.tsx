@@ -160,6 +160,35 @@ describe('AIChatPanel', () => {
         expect(mockRejectAction).toHaveBeenCalledWith('action1')
     })
 
+    it("renders assistant Markdown as rich text instead of raw syntax", () => {
+        mockUseConversation.mockReturnValue({
+            data: {
+                messages: [
+                    createConversationMessage(
+                        "m1",
+                        [
+                            "Based on the last 90 days, conversion is **0.5%**.",
+                            "",
+                            "### 1. Address the Unassigned Bottleneck",
+                            "* **The Data:** Only 6 leads have been contacted.",
+                            "* **Suggestion:** Start a bulk assignment session.",
+                        ].join("\n"),
+                    ),
+                ],
+            },
+            isLoading: false,
+        })
+
+        const { container } = render(<AIChatPanel />)
+
+        expect(screen.getByText("0.5%", { selector: "strong" })).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 3, name: "1. Address the Unassigned Bottleneck" })).toBeInTheDocument()
+        expect(screen.getByText("The Data:", { selector: "strong" })).toBeInTheDocument()
+        expect(container.querySelector("ul")).toBeInTheDocument()
+        expect(container).not.toHaveTextContent(/\*\*0\.5%\*\*/)
+        expect(container).not.toHaveTextContent("### 1. Address the Unassigned Bottleneck")
+    })
+
     it("keeps the chat pinned to the latest message when already near the bottom", async () => {
         const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
             callback(0)

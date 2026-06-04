@@ -8,6 +8,7 @@ import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon
 import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
+import { AssistantRichText } from "@/components/ai/AssistantRichText"
 
 interface Message {
     id: string
@@ -797,6 +798,8 @@ export default function AIAssistantPage() {
                                                         <Loader2Icon className="size-3.5 animate-spin" />
                                                         Thinking
                                                     </div>
+                                                ) : msg.role === "assistant" ? (
+                                                    <AssistantRichText content={msg.content} />
                                                 ) : (
                                                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                                                 )}

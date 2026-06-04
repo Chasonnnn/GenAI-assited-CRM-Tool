@@ -24,6 +24,7 @@ import {
 import { useConversation, useStreamChatMessage, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import type { ProposedAction } from "@/lib/api/ai"
 import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
+import { AssistantRichText } from "@/components/ai/AssistantRichText"
 
 const ScheduleParserDialog = dynamic<ScheduleParserDialogProps>(
     () => import("@/components/ai/ScheduleParserDialog").then((mod) => mod.ScheduleParserDialog),
@@ -362,7 +363,11 @@ export function AIChatPanel({
                                                 Thinking
                                             </div>
                                         ) : (
-                                            <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                            msg.role === "assistant" ? (
+                                                <AssistantRichText content={msg.content} />
+                                            ) : (
+                                                <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                            )
                                         )}
                                     </div>
 
