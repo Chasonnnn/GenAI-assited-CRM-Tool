@@ -198,6 +198,52 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         expect(screen.getByText("Available Times")).toBeInTheDocument()
     })
 
+    it("labels linked appointment unlink actions with the linked record names", () => {
+        mockUseUnifiedCalendarData.mockReturnValue({
+            appointments: [
+                {
+                    id: "appt-linked",
+                    appointment_type_name: "Initial Interview",
+                    client_name: "Linked Appointment",
+                    client_email: "linked@example.com",
+                    client_phone: "+1-555-123-4567",
+                    client_timezone: "America/Los_Angeles",
+                    scheduled_start: appointmentStartLocal.toISOString(),
+                    scheduled_end: appointmentEndLocal.toISOString(),
+                    duration_minutes: 30,
+                    meeting_mode: "zoom",
+                    meeting_location: null,
+                    dial_in_number: null,
+                    status: "confirmed",
+                    zoom_join_url: null,
+                    google_meet_url: null,
+                    surrogate_id: "surrogate-1",
+                    surrogate_number: "S10001",
+                    intended_parent_id: "ip-1",
+                    intended_parent_name: "Casey Parent",
+                    created_at: "2026-02-20T00:00:00Z",
+                },
+            ],
+            appointmentsLoading: false,
+            tasks: [],
+            tasksLoading: false,
+            googleEvents: [],
+            calendarConnected: true,
+            calendarError: null,
+        })
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        fireEvent.click(screen.getByText(/Linked Appointment/i))
+
+        expect(
+            screen.getByRole("button", { name: /unlink surrogate s10001/i })
+        ).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: /unlink intended parent casey parent/i })
+        ).toBeInTheDocument()
+    })
+
     it("keeps all month-view items accessible from the overflow action", () => {
         const overflowDay = new Date(now.getFullYear(), now.getMonth(), 15, 9, 0, 0, 0)
         const overflowDate = format(overflowDay, "yyyy-MM-dd")

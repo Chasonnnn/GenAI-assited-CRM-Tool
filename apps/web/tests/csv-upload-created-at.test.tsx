@@ -109,6 +109,9 @@ describe('CSVUpload created_at backdating', () => {
         await waitFor(() => expect(mockPreviewImport).toHaveBeenCalled())
 
         await screen.findByText(/Use CSV created_at values/i)
+        expect(
+            screen.getByRole('button', { name: /remove selected file surrogates\.csv/i })
+        ).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'Submit Import' }))
 

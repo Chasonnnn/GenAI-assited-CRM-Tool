@@ -672,7 +672,12 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                     <FileIcon className="size-4" />
                                     {file?.name}
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={handleRemoveFile}>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleRemoveFile}
+                                    aria-label={`Remove selected file ${file?.name ?? ""}`.trim()}
+                                >
                                     <XIcon className="size-4" />
                                 </Button>
                             </div>
