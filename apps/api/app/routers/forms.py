@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.enums import FormPurpose
 from app.core.surrogate_access import (
     check_surrogate_access,
     ensure_can_manage_surrogate_priority,
@@ -340,6 +341,12 @@ def use_form_template(
     settings = template.published_settings_json or {}
     if schema is None:
         raise HTTPException(status_code=400, detail="Template schema is missing")
+    template_purpose = settings.get("purpose")
+    purpose = (
+        template_purpose
+        if template_purpose in {purpose.value for purpose in FormPurpose}
+        else FormPurpose.SURROGATE_APPLICATION.value
+    )
 
     form = form_service.create_form(
         db=db,
@@ -351,6 +358,7 @@ def use_form_template(
         max_file_size_bytes=settings.get("max_file_size_bytes"),
         max_file_count=settings.get("max_file_count"),
         allowed_mime_types=settings.get("allowed_mime_types"),
+        purpose=purpose,
     )
 
     mappings = settings.get("mappings")

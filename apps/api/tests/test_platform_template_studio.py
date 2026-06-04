@@ -137,6 +137,7 @@ async def test_platform_form_templates_publish_and_use(authed_client, db, test_u
                 ]
             },
             "settings_json": {
+                "purpose": "lead_capture",
                 "max_file_size_bytes": 10485760,
                 "max_file_count": 5,
                 "allowed_mime_types": ["application/pdf"],
@@ -164,6 +165,7 @@ async def test_platform_form_templates_publish_and_use(authed_client, db, test_u
     assert use_resp.status_code == 200
     form = use_resp.json()
     assert form["name"] == "My Intake Form"
+    assert form["purpose"] == "lead_capture"
 
 
 @pytest.mark.asyncio
