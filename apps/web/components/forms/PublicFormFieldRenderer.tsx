@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 type TableRow = Record<string, string | number | null>
+type PublicFormDensity = "default" | "compact"
+type FormOption = NonNullable<FormField["options"]>[number]
 export type PublicFormAnswerValue =
     | string
     | number
@@ -29,6 +31,7 @@ interface PublicFormFieldRendererProps {
     updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
     datePickerOpen: Record<string, boolean>
     setDatePickerOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+    density?: PublicFormDensity
 }
 
 function formatDate(value: string | null): string {
@@ -39,6 +42,59 @@ function formatDate(value: string | null): string {
 const publicFieldShellClassName = "space-y-2"
 const publicFieldGroupShellClassName = "space-y-3 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4"
 const publicControlClassName = "h-11 rounded-md border-stone-200 bg-white shadow-none"
+
+function getPublicFieldDensityStyles(density: PublicFormDensity) {
+    const isCompact = density === "compact"
+
+    return {
+        fieldShellClassName: cn(publicFieldShellClassName, isCompact && "space-y-1.5"),
+        fieldGroupClassName: cn(
+            publicFieldGroupShellClassName,
+            isCompact && "space-y-2 rounded-md bg-white p-3",
+        ),
+        labelClassName: cn("text-sm font-semibold leading-5 text-stone-900", isCompact && "text-stone-800"),
+        controlClassName: cn(publicControlClassName, isCompact && "h-10 text-sm"),
+        optionSize: (isCompact ? "compact" : "default") as "compact" | "default",
+        isCompact,
+    }
+}
+
+function normalizeChoiceText(value: string): string {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+function getYesNoOptions(options: FormOption[]): FormOption[] | null {
+    if (options.length !== 2) return null
+
+    const yesOption = options.find((option) => {
+        const label = normalizeChoiceText(option.label)
+        const value = normalizeChoiceText(option.value)
+        return label === "yes" || value === "yes"
+    })
+    const noOption = options.find((option) => {
+        const label = normalizeChoiceText(option.label)
+        const value = normalizeChoiceText(option.value)
+        return label === "no" || value === "no"
+    })
+
+    if (!yesOption || !noOption || yesOption.value === noOption.value) return null
+    return [yesOption, noOption]
+}
+
+function getChoiceOptions(options: FormOption[]): FormOption[] {
+    return getYesNoOptions(options) ?? options
+}
+
+function getChoiceGridClassName(options: FormOption[], density: PublicFormDensity): string {
+    const isCompact = density === "compact"
+    const isYesNoChoice = getYesNoOptions(options) !== null
+
+    return cn(
+        "grid",
+        isCompact ? "gap-2" : "gap-3",
+        isYesNoChoice ? "grid-cols-2" : "sm:grid-cols-2",
+    )
+}
 
 function getFieldPlaceholder(field: { key: string; label: string; type: string }): string {
     const key = field.key.trim().toLowerCase()
@@ -380,24 +436,26 @@ function OptionCard({
             aria-checked={selected}
             onClick={onClick}
             className={cn(
-                "w-full border border-stone-200 bg-white text-left transition-all",
-                size === "compact" ? "rounded-md px-3 py-2.5" : "rounded-lg p-4",
-                "hover:border-blue-300 hover:bg-sky-50",
+                "min-h-11 w-full border border-stone-200 bg-white text-left transition-all",
+                size === "compact" ? "min-h-10 rounded-md px-3 py-2" : "rounded-lg px-4 py-3",
+                "hover:border-primary/25 hover:bg-stone-50",
                 "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
-                selected ? "border-blue-500 bg-sky-50 shadow-[0_0_0_1px_rgba(59,130,246,0.18)]" : "border-stone-200",
+                selected
+                    ? "border-primary/45 bg-primary/[0.04] shadow-[0_0_0_1px_rgba(31,41,55,0.08)]"
+                    : "border-stone-200",
             )}
         >
             <div className="flex items-center gap-3">
                 <div
                     className={cn(
                         "flex items-center justify-center rounded-full border-2 transition-all",
-                        size === "compact" ? "size-5" : "size-6",
-                        selected ? "border-blue-600 bg-blue-600" : "border-stone-300 bg-white",
+                        size === "compact" ? "size-4" : "size-5",
+                        selected ? "border-primary bg-primary" : "border-stone-300 bg-white",
                     )}
                 >
-                    {selected && <CheckIcon className={cn("text-white", size === "compact" ? "size-3.5" : "size-4")} />}
+                    {selected && <CheckIcon className={cn("text-white", size === "compact" ? "size-3" : "size-3.5")} />}
                 </div>
-                <div className={cn("font-medium text-stone-900", size === "compact" ? "text-[15px]" : "text-sm")}>
+                <div className="text-sm font-medium leading-5 text-stone-900">
                     {label}
                 </div>
             </div>
@@ -411,13 +469,15 @@ export function PublicFormFieldRenderer({
     updateField,
     datePickerOpen,
     setDatePickerOpen,
+    density = "default",
 }: PublicFormFieldRendererProps) {
     const requiredMark = field.required ? <span className="text-red-500">*</span> : null
+    const densityStyles = getPublicFieldDensityStyles(density)
 
     if (field.type === "textarea") {
         return (
-            <div key={field.key} className={publicFieldShellClassName}>
-                <Label htmlFor={field.key} className="text-sm font-medium">
+            <div key={field.key} className={densityStyles.fieldShellClassName}>
+                <Label htmlFor={field.key} className={densityStyles.labelClassName}>
                     {field.label} {requiredMark}
                 </Label>
                 <Textarea
@@ -425,7 +485,10 @@ export function PublicFormFieldRenderer({
                     value={typeof value === "string" ? value : ""}
                     onChange={(event) => updateField(field.key, event.target.value)}
                     placeholder={getFieldPlaceholder(field)}
-                    className="min-h-24 rounded-md border-stone-200 bg-white shadow-none"
+                    className={cn(
+                        "min-h-24 rounded-md border-stone-200 bg-white shadow-none",
+                        densityStyles.isCompact && "min-h-20 text-[15px]",
+                    )}
                 />
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </div>
@@ -438,8 +501,8 @@ export function PublicFormFieldRenderer({
         const usesDobPickerNavigation = isDobField(field)
 
         return (
-            <div key={field.key} className={publicFieldShellClassName}>
-                <Label className="text-sm font-medium">
+            <div key={field.key} className={densityStyles.fieldShellClassName}>
+                <Label className={densityStyles.labelClassName}>
                     {field.label} {requiredMark}
                 </Label>
                 <Popover
@@ -453,7 +516,8 @@ export function PublicFormFieldRenderer({
                             <Button
                                 variant="outline"
                                 className={cn(
-                                    "h-11 w-full justify-start rounded-md border-stone-200 bg-white text-left font-normal shadow-none",
+                                    densityStyles.controlClassName,
+                                    "w-full justify-start text-left font-normal",
                                     !value && "text-stone-500",
                                 )}
                             >
@@ -510,46 +574,56 @@ export function PublicFormFieldRenderer({
 
     if (field.type === "select" || field.type === "radio") {
         const options = field.options || []
+        const orderedOptions = getChoiceOptions(options)
+        const gridClassName = getChoiceGridClassName(options, density)
+        const legendId = `${field.key}-legend`
 
         return (
-            <div key={field.key} className={publicFieldGroupShellClassName}>
-                <Label className="text-sm font-medium">
+            <fieldset key={field.key} className={densityStyles.fieldShellClassName}>
+                <legend id={legendId} className={densityStyles.labelClassName}>
                     {field.label} {requiredMark}
-                </Label>
+                </legend>
                 {options.length === 0 ? (
                     <p className="text-sm text-stone-500">No options configured.</p>
                 ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        {options.map((option) => (
+                    <div
+                        role="radiogroup"
+                        aria-labelledby={legendId}
+                        className={gridClassName}
+                    >
+                        {orderedOptions.map((option) => (
                             <OptionCard
                                 key={option.value}
                                 selected={value === option.value}
                                 onClick={() => updateField(field.key, option.value)}
                                 label={option.label}
+                                size={densityStyles.optionSize}
                             />
                         ))}
                     </div>
                 )}
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-            </div>
+            </fieldset>
         )
     }
 
     if (field.type === "multiselect") {
         const options = field.options || []
+        const gridClassName = getChoiceGridClassName(options, density)
+        const legendId = `${field.key}-legend`
         const selectedValues = Array.isArray(value)
             ? value.filter((item): item is string => typeof item === "string")
             : []
 
         return (
-            <div key={field.key} className={publicFieldGroupShellClassName}>
-                <Label className="text-sm font-medium">
+            <fieldset key={field.key} className={densityStyles.fieldShellClassName}>
+                <legend id={legendId} className={densityStyles.labelClassName}>
                     {field.label} {requiredMark}
-                </Label>
+                </legend>
                 {options.length === 0 ? (
                     <p className="text-sm text-stone-500">No options configured.</p>
                 ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div aria-labelledby={legendId} className={gridClassName}>
                         {options.map((option) => {
                             const selected = selectedValues.includes(option.value)
                             return (
@@ -564,19 +638,20 @@ export function PublicFormFieldRenderer({
                                         updateField(field.key, next)
                                     }}
                                     label={option.label}
+                                    size={densityStyles.optionSize}
                                 />
                             )
                         })}
                     </div>
                 )}
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
-            </div>
+            </fieldset>
         )
     }
 
     if (field.type === "checkbox") {
         return (
-            <div key={field.key} className={publicFieldGroupShellClassName}>
+            <div key={field.key} className={densityStyles.fieldGroupClassName}>
                 <div className="flex items-start gap-3">
                     <Checkbox
                         id={field.key}
@@ -585,7 +660,7 @@ export function PublicFormFieldRenderer({
                         className="mt-0.5"
                     />
                     <div className="space-y-1">
-                        <Label htmlFor={field.key} className="text-sm font-medium leading-relaxed">
+                        <Label htmlFor={field.key} className={cn(densityStyles.labelClassName, "leading-relaxed")}>
                             {field.label} {requiredMark}
                         </Label>
                         {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
@@ -605,8 +680,8 @@ export function PublicFormFieldRenderer({
                     : "text"
 
     return (
-        <div key={field.key} className={publicFieldShellClassName}>
-            <Label htmlFor={field.key} className="text-sm font-medium">
+        <div key={field.key} className={densityStyles.fieldShellClassName}>
+            <Label htmlFor={field.key} className={densityStyles.labelClassName}>
                 {field.label} {requiredMark}
             </Label>
             <Input
@@ -615,7 +690,7 @@ export function PublicFormFieldRenderer({
                 value={typeof value === "string" ? value : value ? String(value) : ""}
                 onChange={(event) => updateField(field.key, event.target.value)}
                 placeholder={getFieldPlaceholder(field)}
-                className={publicControlClassName}
+                className={densityStyles.controlClassName}
             />
             {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
         </div>

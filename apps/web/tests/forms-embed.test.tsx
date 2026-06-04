@@ -95,6 +95,8 @@ describe("EmbedFormPageClient", () => {
         })
         expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
         expect(getEmbedPublicForm).toHaveBeenCalledWith("lead-form", "https://www.ewisurrogacy.com")
+        expect(screen.getByRole("main")).toHaveClass("max-w-[760px]", "py-4")
+        expect(screen.getByLabelText(/full name/i)).toHaveClass("h-10")
 
         window.dispatchEvent(
             new MessageEvent("message", {

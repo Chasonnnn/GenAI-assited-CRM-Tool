@@ -26,7 +26,7 @@ type Answers = Record<string, PublicFormAnswerValue>
 type ParentMessage =
     | { type: string; attribution?: Record<string, unknown> }
 
-const pageClassName = "public-form-light min-h-screen bg-white text-stone-900"
+const pageClassName = "public-form-light min-h-screen bg-transparent text-stone-900"
 const ALLOWED_ATTRIBUTION_KEYS = new Set([
     "utm_source",
     "utm_medium",
@@ -336,17 +336,20 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                     </Card>
                 </div>
             ) : formConfig ? (
-                <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
-                    <div className="mb-5 space-y-1">
-                        <h1 className="text-xl font-semibold text-stone-950">
-                            {formConfig.form_schema.public_title || formConfig.name}
-                        </h1>
-                        {formConfig.description ? (
-                            <p className="text-sm leading-6 text-stone-600">{formConfig.description}</p>
-                        ) : null}
-                    </div>
+                <main className="mx-auto w-full max-w-[760px] px-4 py-4 sm:px-6 sm:py-6">
+                    <section className="border border-stone-200/80 bg-white px-4 py-5 shadow-[0_18px_60px_rgba(31,38,58,0.08)] sm:px-6 sm:py-6">
+                        <div className="mb-5 border-b border-stone-200/80 pb-4">
+                            <h1 className="text-[22px] font-semibold leading-tight text-stone-950">
+                                {formConfig.form_schema.public_title || formConfig.name}
+                            </h1>
+                            {formConfig.description ? (
+                                <p className="mt-2 max-w-[54ch] text-[14px] leading-6 text-stone-600">
+                                    {formConfig.description}
+                                </p>
+                            ) : null}
+                        </div>
 
-                    <div className="space-y-5">
+                    <div className="space-y-3.5">
                         {renderableFields.map((field) => (
                             <PublicFormFieldRenderer
                                 key={field.key}
@@ -355,11 +358,12 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                                 updateField={updateField}
                                 datePickerOpen={datePickerOpen}
                                 setDatePickerOpen={setDatePickerOpen}
+                                density="compact"
                             />
                         ))}
 
                         {formConfig.consent.text ? (
-                            <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4">
+                            <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50/70 p-3">
                                 <Checkbox
                                     id="sf-embed-consent"
                                     checked={accepted}
@@ -368,7 +372,7 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                                 />
                                 <Label
                                     htmlFor="sf-embed-consent"
-                                    className="text-sm leading-6 text-stone-700"
+                                    className="text-[13px] leading-6 text-stone-700"
                                 >
                                     {formConfig.consent.text}
                                     {formConfig.consent.privacy_policy_url ? (
@@ -398,7 +402,7 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                             type="button"
                             onClick={() => void handleSubmit()}
                             disabled={isSubmitting || !sessionToken}
-                            className="h-11 w-full"
+                            className="h-10 w-full rounded-md"
                         >
                             {isSubmitting ? (
                                 <>
@@ -413,6 +417,7 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                             )}
                         </Button>
                     </div>
+                    </section>
                 </main>
             ) : null}
         </div>

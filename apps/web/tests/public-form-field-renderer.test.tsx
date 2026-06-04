@@ -201,6 +201,77 @@ describe("PublicFormFieldRenderer", () => {
         expect(screen.getByText("Option 3")).toHaveClass("text-sm")
     })
 
+    it("renders compact yes/no choices in one row with the question outside option cards", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "age_range",
+            label: "Are you currently between the ages of 21 and 36?",
+            type: "radio",
+            required: true,
+            options: [
+                { label: "No", value: "no" },
+                { label: "Yes", value: "yes" },
+            ],
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={null}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+                density="compact"
+            />,
+        )
+
+        const question = screen.getByText(/between the ages of 21 and 36/i)
+        expect(question).toHaveClass("text-sm", "font-semibold")
+        expect(question.closest("button")).toBeNull()
+
+        const group = screen.getByRole("radiogroup", {
+            name: /between the ages of 21 and 36/i,
+        })
+        expect(group).toHaveClass("grid-cols-2")
+
+        const options = within(group).getAllByRole("radio")
+        expect(options.map((option) => option.textContent)).toEqual(["Yes", "No"])
+        expect(within(options[0]).getByText("Yes")).toHaveClass("text-sm", "font-medium")
+        expect(within(options[1]).getByText("No")).toHaveClass("text-sm", "font-medium")
+    })
+
+    it("keeps non-binary compact choices stacked on narrow screens", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "race",
+            label: "Please specify your race",
+            type: "radio",
+            required: true,
+            options: [
+                { label: "Asian", value: "asian" },
+                { label: "Black", value: "black" },
+                { label: "Hispanic", value: "hispanic" },
+            ],
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={null}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+                density="compact"
+            />,
+        )
+
+        const group = screen.getByRole("radiogroup", { name: /specify your race/i })
+        expect(group).toHaveClass("sm:grid-cols-2")
+        expect(group).not.toHaveClass("grid-cols-2")
+    })
+
     it("renders fixed table fields with per-row responses and notes", () => {
         const updateField = vi.fn()
         const setDatePickerOpen = vi.fn()
@@ -252,7 +323,7 @@ describe("PublicFormFieldRenderer", () => {
             "@xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)]",
             "@xl/table-row:items-start",
         )
-        expect(within(diabetesRow).getByRole("radio", { name: "Yes" })).toHaveClass("rounded-md", "px-3", "py-2.5")
+        expect(within(diabetesRow).getByRole("radio", { name: "Yes" })).toHaveClass("rounded-md", "px-3", "py-2")
         const detailsInput = within(diabetesRow).getByPlaceholderText("Share any relevant details")
         expect(detailsInput.tagName).toBe("INPUT")
         expect(detailsInput).toHaveClass("h-11")
