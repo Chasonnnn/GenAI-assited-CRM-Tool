@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.32](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.31...surrogacy-crm-platform-v0.91.32) (2026-06-05)
+
+
+### Features
+
+* render assistant messages as rich text ([8a35f74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8a35f748fce3b25c6b5489eb865d662f7ca0423c))
+* seed pre-questionnaire lead form template ([133cc15](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/133cc15838316effaa27f712fe9f123e3ba64284))
+
+
+### Bug Fixes
+
+* bump pyjwt for audit guard ([c9db577](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c9db5778fcc78021cb1e9561096d201c1e5420ab))
+* compact public embed form layout ([ed24209](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ed24209a3ff9589987d5f077e458ea11075f2706))
+* consolidate meta performance counts ([a68ac2c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a68ac2c97abe89a10dda46f64439c6da05a4d382))
+* keep sidebar active state exact ([39b4dae](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/39b4dae5c310a7ac7ba5e35624000cbb2a3f524d))
+* label icon-only record actions ([5e71447](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5e714470c17468f44788af8b4e931604f555c097))
+* rate limit invite acceptance routes ([5909ac6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5909ac6e516c81a6c817c81f97c4024fb850c539))
+* reschedule pending scan jobs immediately ([4781582](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4781582974922df7ff70092d03d2fa508c820e33))
+
+
+### Maintenance
+
+* update frontend dependency guards ([a24ffc7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a24ffc76ca64eccaed3b4a9e56a6b1bff4eb60b5))
+
 ## [0.91.31](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.30...surrogacy-crm-platform-v0.91.31) (2026-05-30)
 
 
