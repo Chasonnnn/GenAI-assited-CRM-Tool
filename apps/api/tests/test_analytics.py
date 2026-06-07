@@ -345,9 +345,7 @@ class TestCasesByStatus:
             assert isinstance(item["count"], int)
 
     @pytest.mark.asyncio
-    async def test_dashboard_user_can_get_surrogates_by_status(
-        self, db, test_org, sample_cases
-    ):
+    async def test_dashboard_user_can_get_surrogates_by_status(self, db, test_org, sample_cases):
         """Dashboard users can load dashboard chart data without full Reports access."""
         async with _authed_client_for_role(db, test_org, Role.INTAKE_SPECIALIST) as client:
             response = await client.get("/analytics/surrogates/by-status")
@@ -391,9 +389,7 @@ class TestCasesTrend:
             assert "count" in point
 
     @pytest.mark.asyncio
-    async def test_dashboard_user_can_get_surrogates_trend(
-        self, db, test_org, sample_cases
-    ):
+    async def test_dashboard_user_can_get_surrogates_trend(self, db, test_org, sample_cases):
         """Dashboard users can load dashboard trend data without full Reports access."""
         async with _authed_client_for_role(db, test_org, Role.INTAKE_SPECIALIST) as client:
             response = await client.get("/analytics/surrogates/trend")

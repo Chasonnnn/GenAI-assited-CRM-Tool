@@ -113,9 +113,7 @@ def test_default_surrogate_journey_mappings_cover_new_platform_stages_conservati
     assert "pending_docusign" in milestones["screening_interviews"]
     assert "life_insurance_application_started" in milestones["ongoing_care"]
     assert "pbo_process_started" in milestones["ongoing_care"]
-    assert all(
-        "cold_leads" not in mapped_stage_keys for mapped_stage_keys in milestones.values()
-    )
+    assert all("cold_leads" not in mapped_stage_keys for mapped_stage_keys in milestones.values())
 
 
 def test_cold_leads_is_not_a_protected_surrogate_system_stage() -> None:

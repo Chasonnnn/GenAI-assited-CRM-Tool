@@ -76,9 +76,10 @@ def test_map_stage_key_to_meta_status_for_org(db, test_org):
         )
         == "Qualified/Converted"
     )
-    assert meta_outbound_service.map_stage_key_to_meta_status_for_org(
-        db, test_org.id, "contacted"
-    ) == "Intake"
+    assert (
+        meta_outbound_service.map_stage_key_to_meta_status_for_org(db, test_org.id, "contacted")
+        == "Intake"
+    )
     assert (
         meta_outbound_service.map_stage_key_to_meta_status_for_org(db, test_org.id, "disqualified")
         == "Not qualified/Lost"

@@ -92,14 +92,13 @@ def _remove_stage_key_refs(feature_config: dict, stage_key: str) -> dict:
     return next_config
 
 
-def _remap_stage_key_refs(feature_config: dict, removed_stage_key: str, target_stage_key: str) -> dict:
+def _remap_stage_key_refs(
+    feature_config: dict, removed_stage_key: str, target_stage_key: str
+) -> dict:
     next_config = deepcopy(feature_config)
 
     def replace_keys(values: list[str]) -> list[str]:
-        replaced = [
-            target_stage_key if key == removed_stage_key else key
-            for key in values
-        ]
+        replaced = [target_stage_key if key == removed_stage_key else key for key in values]
         return list(dict.fromkeys(replaced))
 
     for milestone in next_config["journey"]["milestones"]:
@@ -930,8 +929,7 @@ async def test_pipeline_change_preview_requires_remap_for_pre_qualified_integrat
     assert "active_surrogates" in required_remap["reasons"]
     assert "integrations" in required_remap["reasons"]
     assert any(
-        "Pre-Qualified" in issue and "remap target" in issue
-        for issue in preview["blocking_issues"]
+        "Pre-Qualified" in issue and "remap target" in issue for issue in preview["blocking_issues"]
     )
 
     pre_qualified_dependency = next(
@@ -1190,7 +1188,9 @@ async def test_apply_pipeline_draft_removes_pre_qualified_and_remaps_integration
     pre_qualified_stage = next(
         stage for stage in pipeline["stages"] if stage["stage_key"] == "pre_qualified"
     )
-    contacted_stage = next(stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted")
+    contacted_stage = next(
+        stage for stage in pipeline["stages"] if stage["stage_key"] == "contacted"
+    )
     pre_qualified_db = pipeline_service.get_stage_by_id(db, UUID(pre_qualified_stage["id"]))
     contacted_db = pipeline_service.get_stage_by_id(db, UUID(contacted_stage["id"]))
     assert pre_qualified_db is not None
@@ -1229,9 +1229,7 @@ async def test_apply_pipeline_draft_removes_pre_qualified_and_remaps_integration
             "stages": [
                 _draft_stage_payload(stage, index + 1)
                 for index, stage in enumerate(
-                    stage
-                    for stage in pipeline["stages"]
-                    if stage["stage_key"] != "pre_qualified"
+                    stage for stage in pipeline["stages"] if stage["stage_key"] != "pre_qualified"
                 )
             ],
             "feature_config": _remap_stage_key_refs(

@@ -62,8 +62,7 @@ def get_meta_performance(
 
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
     qualified_count = (
-        func.count(MetaLead.id)
-        .filter(
+        func.count(MetaLead.id).filter(
             MetaLead.is_converted.is_(True),
             Surrogate.stage_id.in_(qualified_or_later_ids),
         )
@@ -72,8 +71,7 @@ def get_meta_performance(
     )
 
     converted_count = (
-        func.count(MetaLead.id)
-        .filter(
+        func.count(MetaLead.id).filter(
             MetaLead.is_converted.is_(True),
             Surrogate.stage_id.in_(converted_or_later_ids),
         )

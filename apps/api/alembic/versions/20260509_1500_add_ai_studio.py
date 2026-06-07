@@ -37,8 +37,12 @@ def upgrade() -> None:
             sa.Column("openai_api_key_encrypted", sa.Text(), nullable=True),
             sa.Column("agents_md", sa.Text(), server_default=sa.text("''"), nullable=False),
             sa.Column("skills_md", sa.Text(), server_default=sa.text("''"), nullable=False),
-            sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
-            sa.Column("updated_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
+            sa.Column(
+                "created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
+            sa.Column(
+                "updated_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("organization_id"),
@@ -55,11 +59,15 @@ def upgrade() -> None:
             ),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
-            sa.Column("status", sa.String(length=20), server_default=sa.text("'preview'"), nullable=False),
+            sa.Column(
+                "status", sa.String(length=20), server_default=sa.text("'preview'"), nullable=False
+            ),
             sa.Column("platform", sa.String(length=30), nullable=False),
             sa.Column("format", sa.String(length=30), nullable=False),
             sa.Column("tone", sa.String(length=30), nullable=False),
-            sa.Column("audience", sa.String(length=200), server_default=sa.text("''"), nullable=False),
+            sa.Column(
+                "audience", sa.String(length=200), server_default=sa.text("''"), nullable=False
+            ),
             sa.Column("brief", sa.Text(), nullable=False),
             sa.Column("caption", sa.Text(), nullable=False),
             sa.Column(
@@ -73,16 +81,30 @@ def upgrade() -> None:
             sa.Column("image_mime_type", sa.String(length=100), nullable=True),
             sa.Column("image_size_bytes", sa.Integer(), nullable=True),
             sa.Column("image_revised_prompt", sa.Text(), nullable=True),
-            sa.Column("reasoning_model", sa.String(length=50), server_default=sa.text("'gpt-5.5'"), nullable=False),
-            sa.Column("image_model", sa.String(length=50), server_default=sa.text("'gpt-image-2'"), nullable=False),
+            sa.Column(
+                "reasoning_model",
+                sa.String(length=50),
+                server_default=sa.text("'gpt-5.5'"),
+                nullable=False,
+            ),
+            sa.Column(
+                "image_model",
+                sa.String(length=50),
+                server_default=sa.text("'gpt-image-2'"),
+                nullable=False,
+            ),
             sa.Column(
                 "generation_metadata",
                 postgresql.JSONB(astext_type=sa.Text()),
                 server_default=sa.text("'{}'::jsonb"),
                 nullable=False,
             ),
-            sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
-            sa.Column("updated_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
+            sa.Column(
+                "created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
+            sa.Column(
+                "updated_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
             sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),

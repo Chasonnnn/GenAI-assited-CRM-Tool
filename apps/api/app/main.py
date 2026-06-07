@@ -511,6 +511,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     # Mitigate Spectre vulnerabilities
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
     response.headers["Cross-Origin-Resource-Policy"] = _resource_policy_for_path(request.url.path)
 
     # Content Security Policy

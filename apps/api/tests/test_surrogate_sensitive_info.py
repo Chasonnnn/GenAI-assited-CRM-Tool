@@ -33,9 +33,7 @@ def _set_stage(db, test_org, surrogate_id: str, stage_key: str):
 
 
 @pytest.mark.asyncio
-async def test_sensitive_info_masked_and_revealable_before_pending_docusign(
-    authed_client, db
-):
+async def test_sensitive_info_masked_and_revealable_before_pending_docusign(authed_client, db):
     created = await _create_surrogate(
         authed_client,
         marital_status="Married",
@@ -90,7 +88,8 @@ async def test_sensitive_info_masked_and_revealable_before_pending_docusign(
         db.query(SurrogateActivityLog)
         .filter(
             SurrogateActivityLog.surrogate_id == uuid.UUID(created["id"]),
-            SurrogateActivityLog.activity_type == SurrogateActivityType.SENSITIVE_INFO_REVEALED.value,
+            SurrogateActivityLog.activity_type
+            == SurrogateActivityType.SENSITIVE_INFO_REVEALED.value,
         )
         .one()
     )
@@ -155,7 +154,8 @@ async def test_sensitive_info_masked_and_revealable_after_pending_docusign(
         db.query(SurrogateActivityLog)
         .filter(
             SurrogateActivityLog.surrogate_id == uuid.UUID(created["id"]),
-            SurrogateActivityLog.activity_type == SurrogateActivityType.SENSITIVE_INFO_REVEALED.value,
+            SurrogateActivityLog.activity_type
+            == SurrogateActivityType.SENSITIVE_INFO_REVEALED.value,
         )
         .one()
     )

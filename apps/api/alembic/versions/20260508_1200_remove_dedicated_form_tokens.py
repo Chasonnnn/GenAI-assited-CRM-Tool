@@ -45,7 +45,9 @@ def upgrade() -> None:
         op.drop_column("form_submissions", "token_id")
 
     if _has_column("form_submissions", "source_mode"):
-        op.execute("UPDATE form_submissions SET source_mode = 'shared' WHERE source_mode = 'dedicated'")
+        op.execute(
+            "UPDATE form_submissions SET source_mode = 'shared' WHERE source_mode = 'dedicated'"
+        )
         op.alter_column(
             "form_submissions",
             "source_mode",

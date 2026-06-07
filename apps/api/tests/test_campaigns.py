@@ -376,7 +376,10 @@ def test_list_suppressions_skips_count_for_short_first_page(db, test_org, monkey
     original_count = Query.count
 
     def _count_should_not_be_called(self, *args, **kwargs):
-        if self.column_descriptions and self.column_descriptions[0].get("name") == "EmailSuppression":
+        if (
+            self.column_descriptions
+            and self.column_descriptions[0].get("name") == "EmailSuppression"
+        ):
             raise AssertionError("list_suppressions should not call Query.count()")
         return original_count(self, *args, **kwargs)
 

@@ -219,7 +219,10 @@ def test_get_pending_requests_skips_count_for_short_first_page(
     original_count = Query.count
 
     def _count_should_not_be_called(self, *args, **kwargs):
-        if self.column_descriptions and self.column_descriptions[0].get("name") == "StatusChangeRequest":
+        if (
+            self.column_descriptions
+            and self.column_descriptions[0].get("name") == "StatusChangeRequest"
+        ):
             raise AssertionError("get_pending_requests should not call Query.count()")
         return original_count(self, *args, **kwargs)
 

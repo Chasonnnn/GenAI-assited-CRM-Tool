@@ -285,14 +285,18 @@ def test_get_pdf_export_data_batches_pending_and_overdue_task_counts(
         )
     db.flush()
 
-    monkeypatch.setattr(analytics_service._surrogate, "get_surrogates_by_status", lambda *_, **__: [])
+    monkeypatch.setattr(
+        analytics_service._surrogate, "get_surrogates_by_status", lambda *_, **__: []
+    )
     monkeypatch.setattr(
         analytics_service._surrogate,
         "get_surrogates_by_assignee",
         lambda *_, **__: [],
     )
     monkeypatch.setattr(analytics_service._surrogate, "get_surrogates_trend", lambda *_, **__: [])
-    monkeypatch.setattr(analytics_service._surrogate, "get_performance_by_user", lambda *_, **__: {})
+    monkeypatch.setattr(
+        analytics_service._surrogate, "get_performance_by_user", lambda *_, **__: {}
+    )
     monkeypatch.setattr(analytics_service._meta, "get_meta_performance", lambda *_, **__: {})
     monkeypatch.setattr(analytics_service._meta, "get_funnel_with_filter", lambda *_, **__: [])
     monkeypatch.setattr(

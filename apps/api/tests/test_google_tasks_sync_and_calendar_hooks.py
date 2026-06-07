@@ -533,7 +533,9 @@ async def test_get_google_events_returns_empty_after_retry_exhaustion(monkeypatc
     calendar_records = [
         record for record in caplog.records if record.name == "app.services.calendar_service"
     ]
-    assert calendar_records[-1].message == "Google Calendar events fetch failed error_type=ReadTimeout"
+    assert (
+        calendar_records[-1].message == "Google Calendar events fetch failed error_type=ReadTimeout"
+    )
     assert "person@example.com" not in calendar_records[-1].message
 
 

@@ -54,7 +54,9 @@ def require_analytics_access(
         return session
 
     if len(required_permissions) == 1:
-        raise HTTPException(status_code=403, detail=f"Missing permission: {required_permissions[0]}")
+        raise HTTPException(
+            status_code=403, detail=f"Missing permission: {required_permissions[0]}"
+        )
     raise HTTPException(
         status_code=403,
         detail=f"Missing one of permissions: {', '.join(required_permissions)}",

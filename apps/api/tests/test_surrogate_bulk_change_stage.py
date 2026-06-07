@@ -201,7 +201,10 @@ async def test_bulk_change_stage_applies_valid_rows_and_collects_failures(
     failure_reasons = {entry["surrogate_id"]: entry["reason"] for entry in payload["failed"]}
     assert failure_reasons[same_stage["id"]] == "Target stage is same as current stage"
     assert failure_reasons[archived["id"]] == "Cannot change status of archived surrogate"
-    assert failure_reasons[on_hold["id"]] == "Cannot bulk change stage for surrogates currently on hold"
+    assert (
+        failure_reasons[on_hold["id"]]
+        == "Cannot bulk change stage for surrogates currently on hold"
+    )
     assert failure_reasons[missing_id] == "Surrogate not found"
 
     successful_row = db.query(Surrogate).filter(Surrogate.id == UUID(successful["id"])).first()
@@ -262,7 +265,9 @@ async def test_bulk_change_stage_rejects_regressions_per_row_without_aborting_ba
     refreshed_regression_row = (
         db.query(Surrogate).filter(Surrogate.id == UUID(regression_row["id"])).first()
     )
-    refreshed_success_row = db.query(Surrogate).filter(Surrogate.id == UUID(success_row["id"])).first()
+    refreshed_success_row = (
+        db.query(Surrogate).filter(Surrogate.id == UUID(success_row["id"])).first()
+    )
     assert refreshed_regression_row is not None
     assert refreshed_regression_row.stage_id == approved_stage.id
     assert refreshed_success_row is not None

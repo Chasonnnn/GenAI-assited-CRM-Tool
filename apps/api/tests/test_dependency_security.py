@@ -7,8 +7,7 @@ from packaging.version import Version
 
 def _requirements_map(dependencies: list[str]) -> dict[str, Requirement]:
     return {
-        Requirement(dependency).name.lower(): Requirement(dependency)
-        for dependency in dependencies
+        Requirement(dependency).name.lower(): Requirement(dependency) for dependency in dependencies
     }
 
 

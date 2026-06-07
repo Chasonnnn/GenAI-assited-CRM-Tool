@@ -43,7 +43,7 @@ def test_worker_scale_scheduler_uses_dedicated_scaler_identity() -> None:
     assert '"run.services.update"' in schedule
     assert 'resource "google_project_iam_member" "worker_scaler_run_update"' in schedule
     assert 'resource "google_service_account_iam_member" "worker_scaler_sa_user_worker"' in schedule
-    assert 'service_account_email = google_service_account.worker_scaler[0].email' in schedule
+    assert "service_account_email = google_service_account.worker_scaler[0].email" in schedule
     assert "(var.clamav_update_enabled || var.worker_schedule_enabled)" not in clamav_iam
 
 

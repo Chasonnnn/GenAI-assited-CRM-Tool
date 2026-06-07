@@ -23,9 +23,13 @@ def upgrade() -> None:
     op.add_column("surrogates", sa.Column("ssn_last4", sa.String(length=4), nullable=True))
     op.add_column("surrogates", sa.Column("partner_name", sa.String(length=255), nullable=True))
     op.add_column("surrogates", sa.Column("partner_email", sa.Text(), nullable=True))
-    op.add_column("surrogates", sa.Column("partner_email_hash", sa.String(length=64), nullable=True))
+    op.add_column(
+        "surrogates", sa.Column("partner_email_hash", sa.String(length=64), nullable=True)
+    )
     op.add_column("surrogates", sa.Column("partner_phone", sa.Text(), nullable=True))
-    op.add_column("surrogates", sa.Column("partner_phone_last4", sa.String(length=4), nullable=True))
+    op.add_column(
+        "surrogates", sa.Column("partner_phone_last4", sa.String(length=4), nullable=True)
+    )
     op.add_column("surrogates", sa.Column("partner_ssn", sa.Text(), nullable=True))
     op.add_column("surrogates", sa.Column("partner_ssn_last4", sa.String(length=4), nullable=True))
     op.add_column("surrogates", sa.Column("partner_address_line1", sa.Text(), nullable=True))

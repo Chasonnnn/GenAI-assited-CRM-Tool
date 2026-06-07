@@ -255,9 +255,7 @@ async def test_approve_status_change_request_applies_regression(db, test_org):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.DEVELOPER])
-async def test_surrogate_status_regression_self_approves_for_admin_or_developer(
-    db, test_org, role
-):
+async def test_surrogate_status_regression_self_approves_for_admin_or_developer(db, test_org, role):
     contacted_stage = _get_stage(db, test_org.id, "contacted")
     new_unread_stage = _get_stage(db, test_org.id, "new_unread")
 

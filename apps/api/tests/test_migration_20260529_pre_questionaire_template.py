@@ -58,9 +58,7 @@ def test_pre_questionaire_template_schema_matches_requested_short_form():
     by_key = {field["key"]: field for field in fields}
     yes_no = [{"label": "Yes", "value": "Yes"}, {"label": "No", "value": "No"}]
 
-    assert by_key["age_21_to_36"]["label"] == (
-        "Are you currently between the ages of 21 and 36?"
-    )
+    assert by_key["age_21_to_36"]["label"] == ("Are you currently between the ages of 21 and 36?")
     assert by_key["age_21_to_36"]["options"] == yes_no
     assert by_key["journey_timing_preference"]["options"] == [
         {"label": "0-3 months", "value": "months_0_3"},

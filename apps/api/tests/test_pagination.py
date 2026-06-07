@@ -20,7 +20,7 @@ class MockQuery:
 
     def all(self) -> list[int]:
         end = None if self._limit is None else self._offset + self._limit
-        return self._items[self._offset:end]
+        return self._items[self._offset : end]
 
     def count(self) -> int:
         self.count_calls += 1

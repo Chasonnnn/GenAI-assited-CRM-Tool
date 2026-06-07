@@ -45,32 +45,58 @@ def upgrade() -> None:
             sa.Column("form_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("version", sa.Integer(), nullable=False),
             sa.Column("form_version_hash", sa.String(length=64), nullable=False),
-            sa.Column("form_schema_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-            sa.Column("field_policy_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-            sa.Column("mapping_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+            sa.Column(
+                "form_schema_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+            ),
+            sa.Column(
+                "field_policy_snapshot_json",
+                postgresql.JSONB(astext_type=sa.Text()),
+                nullable=False,
+            ),
+            sa.Column(
+                "mapping_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+            ),
             sa.Column("consent_text_snapshot", sa.Text(), nullable=True),
             sa.Column("consent_text_hash", sa.String(length=64), nullable=True),
-            sa.Column("thank_you_config_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+            sa.Column(
+                "thank_you_config_snapshot_json",
+                postgresql.JSONB(astext_type=sa.Text()),
+                nullable=False,
+            ),
             sa.Column("tracking_mode_snapshot", sa.String(length=30), nullable=False),
             sa.Column("tracking_policy_hash", sa.String(length=64), nullable=False),
-            sa.Column("embed_theme_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+            sa.Column(
+                "embed_theme_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+            ),
             sa.Column("published_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
-            sa.Column("published_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
+            sa.Column(
+                "published_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
             sa.ForeignKeyConstraint(["form_id"], ["forms.id"], ondelete="CASCADE"),
-            sa.ForeignKeyConstraint(["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(
+                ["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"
+            ),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.ForeignKeyConstraint(["published_by_user_id"], ["users.id"], ondelete="SET NULL"),
             sa.PrimaryKeyConstraint("id"),
         )
-        op.create_index("idx_published_intake_versions_org", "published_intake_versions", ["organization_id"])
-        op.create_index("idx_published_intake_versions_link", "published_intake_versions", ["intake_link_id"])
-        op.create_index("idx_published_intake_versions_form", "published_intake_versions", ["form_id"])
+        op.create_index(
+            "idx_published_intake_versions_org", "published_intake_versions", ["organization_id"]
+        )
+        op.create_index(
+            "idx_published_intake_versions_link", "published_intake_versions", ["intake_link_id"]
+        )
+        op.create_index(
+            "idx_published_intake_versions_form", "published_intake_versions", ["form_id"]
+        )
 
     if _has_table("form_intake_links"):
         if not _has_column("form_intake_links", "embed_enabled"):
             op.add_column(
                 "form_intake_links",
-                sa.Column("embed_enabled", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
+                sa.Column(
+                    "embed_enabled", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False
+                ),
             )
         if not _has_column("form_intake_links", "allowed_embed_origins"):
             op.add_column(
@@ -157,9 +183,13 @@ def upgrade() -> None:
                     ondelete="SET NULL",
                 )
             elif name == "idempotency_key":
-                op.add_column("form_submissions", sa.Column(name, sa.String(length=128), nullable=True))
+                op.add_column(
+                    "form_submissions", sa.Column(name, sa.String(length=128), nullable=True)
+                )
             else:
-                op.add_column("form_submissions", sa.Column(name, sa.String(length=64), nullable=True))
+                op.add_column(
+                    "form_submissions", sa.Column(name, sa.String(length=64), nullable=True)
+                )
         op.create_index(
             "uq_form_submission_intake_idempotency",
             "form_submissions",
@@ -185,18 +215,33 @@ def upgrade() -> None:
         if not _has_column("intake_leads", "source"):
             op.add_column(
                 "intake_leads",
-                sa.Column("source", sa.String(length=30), server_default=sa.text("'shared_intake'"), nullable=False),
+                sa.Column(
+                    "source",
+                    sa.String(length=30),
+                    server_default=sa.text("'shared_intake'"),
+                    nullable=False,
+                ),
             )
         if not _has_column("intake_leads", "lead_type"):
             op.add_column(
                 "intake_leads",
-                sa.Column("lead_type", sa.String(length=40), server_default=sa.text("'surrogate'"), nullable=False),
+                sa.Column(
+                    "lead_type",
+                    sa.String(length=40),
+                    server_default=sa.text("'surrogate'"),
+                    nullable=False,
+                ),
             )
 
     if not _has_table("lead_attribution"):
         op.create_table(
             "lead_attribution",
-            sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=sa.text("gen_random_uuid()"),
+                nullable=False,
+            ),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("form_submission_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("intake_link_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -215,20 +260,33 @@ def upgrade() -> None:
             sa.Column("landing_url", sa.String(length=1000), nullable=True),
             sa.Column("first_touch_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
             sa.Column("last_touch_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-            sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
-            sa.ForeignKeyConstraint(["form_submission_id"], ["form_submissions.id"], ondelete="CASCADE"),
-            sa.ForeignKeyConstraint(["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"),
+            sa.Column(
+                "created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
+            sa.ForeignKeyConstraint(
+                ["form_submission_id"], ["form_submissions.id"], ondelete="CASCADE"
+            ),
+            sa.ForeignKeyConstraint(
+                ["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"
+            ),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("idx_lead_attribution_org", "lead_attribution", ["organization_id"])
-        op.create_index("idx_lead_attribution_submission", "lead_attribution", ["form_submission_id"])
+        op.create_index(
+            "idx_lead_attribution_submission", "lead_attribution", ["form_submission_id"]
+        )
         op.create_index("idx_lead_attribution_link", "lead_attribution", ["intake_link_id"])
 
     if not _has_table("consent_records"):
         op.create_table(
             "consent_records",
-            sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=sa.text("gen_random_uuid()"),
+                nullable=False,
+            ),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("intake_link_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("form_submission_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -236,13 +294,19 @@ def upgrade() -> None:
             sa.Column("consent_text_snapshot", sa.Text(), nullable=True),
             sa.Column("consent_text_hash", sa.String(length=64), nullable=True),
             sa.Column("accepted", sa.Boolean(), nullable=False),
-            sa.Column("accepted_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
+            sa.Column(
+                "accepted_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
             sa.Column("ip_hash", sa.String(length=64), nullable=True),
             sa.Column("user_agent_hash", sa.String(length=64), nullable=True),
             sa.Column("parent_origin", sa.String(length=500), nullable=True),
             sa.Column("privacy_policy_url_snapshot", sa.String(length=1000), nullable=True),
-            sa.ForeignKeyConstraint(["form_submission_id"], ["form_submissions.id"], ondelete="CASCADE"),
-            sa.ForeignKeyConstraint(["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(
+                ["form_submission_id"], ["form_submissions.id"], ondelete="CASCADE"
+            ),
+            sa.ForeignKeyConstraint(
+                ["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"
+            ),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
         )
@@ -253,18 +317,29 @@ def upgrade() -> None:
     if not _has_table("embed_sessions"):
         op.create_table(
             "embed_sessions",
-            sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=sa.text("gen_random_uuid()"),
+                nullable=False,
+            ),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("intake_link_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("public_session_token_hash", sa.String(length=64), nullable=False),
             sa.Column("parent_origin", sa.String(length=500), nullable=False),
-            sa.Column("attribution_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column(
+                "attribution_snapshot_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+            ),
             sa.Column("ip_hash", sa.String(length=64), nullable=True),
             sa.Column("user_agent_hash", sa.String(length=64), nullable=True),
             sa.Column("expires_at", sa.TIMESTAMP(), nullable=False),
             sa.Column("consumed_at", sa.TIMESTAMP(), nullable=True),
-            sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
-            sa.ForeignKeyConstraint(["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"),
+            sa.Column(
+                "created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
+            sa.ForeignKeyConstraint(
+                ["intake_link_id"], ["form_intake_links.id"], ondelete="CASCADE"
+            ),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("public_session_token_hash", name="uq_embed_session_token_hash"),
@@ -275,7 +350,12 @@ def upgrade() -> None:
     if not _has_table("tracking_event_logs"):
         op.create_table(
             "tracking_event_logs",
-            sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=sa.text("gen_random_uuid()"),
+                nullable=False,
+            ),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("intake_link_id", postgresql.UUID(as_uuid=True), nullable=True),
             sa.Column("form_submission_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -285,14 +365,22 @@ def upgrade() -> None:
             sa.Column("payload_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
             sa.Column("payload_hash", sa.String(length=64), nullable=False),
             sa.Column("error_message", sa.Text(), nullable=True),
-            sa.Column("created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False),
-            sa.ForeignKeyConstraint(["form_submission_id"], ["form_submissions.id"], ondelete="SET NULL"),
-            sa.ForeignKeyConstraint(["intake_link_id"], ["form_intake_links.id"], ondelete="SET NULL"),
+            sa.Column(
+                "created_at", sa.TIMESTAMP(), server_default=sa.text("now()"), nullable=False
+            ),
+            sa.ForeignKeyConstraint(
+                ["form_submission_id"], ["form_submissions.id"], ondelete="SET NULL"
+            ),
+            sa.ForeignKeyConstraint(
+                ["intake_link_id"], ["form_intake_links.id"], ondelete="SET NULL"
+            ),
             sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("idx_tracking_event_logs_org", "tracking_event_logs", ["organization_id"])
-        op.create_index("idx_tracking_event_logs_submission", "tracking_event_logs", ["form_submission_id"])
+        op.create_index(
+            "idx_tracking_event_logs_submission", "tracking_event_logs", ["form_submission_id"]
+        )
         op.create_index(
             "idx_tracking_event_logs_destination",
             "tracking_event_logs",
@@ -329,11 +417,15 @@ def downgrade() -> None:
         if _has_column("form_submissions", name):
             op.drop_column("form_submissions", name)
     if _has_column("form_submissions", "published_version_id"):
-        op.drop_constraint("fk_form_submissions_published_version", "form_submissions", type_="foreignkey")
+        op.drop_constraint(
+            "fk_form_submissions_published_version", "form_submissions", type_="foreignkey"
+        )
         op.drop_column("form_submissions", "published_version_id")
 
     if _has_column("form_intake_links", "published_version_id"):
-        op.drop_constraint("fk_form_intake_links_published_version", "form_intake_links", type_="foreignkey")
+        op.drop_constraint(
+            "fk_form_intake_links_published_version", "form_intake_links", type_="foreignkey"
+        )
         op.drop_column("form_intake_links", "published_version_id")
     for name in (
         "embed_theme_json",

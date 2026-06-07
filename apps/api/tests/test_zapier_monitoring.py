@@ -253,7 +253,10 @@ def test_list_events_skips_count_for_short_first_page(db, test_org, monkeypatch)
     original_count = Query.count
 
     def _count_should_not_be_called(self, *args, **kwargs):
-        if self.column_descriptions and self.column_descriptions[0].get("name") == "ZapierOutboundEvent":
+        if (
+            self.column_descriptions
+            and self.column_descriptions[0].get("name") == "ZapierOutboundEvent"
+        ):
             raise AssertionError("list_events should not call Query.count()")
         return original_count(self, *args, **kwargs)
 

@@ -290,7 +290,9 @@ def test_list_claim_queue_does_not_use_query_count(db, test_org, test_user, monk
 
     monkeypatch.setattr(Query, "count", _count_should_not_be_called)
 
-    surrogates, total = surrogate_service.list_claim_queue(db=db, org_id=org_id, page=1, per_page=20)
+    surrogates, total = surrogate_service.list_claim_queue(
+        db=db, org_id=org_id, page=1, per_page=20
+    )
 
     assert total >= 1
     assert any(item.id == surrogate.id for item in surrogates)
