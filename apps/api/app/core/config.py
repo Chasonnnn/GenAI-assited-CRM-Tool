@@ -23,7 +23,7 @@ DEFAULT_DUO_REDIRECT_URI = "http://localhost:3000/auth/duo/callback"
 DEFAULT_META_OAUTH_REDIRECT_URI = "http://localhost:8000/integrations/meta/callback"
 RELEASE_PLEASE_MANIFEST_NAME = ".release-please-manifest.json"
 RELEASE_PLEASE_VERSION_NAME = ".release-please-version.json"
-FALLBACK_APP_VERSION = "0.54.0"
+FALLBACK_APP_VERSION = "0.91.32"  # x-release-please-version
 
 
 def _normalize_origin(origin: str) -> str:
