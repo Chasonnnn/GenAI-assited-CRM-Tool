@@ -474,7 +474,6 @@ Terminal (intake-only): lost, disqualified
 
 ## 13) Current Status
 
-- **Version:** 0.16.0
 - **Completed:** Auth, surrogates, IPs, matches, tasks, notes, attachments, notifications, calendar, bulk operations, filter persistence, automation workflows, campaigns, queue management
 - **Stack:** Next.js 16, React 19, FastAPI, PostgreSQL, SQLAlchemy 2.0
 

@@ -1,6 +1,6 @@
 # Surrogacy Force Platform
 
-> **Version:** 0.42.0 | Multi-tenant Surrogacy Force platform for surrogacy agencies
+> Multi-tenant Surrogacy Force platform for surrogacy agencies
 
 ## Project Guidelines
 
