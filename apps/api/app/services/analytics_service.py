@@ -35,54 +35,79 @@ def get_pdf_export_data(
     org = org_service.get_org_by_id(db, organization_id)
     org_name = org.name if org else "Organization"
 
-    total_surrogates = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            date_filter,
-        )
-        .scalar()
-        or 0
-    )
+    from sqlalchemy import case, and_
 
     period_start = (end_dt or datetime.now(timezone.utc)) - timedelta(days=7)
-    new_this_period = (
-        db.query(func.count(Surrogate.id))
-        .filter(
-            Surrogate.organization_id == organization_id,
-            Surrogate.is_archived.is_(False),
-            Surrogate.created_at >= period_start,
-        )
-        .scalar()
-        or 0
-    )
 
     analytics_config = _shared.get_analytics_stage_configuration(db, organization_id)
-    snapshot = analytics_config["snapshot"]
-    qualification_stage_key = analytics_config["qualification_stage_key"]
+    snapshot = analytics_config.get("snapshot")
+    qualification_stage_key = analytics_config.get("qualification_stage_key")
     qualification_stage = (
-        analytics_config["stage_by_key"].get(qualification_stage_key)
+        analytics_config.get("stage_by_key", {}).get(qualification_stage_key)
         if qualification_stage_key
         else None
     )
 
-    qualification_rate = 0.0
-    if qualification_stage and total_surrogates > 0:
+    qualified_stage_ids = []
+    if snapshot and hasattr(snapshot, "stages"):
         qualified_stage_ids = [
             stage.id
             for stage in snapshot.stages
-            if stage.is_active and stage.order >= qualification_stage.order
+            if stage.is_active and qualification_stage and stage.order >= qualification_stage.order
         ]
-        qualified_count = (
-            db.query(func.count(Surrogate.id))
-            .filter(
-                Surrogate.organization_id == organization_id,
-                Surrogate.is_archived.is_(False),
-                Surrogate.stage_id.in_(qualified_stage_ids),
-            )
-            .scalar()
-            or 0
+
+    metrics = (
+        db.query(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (date_filter, 1),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("total_surrogates"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Surrogate.is_archived.is_(False),
+                                Surrogate.created_at >= period_start,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("new_this_period"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Surrogate.is_archived.is_(False),
+                                Surrogate.stage_id.in_(qualified_stage_ids),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("qualified_count"),
         )
+        .filter(Surrogate.organization_id == organization_id)
+        .one()
+    )
+
+    total_surrogates = int(metrics.total_surrogates or 0)
+    new_this_period = int(metrics.new_this_period or 0)
+    qualified_count = int(metrics.qualified_count or 0)
+
+    qualification_rate = 0.0
+    if total_surrogates > 0:
         qualification_rate = (qualified_count / total_surrogates) * 100
 
     today = datetime.now(timezone.utc).date()
