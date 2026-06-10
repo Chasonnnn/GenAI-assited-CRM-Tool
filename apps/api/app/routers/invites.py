@@ -107,6 +107,7 @@ def list_invites(
 
 
 @router.post("", response_model=InviteRead, dependencies=[Depends(require_csrf_header)])
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def create_invite(
     body: InviteCreate,
     request: Request,
@@ -171,7 +172,9 @@ async def create_invite(
 
 
 @router.post("/{invite_id}/resend", dependencies=[Depends(require_csrf_header)])
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 async def resend_invite(
+    request: Request,
     invite_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(
@@ -205,7 +208,9 @@ async def resend_invite(
 
 
 @router.delete("/{invite_id}", dependencies=[Depends(require_csrf_header)])
+@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
 def revoke_invite(
+    request: Request,
     invite_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(
