@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2024-06-11 - Hide decorative icons in interactive elements
+**Learning:** Decorative icons (like loaders, checkmarks, or X marks) placed inside interactive elements (like buttons) that already have visible text or an `aria-label` are read redundantly by screen readers if not hidden.
+**Action:** Always add `aria-hidden="true"` to these decorative icons to keep the accessibility tree clean and improve the screen reader experience.
