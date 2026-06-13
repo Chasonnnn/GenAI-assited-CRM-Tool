@@ -7,8 +7,7 @@ from packaging.version import Version
 
 def _requirements_map(dependencies: list[str]) -> dict[str, Requirement]:
     return {
-        Requirement(dependency).name.lower(): Requirement(dependency)
-        for dependency in dependencies
+        Requirement(dependency).name.lower(): Requirement(dependency) for dependency in dependencies
     }
 
 
@@ -34,7 +33,7 @@ def test_dependency_pins_match_security_fixes():
         "fastapi": "0.136.3",
         "idna": "3.15",
         "pillow": "12.2.0",
-        "pypdf": "6.10.2",
+        "pypdf": "6.12.0",
         "python-multipart": "0.0.27",
         "starlette": "1.0.1",
     }
