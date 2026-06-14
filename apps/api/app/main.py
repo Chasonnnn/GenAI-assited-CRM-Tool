@@ -582,6 +582,27 @@ async def structured_request_logging_middleware(request: Request, call_next):
         )
 
 
+@app.middleware("http")
+async def clear_org_scope_middleware(request: Request, call_next):
+    """Bound the multi-tenant org-scope to the request lifecycle.
+
+    ``get_current_session`` stamps the authenticated org onto the request's DB
+    session so the org-scoping backstop (app/db/org_scope.py) is active inside
+    handlers. In production each request gets a fresh session discarded at
+    request end, but the test harness shares one session across the request and
+    its direct assertions — so we explicitly clear the stamp here, ensuring the
+    scope can never leak past the request that set it.
+    """
+    from app.db.org_scope import clear_org_scope
+
+    try:
+        return await call_next(request)
+    finally:
+        db = getattr(request.state, "request_db", None)
+        if db is not None:
+            clear_org_scope(db)
+
+
 # ============================================================================
 # Routers
 # ============================================================================
