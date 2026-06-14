@@ -43,12 +43,28 @@ SECRET_FIELDS = [
 _SENTINEL = "sup3r-secret-sentinel-DO-NOT-LEAK-9f8e7d6c"
 
 
+# The DB URL embeds a password, so it must be masked too. The sentinel is placed
+# in the password slot so the repr/model_dump leak tests below also cover it.
+_DB_URL_WITH_SECRET = f"postgresql+psycopg://u:{_SENTINEL}@localhost:5432/db"
+
+
 def _settings_with_sentinels() -> Settings:
     return Settings(
         ENV="test",
-        DATABASE_URL="postgresql+psycopg://u:p@localhost:5432/db",
+        DATABASE_URL=_DB_URL_WITH_SECRET,
         **{field: _SENTINEL for field in SECRET_FIELDS},
     )
+
+
+def test_database_url_is_masked_secretstr():
+    """DATABASE_URL carries the DB password; it must be a SecretStr and never
+    surface in repr()/model_dump()."""
+    s = _settings_with_sentinels()
+    assert isinstance(s.DATABASE_URL, SecretStr)
+    assert s.DATABASE_URL.get_secret_value() == _DB_URL_WITH_SECRET
+    assert _SENTINEL not in repr(s)
+    assert _SENTINEL not in str(s.model_dump())
+    assert _SENTINEL not in s.model_dump_json()
 
 
 def test_secret_fields_are_secretstr():

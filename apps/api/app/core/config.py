@@ -107,7 +107,9 @@ class Settings(BaseSettings):
     TRUST_PROXY_HOSTS: str = "127.0.0.1"
 
     # Database
-    DATABASE_URL: str
+    # SecretStr: the URL carries the DB password; keep it out of repr/model_dump/
+    # Sentry. Read via settings.DATABASE_URL.get_secret_value().
+    DATABASE_URL: SecretStr
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
