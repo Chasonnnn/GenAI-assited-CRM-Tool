@@ -199,7 +199,7 @@ export function SurrogateAiTab({
                                     size="sm"
                                     variant="outline"
                                     onClick={() => {
-                                        navigator.clipboard.writeText(
+                                        void navigator.clipboard.writeText(
                                             `Subject: ${aiDraftEmail.subject}\n\n${aiDraftEmail.body}`
                                         )
                                     }}

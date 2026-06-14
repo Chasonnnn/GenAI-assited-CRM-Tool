@@ -18,7 +18,7 @@ export function useCreateInvite() {
     return useMutation({
         mutationFn: (data: CreateInviteRequest) => invitesApi.create(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["invites"] })
+            void queryClient.invalidateQueries({ queryKey: ["invites"] })
         },
     })
 }
@@ -29,7 +29,7 @@ export function useResendInvite() {
     return useMutation({
         mutationFn: (inviteId: string) => invitesApi.resend(inviteId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["invites"] })
+            void queryClient.invalidateQueries({ queryKey: ["invites"] })
         },
     })
 }
@@ -40,7 +40,7 @@ export function useRevokeInvite() {
     return useMutation({
         mutationFn: (inviteId: string) => invitesApi.revoke(inviteId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["invites"] })
+            void queryClient.invalidateQueries({ queryKey: ["invites"] })
         },
     })
 }

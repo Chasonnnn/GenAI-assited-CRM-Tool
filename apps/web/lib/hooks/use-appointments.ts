@@ -55,7 +55,7 @@ export function useCreateAppointmentType() {
     return useMutation({
         mutationFn: appointmentsApi.createAppointmentType,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.types() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.types() });
         },
     });
 }
@@ -72,7 +72,7 @@ export function useUpdateAppointmentType() {
             data: Partial<appointmentsApi.AppointmentTypeCreate & { is_active: boolean }>;
         }) => appointmentsApi.updateAppointmentType(typeId, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.types() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.types() });
         },
     });
 }
@@ -83,7 +83,7 @@ export function useDeleteAppointmentType() {
     return useMutation({
         mutationFn: appointmentsApi.deleteAppointmentType,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.types() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.types() });
         },
     });
 }
@@ -111,7 +111,7 @@ export function useSetAvailabilityRules() {
             timezone: string;
         }) => appointmentsApi.setAvailabilityRules(rules, timezone),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.availability() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.availability() });
         },
     });
 }
@@ -201,7 +201,7 @@ export function useApproveAppointment() {
         mutationFn: appointmentsApi.approveAppointment,
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
         },
     });
 }
@@ -219,7 +219,7 @@ export function useRescheduleAppointment() {
         }) => appointmentsApi.rescheduleAppointment(appointmentId, scheduledStart),
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
         },
         onError: (error) => {
             const message =
@@ -244,7 +244,7 @@ export function useCancelAppointment() {
         }) => appointmentsApi.cancelAppointment(appointmentId, reason),
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
         },
     });
 }
@@ -262,7 +262,7 @@ export function useUpdateAppointmentLink() {
         }) => appointmentsApi.updateAppointmentLink(appointmentId, data),
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
         },
     });
 }
@@ -338,12 +338,12 @@ export function useCreateBooking() {
             data: appointmentsApi.BookingCreate;
         }) => appointmentsApi.createBooking(publicSlug, data),
         onSuccess: (_createdBooking, { publicSlug }) => {
-            queryClient.invalidateQueries({ queryKey: bookingKeys.page(publicSlug) });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: bookingKeys.page(publicSlug) });
+            void queryClient.invalidateQueries({
                 queryKey: [...bookingKeys.all, 'slots'],
                 exact: false,
             });
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });
         },
     });
 }
@@ -370,12 +370,12 @@ export function useRescheduleByManageToken() {
             scheduledStart: string;
         }) => appointmentsApi.rescheduleByManageToken(orgId, token, scheduledStart),
         onSuccess: (_updatedAppointment, { orgId, token }) => {
-            queryClient.invalidateQueries({ queryKey: bookingKeys.manage(orgId, token) })
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: bookingKeys.manage(orgId, token) })
+            void queryClient.invalidateQueries({
                 queryKey: [...bookingKeys.all, 'slots'],
                 exact: false,
             })
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
         },
     })
 }
@@ -394,12 +394,12 @@ export function useCancelByManageToken() {
             reason?: string;
         }) => appointmentsApi.cancelByManageToken(orgId, token, reason),
         onSuccess: (_updatedAppointment, { orgId, token }) => {
-            queryClient.invalidateQueries({ queryKey: bookingKeys.manage(orgId, token) })
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: bookingKeys.manage(orgId, token) })
+            void queryClient.invalidateQueries({
                 queryKey: [...bookingKeys.all, 'slots'],
                 exact: false,
             })
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
         },
     })
 }

@@ -996,7 +996,7 @@ function OrganizationBrandingSection() {
 
   useEffect(() => {
     if (user?.org_id) {
-      loadOrgSettings()
+      void loadOrgSettings()
     } else {
       setBrandingUi((current) => ({ ...current, orgSettingsLoading: false }))
     }

@@ -43,15 +43,15 @@ function invalidateImportCaches(
     importId?: string | null,
     options: { refreshSurrogates?: boolean } = {}
 ) {
-    queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-    queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+    void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+    void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
     if (importId) {
-        queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
+        void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
     }
     if (options.refreshSurrogates) {
-        queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
-        queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
-        queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
     }
 }
 

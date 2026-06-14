@@ -134,7 +134,7 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
             toast.success("Match proposed successfully!")
-            queryClient.invalidateQueries({ queryKey: ["matches"] })
+            void queryClient.invalidateQueries({ queryKey: ["matches"] })
             onOpenChange(false)
             resetForm()
             onSuccess?.()

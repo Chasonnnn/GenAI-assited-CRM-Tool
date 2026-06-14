@@ -46,8 +46,8 @@ export function useUpdateUserSignature() {
     return useMutation({
         mutationFn: (data: UserSignatureUpdate) => updateUserSignature(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
         },
     })
 }
@@ -64,8 +64,8 @@ export function useUploadSignaturePhoto() {
     return useMutation({
         mutationFn: (file: File) => uploadSignaturePhoto(file),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
         },
     })
 }
@@ -75,8 +75,8 @@ export function useDeleteSignaturePhoto() {
     return useMutation({
         mutationFn: () => deleteSignaturePhoto(),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.user() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
         },
     })
 }
@@ -97,8 +97,8 @@ export function useUpdateOrgSignature() {
     return useMutation({
         mutationFn: (data: OrgSignatureUpdate) => updateOrgSignature(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
         },
     })
 }
@@ -108,8 +108,8 @@ export function useUploadOrgLogo() {
     return useMutation({
         mutationFn: (file: File) => uploadOrgLogo(file),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
         },
     })
 }
@@ -119,9 +119,9 @@ export function useDeleteOrgLogo() {
     return useMutation({
         mutationFn: () => deleteOrgLogo(),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
-            queryClient.invalidateQueries({ queryKey: signatureKeys.orgPreview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.org() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.preview() })
+            void queryClient.invalidateQueries({ queryKey: signatureKeys.orgPreview() })
         },
     })
 }

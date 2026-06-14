@@ -255,7 +255,7 @@ export default function CSVImportPage() {
                 onClose={() => setErrorTarget(null)}
                 onRetry={() => {
                     if (!errorTarget) return
-                    handleRetry(errorTarget, retryValidationMode)
+                    void handleRetry(errorTarget, retryValidationMode)
                 }}
             />
         </div>

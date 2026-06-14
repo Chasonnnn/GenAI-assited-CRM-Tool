@@ -66,7 +66,7 @@ export function MilestoneImageSelector({
         if (!attachments || attachments.length === 0) return
         attachments.forEach((attachment) => {
             if (!imageUrls[attachment.id] && !loadingUrls.has(attachment.id)) {
-                loadImageUrl(attachment)
+                void loadImageUrl(attachment)
             }
         })
     }, [attachments, imageUrls, loadingUrls, loadImageUrl])
@@ -154,7 +154,7 @@ export function MilestoneImageSelector({
 
                                 // Load URL when component mounts
                                 if (!url && !isLoading) {
-                                    loadImageUrl(attachment)
+                                    void loadImageUrl(attachment)
                                 }
 
                                 return (

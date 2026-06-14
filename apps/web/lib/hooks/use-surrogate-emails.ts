@@ -34,7 +34,7 @@ export function useCreateSurrogateEmailContact(surrogateId: string) {
         mutationFn: (data: surrogateEmailsApi.SurrogateEmailContactCreatePayload) =>
             surrogateEmailsApi.createSurrogateEmailContact(surrogateId, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
         },
     })
 }
@@ -51,7 +51,7 @@ export function usePatchSurrogateEmailContact(surrogateId: string) {
             data: surrogateEmailsApi.SurrogateEmailContactPatchPayload
         }) => surrogateEmailsApi.patchSurrogateEmailContact(surrogateId, contactId, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
         },
     })
 }
@@ -63,7 +63,7 @@ export function useDeactivateSurrogateEmailContact(surrogateId: string) {
         mutationFn: (contactId: string) =>
             surrogateEmailsApi.deactivateSurrogateEmailContact(surrogateId, contactId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
         },
     })
 }

@@ -102,10 +102,10 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
     const deleteMutation = useDeleteAttachment()
 
     const onDrop = useCallback(
-        async (acceptedFiles: File[]) => {
+        (acceptedFiles: File[]) => {
             setError(null)
 
-            await uploadAcceptedFilesSequentially(acceptedFiles, async (file) => {
+            void uploadAcceptedFilesSequentially(acceptedFiles, async (file) => {
                 // Validate extension
                 const ext = file.name.split(".").pop()?.toLowerCase()
                 if (!ext || !ALLOWED_EXTENSION_SET.has(ext)) {

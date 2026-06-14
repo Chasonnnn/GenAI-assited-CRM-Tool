@@ -42,8 +42,8 @@ const workflowKeys = {
 }
 
 function invalidateWorkflowCollectionCaches(queryClient: ReturnType<typeof useQueryClient>) {
-    queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
-    queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+    void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+    void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
 }
 
 function refreshWorkflowDetailCache(
@@ -51,7 +51,7 @@ function refreshWorkflowDetailCache(
     workflow: { id: string },
 ) {
     queryClient.setQueryData(workflowKeys.detail(workflow.id), workflow)
-    queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflow.id) })
+    void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflow.id) })
 }
 
 // =============================================================================
@@ -116,12 +116,12 @@ export function useRetryWorkflowExecution() {
     return useMutation({
         mutationFn: (executionId: string) => retryWorkflowExecution(executionId),
         onSuccess: (execution) => {
-            queryClient.invalidateQueries({ queryKey: workflowKeys.executions(execution.workflow_id) })
-            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.executions(execution.workflow_id) })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
             // Org executions dashboard uses its own query keys.
-            queryClient.invalidateQueries({ queryKey: ["workflow-executions"] })
-            queryClient.invalidateQueries({ queryKey: ["workflow-execution-stats"] })
+            void queryClient.invalidateQueries({ queryKey: ["workflow-executions"] })
+            void queryClient.invalidateQueries({ queryKey: ["workflow-execution-stats"] })
         },
     })
 }
@@ -132,8 +132,8 @@ export function useCreateWorkflow() {
     return useMutation({
         mutationFn: (data: WorkflowCreate) => createWorkflow(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
         },
     })
 }
@@ -213,7 +213,7 @@ export function useUpdateUserPreference() {
             isOptedOut: boolean
         }) => updateUserPreference(workflowId, isOptedOut),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: workflowKeys.preferences() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.preferences() })
         },
     })
 }

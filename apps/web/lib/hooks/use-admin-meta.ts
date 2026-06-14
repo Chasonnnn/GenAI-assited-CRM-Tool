@@ -32,7 +32,7 @@ export function useCreateMetaAdAccount() {
     return useMutation({
         mutationFn: (data: MetaAdAccountCreate) => createMetaAdAccount(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
     })
 }
@@ -49,7 +49,7 @@ export function useUpdateMetaAdAccount() {
             data: MetaAdAccountUpdate
         }) => updateMetaAdAccount(accountId, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
     })
 }
@@ -60,7 +60,7 @@ export function useDeleteMetaAdAccount() {
     return useMutation({
         mutationFn: (accountId: string) => deleteMetaAdAccount(accountId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
     })
 }

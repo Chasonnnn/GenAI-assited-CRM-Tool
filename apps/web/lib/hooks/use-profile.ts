@@ -48,7 +48,7 @@ export function useSaveProfileOverrides() {
             newBaseSubmissionId?: string | null
         }) => saveProfileOverrides(surrogateId, overrides, newBaseSubmissionId),
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: profileKeys.detail(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: profileKeys.detail(surrogateId) })
         },
     })
 }
@@ -67,7 +67,7 @@ export function useToggleProfileHidden() {
             hidden: boolean
         }) => toggleProfileHiddenField(surrogateId, fieldKey, hidden),
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: profileKeys.detail(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: profileKeys.detail(surrogateId) })
         },
     })
 }

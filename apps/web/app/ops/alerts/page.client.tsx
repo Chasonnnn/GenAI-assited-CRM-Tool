@@ -130,7 +130,7 @@ export default function GlobalAlertsPage() {
     }, [statusFilter, severityFilter]);
 
     useEffect(() => {
-        fetchAlerts();
+        void fetchAlerts();
     }, [fetchAlerts]);
 
     const handleAcknowledge = async (alertId: string) => {

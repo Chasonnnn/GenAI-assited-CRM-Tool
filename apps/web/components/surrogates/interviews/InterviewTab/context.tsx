@@ -193,7 +193,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         )
         if (!hasPending) return
         const interval = setInterval(() => {
-            refetchInterview()
+            void refetchInterview()
         }, 5000)
         return () => clearInterval(interval)
     }, [attachments, refetchInterview, selectedId])

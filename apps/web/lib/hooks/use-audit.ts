@@ -69,7 +69,7 @@ export function useCreateAuditExport() {
     return useMutation({
         mutationFn: (data: AuditExportCreate) => createAuditExport(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: auditKeys.exports() })
+            void queryClient.invalidateQueries({ queryKey: auditKeys.exports() })
         },
     })
 }

@@ -79,7 +79,7 @@ export function useCreateMatch() {
     return useMutation({
         mutationFn: (data: MatchCreate) => createMatch(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
         },
     })
 }
@@ -94,7 +94,7 @@ export function useAcceptMatch() {
         mutationFn: ({ matchId, data }: { matchId: string; data?: MatchAcceptRequest }) =>
             acceptMatch(matchId, data),
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
@@ -110,7 +110,7 @@ export function useRejectMatch() {
         mutationFn: ({ matchId, data }: { matchId: string; data: MatchRejectRequest }) =>
             rejectMatch(matchId, data),
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
@@ -126,7 +126,7 @@ export function useCancelMatch() {
         mutationFn: ({ matchId, data }: { matchId: string; data?: MatchCancelRequest }) =>
             cancelMatch(matchId, data),
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
         },
     })
@@ -189,7 +189,7 @@ export function useCreateMatchEvent(matchId: string) {
     return useMutation({
         mutationFn: (data: MatchEventCreate) => createMatchEvent(matchId, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+            void queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
         },
     })
 }
@@ -204,7 +204,7 @@ export function useUpdateMatchEvent(matchId: string) {
         mutationFn: ({ eventId, data }: { eventId: string; data: MatchEventUpdate }) =>
             updateMatchEvent(matchId, eventId, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+            void queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
         },
     })
 }
@@ -218,7 +218,7 @@ export function useDeleteMatchEvent(matchId: string) {
     return useMutation({
         mutationFn: (eventId: string) => deleteMatchEvent(matchId, eventId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
+            void queryClient.invalidateQueries({ queryKey: matchEventKeys.list(matchId) })
         },
     })
 }

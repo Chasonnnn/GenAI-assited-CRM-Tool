@@ -25,7 +25,7 @@ export function useCreateZapierInboundWebhook() {
     return useMutation({
         mutationFn: zapierApi.createZapierInboundWebhook,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
         },
     });
 }
@@ -36,7 +36,7 @@ export function useRotateZapierInboundWebhook() {
         mutationFn: ({ webhookId }: { webhookId: string }) =>
             zapierApi.rotateZapierInboundWebhookSecret(webhookId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
         },
     });
 }
@@ -47,7 +47,7 @@ export function useUpdateZapierInboundWebhook() {
         mutationFn: ({ webhookId, payload }: { webhookId: string; payload: zapierApi.ZapierInboundWebhookUpdateRequest }) =>
             zapierApi.updateZapierInboundWebhook(webhookId, payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
         },
     });
 }
@@ -58,7 +58,7 @@ export function useDeleteZapierInboundWebhook() {
         mutationFn: ({ webhookId }: { webhookId: string }) =>
             zapierApi.deleteZapierInboundWebhook(webhookId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
         },
     });
 }
@@ -68,7 +68,7 @@ export function useUpdateZapierOutboundSettings() {
     return useMutation({
         mutationFn: zapierApi.updateZapierOutboundSettings,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
         },
     });
 }
@@ -79,10 +79,10 @@ export function useZapierTestLead() {
     return useMutation({
         mutationFn: zapierApi.sendZapierTestLead,
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() });
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.all });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() });
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.all });
             if (result.surrogate_id) {
                 invalidateSurrogateCrmCaches(queryClient, result.surrogate_id);
             }
@@ -96,11 +96,11 @@ export function useZapierOutboundTest() {
     return useMutation({
         mutationFn: zapierApi.sendZapierOutboundTest,
         onSuccess: () => {
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...zapierKeys.all, 'outbound-events'],
                 exact: false,
             });
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...zapierKeys.all, 'outbound-events-summary'],
                 exact: false,
             });
@@ -133,8 +133,8 @@ export function useRetryZapierOutboundEvent() {
             payload?: zapierApi.RetryZapierOutboundEventRequest;
         }) => zapierApi.retryZapierOutboundEvent(eventId, payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.outboundEventsSummary(24) });
-            queryClient.invalidateQueries({ queryKey: [...zapierKeys.all, 'outbound-events'] });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.outboundEventsSummary(24) });
+            void queryClient.invalidateQueries({ queryKey: [...zapierKeys.all, 'outbound-events'] });
         },
     });
 }
@@ -144,7 +144,7 @@ export function useZapierFieldPaste() {
     return useMutation({
         mutationFn: zapierApi.parseZapierFieldPaste,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.settings() });
         },
     });
 }

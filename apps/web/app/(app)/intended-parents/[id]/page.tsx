@@ -242,7 +242,7 @@ export default function IntendedParentDetailPage() {
             toast.success(`Stage updated to ${targetLabel}`, {
                 action: {
                     label: "Undo (5 min)",
-                    onClick: async () => {
+                    onClick: () => void (async () => {
                         if (!previousStageId) {
                             toast.error("Undo failed")
                             return
@@ -258,7 +258,7 @@ export default function IntendedParentDetailPage() {
                                 error instanceof Error ? error.message : "Undo failed"
                             toast.error(message)
                         }
-                    },
+                    })(),
                 },
                 duration: 60000,
             })

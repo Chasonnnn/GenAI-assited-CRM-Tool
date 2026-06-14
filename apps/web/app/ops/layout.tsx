@@ -103,7 +103,7 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                 replace('/ops/login');
             }
         }
-        checkPlatformAdmin();
+        void checkPlatformAdmin();
     }, [replace, isLoginPage]);
 
     const handleLogout = async () => {

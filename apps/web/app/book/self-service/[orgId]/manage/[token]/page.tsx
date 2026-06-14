@@ -181,7 +181,7 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
             }
         }
 
-        load()
+        void load()
     }, [orgId, token, applyLoadState])
 
     useEffect(() => {

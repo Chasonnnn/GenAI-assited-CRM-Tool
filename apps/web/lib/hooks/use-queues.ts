@@ -123,7 +123,7 @@ export function useCreateQueue() {
     return useMutation({
         mutationFn: createQueue,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
         },
     });
 }
@@ -139,7 +139,7 @@ export function useUpdateQueue() {
             updateQueue(queueId, data),
         onSuccess: (updatedQueue) => {
             queryClient.setQueryData(queueKeys.detail(updatedQueue.id), updatedQueue);
-            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
         },
     });
 }
@@ -153,7 +153,7 @@ export function useDeleteQueue() {
     return useMutation({
         mutationFn: deleteQueue,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
         },
     });
 }
@@ -168,10 +168,10 @@ export function useClaimSurrogate() {
     return useMutation({
         mutationFn: claimSurrogate,
         onSuccess: (_, surrogateId) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
-            queryClient.invalidateQueries({ queryKey: queueKeys.all });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });
 }
@@ -186,9 +186,9 @@ export function useReleaseSurrogate() {
         mutationFn: ({ surrogateId, queueId }: { surrogateId: string; queueId: string }) =>
             releaseSurrogate(surrogateId, queueId),
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: queueKeys.all });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });
 }
@@ -203,9 +203,9 @@ export function useAssignToQueue() {
         mutationFn: ({ surrogateId, queueId }: { surrogateId: string; queueId: string }) =>
             assignSurrogateToQueue(surrogateId, queueId),
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: queueKeys.all });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.all });
         },
     });
 }
@@ -251,8 +251,8 @@ export function useAddQueueMember() {
         mutationFn: ({ queueId, userId }: { queueId: string; userId: string }) =>
             addQueueMember(queueId, userId),
         onSuccess: (_, { queueId }) => {
-            queryClient.invalidateQueries({ queryKey: [...queueKeys.detail(queueId), 'members'] });
-            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: [...queueKeys.detail(queueId), 'members'] });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
         },
     });
 }
@@ -267,8 +267,8 @@ export function useRemoveQueueMember() {
         mutationFn: ({ queueId, userId }: { queueId: string; userId: string }) =>
             removeQueueMember(queueId, userId),
         onSuccess: (_, { queueId }) => {
-            queryClient.invalidateQueries({ queryKey: [...queueKeys.detail(queueId), 'members'] });
-            queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: [...queueKeys.detail(queueId), 'members'] });
+            void queryClient.invalidateQueries({ queryKey: queueKeys.lists() });
         },
     });
 }

@@ -147,7 +147,7 @@ export function useCreateInterview() {
         mutationFn: ({ surrogateId, data }: { surrogateId: string; data: InterviewCreatePayload }) =>
             interviewsApi.createInterview(surrogateId, data),
         onSuccess: (interview) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(interview.surrogate_id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(interview.surrogate_id) });
         },
     });
 }
@@ -162,11 +162,11 @@ export function useUpdateInterview() {
         mutationFn: ({ interviewId, data }: { interviewId: string; data: InterviewUpdatePayload }) =>
             interviewsApi.updateInterview(interviewId, data),
         onSuccess: (interview) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interview.id) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(interview.surrogate_id) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.versions(interview.id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interview.id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(interview.surrogate_id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.versions(interview.id) });
             // Invalidate notes to get recalculated anchors
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interview.id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interview.id) });
         },
     });
 }
@@ -181,7 +181,7 @@ export function useDeleteInterview() {
         mutationFn: ({ interviewId, surrogateId: _surrogateId }: { interviewId: string; surrogateId: string }) =>
             interviewsApi.deleteInterview(interviewId),
         onSuccess: (_, { interviewId, surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.forSurrogate(surrogateId) });
             queryClient.removeQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
@@ -197,9 +197,9 @@ export function useRestoreInterviewVersion() {
         mutationFn: ({ interviewId, version }: { interviewId: string; version: number }) =>
             interviewsApi.restoreVersion(interviewId, version),
         onSuccess: (interview) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interview.id) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.versions(interview.id) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interview.id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interview.id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.versions(interview.id) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interview.id) });
         },
     });
 }
@@ -218,8 +218,8 @@ export function useCreateInterviewNote() {
         mutationFn: ({ interviewId, data }: { interviewId: string; data: InterviewNoteCreatePayload }) =>
             interviewsApi.createNote(interviewId, data),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }
@@ -237,7 +237,7 @@ export function useUpdateInterviewNote() {
             data: InterviewNoteUpdatePayload
         }) => interviewsApi.updateNote(interviewId, noteId, data),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
         },
     });
 }
@@ -252,8 +252,8 @@ export function useDeleteInterviewNote() {
         mutationFn: ({ interviewId, noteId }: { interviewId: string; noteId: string }) =>
             interviewsApi.deleteNote(interviewId, noteId),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }
@@ -268,7 +268,7 @@ export function useResolveInterviewNote() {
         mutationFn: ({ interviewId, noteId }: { interviewId: string; noteId: string }) =>
             interviewsApi.resolveNote(interviewId, noteId),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
         },
     });
 }
@@ -283,7 +283,7 @@ export function useUnresolveInterviewNote() {
         mutationFn: ({ interviewId, noteId }: { interviewId: string; noteId: string }) =>
             interviewsApi.unresolveNote(interviewId, noteId),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
         },
     });
 }
@@ -302,8 +302,8 @@ export function useUploadInterviewAttachment() {
         mutationFn: ({ interviewId, file }: { interviewId: string; file: File }) =>
             interviewsApi.uploadAttachment(interviewId, file),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }
@@ -318,8 +318,8 @@ export function useLinkInterviewAttachment() {
         mutationFn: ({ interviewId, attachmentId }: { interviewId: string; attachmentId: string }) =>
             interviewsApi.linkAttachment(interviewId, attachmentId),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }
@@ -334,8 +334,8 @@ export function useUnlinkInterviewAttachment() {
         mutationFn: ({ interviewId, attachmentId }: { interviewId: string; attachmentId: string }) =>
             interviewsApi.unlinkAttachment(interviewId, attachmentId),
         onSuccess: (_, { interviewId }) => {
-            queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }
@@ -353,11 +353,11 @@ export function useRequestTranscription() {
             options?: { language?: string; prompt?: string }
         }) => interviewsApi.requestTranscription(interviewId, attachmentId, options),
         onSuccess: (_, { interviewId, attachmentId }) => {
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: interviewKeys.transcription(interviewId, attachmentId)
             });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
-            queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.attachments(interviewId) });
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
         },
     });
 }

@@ -32,7 +32,7 @@ export function useUpdateResendSettings() {
     return useMutation({
         mutationFn: (update: ResendSettingsUpdate) => resendApi.updateResendSettings(update),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: resendKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: resendKeys.settings() });
         },
     });
 }
@@ -49,7 +49,7 @@ export function useRotateWebhook() {
     return useMutation({
         mutationFn: resendApi.rotateWebhook,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: resendKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: resendKeys.settings() });
         },
     });
 }

@@ -50,10 +50,10 @@ function invalidateCampaignRunCaches(
     campaignId: string,
     runId?: string | null
 ) {
-    queryClient.invalidateQueries({ queryKey: campaignKeys.runs(campaignId) });
+    void queryClient.invalidateQueries({ queryKey: campaignKeys.runs(campaignId) });
     if (runId) {
-        queryClient.invalidateQueries({ queryKey: campaignKeys.run(campaignId, runId) });
-        queryClient.invalidateQueries({ queryKey: campaignKeys.runRecipients(campaignId, runId) });
+        void queryClient.invalidateQueries({ queryKey: campaignKeys.run(campaignId, runId) });
+        void queryClient.invalidateQueries({ queryKey: campaignKeys.runRecipients(campaignId, runId) });
     }
 }
 
@@ -155,7 +155,7 @@ export function useCreateCampaign() {
     return useMutation({
         mutationFn: (data: CampaignCreate) => createCampaign(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
         },
     });
 }
@@ -167,8 +167,8 @@ export function useUpdateCampaign() {
         mutationFn: ({ id, data }: { id: string; data: CampaignUpdate }) =>
             updateCampaign(id, data),
         onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
-            queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
         },
     });
 }
@@ -179,7 +179,7 @@ export function useDeleteCampaign() {
     return useMutation({
         mutationFn: (id: string) => deleteCampaign(id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
         },
     });
 }
@@ -190,7 +190,7 @@ export function useDuplicateCampaign() {
     return useMutation({
         mutationFn: (id: string) => duplicateCampaign(id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
         },
     });
 }
@@ -202,8 +202,8 @@ export function useSendCampaign() {
         mutationFn: ({ id, sendNow = true }: { id: string; sendNow?: boolean }) =>
             sendCampaign(id, sendNow),
         onSuccess: (result, { id }) => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
-            queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
             invalidateCampaignRunCaches(queryClient, id, result.run_id);
         },
     });
@@ -215,8 +215,8 @@ export function useCancelCampaign() {
     return useMutation({
         mutationFn: (id: string) => cancelCampaign(id),
         onSuccess: (_, id) => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
-            queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.detail(id) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
             invalidateCampaignRunCaches(queryClient, id);
         },
     });
@@ -229,10 +229,10 @@ export function useRetryFailedCampaignRun() {
         mutationFn: ({ campaignId, runId }: { campaignId: string; runId: string }) =>
             retryFailedCampaignRun(campaignId, runId),
         onSuccess: (_, { campaignId, runId }) => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.runs(campaignId) });
-            queryClient.invalidateQueries({ queryKey: campaignKeys.run(campaignId, runId) });
-            queryClient.invalidateQueries({ queryKey: campaignKeys.runRecipients(campaignId, runId) });
-            queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.runs(campaignId) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.run(campaignId, runId) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.runRecipients(campaignId, runId) });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         },
     });
 }
@@ -255,7 +255,7 @@ export function useAddSuppression() {
         mutationFn: ({ email, reason }: { email: string; reason?: string }) =>
             addSuppression(email, reason || "opt_out"),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.suppressions });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.suppressions });
         },
     });
 }
@@ -266,7 +266,7 @@ export function useRemoveSuppression() {
     return useMutation({
         mutationFn: (email: string) => removeSuppression(email),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: campaignKeys.suppressions });
+            void queryClient.invalidateQueries({ queryKey: campaignKeys.suppressions });
         },
     });
 }

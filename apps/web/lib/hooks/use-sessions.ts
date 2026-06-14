@@ -37,7 +37,7 @@ export function useRevokeSession() {
     return useMutation({
         mutationFn: (sessionId: string) => revokeSession(sessionId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: sessionKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: sessionKeys.list() })
         },
     })
 }
@@ -47,7 +47,7 @@ export function useRevokeAllSessions() {
     return useMutation({
         mutationFn: () => revokeAllSessions(),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: sessionKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: sessionKeys.list() })
         },
     })
 }
@@ -62,8 +62,8 @@ export function useUploadAvatar() {
         mutationFn: (file: File) => uploadAvatar(file),
         onSuccess: () => {
             // Invalidate user data to refresh avatar URL
-            queryClient.invalidateQueries({ queryKey: ['user'] })
-            queryClient.invalidateQueries({ queryKey: ['me'] })
+            void queryClient.invalidateQueries({ queryKey: ['user'] })
+            void queryClient.invalidateQueries({ queryKey: ['me'] })
         },
     })
 }
@@ -73,8 +73,8 @@ export function useDeleteAvatar() {
     return useMutation({
         mutationFn: () => deleteAvatar(),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['user'] })
-            queryClient.invalidateQueries({ queryKey: ['me'] })
+            void queryClient.invalidateQueries({ queryKey: ['user'] })
+            void queryClient.invalidateQueries({ queryKey: ['me'] })
         },
     })
 }

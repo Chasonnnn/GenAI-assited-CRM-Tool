@@ -23,7 +23,7 @@ export function useUpdateMetaCrmDatasetSettings() {
     return useMutation({
         mutationFn: metaCrmDatasetApi.updateMetaCrmDatasetSettings,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.settings() })
+            void queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.settings() })
         },
     })
 }
@@ -33,8 +33,8 @@ export function useMetaCrmDatasetOutboundTest() {
     return useMutation({
         mutationFn: metaCrmDatasetApi.sendMetaCrmDatasetOutboundTest,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.eventsSummary(24) })
-            queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.all })
+            void queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.eventsSummary(24) })
+            void queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.all })
         },
     })
 }
@@ -66,8 +66,8 @@ export function useRetryMetaCrmDatasetEvent() {
             payload?: metaCrmDatasetApi.RetryMetaCrmDatasetEventRequest
         }) => metaCrmDatasetApi.retryMetaCrmDatasetEvent(eventId, payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.eventsSummary(24) })
-            queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.all })
+            void queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.eventsSummary(24) })
+            void queryClient.invalidateQueries({ queryKey: metaCrmDatasetKeys.all })
         },
     })
 }

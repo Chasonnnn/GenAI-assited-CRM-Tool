@@ -42,7 +42,7 @@ export function useUpdateMilestoneFeaturedImage(surrogateId: string) {
         }) => journeyApi.updateMilestoneFeaturedImage(surrogateId, milestoneSlug, attachmentId),
         onSuccess: () => {
             // Invalidate journey data to refetch with new image URLs
-            queryClient.invalidateQueries({ queryKey: journeyKeys.surrogate(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: journeyKeys.surrogate(surrogateId) });
         },
     });
 }

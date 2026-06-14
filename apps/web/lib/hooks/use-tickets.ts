@@ -46,8 +46,8 @@ export function usePatchTicket() {
         mutationFn: ({ ticketId, data }: { ticketId: string; data: ticketsApi.TicketPatchRequest }) =>
             ticketsApi.patchTicket(ticketId, data),
         onSuccess: (ticket) => {
-            queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticket.id) })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticket.id) })
         },
     })
 }
@@ -59,8 +59,8 @@ export function useReplyTicket() {
         mutationFn: ({ ticketId, data }: { ticketId: string; data: ticketsApi.TicketReplyRequest }) =>
             ticketsApi.replyTicket(ticketId, data),
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
         },
     })
 }
@@ -71,8 +71,8 @@ export function useComposeTicket() {
     return useMutation({
         mutationFn: ticketsApi.composeTicket,
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
         },
     })
 }
@@ -84,8 +84,8 @@ export function useAddTicketNote() {
         mutationFn: ({ ticketId, bodyMarkdown }: { ticketId: string; bodyMarkdown: string }) =>
             ticketsApi.addTicketNote(ticketId, bodyMarkdown),
         onSuccess: (_note, vars) => {
-            queryClient.invalidateQueries({ queryKey: ticketKeys.detail(vars.ticketId) })
-            queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(vars.ticketId) })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
         },
     })
 }
@@ -113,8 +113,8 @@ export function useLinkTicketSurrogate() {
             return ticketsApi.linkTicketSurrogate(ticketId, payload)
         },
         onSuccess: (ticket) => {
-            queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticket.id) })
-            queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(ticket.id) })
+            void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
         },
     })
 }

@@ -18,7 +18,7 @@ const aiKeys = {
 };
 
 export function invalidateAIUsageCaches(queryClient: QueryClient) {
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
         queryKey: aiKeys.usageSummary(),
         exact: false,
     });
@@ -43,7 +43,7 @@ export function useUpdateAISettings() {
     return useMutation({
         mutationFn: (update: AISettingsUpdate) => aiApi.updateAISettings(update),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: aiKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: aiKeys.settings() });
         },
     });
 }
@@ -80,8 +80,8 @@ export function useAcceptConsent() {
     return useMutation({
         mutationFn: aiApi.acceptConsent,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: aiKeys.consent() });
-            queryClient.invalidateQueries({ queryKey: aiKeys.settings() });
+            void queryClient.invalidateQueries({ queryKey: aiKeys.consent() });
+            void queryClient.invalidateQueries({ queryKey: aiKeys.settings() });
         },
     });
 }
@@ -119,11 +119,11 @@ export function useSendMessage() {
             // Invalidate conversation to refetch with new message
             const isGlobal = !variables.entity_type || !variables.entity_id || variables.entity_type === 'global';
             if (isGlobal) {
-                queryClient.invalidateQueries({
+                void queryClient.invalidateQueries({
                     queryKey: [...aiKeys.all, 'conversation', 'global']
                 });
             } else {
-                queryClient.invalidateQueries({
+                void queryClient.invalidateQueries({
                     queryKey: aiKeys.conversation(variables.entity_type!, variables.entity_id!)
                 });
             }
@@ -150,11 +150,11 @@ export function useStreamChatMessage() {
             const isGlobal =
                 !request.entity_type || !request.entity_id || request.entity_type === 'global';
             if (isGlobal) {
-                queryClient.invalidateQueries({
+                void queryClient.invalidateQueries({
                     queryKey: [...aiKeys.all, 'conversation', 'global'],
                 });
             } else {
-                queryClient.invalidateQueries({
+                void queryClient.invalidateQueries({
                     queryKey: aiKeys.conversation(request.entity_type!, request.entity_id!),
                 });
             }
@@ -177,7 +177,7 @@ export function useApproveAction() {
         mutationFn: (approvalId: string) => aiApi.approveAction(approvalId),
         onSuccess: () => {
             // Invalidate conversations to update action statuses
-            queryClient.invalidateQueries({ queryKey: [...aiKeys.all, 'conversation'] });
+            void queryClient.invalidateQueries({ queryKey: [...aiKeys.all, 'conversation'] });
         },
     });
 }
@@ -188,7 +188,7 @@ export function useRejectAction() {
     return useMutation({
         mutationFn: (approvalId: string) => aiApi.rejectAction(approvalId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: [...aiKeys.all, 'conversation'] });
+            void queryClient.invalidateQueries({ queryKey: [...aiKeys.all, 'conversation'] });
         },
     });
 }

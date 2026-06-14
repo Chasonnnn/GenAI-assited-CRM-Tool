@@ -142,7 +142,7 @@ export default function AgencyDetailPage() {
             }
         }
 
-        fetchData();
+        void fetchData();
 
         return () => {
             isCurrent = false;
@@ -170,7 +170,7 @@ export default function AgencyDetailPage() {
     }, [orgId]);
 
     useEffect(() => {
-        fetchOrgAlerts();
+        void fetchOrgAlerts();
     }, [fetchOrgAlerts]);
 
     const openAlertCount = useMemo(
@@ -199,7 +199,7 @@ export default function AgencyDetailPage() {
             }
         }
 
-        fetchEmailStatus();
+        void fetchEmailStatus();
 
         return () => {
             isCurrent = false;

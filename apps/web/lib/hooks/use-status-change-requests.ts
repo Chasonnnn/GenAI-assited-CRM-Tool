@@ -50,9 +50,9 @@ export function useApproveStatusChangeRequest() {
         mutationFn: (requestId: string) => api.approveRequest(requestId),
         onSuccess: () => {
             // Invalidate all status change request lists
-            queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
             // Also invalidate surrogates since the approval changes the surrogate
-            queryClient.invalidateQueries({ queryKey: ['surrogates'] });
+            void queryClient.invalidateQueries({ queryKey: ['surrogates'] });
         },
     });
 }
@@ -67,7 +67,7 @@ export function useRejectStatusChangeRequest() {
         mutationFn: ({ requestId, reason }: { requestId: string; reason?: string }) =>
             api.rejectRequest(requestId, reason),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
         },
     });
 }
@@ -81,7 +81,7 @@ export function useCancelStatusChangeRequest() {
     return useMutation({
         mutationFn: (requestId: string) => api.cancelRequest(requestId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
         },
     });
 }

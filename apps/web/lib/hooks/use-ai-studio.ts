@@ -27,7 +27,7 @@ export function useUpdateAIStudioSettings() {
         mutationFn: (update: AIStudioSettingsUpdate) =>
             aiStudioApi.updateAIStudioSettings(update),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: aiStudioKeys.settings() })
+            void queryClient.invalidateQueries({ queryKey: aiStudioKeys.settings() })
         },
     })
 }
@@ -39,7 +39,7 @@ export function useGenerateAIStudioDraft() {
         mutationFn: (request: AIStudioGenerateRequest) =>
             aiStudioApi.generateAIStudioDraft(request),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: aiStudioKeys.drafts() })
+            void queryClient.invalidateQueries({ queryKey: aiStudioKeys.drafts() })
         },
     })
 }
@@ -50,7 +50,7 @@ export function useSaveAIStudioDraft() {
     return useMutation({
         mutationFn: (draftId: string) => aiStudioApi.saveAIStudioDraft(draftId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: aiStudioKeys.drafts() })
+            void queryClient.invalidateQueries({ queryKey: aiStudioKeys.drafts() })
         },
     })
 }

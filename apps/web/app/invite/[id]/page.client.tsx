@@ -50,7 +50,7 @@ export default function InviteAcceptPageClient() {
         }
 
         if (inviteId) {
-            fetchInvite()
+            void fetchInvite()
         }
     }, [inviteId])
 
@@ -66,7 +66,7 @@ export default function InviteAcceptPageClient() {
                 // Ignore unauthenticated users
             }
         }
-        fetchMe()
+        void fetchMe()
         return () => {
             active = false
         }

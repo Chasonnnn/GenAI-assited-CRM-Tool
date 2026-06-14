@@ -405,7 +405,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
 
         const droppedFile = e.dataTransfer.files[0]
         if (droppedFile) {
-            handleFileSelect(droppedFile)
+            void handleFileSelect(droppedFile)
         }
     }, [handleFileSelect])
 
@@ -586,7 +586,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                             className="hidden"
                             onChange={(e) => {
                                 const selectedFile = e.target.files?.[0]
-                                if (selectedFile) handleFileSelect(selectedFile)
+                                if (selectedFile) void handleFileSelect(selectedFile)
                             }}
                         />
 

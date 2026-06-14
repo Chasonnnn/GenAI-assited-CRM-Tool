@@ -116,7 +116,7 @@ export function ZoomMeetingDialog() {
                                 variant="outline"
                                 onClick={() => {
                                     if (zoomForm.lastMeetingResult) {
-                                        navigator.clipboard.writeText(zoomForm.lastMeetingResult.join_url)
+                                        void navigator.clipboard.writeText(zoomForm.lastMeetingResult.join_url)
                                     }
                                 }}
                             >

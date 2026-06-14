@@ -64,9 +64,9 @@ export function useDisconnectMetaConnection() {
         mutationFn: (connectionId: string) => disconnectMetaConnection(connectionId),
         onSuccess: (_result, connectionId) => {
             // Invalidate connections and assets lists
-            queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
-            queryClient.invalidateQueries({ queryKey: metaOAuthKeys.availableAssets(connectionId) })
-            queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
+            void queryClient.invalidateQueries({ queryKey: metaOAuthKeys.availableAssets(connectionId) })
+            void queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
     })
 }
@@ -99,11 +99,11 @@ export function useConnectMetaAssets(connectionId: string) {
         mutationFn: (data: ConnectAssetsRequest) => connectAssets(connectionId, data),
         onSuccess: () => {
             // Invalidate relevant queries
-            queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: metaOAuthKeys.connections() })
+            void queryClient.invalidateQueries({
                 queryKey: metaOAuthKeys.availableAssets(connectionId),
             })
-            queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: adminMetaAdAccountKeys.lists() })
         },
     })
 }

@@ -172,10 +172,10 @@ export function useSyncGoogleCalendarNow() {
     return useMutation({
         mutationFn: syncGoogleCalendarNow,
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: integrationKeys.list() })
-            queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
-            queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
+            void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
 
             if (result.warnings?.length) {
                 toast.warning('Google sync completed with warnings.')
@@ -237,7 +237,7 @@ export function useDisconnectIntegration() {
     return useMutation({
         mutationFn: disconnectIntegration,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: integrationKeys.all })
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.all })
         },
     })
 }
@@ -251,9 +251,9 @@ export function useCreateZoomMeeting() {
     return useMutation({
         mutationFn: (data: CreateMeetingRequest) => createZoomMeeting(data),
         onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({ queryKey: ['notes'] })
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: integrationKeys.zoomMeetingsList() })
+            void queryClient.invalidateQueries({ queryKey: ['notes'] })
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.zoomMeetingsList() })
             if (variables.entity_type === 'surrogate') {
                 invalidateSurrogateCrmCaches(queryClient, variables.entity_id)
             }

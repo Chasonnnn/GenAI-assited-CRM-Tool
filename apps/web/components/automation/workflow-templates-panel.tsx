@@ -202,7 +202,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
         mutationFn: () => applyTemplateApi(selectedTemplate!.id, formData, workflowScope),
         onSuccess: () => {
             toast.success("Workflow created from template!")
-            queryClient.invalidateQueries({ queryKey: ["workflows"] })
+            void queryClient.invalidateQueries({ queryKey: ["workflows"] })
             setSelectedTemplate(null)
             setFormData({ name: "", description: "", is_enabled: true, action_overrides: {} })
         },
