@@ -66,7 +66,7 @@ def test_pipeline_service_lifecycle(monkeypatch, db, test_org, test_user):
 
 
 def test_internal_verify_secret_guard(monkeypatch):
-    monkeypatch.setattr(internal_router.settings, "INTERNAL_SECRET", None)
+    monkeypatch.setattr(internal_router.settings, "INTERNAL_SECRET", "")
     with pytest.raises(Exception):
         internal_router.verify_internal_secret("secret")
 

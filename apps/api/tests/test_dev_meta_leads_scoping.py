@@ -82,7 +82,7 @@ async def test_dev_meta_lead_alerts_are_org_scoped(client, db, test_org):
     response = await client.get(
         "/dev/meta-leads/alerts",
         params={"org_id": str(test_org.id), "limit": 50},
-        headers={"X-Dev-Secret": settings.DEV_SECRET},
+        headers={"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()},
     )
 
     assert response.status_code == 200
@@ -130,7 +130,7 @@ async def test_dev_meta_leads_all_is_org_scoped_and_status_filtered(client, db, 
     response_all = await client.get(
         "/dev/meta-leads/all",
         params={"org_id": str(test_org.id), "limit": 100},
-        headers={"X-Dev-Secret": settings.DEV_SECRET},
+        headers={"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()},
     )
     assert response_all.status_code == 200
     all_data = response_all.json()
@@ -142,7 +142,7 @@ async def test_dev_meta_leads_all_is_org_scoped_and_status_filtered(client, db, 
     response_filtered = await client.get(
         "/dev/meta-leads/all",
         params={"org_id": str(test_org.id), "status": "received", "limit": 100},
-        headers={"X-Dev-Secret": settings.DEV_SECRET},
+        headers={"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()},
     )
     assert response_filtered.status_code == 200
     filtered_data = response_filtered.json()

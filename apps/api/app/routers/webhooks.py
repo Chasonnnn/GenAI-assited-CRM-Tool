@@ -127,7 +127,7 @@ async def google_gmail_push_webhook(
     Pub/Sub envelope payload:
       {"message": {"data": base64(json({"emailAddress","historyId"})), "messageId": "..."}}
     """
-    expected_token = (settings.GMAIL_PUSH_WEBHOOK_TOKEN or "").strip()
+    expected_token = (settings.GMAIL_PUSH_WEBHOOK_TOKEN.get_secret_value() or "").strip()
     if expected_token and request.query_params.get("token") != expected_token:
         return JSONResponse({"status": "ignored", "reason": "invalid_token"}, status_code=202)
 

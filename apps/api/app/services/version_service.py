@@ -39,7 +39,10 @@ def get_fernet() -> Fernet:
     """Get or create Fernet instance for version encryption."""
     global _fernet
     if _fernet is None:
-        key = settings.VERSION_ENCRYPTION_KEY or settings.META_ENCRYPTION_KEY
+        key = (
+            settings.VERSION_ENCRYPTION_KEY.get_secret_value()
+            or settings.META_ENCRYPTION_KEY.get_secret_value()
+        )
         if not key:
             raise ValueError(
                 "VERSION_ENCRYPTION_KEY or META_ENCRYPTION_KEY must be set. "

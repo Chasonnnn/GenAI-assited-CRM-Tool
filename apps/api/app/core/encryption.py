@@ -18,12 +18,12 @@ def get_fernet() -> Fernet:
     """Get or create Fernet instance for encryption/decryption."""
     global _fernet
     if _fernet is None:
-        if not settings.META_ENCRYPTION_KEY:
+        if not settings.META_ENCRYPTION_KEY.get_secret_value():
             raise RuntimeError(
                 "META_ENCRYPTION_KEY not configured. "
                 'Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
-        _fernet = Fernet(settings.META_ENCRYPTION_KEY.encode())
+        _fernet = Fernet(settings.META_ENCRYPTION_KEY.get_secret_value().encode())
     return _fernet
 
 
@@ -31,12 +31,12 @@ def get_data_fernet() -> Fernet:
     """Get Fernet instance for field-level PII encryption."""
     global _data_fernet
     if _data_fernet is None:
-        if not settings.DATA_ENCRYPTION_KEY:
+        if not settings.DATA_ENCRYPTION_KEY.get_secret_value():
             raise RuntimeError(
                 "DATA_ENCRYPTION_KEY not configured. "
                 'Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
-        _data_fernet = Fernet(settings.DATA_ENCRYPTION_KEY.encode())
+        _data_fernet = Fernet(settings.DATA_ENCRYPTION_KEY.get_secret_value().encode())
     return _data_fernet
 
 
@@ -86,12 +86,14 @@ def decrypt_value(value: str) -> str:
 
 def hash_pii(value: str, purpose: str = "pii") -> str:
     """Hash PII deterministically for lookups and uniqueness."""
-    if not settings.PII_HASH_KEY:
+    if not settings.PII_HASH_KEY.get_secret_value():
         raise RuntimeError("PII_HASH_KEY not configured.")
     if value is None:
         return ""
     data = f"{purpose}:{value}".encode()
-    return hmac.new(settings.PII_HASH_KEY.encode(), data, hashlib.sha256).hexdigest()
+    return hmac.new(
+        settings.PII_HASH_KEY.get_secret_value().encode(), data, hashlib.sha256
+    ).hexdigest()
 
 
 def hash_email(email: str) -> str:
@@ -113,9 +115,12 @@ def hash_phone(phone: str | None) -> str:
 
 def is_encryption_configured() -> bool:
     """Check if encryption is properly configured."""
-    return bool(settings.META_ENCRYPTION_KEY)
+    return bool(settings.META_ENCRYPTION_KEY.get_secret_value())
 
 
 def is_pii_encryption_configured() -> bool:
     """Check if PII encryption is properly configured."""
-    return bool(settings.DATA_ENCRYPTION_KEY and settings.PII_HASH_KEY)
+    return bool(
+        settings.DATA_ENCRYPTION_KEY.get_secret_value()
+        and settings.PII_HASH_KEY.get_secret_value()
+    )

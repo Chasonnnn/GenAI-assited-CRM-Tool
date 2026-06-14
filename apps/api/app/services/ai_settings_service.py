@@ -42,7 +42,7 @@ def get_effective_model(ai_settings: AISettings | None) -> str | None:
 
 def _get_fernet() -> Fernet:
     """Get Fernet instance for encryption/decryption."""
-    key = settings.FERNET_KEY
+    key = settings.FERNET_KEY.get_secret_value()
     if not key:
         raise ValueError("FERNET_KEY not configured")
     return Fernet(key.encode())
@@ -270,7 +270,7 @@ def get_ai_provider_for_settings(
             and ai_settings.vertex_service_account_email
         ):
             return None
-        if not settings.WIF_OIDC_PRIVATE_KEY:
+        if not settings.WIF_OIDC_PRIVATE_KEY.get_secret_value():
             return None
         effective_model = get_effective_model(ai_settings) or DEFAULT_GEMINI_MODEL
         config = VertexWIFConfig(

@@ -9,7 +9,7 @@ from app.services import session_service
 async def test_dev_login_creates_session(client, db, test_user):
     response = await client.post(
         f"/dev/login-as/{test_user.id}",
-        headers={"X-Dev-Secret": settings.DEV_SECRET},
+        headers={"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()},
     )
 
     assert response.status_code == 200
@@ -45,7 +45,7 @@ async def test_dev_login_preflight_allows_loopback_origin_alias(client, test_use
 
 @pytest.mark.asyncio
 async def test_dev_seed_idempotent_and_includes_developer(client):
-    headers = {"X-Dev-Secret": settings.DEV_SECRET}
+    headers = {"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()}
 
     first = await client.post("/dev/seed", headers=headers)
     assert first.status_code == 200
@@ -72,7 +72,7 @@ async def test_dev_seed_idempotent_and_includes_developer(client):
 
 @pytest.mark.asyncio
 async def test_dev_login_as_seeded_developer(client):
-    headers = {"X-Dev-Secret": settings.DEV_SECRET}
+    headers = {"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()}
     seed_response = await client.post("/dev/seed", headers=headers)
     assert seed_response.status_code == 200
     payload = seed_response.json()
