@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -114,7 +115,7 @@ export default function TasksPage() {
         const newUrl = nextQuery ? `/tasks?${nextQuery}` : "/tasks"
         const currentUrl = currentQuery ? `/tasks?${currentQuery}` : "/tasks"
         if (newUrl === currentUrl) return
-        replace(newUrl, { scroll: false })
+        replace(newUrl as Route, { scroll: false })
     }, [searchParams, replace])
 
     // Handle filter change

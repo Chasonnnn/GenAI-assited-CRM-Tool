@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import type { Route } from 'next'
 import { useRouter } from 'next/navigation'
 import { getNotificationHref } from '@/lib/utils/notification-routing'
 
@@ -82,7 +83,7 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
                         type: options?.notificationType ?? "",
                         entity_type: options?.entityType ?? null,
                         entity_id: options?.entityId ?? null,
-                    })
+                    }) as Route
                 )
 
                 const clickData = options?.entityType && options?.entityId
