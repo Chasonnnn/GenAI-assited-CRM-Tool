@@ -255,11 +255,65 @@ def test_get_meta_performance_uses_single_meta_leads_count_query(db, test_org, t
     assert data["leads_converted"] == 1
 
 
-def test_get_pdf_export_data_batches_pending_and_overdue_task_counts(
-    db, test_org, test_user, monkeypatch
+def test_get_pdf_export_data_batches_surrogate_and_task_counts(
+    db, test_org, default_stage, test_user, monkeypatch
 ):
     today = date.today()
     now = datetime.now(timezone.utc)
+
+    qualified_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=default_stage.pipeline_id,
+        stage_key="pre_qualified",
+        slug="pre_qualified",
+        label="Pre-Qualified",
+        color="#10b981",
+        stage_type="intake",
+        order=default_stage.order + 1,
+        is_active=True,
+        is_intake_stage=True,
+    )
+    db.add(qualified_stage)
+    db.flush()
+
+    surrogate_rows = [
+        ("pdf-total@example.com", now - timedelta(days=14), default_stage.id, default_stage.label, False),
+        (
+            "pdf-new@example.com",
+            now - timedelta(days=2),
+            qualified_stage.id,
+            qualified_stage.label,
+            False,
+        ),
+        (
+            "pdf-archived@example.com",
+            now - timedelta(days=1),
+            default_stage.id,
+            default_stage.label,
+            True,
+        ),
+    ]
+    for index, (email, created_at, stage_id, status_label, is_archived) in enumerate(surrogate_rows):
+        db.add(
+            Surrogate(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                stage_id=stage_id,
+                full_name=f"PDF Export User {index}",
+                status_label=status_label,
+                email=email,
+                email_hash=hash_email(email),
+                phone=f"555-03{index:02d}",
+                phone_hash=hash_phone(f"555-03{index:02d}"),
+                source="website",
+                surrogate_number=f"S96{index:03d}",
+                created_by_user_id=test_user.id,
+                owner_type="user",
+                owner_id=test_user.id,
+                created_at=created_at,
+                is_archived=is_archived,
+            )
+        )
 
     tasks = [
         ("Pending task", TaskType.OTHER.value, False, None),
@@ -319,6 +373,17 @@ def test_get_pdf_export_data_batches_pending_and_overdue_task_counts(
         and "from tasks" in statement.lower()
         and "count(" in statement.lower()
     ]
+    surrogate_metric_selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().lower().startswith("select")
+        and "from surrogates" in statement.lower()
+        and "sum(" in statement.lower()
+    ]
     assert len(task_count_selects) == 1
+    assert len(surrogate_metric_selects) == 1
+    assert data["summary"]["total_surrogates"] == 2
+    assert data["summary"]["new_this_period"] == 1
+    assert data["summary"]["qualification_rate"] == 50.0
     assert data["summary"]["pending_tasks"] == 2
     assert data["summary"]["overdue_tasks"] == 1

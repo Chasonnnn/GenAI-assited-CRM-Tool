@@ -1,8 +1,18 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ApprovalTaskActions } from '../components/tasks/ApprovalTaskActions'
 
 const mockResolveApproval = vi.fn()
+
+function expectIconTagsDecorative(source: string, iconName: string) {
+    const tags = source.match(new RegExp(`<${iconName}[^>]*>`, 'g')) ?? []
+
+    expect(tags.length).toBeGreaterThan(0)
+    expect(tags.every((tag) => tag.includes('aria-hidden="true"'))).toBe(true)
+}
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useResolveWorkflowApproval: () => ({
@@ -83,5 +93,16 @@ describe('ApprovalTaskActions', () => {
 
         expect(screen.getByRole('button', { name: /approve/i })).toBeDisabled()
         expect(screen.getByRole('button', { name: /deny/i })).toBeDisabled()
+    })
+
+    it('keeps workflow approval action icons explicitly decorative in source', () => {
+        const source = readFileSync(
+            join(process.cwd(), 'components/tasks/ApprovalTaskActions.tsx'),
+            'utf8',
+        )
+
+        expectIconTagsDecorative(source, 'Loader2Icon')
+        expectIconTagsDecorative(source, 'CheckIcon')
+        expectIconTagsDecorative(source, 'XIcon')
     })
 })

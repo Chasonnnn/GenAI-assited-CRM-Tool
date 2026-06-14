@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, Request
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.enums import TaskType, TaskStatus, OwnerType
@@ -818,27 +818,29 @@ def list_tasks_for_session(
 def count_pending_tasks(db: Session, org_id: UUID) -> int:
     """Count incomplete tasks for dashboard metrics."""
     return (
-        db.query(Task)
-        .filter(
-            Task.organization_id == org_id,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+        db.scalar(
+            select(func.count(Task.id)).where(
+                Task.organization_id == org_id,
+                Task.is_completed.is_(False),
+                Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+            )
         )
-        .count()
+        or 0
     )
 
 
 def count_overdue_tasks(db: Session, org_id: UUID, today) -> int:
     """Count overdue tasks for dashboard metrics."""
     return (
-        db.query(Task)
-        .filter(
-            Task.organization_id == org_id,
-            Task.is_completed.is_(False),
-            Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
-            Task.due_date < today,
+        db.scalar(
+            select(func.count(Task.id)).where(
+                Task.organization_id == org_id,
+                Task.is_completed.is_(False),
+                Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
+                Task.due_date < today,
+            )
         )
-        .count()
+        or 0
     )
 
 

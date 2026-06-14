@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, inspect as sa_inspect
+from sqlalchemy import func, inspect as sa_inspect, select
 from sqlalchemy.orm import Session
 
 from app.db.enums import AlertSeverity, AlertType, SurrogateSource
@@ -976,18 +976,19 @@ def list_problem_leads(db: Session, org_id: UUID, limit: int = 50) -> list[MetaL
 
 def count_meta_leads(db: Session, org_id: UUID) -> int:
     """Count total Meta leads (org-scoped)."""
-    return db.query(MetaLead).filter(MetaLead.organization_id == org_id).count()
+    return db.scalar(select(func.count(MetaLead.id)).where(MetaLead.organization_id == org_id)) or 0
 
 
 def count_failed_meta_leads(db: Session, org_id: UUID) -> int:
     """Count failed Meta leads (org-scoped)."""
     return (
-        db.query(MetaLead)
-        .filter(
-            MetaLead.organization_id == org_id,
-            MetaLead.status.in_(["fetch_failed", "convert_failed"]),
+        db.scalar(
+            select(func.count(MetaLead.id)).where(
+                MetaLead.organization_id == org_id,
+                MetaLead.status.in_(["fetch_failed", "convert_failed"]),
+            )
         )
-        .count()
+        or 0
     )
 
 

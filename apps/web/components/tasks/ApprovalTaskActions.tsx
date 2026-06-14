@@ -79,9 +79,9 @@ export function ApprovalTaskActions({
                     disabled={disabled || isPending}
                 >
                     {isPending ? (
-                        <Loader2Icon className="mr-1 size-4 animate-spin" />
+                        <Loader2Icon className="mr-1 size-4 animate-spin" aria-hidden="true" />
                     ) : (
-                        <CheckIcon className="mr-1 size-4" />
+                        <CheckIcon className="mr-1 size-4" aria-hidden="true" />
                     )}
                     Approve
                 </Button>
@@ -92,7 +92,7 @@ export function ApprovalTaskActions({
                     onClick={() => setShowDenyDialog(true)}
                     disabled={disabled || isPending}
                 >
-                    <XIcon className="mr-1 size-4" />
+                    <XIcon className="mr-1 size-4" aria-hidden="true" />
                     Deny
                 </Button>
             </div>
@@ -129,7 +129,12 @@ export function ApprovalTaskActions({
                             onClick={handleDeny}
                             disabled={isPending}
                         >
-                            {isPending && <Loader2Icon className="mr-1 size-4 animate-spin" />}
+                            {isPending && (
+                                <Loader2Icon
+                                    className="mr-1 size-4 animate-spin"
+                                    aria-hidden="true"
+                                />
+                            )}
                             Deny
                         </Button>
                     </DialogFooter>

@@ -289,6 +289,86 @@ async def test_create_invite_allows_platform_sender_without_gmail(authed_client,
 
 
 @pytest.mark.asyncio
+async def test_create_invite_rate_limited(authed_client, monkeypatch, rate_limiter_reset):
+    """Invite creation sends mail and must not be unbounded."""
+    from app.services import invite_email_service, platform_email_service
+
+    async def fake_send_invite_email(*_args, **_kwargs):
+        return {"success": True}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fake_send_invite_email)
+    monkeypatch.setattr(platform_email_service, "platform_sender_configured", lambda: True)
+
+    for index in range(6):
+        response = await authed_client.post(
+            "/settings/invites",
+            json={"email": f"limited-create-{index}@example.com", "role": "case_manager"},
+        )
+        if index < 5:
+            assert response.status_code != 429
+        else:
+            assert response.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_resend_invite_rate_limited(
+    authed_client,
+    db,
+    test_auth,
+    monkeypatch,
+    rate_limiter_reset,
+):
+    """Invite resend emails must be throttled across requests."""
+    from app.db.models import OrgInvite
+    from app.services import invite_email_service
+
+    async def fake_send_invite_email(*_args, **_kwargs):
+        return {"success": True}
+
+    monkeypatch.setattr(invite_email_service, "send_invite_email", fake_send_invite_email)
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_auth.org.id,
+        email="limited-resend@example.com",
+        role="case_manager",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    for index in range(6):
+        response = await authed_client.post(f"/settings/invites/{invite.id}/resend")
+        if index < 5:
+            assert response.status_code != 429
+        else:
+            assert response.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_revoke_invite_rate_limited(authed_client, db, test_auth, rate_limiter_reset):
+    """Invite revocation mutates state and must be throttled."""
+    from app.db.models import OrgInvite
+
+    invite = OrgInvite(
+        id=uuid4(),
+        organization_id=test_auth.org.id,
+        email="limited-revoke@example.com",
+        role="case_manager",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invite)
+    db.commit()
+
+    for index in range(6):
+        response = await authed_client.delete(f"/settings/invites/{invite.id}")
+        if index < 5:
+            assert response.status_code != 429
+        else:
+            assert response.status_code == 429
+
+
+@pytest.mark.asyncio
 async def test_create_invite_reuses_expired_pending_invite(
     authed_client, db, test_org, test_user, monkeypatch
 ):

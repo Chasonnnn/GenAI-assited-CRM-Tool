@@ -1,8 +1,18 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
 import { describe, it, expect, vi } from "vitest"
 import { createEvent, fireEvent, render, screen } from "@testing-library/react"
 
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
+
+function expectIconTagsDecorative(source: string, iconName: string) {
+    const tags = source.match(new RegExp(`<${iconName}[^>]*>`, "g")) ?? []
+
+    expect(tags.length).toBeGreaterThan(0)
+    expect(tags.every((tag) => tag.includes('aria-hidden="true"'))).toBe(true)
+}
 
 describe("Inline field accessibility", () => {
     it("activates InlineEditField with Enter", () => {
@@ -145,5 +155,21 @@ describe("Inline field accessibility", () => {
             expect(icon).toHaveAttribute("aria-hidden", "true")
             expect(icon).toHaveClass("group-focus-visible:opacity-100")
         })
+    })
+
+    it("keeps inline edit action icons explicitly decorative in source", () => {
+        const source = readFileSync(join(process.cwd(), "components/inline-edit-field.tsx"), "utf8")
+
+        expectIconTagsDecorative(source, "Loader2Icon")
+        expectIconTagsDecorative(source, "CheckIcon")
+        expectIconTagsDecorative(source, "XIcon")
+    })
+
+    it("keeps inline date action icons explicitly decorative in source", () => {
+        const source = readFileSync(join(process.cwd(), "components/inline-date-field.tsx"), "utf8")
+
+        expectIconTagsDecorative(source, "Loader2Icon")
+        expectIconTagsDecorative(source, "CheckIcon")
+        expectIconTagsDecorative(source, "XIcon")
     })
 })
