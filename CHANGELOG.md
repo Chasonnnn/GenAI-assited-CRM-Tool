@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.32...surrogacy-crm-platform-v0.91.33) (2026-06-14)
+
+
+### Bug Fixes
+
+* Avoid uv cache upload races in CI ([e012160](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e0121609bbd1f1ecf21606c1b7fab5731e87c883))
+* Consolidate security and performance fixes ([81d850f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/81d850fd910e98b6df43df1703edafe5b15333e7))
+* keep app version fallback in sync via release-please ([#499](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/499)) ([4d55972](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4d55972d864733e621128749a521147111fdc8b2))
+
 ## [0.91.32](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.31...surrogacy-crm-platform-v0.91.32) (2026-06-05)
 
 
