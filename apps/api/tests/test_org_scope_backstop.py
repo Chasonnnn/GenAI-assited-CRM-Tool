@@ -240,35 +240,40 @@ async def test_authenticated_request_stamps_active_org(authed_client, test_auth,
     assert test_auth.org.id in seen
 
 
-def test_operator_routes_are_not_scoped(db, test_org):
-    """Operator consoles (/platform, /ops) are cross-org by design, so the request
-    stamp helper must NOT arm the backstop for them — otherwise a cross-org
-    handler (e.g. GET /platform/orgs/{other}/members) would be silently emptied.
-    Tenant app routes are still stamped.
+def test_backstop_covers_count_select_from(db, test_org):
+    """A column-less ``select(func.count()).select_from(Model)`` has an empty
+    ``all_mappers``; the backstop must still scope it by recovering the entity
+    from the FROM clause, or a forgotten org filter on a count leaks tenants.
     """
-    from types import SimpleNamespace
+    from sqlalchemy import func
 
-    from app.core.deps import _stamp_request_org_scope
+    org_b = _make_org(db, "OrgB")
+    _make_queue(db, test_org, "A1")
+    _make_queue(db, test_org, "A2")
+    _make_queue(db, org_b, "B1")
 
-    def _req(path: str):
-        return SimpleNamespace(url=SimpleNamespace(path=path))
+    # Baseline: unscoped sees all three.
+    assert db.scalar(select(func.count()).select_from(Queue)) >= 3
 
-    # Operator routes: no stamp.
-    for path in ("/platform", "/platform/orgs/x/members", "/ops", "/ops/alerts"):
-        clear_org_scope(db)
-        _stamp_request_org_scope(_req(path), db, test_org.id)
-        assert ORG_SCOPE_KEY not in db.info, f"{path} must not be scoped"
+    set_org_scope(db, test_org.id)
+    assert db.scalar(select(func.count()).select_from(Queue)) == 2
 
-    # A path that merely shares a prefix substring is still a tenant route.
-    clear_org_scope(db)
-    _stamp_request_org_scope(_req("/operations/report"), db, test_org.id)
-    assert db.info.get(ORG_SCOPE_KEY) == test_org.id
 
-    # Tenant app routes: stamped.
-    clear_org_scope(db)
-    _stamp_request_org_scope(_req("/surrogates"), db, test_org.id)
-    assert db.info.get(ORG_SCOPE_KEY) == test_org.id
-    clear_org_scope(db)
+def test_backstop_covers_top_level_alias(db, test_org):
+    """A top-level aliased query ``select(aliased(Model))`` must be scoped too
+    (covered via include_aliases=True)."""
+    from sqlalchemy.orm import aliased
+
+    org_b = _make_org(db, "OrgB")
+    q_a = _make_queue(db, test_org, "A-queue")
+    q_b = _make_queue(db, org_b, "B-queue")
+
+    set_org_scope(db, test_org.id)
+
+    QAlias = aliased(Queue)
+    ids = {q.id for q in db.scalars(select(QAlias)).all()}
+    assert q_a.id in ids
+    assert q_b.id not in ids
 
 
 @pytest.mark.asyncio

@@ -119,26 +119,6 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
     raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
-# Operator-console route prefixes whose handlers operate ACROSS tenants by design.
-# These operators are authorized for every org and address specific orgs by
-# explicit id (e.g. GET /platform/orgs/{org_id}/members), so the per-org backstop
-# must never pin their queries to the operator's own org. /platform already
-# authenticates via require_platform_admin (which never stamps scope); /ops uses
-# get_current_session, so the guard here is what keeps cross-org /ops handlers
-# from being silently emptied by the backstop. Cross-tenant protection on these
-# routes is the platform-admin authorization check, not row scoping.
-_CROSS_ORG_ROUTE_PREFIXES = ("/platform", "/ops")
-
-
-def _stamp_request_org_scope(request: Request, db: Session, org_id) -> None:
-    """Arm the org-scoping backstop for tenant requests, skipping operator routes."""
-    path = request.url.path or ""
-    for prefix in _CROSS_ORG_ROUTE_PREFIXES:
-        if path == prefix or path.startswith(prefix + "/"):
-            return
-    set_org_scope(db, org_id)
-
-
 def get_db(request: Request = None) -> Generator[Session, None, None]:
     """
     Database session dependency.
@@ -339,7 +319,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         if support_org:
             request.state.org_slug = support_org.slug
         request.state.user_session = session
-        _stamp_request_org_scope(request, db, session.org_id)
+        set_org_scope(db, session.org_id)
         return session
 
     origin_host = _get_origin_host(request)
@@ -373,7 +353,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
                 if not _is_mfa_bypass_allowed(request):
                     raise HTTPException(status_code=403, detail="MFA verification required")
             request.state.user_session = session
-            _stamp_request_org_scope(request, db, session.org_id)
+            set_org_scope(db, session.org_id)
             return session
         if not membership:
             raise HTTPException(status_code=403, detail="No organization membership")
@@ -387,7 +367,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
                 if not _is_mfa_bypass_allowed(request):
                     raise HTTPException(status_code=403, detail="MFA verification required")
             request.state.user_session = session
-            _stamp_request_org_scope(request, db, session.org_id)
+            set_org_scope(db, session.org_id)
             return session
         raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
 
@@ -421,7 +401,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
 
     request.state.org_slug = org.slug
     request.state.user_session = session
-    _stamp_request_org_scope(request, db, session.org_id)
+    set_org_scope(db, session.org_id)
     return session
 
 

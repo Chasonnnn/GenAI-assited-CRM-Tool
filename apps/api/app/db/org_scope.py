@@ -48,7 +48,13 @@ It is a backstop, not a replacement: services must keep their explicit
 Coverage
 --------
 This backstop constrains **top-level** ORM ``SELECT`` statements — the dominant
-leak vector, i.e. a service query that forgets its ``organization_id`` filter.
+leak vector, i.e. a service query that forgets its ``organization_id`` filter. It
+covers entity selects, joins, legacy ``Query`` and 2.0 ``select()``, top-level
+aliases (``select(aliased(Model))`` — via ``include_aliases``), and column-less
+shapes such as ``select(func.count()).select_from(Model)`` (where
+``all_mappers`` is empty — entities are recovered from the FROM clause; see
+:func:`_org_scoped_entities`).
+
 It deliberately does NOT rewrite relationship post-loads (lazy/selectin/joined)
 or deferred column loads. In practice cross-tenant relationship traversal is
 already prevented by the foreign-key data model (org-scoped rows never reference
@@ -62,6 +68,7 @@ import uuid
 
 from sqlalchemy import event, or_
 from sqlalchemy.orm import ORMExecuteState, Session, with_loader_criteria
+from sqlalchemy.sql.util import find_tables
 
 # Key under which the active organization id is stored in ``Session.info``.
 ORG_SCOPE_KEY = "org_scope_id"
@@ -71,6 +78,53 @@ SKIP_ORG_SCOPE = "skip_org_scope"
 _ORG_COLUMN = "organization_id"
 # SQLAlchemy event identifier the listener attaches to.
 _EVENT = "do_orm_execute"
+
+# Lazily-built {Table: Mapper} index for every org-scoped entity, used to recover
+# entities from a statement's FROM clause when ``all_mappers`` is empty (see
+# ``_org_scoped_entities``). Built on first use, by which time all models import.
+_ORG_TABLE_INDEX: dict | None = None
+
+
+def _org_table_index() -> dict:
+    global _ORG_TABLE_INDEX
+    if _ORG_TABLE_INDEX is None:
+        from app.db.base import Base
+
+        index: dict = {}
+        for mapper in Base.registry.mappers:
+            if _ORG_COLUMN in mapper.columns:
+                for table in mapper.tables:
+                    index[table] = mapper
+        _ORG_TABLE_INDEX = index
+    return _ORG_TABLE_INDEX
+
+
+def _org_scoped_entities(state: ORMExecuteState) -> list[tuple[type, bool]]:
+    """Return (entity_class, org_column_is_nullable) for every org-scoped entity
+    referenced by the statement.
+
+    ``ORMExecuteState.all_mappers`` covers the common shapes, but it is empty for
+    column-less selects such as ``select(func.count()).select_from(Model)`` — so
+    we also resolve org-scoped entities from the statement's FROM tables. Without
+    this, a forgotten org filter in that query shape would bypass the backstop.
+    """
+    mappers: dict = {}
+    for mapper in state.all_mappers:
+        if _ORG_COLUMN in mapper.columns:
+            mappers[mapper] = mapper
+
+    try:
+        tables = find_tables(state.statement)
+    except Exception:
+        tables = ()
+    if tables:
+        index = _org_table_index()
+        for table in tables:
+            mapper = index.get(table)
+            if mapper is not None:
+                mappers[mapper] = mapper
+
+    return [(m.class_, m.columns[_ORG_COLUMN].nullable) for m in mappers]
 
 
 def set_org_scope(session: Session, org_id: uuid.UUID | str | None) -> None:
@@ -125,17 +179,13 @@ def _apply_org_scope(state: ORMExecuteState) -> None:
         return
 
     options = []
-    for mapper in state.all_mappers:
-        if _ORG_COLUMN not in mapper.columns:
-            continue
-        entity = mapper.class_
+    for entity, nullable_org in _org_scoped_entities(state):
         # A NULLABLE organization_id means NULL == "platform-global / unowned"
         # (e.g. WorkflowTemplate published platform-wide, request_metrics_rollup
         # for unauthenticated traffic). Such rows belong to every scope, so admit
         # them alongside the active org. The 118 tenant models have a NOT NULL
         # column, so they keep the strict ``== org_id`` form (no IS NULL noise).
-        nullable_org = mapper.columns[_ORG_COLUMN].nullable
-
+        #
         # Lambda form is REQUIRED: it registers ``org_id`` as a bound parameter
         # re-read on every execution. A plain ``entity.organization_id == org_id``
         # expression would be baked into the cached statement and could apply one
@@ -151,13 +201,14 @@ def _apply_org_scope(state: ORMExecuteState) -> None:
             with_loader_criteria(
                 entity,
                 criteria,
-                # include_aliases is left at its default of False on purpose:
-                # applying the criteria to *aliases* of an org-scoped entity turns
-                # LEFT OUTER JOINs against those aliases (e.g. an owner/creator
-                # User alias in the surrogate export) into inner joins, dropping
-                # rows whose alias is NULL or cross-org. The backstop only needs to
-                # constrain the primary/queried entities; FK integrity keeps
-                # aliased look-ups in-org.
+                # include_aliases=True so a top-level aliased query —
+                # ``select(aliased(Model))`` — is also scoped. SQLAlchemy places
+                # the criteria in a join's ON clause (not the trailing WHERE) for
+                # outer-joined aliases, so LEFT OUTER JOINs against org-scoped
+                # aliases (e.g. the owner/creator User aliases in the surrogate
+                # export) keep their NULL/parent rows. Verified against the full
+                # suite incl. admin export.
+                include_aliases=True,
                 propagate_to_loaders=False,
             )
         )
