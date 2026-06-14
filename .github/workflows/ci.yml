@@ -46,6 +46,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: ${{ github.job }}
       
       - name: Install dependencies
         working-directory: apps/api
@@ -99,6 +101,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: ${{ github.job }}
 
       - name: Install dependencies
         working-directory: apps/api
@@ -153,6 +157,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: ${{ github.job }}
 
       - name: Install dependencies
         working-directory: apps/api
@@ -311,6 +317,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: ${{ github.job }}
 
       - name: Install Python dependencies
         working-directory: apps/api
