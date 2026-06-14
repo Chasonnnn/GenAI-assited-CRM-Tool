@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import type { Route } from "next"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -268,7 +269,7 @@ export function StageChart() {
     // Handle bar click - navigate to surrogates filtered by stage
     const handleBarClick = (data: { stage_id: string | null }) => {
         if (!data.stage_id) return
-        push(buildStageUrl(data.stage_id))
+        push(buildStageUrl(data.stage_id) as Route)
     }
 
     const stageLinkEntries = chartData.flatMap((entry) => {

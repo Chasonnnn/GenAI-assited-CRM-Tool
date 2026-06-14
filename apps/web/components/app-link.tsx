@@ -1,8 +1,15 @@
 "use client"
 
 import * as React from "react"
-import Link, { type LinkProps } from "next/link"
+import Link from "next/link"
+import type { Route } from "next"
+import type { UrlObject } from "url"
 import { useRouter } from "next/navigation"
+
+// AppLink is a permissive runtime wrapper that resolves arbitrary hrefs (including
+// external and dynamically-built URLs), so it accepts plain strings in addition to
+// the typedRoutes `Route` type and casts to `Route` where Next requires it.
+type AppLinkHref = Route | UrlObject | string
 
 function toSearchParams(query: Record<string, unknown> | undefined) {
   if (!query) return ""
@@ -22,7 +29,7 @@ function toSearchParams(query: Record<string, unknown> | undefined) {
   return qs ? `?${qs}` : ""
 }
 
-function resolveHref(href: LinkProps["href"]) {
+function resolveHref(href: AppLinkHref) {
   if (typeof href === "string") return href
   if (href instanceof URL) return href.toString()
 
@@ -43,11 +50,14 @@ function resolveHref(href: LinkProps["href"]) {
   return `${pathname}${queryString}${hashString}`
 }
 
-type AppLinkProps = LinkProps &
-  React.AnchorHTMLAttributes<HTMLAnchorElement> & {
-    fallbackMode?: "router" | "reload" | "none"
-    ref?: React.Ref<HTMLAnchorElement>
-  }
+type AppLinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
+  href: AppLinkHref
+  replace?: boolean
+  scroll?: boolean
+  prefetch?: boolean
+  fallbackMode?: "router" | "reload" | "none"
+  ref?: React.Ref<HTMLAnchorElement>
+}
 
 function AppLink({
   href,
@@ -101,9 +111,9 @@ function AppLink({
       event.preventDefault()
       if (targetUrl.origin === window.location.origin) {
         if (replace) {
-          replaceRoute(targetHref, scroll === undefined ? undefined : { scroll })
+          replaceRoute(targetHref as Route, scroll === undefined ? undefined : { scroll })
         } else {
-          push(targetHref, scroll === undefined ? undefined : { scroll })
+          push(targetHref as Route, scroll === undefined ? undefined : { scroll })
         }
       } else {
         window.location.assign(targetHref)
@@ -113,18 +123,22 @@ function AppLink({
   )
 
   const linkProps = {
-    href,
+    href: href as Route | UrlObject,
     onClick: handleClick,
-    target,
-    download,
-    ref,
     ...props,
+    // Conditionally spread optional props so we never pass explicit `undefined`
+    // (incompatible with the Link types under exactOptionalPropertyTypes).
+    ...(target !== undefined ? { target } : {}),
+    ...(download !== undefined ? { download } : {}),
+    ...(ref !== undefined ? { ref } : {}),
     ...(replace ? { replace: true } : {}),
     ...(scroll !== undefined ? { scroll } : {}),
     ...(prefetch !== undefined ? { prefetch } : {}),
   }
 
-  return <Link {...linkProps} />
+  // The wrapper forwards arbitrary anchor attributes; assert the assembled props match
+  // Link's prop type (broad optional spread is otherwise rejected under exactOptionalPropertyTypes).
+  return <Link {...(linkProps as React.ComponentProps<typeof Link>)} />
 }
 
 export default AppLink

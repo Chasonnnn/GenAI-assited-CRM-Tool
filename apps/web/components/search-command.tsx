@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -79,7 +80,7 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
         const config = ENTITY_CONFIG[result.entity_type]
         const url = config.getUrl(result)
         onOpenChange(false)
-        push(url)
+        push(url as Route)
     }, [onOpenChange, push])
 
     return (

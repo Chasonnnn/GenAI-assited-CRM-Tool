@@ -460,7 +460,7 @@ export default function WorkflowExecutionsPage() {
                                                         <Link
                                                             href={entityLink}
                                                             className="text-primary hover:underline"
-                                                            onClick={(e) => e.stopPropagation()}
+                                                            onClick={(e: React.MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
                                                         >
                                                             {formatEntityLabel(execution)}
                                                         </Link>

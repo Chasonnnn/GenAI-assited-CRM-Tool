@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import type { Route } from "next"
 import Link from "@/components/app-link"
 import { differenceInCalendarDays, formatDistanceToNow } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -113,7 +114,7 @@ export default function NotificationsPage() {
         if (!notification.read_at) {
             markRead.mutate(notification.id)
         }
-        push(getNotificationHref(notification))
+        push(getNotificationHref(notification) as Route)
     }
 
     const handleMarkAllRead = () => {

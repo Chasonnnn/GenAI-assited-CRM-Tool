@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, use, useEffect, useState, useRef, useCallback, useMemo } from "react"
+import type { Route } from "next"
 import NextImage from "next/image"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1200,7 +1201,7 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
     }
     const queryString = nextParams.toString()
     const nextUrl = queryString ? `/settings?${queryString}` : "/settings"
-    replace(nextUrl, { scroll: false })
+    replace(nextUrl as Route, { scroll: false })
   }
 
   return (

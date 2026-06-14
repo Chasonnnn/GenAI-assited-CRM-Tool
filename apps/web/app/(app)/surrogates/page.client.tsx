@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useTransition, useRef } from "react"
+import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -535,7 +536,7 @@ export function SurrogatesPageClient() {
         const newUrl = nextQuery ? `/surrogates?${nextQuery}` : "/surrogates"
         const currentUrl = currentQuery ? `/surrogates?${currentQuery}` : "/surrogates"
         if (newUrl === currentUrl) return
-        replace(newUrl, { scroll: false })
+        replace(newUrl as Route, { scroll: false })
     }, [replace, searchParams])
 
     // Update URL when filters change - wrapped in startTransition for smoother UI
@@ -790,7 +791,7 @@ export function SurrogatesPageClient() {
         if (nextQuery === currentQuery) return
 
         const newUrl = nextQuery ? `/surrogates?${nextQuery}` : "/surrogates"
-        replace(newUrl, { scroll: false })
+        replace(newUrl as Route, { scroll: false })
     }, [currentQuery, replace, searchParams])
 
     // Sync debouncedSearch to URL (separate effect to avoid circular updates)
@@ -1175,7 +1176,7 @@ export function SurrogatesPageClient() {
             setIsCreateOpen(false)
             resetCreateForm()
             toast.success("Surrogate created successfully")
-            push(buildSurrogateDetailHref(created.id, currentListHref))
+            push(buildSurrogateDetailHref(created.id, currentListHref) as Route)
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to create surrogate"
             toast.error(message)

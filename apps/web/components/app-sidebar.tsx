@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useCallback, useEffect, useReducer } from "react"
+import type { Route } from "next"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSearchHotkey, SearchCommandDialog } from "@/components/search-command"
@@ -221,7 +222,7 @@ function SidebarNavLink({
     const Icon = item.icon
     return (
         <Link
-            href={item.url}
+            href={item.url as Route}
             prefetch={false}
             className={getNavItemClass(active)}
             title={item.title}
@@ -357,7 +358,7 @@ function AppSidebarContent({
                             {tasksItems.map((subItem) => (
                                 <Link
                                     key={subItem.url}
-                                    href={subItem.url}
+                                    href={subItem.url as Route}
                                     prefetch={false}
                                     className={getNavItemClass(pathname === subItem.url || Boolean(pathname?.startsWith(subItem.url + "/")))}
                                 >
@@ -392,7 +393,7 @@ function AppSidebarContent({
                             {automationItems.map((subItem) => (
                                 <Link
                                     key={subItem.url}
-                                    href={subItem.url}
+                                    href={subItem.url as Route}
                                     prefetch={false}
                                     className={getNavItemClass(activeState.automationItem(subItem))}
                                 >
@@ -451,7 +452,7 @@ function AppSidebarContent({
                             {settingsItems.map((subItem) => (
                                 <Link
                                     key={subItem.url}
-                                    href={subItem.url}
+                                    href={subItem.url as Route}
                                     prefetch={false}
                                     className={getNavItemClass(activeState.settingsItem(subItem))}
                                 >
