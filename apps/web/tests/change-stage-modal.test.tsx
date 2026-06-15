@@ -47,6 +47,23 @@ const stages = [
 ]
 
 describe("ChangeStageModal", () => {
+    it("renders as a scrollable slide-over with actions outside the scroll body", () => {
+        render(
+            <ChangeStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={stages}
+                currentStageId="stage_new_unread"
+                currentStageLabel="New Unread"
+                onSubmit={vi.fn().mockResolvedValue({ status: "applied" })}
+            />
+        )
+
+        expect(screen.getByTestId("change-stage-sheet")).toHaveClass("h-dvh", "overflow-hidden")
+        expect(screen.getByTestId("change-stage-scroll-body")).toHaveClass("min-h-0", "overflow-y-auto")
+        expect(screen.getByTestId("change-stage-actions")).toHaveClass("shrink-0", "border-t")
+    })
+
     it("requires a reason and submits follow-up months when moving to On-Hold", async () => {
         const onSubmit = vi.fn().mockResolvedValue({ status: "applied" })
 

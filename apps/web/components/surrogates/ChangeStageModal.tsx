@@ -13,13 +13,12 @@ import {
 
 import { Button } from "@/components/ui/button"
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -328,16 +327,23 @@ export function ChangeStageModal({
     )
 
     return (
-        <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Change {label}</DialogTitle>
-                    <DialogDescription>
+        <Sheet open={open} onOpenChange={handleClose}>
+            <SheetContent
+                side="right"
+                data-testid="change-stage-sheet"
+                className="h-dvh w-full max-w-none overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg data-[side=right]:md:max-w-xl"
+            >
+                <SheetHeader className="shrink-0 border-b p-5 pr-14">
+                    <SheetTitle>Change {label}</SheetTitle>
+                    <SheetDescription>
                         Current: {currentStageLabel}
-                    </DialogDescription>
-                </DialogHeader>
+                    </SheetDescription>
+                </SheetHeader>
 
-                <div className="space-y-5">
+                <div
+                    data-testid="change-stage-scroll-body"
+                    className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4"
+                >
                     {/* Stage Selector */}
                     <div className="space-y-2">
                         <Label>New {label}</Label>
@@ -694,29 +700,34 @@ export function ChangeStageModal({
                     )}
                 </div>
 
-                <DialogFooter className="mt-2">
-                    <Button
-                        variant="outline"
-                        onClick={handleClose}
-                        disabled={isPending}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleSubmit}
-                        disabled={!canSubmit || isPending}
-                    >
-                        {isPending ? (
-                            <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                {submitButtonLoadingText}
-                            </>
-                        ) : (
-                            submitButtonText
-                        )}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                <div
+                    data-testid="change-stage-actions"
+                    className="shrink-0 border-t bg-background p-4"
+                >
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <Button
+                            variant="outline"
+                            onClick={handleClose}
+                            disabled={isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={!canSubmit || isPending}
+                        >
+                            {isPending ? (
+                                <>
+                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                    {submitButtonLoadingText}
+                                </>
+                            ) : (
+                                submitButtonText
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            </SheetContent>
+        </Sheet>
     )
 }
