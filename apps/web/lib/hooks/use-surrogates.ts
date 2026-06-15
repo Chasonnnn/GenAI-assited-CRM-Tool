@@ -24,6 +24,7 @@ export const surrogateKeys = {
     templateVariables: (id: string) => [...surrogateKeys.detail(id), 'template-variables'] as const,
     history: (id: string) => [...surrogateKeys.detail(id), 'history'] as const,
     massEditOptions: () => [...surrogateKeys.all, 'mass-edit-options'] as const,
+    accessibleOwners: () => [...surrogateKeys.all, 'accessible-owners'] as const,
 };
 
 export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogateId: string) {
@@ -305,6 +306,14 @@ export function useAssignees() {
         queryKey: [...surrogateKeys.all, 'assignees'],
         queryFn: surrogatesApi.getAssignees,
         staleTime: 60 * 1000, // 1 minute
+    });
+}
+
+export function useAccessibleSurrogateOwners() {
+    return useQuery({
+        queryKey: surrogateKeys.accessibleOwners(),
+        queryFn: surrogatesApi.getAccessibleSurrogateOwners,
+        staleTime: 60 * 1000,
     });
 }
 

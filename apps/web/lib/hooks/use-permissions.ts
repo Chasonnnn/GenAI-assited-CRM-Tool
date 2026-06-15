@@ -14,7 +14,11 @@ import {
     getRoleDetail,
     updateRolePermissions,
     bulkUpdateRoles,
+    getIntakePoolGrants,
+    createIntakePoolGrant,
+    revokeIntakePoolGrant,
     type MemberUpdate,
+    type IntakePoolGrantCreate,
 } from "@/lib/api/permissions"
 
 // Query Keys
@@ -25,6 +29,8 @@ const KEYS = {
     effective: (userId: string) => ["permissions", "effective", userId] as const,
     roles: ["permissions", "roles"] as const,
     role: (role: string) => ["permissions", "roles", role] as const,
+    intakePoolGrants: (granteeUserId?: string) =>
+        ["permissions", "intake-pool-grants", granteeUserId ?? "all"] as const,
 }
 
 // Hooks
@@ -81,6 +87,42 @@ export function useEffectivePermissions(userId: string | null) {
         queryKey: KEYS.effective("me"),
         queryFn: getMyEffectivePermissions,
         enabled: !!userId,
+    })
+}
+
+export function useIntakePoolGrants(
+    granteeUserId?: string | null,
+    options: { enabled?: boolean } = {},
+) {
+    return useQuery({
+        queryKey: KEYS.intakePoolGrants(granteeUserId || undefined),
+        queryFn: () => getIntakePoolGrants(granteeUserId || undefined),
+        enabled: granteeUserId !== null && (options.enabled ?? true),
+    })
+}
+
+export function useCreateIntakePoolGrant() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (data: IntakePoolGrantCreate) => createIntakePoolGrant(data),
+        onSuccess: (grant) => {
+            void queryClient.invalidateQueries({ queryKey: KEYS.intakePoolGrants() })
+            void queryClient.invalidateQueries({ queryKey: KEYS.intakePoolGrants(grant.grantee_user_id) })
+            void queryClient.invalidateQueries({ queryKey: ["surrogates", "accessible-owners"] })
+        },
+    })
+}
+
+export function useRevokeIntakePoolGrant() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: revokeIntakePoolGrant,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ["permissions", "intake-pool-grants"] })
+            void queryClient.invalidateQueries({ queryKey: ["surrogates", "accessible-owners"] })
+        },
     })
 }
 

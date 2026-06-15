@@ -435,11 +435,23 @@ export interface Assignee {
     role: string;
 }
 
+export interface AccessibleSurrogateOwner extends Assignee {
+    email?: string;
+    is_self?: boolean;
+}
+
 /**
  * Get list of org members who can be assigned surrogates.
  */
 export function getAssignees(): Promise<Assignee[]> {
     return api.get<Assignee[]>('/surrogates/assignees');
+}
+
+/**
+ * Get assignee filter owners visible to the current user.
+ */
+export function getAccessibleSurrogateOwners(): Promise<AccessibleSurrogateOwner[]> {
+    return api.get<AccessibleSurrogateOwner[]>('/surrogates/accessible-owners');
 }
 
 export interface BulkAssignPayload {

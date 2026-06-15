@@ -69,6 +69,24 @@ export interface EffectivePermissions {
     overrides: PermissionOverride[]
 }
 
+export interface IntakePoolGrant {
+    id: string
+    source_user_id: string
+    source_user_name: string | null
+    source_user_email: string
+    grantee_user_id: string
+    grantee_user_name: string | null
+    grantee_user_email: string
+    created_by_user_id: string | null
+    created_at: string
+    updated_at: string
+}
+
+export interface IntakePoolGrantCreate {
+    source_user_id: string
+    grantee_user_id: string
+}
+
 // API Functions
 
 export async function getAvailablePermissions(): Promise<PermissionInfo[]> {
@@ -97,6 +115,19 @@ export async function getEffectivePermissions(userId: string): Promise<Effective
 
 export async function getMyEffectivePermissions(): Promise<EffectivePermissions> {
     return api.get<EffectivePermissions>("/settings/permissions/effective/me")
+}
+
+export async function getIntakePoolGrants(granteeUserId?: string): Promise<IntakePoolGrant[]> {
+    const query = granteeUserId ? `?grantee_user_id=${encodeURIComponent(granteeUserId)}` : ""
+    return api.get<IntakePoolGrant[]>(`/settings/permissions/intake-pool-grants${query}`)
+}
+
+export async function createIntakePoolGrant(data: IntakePoolGrantCreate): Promise<IntakePoolGrant> {
+    return api.post<IntakePoolGrant>("/settings/permissions/intake-pool-grants", data)
+}
+
+export async function revokeIntakePoolGrant(grantId: string): Promise<{ removed: boolean; id: string }> {
+    return api.delete<{ removed: boolean; id: string }>(`/settings/permissions/intake-pool-grants/${grantId}`)
 }
 
 export async function getRoles(): Promise<RoleSummary[]> {

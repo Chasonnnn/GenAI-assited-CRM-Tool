@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon, SlidersHorizontalIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useAccessibleSurrogateOwners, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
@@ -387,7 +387,12 @@ export function SurrogatesPageClient() {
     const urlSortBy = searchParams.get("sort_by")
     const urlSortOrder = searchParams.get("sort_order")
     const { user } = useAuth()
-    const canFilterByAssignee = user?.role === "admin" || user?.role === "developer"
+    const { data: assignees } = useAssignees()
+    const { data: accessibleOwners } = useAccessibleSurrogateOwners()
+    const canUseOrgAssigneeFilter = user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
+    const canUseIntakePoolFilter = user?.role === "intake_specialist" && (accessibleOwners?.length ?? 0) > 1
+    const canFilterByAssignee = canUseOrgAssigneeFilter || canUseIntakePoolFilter
+    const assigneeFilterOptions = canUseOrgAssigneeFilter ? (assignees ?? []) : (accessibleOwners ?? [])
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
     const effectiveUrlOwnerId = canFilterByAssignee ? urlOwnerId : null
     const initialDynamicFilter = isDynamicSurrogateFilter(urlDynamicFilter) ? urlDynamicFilter : null
@@ -427,7 +432,6 @@ export function SurrogatesPageClient() {
         source: "manual" as SurrogateSource,
     })
     const perPage = 30
-    const { data: assignees } = useAssignees()
     const createMutation = useCreateSurrogate()
     const { data: intelligentSummary } = useIntelligentSuggestionSummary()
     const [isFilterPending, startFilterTransition] = useTransition()
@@ -1093,7 +1097,7 @@ export function SurrogatesPageClient() {
         ...(ownerFilter !== "all"
             ? [{
                 key: "owner" as const,
-                label: `Assignee: ${getAssigneeFilterLabel(ownerFilter, assignees)}`,
+                label: `Assignee: ${getAssigneeFilterLabel(ownerFilter, assigneeFilterOptions)}`,
             }]
             : []),
         ...(dynamicFilter && dynamicFilter !== "intelligent_any"
@@ -1356,13 +1360,13 @@ export function SurrogatesPageClient() {
                                                     <SelectTrigger aria-label="Filter by assignee">
                                                         <SelectValue placeholder="All Assignees">
                                                             {(value: string | null) =>
-                                                                getAssigneeFilterLabel(value, assignees)
+                                                                getAssigneeFilterLabel(value, assigneeFilterOptions)
                                                             }
                                                         </SelectValue>
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="all">All Assignees</SelectItem>
-                                                        {(assignees ?? []).map((assignee) => (
+                                                        {assigneeFilterOptions.map((assignee) => (
                                                             <SelectItem key={assignee.id} value={assignee.id}>
                                                                 {assignee.name}
                                                             </SelectItem>

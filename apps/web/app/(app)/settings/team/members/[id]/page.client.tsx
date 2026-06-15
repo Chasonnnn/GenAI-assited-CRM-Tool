@@ -28,9 +28,13 @@ import {
 } from "lucide-react"
 import {
     useMember,
+    useMembers,
     useUpdateMember,
     useRemoveMember,
-    useAvailablePermissions
+    useAvailablePermissions,
+    useIntakePoolGrants,
+    useCreateIntakePoolGrant,
+    useRevokeIntakePoolGrant,
 } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
@@ -182,15 +186,23 @@ export default function MemberDetailPage() {
     const updateMember = useUpdateMember()
     const removeMember = useRemoveMember()
     const { user } = useAuth()
+    const isDeveloper = user?.role === "developer"
+    const canManageIntakePools = user?.role === "admin" || isDeveloper
+    const { data: members } = useMembers()
+    const { data: intakePoolGrants } = useIntakePoolGrants(member?.user_id ?? null, {
+        enabled: canManageIntakePools,
+    })
+    const createIntakePoolGrant = useCreateIntakePoolGrant()
+    const revokeIntakePoolGrant = useRevokeIntakePoolGrant()
 
     const [pendingRole, setPendingRole] = useState<string | null>(null)
+    const [poolSourceUserId, setPoolSourceUserId] = useState("")
     const [pendingOverrides, setPendingOverrides] = useState<{
         add: { permission: string; override_type: "grant" | "revoke" }[]
         remove: string[]
     }>({ add: [], remove: [] })
     const [showOverrideDialog, setShowOverrideDialog] = useState(false)
 
-    const isDeveloper = user?.role === "developer"
     const currentUserId = user?.email  // Use email as identifier since User type may vary
     const isCurrentUser = member?.email === currentUserId
     const hasChanges = pendingRole !== null || pendingOverrides.add.length > 0 || pendingOverrides.remove.length > 0
@@ -275,6 +287,44 @@ export default function MemberDetailPage() {
     ]
 
     const currentRole = pendingRole || member.role
+    const intakePoolGrantRows = intakePoolGrants ?? []
+    const grantedSourceUserIds = new Set(intakePoolGrantRows.map(grant => grant.source_user_id))
+    const intakePoolSourceOptions = (members ?? [])
+        .filter(candidate =>
+            candidate.role === "intake_specialist" &&
+            candidate.user_id !== member.user_id &&
+            !grantedSourceUserIds.has(candidate.user_id)
+        )
+        .sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email))
+    const selectedPoolSource = intakePoolSourceOptions.find(option => option.user_id === poolSourceUserId)
+
+    const handleCreateIntakePoolGrant = async () => {
+        if (!poolSourceUserId) return
+
+        try {
+            await createIntakePoolGrant.mutateAsync({
+                source_user_id: poolSourceUserId,
+                grantee_user_id: member.user_id,
+            })
+            setPoolSourceUserId("")
+            toast.success("Intake pool access added")
+        } catch (error) {
+            toast.error("Failed to add intake pool access", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
+        }
+    }
+
+    const handleRevokeIntakePoolGrant = async (grantId: string) => {
+        try {
+            await revokeIntakePoolGrant.mutateAsync(grantId)
+            toast.success("Intake pool access revoked")
+        } catch (error) {
+            toast.error("Failed to revoke intake pool access", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
+        }
+    }
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
@@ -441,6 +491,95 @@ export default function MemberDetailPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {canManageIntakePools && currentRole === "intake_specialist" && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Shield className="size-5" aria-hidden="true" />
+                            Intake Pool Access
+                        </CardTitle>
+                        <CardDescription>
+                            Allow this intake specialist to work another intake specialist&apos;s owned cases.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                            <div className="space-y-2">
+                                <Label htmlFor="intake-pool-source">Source intake pool</Label>
+                                <Select
+                                    value={poolSourceUserId || "none"}
+                                    onValueChange={(value) => setPoolSourceUserId(value === "none" ? "" : value ?? "")}
+                                >
+                                    <SelectTrigger id="intake-pool-source">
+                                        <SelectValue placeholder="Select intake pool">
+                                            {(value: string | null) => {
+                                                if (!value || value === "none") return "Select intake pool"
+                                                return selectedPoolSource?.display_name || selectedPoolSource?.email || "Unknown intake"
+                                            }}
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Select intake pool</SelectItem>
+                                        {intakePoolSourceOptions.map(source => (
+                                            <SelectItem key={source.user_id} value={source.user_id}>
+                                                {source.display_name || source.email}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-end">
+                                <Button
+                                    type="button"
+                                    onClick={handleCreateIntakePoolGrant}
+                                    disabled={!poolSourceUserId || createIntakePoolGrant.isPending}
+                                >
+                                    {createIntakePoolGrant.isPending ? (
+                                        <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    ) : (
+                                        <Plus className="size-4 mr-2" aria-hidden="true" />
+                                    )}
+                                    Add Access
+                                </Button>
+                            </div>
+                        </div>
+
+                        {intakePoolGrantRows.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-2">
+                                No intake pool access grants.
+                            </p>
+                        ) : (
+                            <div className="space-y-2">
+                                {intakePoolGrantRows.map(grant => (
+                                    <div
+                                        key={grant.id}
+                                        className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 p-3"
+                                    >
+                                        <div>
+                                            <p className="font-medium">
+                                                {grant.source_user_name || grant.source_user_email}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {grant.source_user_email}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleRevokeIntakePoolGrant(grant.id)}
+                                            disabled={revokeIntakePoolGrant.isPending}
+                                            aria-label={`Revoke ${grant.source_user_name || grant.source_user_email} access`}
+                                        >
+                                            <X className="size-4" aria-hidden="true" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {!isCurrentUser && (
                 <Card className="border-destructive/50">
