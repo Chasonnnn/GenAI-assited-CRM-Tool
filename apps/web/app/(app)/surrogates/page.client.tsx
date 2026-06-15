@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon, SlidersHorizontalIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
-import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useAccessibleSurrogateOwners, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
+import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
@@ -388,11 +388,9 @@ export function SurrogatesPageClient() {
     const urlSortOrder = searchParams.get("sort_order")
     const { user } = useAuth()
     const { data: assignees } = useAssignees()
-    const { data: accessibleOwners } = useAccessibleSurrogateOwners()
     const canUseOrgAssigneeFilter = user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
-    const canUseIntakePoolFilter = user?.role === "intake_specialist" && (accessibleOwners?.length ?? 0) > 1
-    const canFilterByAssignee = canUseOrgAssigneeFilter || canUseIntakePoolFilter
-    const assigneeFilterOptions = canUseOrgAssigneeFilter ? (assignees ?? []) : (accessibleOwners ?? [])
+    const canFilterByAssignee = canUseOrgAssigneeFilter
+    const assigneeFilterOptions = assignees ?? []
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
     const effectiveUrlOwnerId = canFilterByAssignee ? urlOwnerId : null
     const initialDynamicFilter = isDynamicSurrogateFilter(urlDynamicFilter) ? urlDynamicFilter : null

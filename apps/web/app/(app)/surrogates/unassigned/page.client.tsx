@@ -50,7 +50,7 @@ export default function UnassignedSurrogatesPage({
     const { push, replace } = useRouter()
 
     const authLoaded = !!user?.role
-    const canViewUnassignedQueue = user?.role === "intake_specialist" || user?.role === "developer"
+    const canViewUnassignedQueue = user?.role === "admin" || user?.role === "developer"
 
     const urlPage = parsePageParam(initialPageParam)
     const page = urlPage

@@ -10,9 +10,9 @@ from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role
-from app.db.models import Membership, Surrogate, User
+from app.db.models import Membership, Surrogate, Task, User
 from app.main import app
-from app.services import pipeline_service, session_service
+from app.services import pipeline_service, queue_service, session_service
 from app.utils.normalization import normalize_email, normalize_identifier, normalize_search_text
 
 
@@ -69,6 +69,37 @@ def _create_surrogate(
         owner_type=OwnerType.USER.value,
         owner_id=owner_id,
         created_by_user_id=owner_id,
+        full_name=name,
+        full_name_normalized=normalize_search_text(name),
+        surrogate_number_normalized=normalize_identifier(surrogate_number),
+        email=email,
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+    return surrogate
+
+
+def _create_queue_surrogate(
+    db,
+    org_id: UUID,
+    *,
+    queue_id: UUID,
+    stage_key: str,
+    name: str,
+) -> Surrogate:
+    stage = _get_stage(db, org_id, stage_key)
+    email = normalize_email(f"{name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:8]}@example.com")
+    surrogate_number = f"S{uuid.uuid4().int % 90000 + 10000:05d}"
+    surrogate = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        surrogate_number=surrogate_number,
+        stage_id=stage.id,
+        status_label=stage.label,
+        owner_type=OwnerType.QUEUE.value,
+        owner_id=queue_id,
+        created_by_user_id=None,
         full_name=name,
         full_name_normalized=normalize_search_text(name),
         surrogate_number_normalized=normalize_identifier(surrogate_number),
@@ -211,11 +242,125 @@ async def test_case_manager_can_edit_visible_unclaimed_case_but_not_change_statu
 
 
 @pytest.mark.asyncio
-async def test_intake_pool_grant_allows_dynamic_pool_access_and_revoke(db, test_org):
+async def test_intake_default_surfaces_show_only_assigned_pool(db, test_org):
+    intake = _create_user(db, test_org.id, Role.INTAKE_SPECIALIST, "Assigned Intake")
+    other = _create_user(db, test_org.id, Role.INTAKE_SPECIALIST, "Other Intake")
+    default_queue = queue_service.get_or_create_default_queue(db, test_org.id)
+
+    assigned = _create_surrogate(
+        db,
+        test_org.id,
+        owner_id=intake.id,
+        stage_key="contacted",
+        name="Assigned Intake Case",
+    )
+    other_case = _create_surrogate(
+        db,
+        test_org.id,
+        owner_id=other.id,
+        stage_key="contacted",
+        name="Other Intake Case",
+    )
+    unassigned = _create_queue_surrogate(
+        db,
+        test_org.id,
+        queue_id=default_queue.id,
+        stage_key="contacted",
+        name="Default Queue Case",
+    )
+    db.add_all(
+        [
+            Task(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                surrogate_id=assigned.id,
+                created_by_user_id=intake.id,
+                owner_type=OwnerType.USER.value,
+                owner_id=intake.id,
+                title="Assigned case task",
+                task_type="other",
+            ),
+            Task(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                surrogate_id=other_case.id,
+                created_by_user_id=intake.id,
+                owner_type=OwnerType.USER.value,
+                owner_id=intake.id,
+                title="Other intake case task",
+                task_type="other",
+            ),
+            Task(
+                id=uuid.uuid4(),
+                organization_id=test_org.id,
+                surrogate_id=unassigned.id,
+                created_by_user_id=intake.id,
+                owner_type=OwnerType.USER.value,
+                owner_id=intake.id,
+                title="Default queue case task",
+                task_type="other",
+            ),
+        ]
+    )
+    db.flush()
+
+    async with _client_for_user(db, test_org.id, intake, Role.INTAKE_SPECIALIST) as client:
+        list_response = await client.get("/surrogates", params={"per_page": 100})
+        assert list_response.status_code == 200, list_response.text
+        list_data = list_response.json()
+        assert list_data["total"] == 1
+        assert {item["id"] for item in list_data["items"]} == {str(assigned.id)}
+
+        accessible_owners = await client.get("/surrogates/accessible-owners")
+        assert accessible_owners.status_code == 200, accessible_owners.text
+        assert accessible_owners.json() == []
+
+        stats = await client.get("/surrogates/stats")
+        assert stats.status_code == 200, stats.text
+        assert stats.json()["total"] == 1
+
+        by_status = await client.get("/analytics/surrogates/by-status")
+        assert by_status.status_code == 200, by_status.text
+        assert sum(item["count"] for item in by_status.json()) == 1
+
+        trend = await client.get("/analytics/surrogates/trend")
+        assert trend.status_code == 200, trend.text
+        assert sum(item["count"] for item in trend.json()) == 1
+
+        analytics_summary = await client.get("/analytics/summary")
+        assert analytics_summary.status_code == 403, analytics_summary.text
+
+        search = await client.get("/search", params={"q": "Default Queue", "types": "case"})
+        assert search.status_code == 200, search.text
+        assert search.json()["total"] == 0
+
+        other_search = await client.get("/search", params={"q": "Other Intake", "types": "case"})
+        assert other_search.status_code == 200, other_search.text
+        assert other_search.json()["total"] == 0
+
+        tasks = await client.get("/tasks", params={"per_page": 100})
+        assert tasks.status_code == 200, tasks.text
+        task_data = tasks.json()
+        assert task_data["total"] == 1
+        assert [item["title"] for item in task_data["items"]] == ["Assigned case task"]
+
+        assert other_case.id != assigned.id
+        assert unassigned.id != assigned.id
+
+
+@pytest.mark.asyncio
+async def test_stale_intake_pool_grant_does_not_expand_intake_visibility(db, test_org):
     admin = _create_user(db, test_org.id, Role.ADMIN, "Admin User")
     grantee = _create_user(db, test_org.id, Role.INTAKE_SPECIALIST, "Grantee Intake")
     source = _create_user(db, test_org.id, Role.INTAKE_SPECIALIST, "Source Intake")
     other = _create_user(db, test_org.id, Role.INTAKE_SPECIALIST, "Other Intake")
+    own_case = _create_surrogate(
+        db,
+        test_org.id,
+        owner_id=grantee.id,
+        stage_key="contacted",
+        name="Grantee Own Case",
+    )
     source_case = _create_surrogate(
         db,
         test_org.id,
@@ -258,38 +403,34 @@ async def test_intake_pool_grant_allows_dynamic_pool_access_and_revoke(db, test_
     async with _client_for_user(db, test_org.id, grantee, Role.INTAKE_SPECIALIST) as client:
         accessible_owners = await client.get("/surrogates/accessible-owners")
         assert accessible_owners.status_code == 200, accessible_owners.text
-        owner_ids = {item["id"] for item in accessible_owners.json()}
-        assert {str(grantee.id), str(source.id)} <= owner_ids
-        assert str(other.id) not in owner_ids
+        assert accessible_owners.json() == []
 
         after = await client.get("/surrogates", params={"per_page": 100})
         assert after.status_code == 200, after.text
         ids = {item["id"] for item in after.json()["items"]}
-        assert {str(source_case.id), str(future_case.id)} <= ids
+        assert ids == {str(own_case.id)}
+        assert str(source_case.id) not in ids
+        assert str(future_case.id) not in ids
         assert str(other_case.id) not in ids
 
         filtered = await client.get("/surrogates", params={"owner_id": str(source.id)})
-        assert filtered.status_code == 200, filtered.text
-        filtered_ids = {item["id"] for item in filtered.json()["items"]}
-        assert {str(source_case.id), str(future_case.id)} <= filtered_ids
-        assert str(other_case.id) not in filtered_ids
+        assert filtered.status_code == 403, filtered.text
 
         blocked_filter = await client.get("/surrogates", params={"owner_id": str(other.id)})
         assert blocked_filter.status_code == 403, blocked_filter.text
 
         detail = await client.get(f"/surrogates/{source_case.id}")
-        assert detail.status_code == 200, detail.text
+        assert detail.status_code == 403, detail.text
 
         edit = await client.patch(
             f"/surrogates/{source_case.id}",
             json={"full_name": "Edited Shared Source Case"},
         )
-        assert edit.status_code == 200, edit.text
-        assert edit.json()["full_name"] == "Edited Shared Source Case"
+        assert edit.status_code == 403, edit.text
 
         search = await client.get("/search", params={"q": "Future Shared Source", "types": "case"})
         assert search.status_code == 200, search.text
-        assert str(future_case.id) in {item["entity_id"] for item in search.json()["results"]}
+        assert search.json()["total"] == 0
 
     async with _client_for_user(db, test_org.id, admin, Role.ADMIN) as client:
         revoke = await client.delete(f"/settings/permissions/intake-pool-grants/{grant_id}")
@@ -298,6 +439,7 @@ async def test_intake_pool_grant_allows_dynamic_pool_access_and_revoke(db, test_
     async with _client_for_user(db, test_org.id, grantee, Role.INTAKE_SPECIALIST) as client:
         after_revoke = await client.get("/surrogates", params={"per_page": 100})
         assert after_revoke.status_code == 200, after_revoke.text
+        assert {item["id"] for item in after_revoke.json()["items"]} == {str(own_case.id)}
         assert str(source_case.id) not in {item["id"] for item in after_revoke.json()["items"]}
 
 

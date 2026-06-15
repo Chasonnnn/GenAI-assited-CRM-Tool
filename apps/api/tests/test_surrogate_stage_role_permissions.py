@@ -204,7 +204,7 @@ async def test_intake_can_move_case_to_on_hold(db, test_org):
 
 
 @pytest.mark.asyncio
-async def test_intake_can_follow_after_approving_case(db, test_org):
+async def test_intake_loses_access_after_approving_case(db, test_org):
     approved_stage_id = _get_stage_id(db, test_org.id, "approved")
 
     async with _client_for_role(db, test_org.id, Role.INTAKE_SPECIALIST) as (_, client):
@@ -218,24 +218,22 @@ async def test_intake_can_follow_after_approving_case(db, test_org):
         assert to_approved.json()["status"] == "applied"
 
         detail = await client.get(f"/surrogates/{surrogate_id}")
-        assert detail.status_code == 200, detail.text
-        assert detail.json()["id"] == surrogate_id
+        assert detail.status_code == 403, detail.text
 
         listed = await client.get("/surrogates", params={"per_page": 100})
         assert listed.status_code == 200, listed.text
-        assert any(item["id"] == surrogate_id for item in listed.json()["items"])
+        assert all(item["id"] != surrogate_id for item in listed.json()["items"])
 
         updated_name = "Intake Follow Updated"
         updated = await client.patch(
             f"/surrogates/{surrogate_id}",
             json={"full_name": updated_name},
         )
-        assert updated.status_code == 200, updated.text
-        assert updated.json()["full_name"] == updated_name
+        assert updated.status_code == 403, updated.text
 
 
 @pytest.mark.asyncio
-async def test_intake_can_follow_after_approving_case_when_slug_is_renamed(db, test_org):
+async def test_intake_loses_access_after_approving_case_when_slug_is_renamed(db, test_org):
     pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
     approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
     assert approved_stage is not None
@@ -254,4 +252,4 @@ async def test_intake_can_follow_after_approving_case_when_slug_is_renamed(db, t
 
         listed = await client.get("/surrogates", params={"per_page": 100})
         assert listed.status_code == 200, listed.text
-        assert any(item["id"] == surrogate_id for item in listed.json()["items"])
+        assert all(item["id"] != surrogate_id for item in listed.json()["items"])

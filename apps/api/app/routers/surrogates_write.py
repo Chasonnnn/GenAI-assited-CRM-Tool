@@ -106,8 +106,8 @@ def claim_surrogate(
     """
     Claim a surrogate from a queue (atomic).
 
-    - Intake specialists: only allowed to claim from the system Unassigned queue.
-    - Case managers/admin/developer: must have assign_surrogates permission (can claim from any queue).
+    Intake specialists cannot claim queue-owned cases directly; admins or other
+    users with assign_surrogates permission must assign cases to them.
     """
     from app.services import permission_service
     from app.services.queue_service import (
@@ -119,20 +119,18 @@ def claim_surrogate(
 
     role_str = session.role.value if hasattr(session.role, "value") else session.role
 
-    allowed_queue_ids = None
     if session.role == Role.INTAKE_SPECIALIST:
-        default_queue = queue_service.get_or_create_default_queue(db, session.org_id)
-        allowed_queue_ids = {default_queue.id}
-    else:
-        # Respect per-user permission overrides (revoke > grant > role default).
-        if not permission_service.check_permission(
-            db,
-            session.org_id,
-            session.user_id,
-            role_str,
-            "assign_surrogates",
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: assign_surrogates")
+        raise HTTPException(status_code=403, detail="Intake users can only work assigned cases")
+
+    # Respect per-user permission overrides (revoke > grant > role default).
+    if not permission_service.check_permission(
+        db,
+        session.org_id,
+        session.user_id,
+        role_str,
+        "assign_surrogates",
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission: assign_surrogates")
 
     try:
         surrogate = queue_service.claim_surrogate(
@@ -140,7 +138,7 @@ def claim_surrogate(
             org_id=session.org_id,
             surrogate_id=surrogate_id,
             claimer_user_id=session.user_id,
-            allowed_queue_ids=allowed_queue_ids,
+            allowed_queue_ids=None,
         )
         audit_service.log_event(
             db=db,
@@ -162,7 +160,7 @@ def claim_surrogate(
     except NotAllowedQueueError:
         raise HTTPException(
             status_code=403,
-            detail="Only surrogates in the Unassigned queue can be claimed by intake specialists",
+            detail="Not authorized to claim from this queue",
         )
     except NotQueueMemberError as e:
         raise HTTPException(status_code=403, detail=str(e))

@@ -578,7 +578,8 @@ def list_tasks(
         (tasks, total_count)
     """
     from datetime import date
-    from app.db.enums import Role, OwnerType
+    from app.core.surrogate_access import build_surrogate_visibility_filter
+    from app.db.enums import Role
     from app.db.models import Surrogate
 
     if user_id:
@@ -586,24 +587,22 @@ def list_tasks(
 
     query = db.query(Task).filter(Task.organization_id == org_id)
 
-    # Role-based surrogate access filtering for intake specialists
-    # Filter out tasks linked to surrogates they can't access
+    # Role-based surrogate access filtering for intake specialists:
+    # filter out tasks linked to surrogates they can't access.
     if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
-        # Subquery: surrogates intake can access (owner-based)
         if user_id:
-            default_queue = queue_service.get_or_create_default_queue(db, org_id)
             accessible_surrogate_ids = (
-                db.query(Surrogate.id)
-                .filter(
+                select(Surrogate.id)
+                .where(
                     Surrogate.organization_id == org_id,
-                    or_(
-                        (Surrogate.owner_type == OwnerType.USER.value)
-                        & (Surrogate.owner_id == user_id),
-                        (Surrogate.owner_type == OwnerType.QUEUE.value)
-                        & (Surrogate.owner_id == default_queue.id),
+                    build_surrogate_visibility_filter(
+                        db,
+                        org_id,
+                        user_role,
+                        user_id,
+                        surrogate_model=Surrogate,
                     ),
                 )
-                .subquery()
             )
 
             query = query.filter(

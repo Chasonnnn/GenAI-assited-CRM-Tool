@@ -375,15 +375,11 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     const isInQueue = surrogateData?.owner_type === "queue"
     const isOwnedByUser = surrogateData?.owner_type === "user"
     const zoomConnected = !!zoomStatus?.connected
-    const isUnassignedQueue = !!(
-        surrogateData?.owner_type === "queue" &&
-        surrogateData.owner_name === "Unassigned"
-    )
     const canClaimSurrogate = !!(
         surrogateData &&
         !surrogateData.is_archived &&
         isInQueue &&
-        (canManageQueue || (user?.role === "intake_specialist" && isUnassignedQueue))
+        canManageQueue
     )
 
     useEffect(() => {

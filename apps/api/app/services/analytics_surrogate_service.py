@@ -156,6 +156,8 @@ def get_surrogates_trend(
     owner_id: uuid.UUID | None = None,
     pipeline_id: uuid.UUID | None = None,
     timezone_name: str | None = None,
+    role_filter: Any | None = None,
+    user_id: uuid.UUID | None = None,
     group_by: str = "day",  # day, week, month
 ) -> list[dict[str, Any]]:
     """Get new surrogates created over time."""
@@ -202,6 +204,18 @@ def get_surrogates_trend(
             Surrogate.owner_type == OwnerType.USER.value,
             Surrogate.owner_id == owner_id,
         )
+    if role_filter:
+        from app.core.surrogate_access import build_surrogate_visibility_filter
+
+        results = results.filter(
+            build_surrogate_visibility_filter(
+                db,
+                organization_id,
+                role_filter,
+                user_id,
+                surrogate_model=Surrogate,
+            )
+        )
     if pipeline_id:
         results = results.join(PipelineStage, Surrogate.stage_id == PipelineStage.id).filter(
             PipelineStage.pipeline_id == pipeline_id
@@ -231,6 +245,8 @@ def get_cached_surrogates_trend(
     pipeline_id: uuid.UUID | None = None,
     owner_id: uuid.UUID | None = None,
     timezone_name: str | None = None,
+    role_filter: Any | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     normalized_timezone_name: str | None = None
     if timezone_name:
@@ -246,6 +262,10 @@ def get_cached_surrogates_trend(
         "pipeline_id": str(pipeline_id) if pipeline_id else None,
         "owner_id": str(owner_id) if owner_id else None,
         "timezone_name": normalized_timezone_name,
+        "role_filter": str(role_filter.value if hasattr(role_filter, "value") else role_filter)
+        if role_filter
+        else None,
+        "user_id": str(user_id) if user_id else None,
     }
     return _get_or_compute_snapshot(
         db,
@@ -261,6 +281,8 @@ def get_cached_surrogates_trend(
             pipeline_id=pipeline_id,
             owner_id=owner_id,
             timezone_name=normalized_timezone_name,
+            role_filter=role_filter,
+            user_id=user_id,
         ),
         range_start=start,
         range_end=end,
@@ -275,6 +297,8 @@ def get_surrogates_by_status(
     source: str | None = None,
     pipeline_id: uuid.UUID | None = None,
     owner_id: uuid.UUID | None = None,
+    role_filter: Any | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     """Get current case count by status with stage metadata."""
     query = (
@@ -300,6 +324,18 @@ def get_surrogates_by_status(
         query = query.filter(
             Surrogate.owner_type == OwnerType.USER.value,
             Surrogate.owner_id == owner_id,
+        )
+    if role_filter:
+        from app.core.surrogate_access import build_surrogate_visibility_filter
+
+        query = query.filter(
+            build_surrogate_visibility_filter(
+                db,
+                organization_id,
+                role_filter,
+                user_id,
+                surrogate_model=Surrogate,
+            )
         )
 
     results = (
@@ -327,6 +363,8 @@ def get_cached_surrogates_by_status(
     source: str | None = None,
     pipeline_id: uuid.UUID | None = None,
     owner_id: uuid.UUID | None = None,
+    role_filter: Any | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     params = {
         "start_date": start_date.isoformat() if start_date else None,
@@ -334,6 +372,10 @@ def get_cached_surrogates_by_status(
         "source": source,
         "pipeline_id": str(pipeline_id) if pipeline_id else None,
         "owner_id": str(owner_id) if owner_id else None,
+        "role_filter": str(role_filter.value if hasattr(role_filter, "value") else role_filter)
+        if role_filter
+        else None,
+        "user_id": str(user_id) if user_id else None,
     }
     range_start = (
         datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
@@ -356,6 +398,8 @@ def get_cached_surrogates_by_status(
             source=source,
             pipeline_id=pipeline_id,
             owner_id=owner_id,
+            role_filter=role_filter,
+            user_id=user_id,
         ),
         range_start=range_start,
         range_end=range_end,

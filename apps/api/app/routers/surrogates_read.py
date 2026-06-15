@@ -53,18 +53,9 @@ class IntelligentSuggestionSummaryRead(BaseModel):
 
 
 def _require_owner_filter_access(session: UserSession, db: Session, owner_id: UUID | None) -> None:
-    from app.services import intake_pool_access_service
-
     if not owner_id or owner_id == session.user_id:
         return
     if session.role in (Role.ADMIN, Role.DEVELOPER):
-        return
-    if session.role == Role.INTAKE_SPECIALIST and intake_pool_access_service.has_pool_access(
-        db,
-        session.org_id,
-        source_user_id=owner_id,
-        grantee_user_id=session.user_id,
-    ):
         return
     if session.role == Role.CASE_MANAGER:
         return
@@ -82,14 +73,6 @@ def list_accessible_surrogate_owners(
     """List assignees the current user may use as surrogate owner filters."""
     if session.role in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER):
         return surrogate_service.list_assignees(db, session.org_id)
-    if session.role == Role.INTAKE_SPECIALIST:
-        from app.services import intake_pool_access_service
-
-        return intake_pool_access_service.list_accessible_intake_owners(
-            db,
-            session.org_id,
-            session.user_id,
-        )
     return []
 
 
@@ -164,6 +147,9 @@ def list_unassigned_queue(
     per_page: Annotated[int, "fastapi_param"] = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
 ):
     """List surrogates in the system Unassigned queue (ready for intake claim)."""
+    if session.role not in (Role.ADMIN, Role.DEVELOPER):
+        raise HTTPException(status_code=403, detail="Only admins can view the unassigned queue")
+
     surrogates, total = surrogate_service.list_unassigned_queue(
         db=db,
         org_id=session.org_id,

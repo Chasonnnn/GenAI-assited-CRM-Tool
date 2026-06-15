@@ -263,24 +263,23 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export default SurrogatesPageClient")
     })
 
-    it("limits intake assignee filters to accessible owner pools", () => {
+    it("does not show assignee filters to intake users", () => {
         const source = readSource("app/(app)/surrogates/page.client.tsx")
 
-        expect(source).toContain("useAccessibleSurrogateOwners")
-        expect(source).toContain("const canUseIntakePoolFilter = user?.role === \"intake_specialist\"")
-        expect(source).toContain("const assigneeFilterOptions = canUseOrgAssigneeFilter")
+        expect(source).not.toContain("useAccessibleSurrogateOwners")
+        expect(source).not.toContain("canUseIntakePoolFilter")
+        expect(source).toContain("const canFilterByAssignee = canUseOrgAssigneeFilter")
         expect(source).toContain("getAssigneeFilterLabel(value, assigneeFilterOptions)")
         expect(source).not.toContain("getAssigneeFilterLabel(ownerFilter, assignees)")
     })
 
-    it("keeps intake pool grants separate from permission overrides in team settings", () => {
+    it("does not expose intake pool grants in team settings", () => {
         const source = readSource("app/(app)/settings/team/members/[id]/page.client.tsx")
 
-        expect(source).toContain("useIntakePoolGrants")
-        expect(source).toContain("useCreateIntakePoolGrant")
-        expect(source).toContain("useRevokeIntakePoolGrant")
-        expect(source).toContain("Intake Pool Access")
-        expect(source).toContain("currentRole === \"intake_specialist\"")
+        expect(source).not.toContain("useIntakePoolGrants")
+        expect(source).not.toContain("useCreateIntakePoolGrant")
+        expect(source).not.toContain("useRevokeIntakePoolGrant")
+        expect(source).not.toContain("Intake Pool Access")
     })
 
     it("keeps test-only factories and interview internals private", () => {

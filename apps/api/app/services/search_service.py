@@ -18,18 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
 from app.core.surrogate_access import case_manager_approved_onward_joined_filter
-from app.db.enums import OwnerType, Role, SurrogateStatus
-from app.db.models import (
-    Attachment,
-    EntityNote,
-    IntakePoolAccessGrant,
-    IntendedParent,
-    Membership,
-    PipelineStage,
-    Queue,
-    Surrogate,
-    SurrogateStatusHistory,
-)
+from app.db.enums import OwnerType, Role
+from app.db.models import Attachment, EntityNote, IntendedParent, PipelineStage, Surrogate
 from app.schemas.auth import UserSession
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 
@@ -138,67 +128,9 @@ def _build_surrogate_access_filter(
     elif role == Role.CASE_MANAGER.value:
         ownership_filter = case_manager_approved_onward_joined_filter(surrogate_table, stage_table)
     elif role == Role.INTAKE_SPECIALIST.value:
-        source_membership = Membership.__table__.alias("source_intake_grant_membership")
-        grantee_membership = Membership.__table__.alias("grantee_intake_grant_membership")
-        default_queue_id = (
-            select(Queue.id)
-            .where(
-                Queue.organization_id == org_id,
-                Queue.name == "Unassigned",
-                Queue.is_active.is_(True),
-            )
-            .scalar_subquery()
-        )
-        granted_source_ids = (
-            select(IntakePoolAccessGrant.source_user_id)
-            .select_from(
-                IntakePoolAccessGrant.__table__
-                .join(
-                    source_membership,
-                    and_(
-                        source_membership.c.organization_id == org_id,
-                        source_membership.c.user_id == IntakePoolAccessGrant.source_user_id,
-                        source_membership.c.is_active.is_(True),
-                        source_membership.c.role == Role.INTAKE_SPECIALIST.value,
-                    ),
-                )
-                .join(
-                    grantee_membership,
-                    and_(
-                        grantee_membership.c.organization_id == org_id,
-                        grantee_membership.c.user_id == IntakePoolAccessGrant.grantee_user_id,
-                        grantee_membership.c.is_active.is_(True),
-                        grantee_membership.c.role == Role.INTAKE_SPECIALIST.value,
-                    ),
-                )
-            )
-            .where(
-                IntakePoolAccessGrant.organization_id == org_id,
-                IntakePoolAccessGrant.grantee_user_id == user_id,
-            )
-        )
-        followed_ids = (
-            select(SurrogateStatusHistory.surrogate_id)
-            .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
-            .where(
-                SurrogateStatusHistory.organization_id == org_id,
-                SurrogateStatusHistory.changed_by_user_id == user_id,
-                PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
-            )
-        )
-        ownership_filter = or_(
-            and_(
-                surrogate_table.c.owner_type == OwnerType.USER.value,
-                or_(
-                    surrogate_table.c.owner_id == user_id,
-                    surrogate_table.c.owner_id.in_(granted_source_ids),
-                ),
-            ),
-            and_(
-                surrogate_table.c.owner_type == OwnerType.QUEUE.value,
-                surrogate_table.c.owner_id == default_queue_id,
-            ),
-            surrogate_table.c.id.in_(followed_ids),
+        ownership_filter = and_(
+            surrogate_table.c.owner_type == OwnerType.USER.value,
+            surrogate_table.c.owner_id == user_id,
         )
     else:
         ownership_filter = false()

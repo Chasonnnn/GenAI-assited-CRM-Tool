@@ -2,12 +2,12 @@
 
 from uuid import UUID
 from fastapi import HTTPException, status
-from sqlalchemy import and_, false, func, literal, or_, select, true
+from sqlalchemy import and_, false, func, literal, select, true
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.enums import OwnerType, Role, SurrogateStatus
-from app.db.models import PipelineStage, Surrogate, SurrogateStatusHistory
+from app.db.models import PipelineStage, Surrogate
 
 PRIORITY_MANAGER_ROLES = {Role.ADMIN.value, Role.DEVELOPER.value}
 
@@ -80,7 +80,6 @@ def build_surrogate_visibility_filter(
     user_id: UUID | None,
     *,
     surrogate_model=Surrogate,
-    include_unassigned_queue: bool = True,
 ) -> ColumnElement[bool]:
     """Build the row-level surrogate visibility filter for list/count queries."""
     role_str = _role_value(user_role)
@@ -93,37 +92,10 @@ def build_surrogate_visibility_filter(
     if role_str != Role.INTAKE_SPECIALIST.value:
         return false()
 
-    from app.services import intake_pool_access_service, queue_service
-
-    owner_ids = {
-        user_id,
-        *intake_pool_access_service.get_source_user_ids_for_grantee(db, org_id, user_id),
-    }
-    owned_clause = and_(
+    return and_(
         surrogate_model.owner_type == OwnerType.USER.value,
-        surrogate_model.owner_id.in_(owner_ids),
+        surrogate_model.owner_id == user_id,
     )
-    followed_ids = (
-        select(SurrogateStatusHistory.surrogate_id)
-        .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
-        .where(
-            SurrogateStatusHistory.organization_id == org_id,
-            SurrogateStatusHistory.changed_by_user_id == user_id,
-            PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
-        )
-    )
-    clauses = [owned_clause, surrogate_model.id.in_(followed_ids)]
-
-    if include_unassigned_queue:
-        default_queue = queue_service.get_or_create_default_queue(db, org_id)
-        clauses.append(
-            and_(
-                surrogate_model.owner_type == OwnerType.QUEUE.value,
-                surrogate_model.owner_id == default_queue.id,
-            )
-        )
-
-    return or_(*clauses)
 
 
 def check_surrogate_access(
@@ -232,27 +204,7 @@ def has_surrogate_record_access(
     if role_str != Role.INTAKE_SPECIALIST.value:
         return False
 
-    if surrogate.owner_type == OwnerType.USER.value:
-        if surrogate.owner_id == user_id:
-            return True
-        from app.services import intake_pool_access_service
-
-        if intake_pool_access_service.has_pool_access(
-            db,
-            org_id,
-            source_user_id=surrogate.owner_id,
-            grantee_user_id=user_id,
-        ):
-            return True
-
-    if surrogate.owner_type == OwnerType.QUEUE.value:
-        from app.services import queue_service
-
-        default_queue = queue_service.get_or_create_default_queue(db, org_id)
-        if surrogate.owner_id == default_queue.id:
-            return True
-
-    return _intake_has_follow_access(db, surrogate, org_id, user_id)
+    return surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id == user_id
 
 
 def _is_approved_onward(db: Session, surrogate: Surrogate) -> bool:
@@ -310,36 +262,6 @@ def _check_post_approval_access(
         )
 
 
-def _intake_has_follow_access(
-    db: Session,
-    surrogate: Surrogate,
-    org_id: UUID,
-    user_id: UUID | None,
-) -> bool:
-    """
-    Allow intake to follow surrogates they moved to `approved`.
-
-    Uses status history instead of activity log JSON to stay robust across ownership transfers.
-    """
-    if not (db and user_id):
-        return False
-
-    from app.db.models import PipelineStage, SurrogateStatusHistory
-
-    approved_by_user = (
-        db.query(SurrogateStatusHistory.id)
-        .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
-        .filter(
-            SurrogateStatusHistory.surrogate_id == surrogate.id,
-            SurrogateStatusHistory.organization_id == org_id,
-            SurrogateStatusHistory.changed_by_user_id == user_id,
-            PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
-        )
-        .first()
-    )
-    return approved_by_user is not None
-
-
 def can_modify_surrogate(
     surrogate: Surrogate,
     user_id: UUID | str,
@@ -354,7 +276,7 @@ def can_modify_surrogate(
     Rules:
     - Admin/developer can modify any non-archived surrogate
     - Case managers can modify approved-onward surrogates they can access
-    - Intake specialists can modify owned, followed, or granted-pool surrogates
+    - Intake specialists can modify only surrogates assigned to themselves
 
     Returns:
         True if user can modify, False otherwise

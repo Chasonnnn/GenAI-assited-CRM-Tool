@@ -15,7 +15,7 @@ from app.utils.normalization import normalize_email
 
 
 @pytest.mark.asyncio
-async def test_intake_can_list_unassigned_queue_and_claim(db, test_org, default_stage):
+async def test_intake_cannot_list_unassigned_queue_or_claim(db, test_org, default_stage):
     intake_user = User(
         id=uuid.uuid4(),
         email=f"intake-{uuid.uuid4().hex[:8]}@test.com",
@@ -81,23 +81,10 @@ async def test_intake_can_list_unassigned_queue_and_claim(db, test_org, default_
         headers={CSRF_HEADER: csrf_token},
     ) as client:
         resp = await client.get("/surrogates/unassigned-queue")
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
-        assert any(item["id"] == str(surrogate.id) for item in data["items"])
+        assert resp.status_code == 403, resp.text
 
         claim = await client.post(f"/surrogates/{surrogate.id}/claim")
-        assert claim.status_code == 200, claim.text
-
-        detail = await client.get(f"/surrogates/{surrogate.id}")
-        assert detail.status_code == 200, detail.text
-        detail_data = detail.json()
-        assert detail_data["owner_type"] == "user"
-        assert detail_data["owner_id"] == str(intake_user.id)
-
-        after = await client.get("/surrogates/unassigned-queue")
-        assert after.status_code == 200, after.text
-        after_data = after.json()
-        assert not any(item["id"] == str(surrogate.id) for item in after_data["items"])
+        assert claim.status_code == 403, claim.text
 
     app.dependency_overrides.clear()
 

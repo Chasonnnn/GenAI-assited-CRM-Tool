@@ -37,6 +37,9 @@ def require_analytics_access(
 
     session = get_current_session(request, db)
     path = request.scope.get("path") or request.url.path
+    if session.role == Role.INTAKE_SPECIALIST and path not in DASHBOARD_ANALYTICS_PATHS:
+        raise HTTPException(status_code=403, detail="Intake users can only view assigned-case analytics")
+
     required_permissions = [POLICIES["reports"].default.value]
     if path in DASHBOARD_ANALYTICS_PATHS:
         required_permissions.append(PermissionKey.VIEW_DASHBOARD.value)
@@ -197,7 +200,7 @@ def get_surrogates_by_status(
     if (
         owner_id
         and owner_id != session.user_id
-        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+        and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
@@ -212,6 +215,8 @@ def get_surrogates_by_status(
         end_date=end_date,
         pipeline_id=pipeline_id,
         owner_id=owner_id,
+        role_filter=session.role,
+        user_id=session.user_id,
     )
     return [StatusCount(**item) for item in data]
 
@@ -249,7 +254,7 @@ def get_surrogates_trend(
     if (
         owner_id
         and owner_id != session.user_id
-        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+        and session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER)
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view other users' analytics")
 
@@ -268,6 +273,8 @@ def get_surrogates_trend(
         pipeline_id=pipeline_id,
         owner_id=owner_id,
         timezone_name=timezone_name,
+        role_filter=session.role,
+        user_id=session.user_id,
     )
     return [TrendPoint(**item) for item in data]
 

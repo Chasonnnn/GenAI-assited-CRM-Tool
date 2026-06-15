@@ -207,18 +207,7 @@ def get_attention(
     - total_count: Sum of all attention items
     """
     if assignee_id and assignee_id != session.user_id:
-        from app.services import intake_pool_access_service
-
-        can_filter_assignee = session.role in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER) or (
-            session.role == Role.INTAKE_SPECIALIST
-            and intake_pool_access_service.has_pool_access(
-                db,
-                session.org_id,
-                source_user_id=assignee_id,
-                grantee_user_id=session.user_id,
-            )
-        )
-        if not can_filter_assignee:
+        if session.role not in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER):
             raise HTTPException(
                 status_code=403, detail="Not authorized to view other users' attention items"
             )
