@@ -16,6 +16,7 @@ from app.core.security import decode_session_token
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
 from app.core.structured_logging import build_request_log_context, log_structured_event
 from app.db.session import SessionLocal
+from app.db.org_scope import clear_org_scope, set_org_scope
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,10 @@ def get_db(request: Request = None) -> Generator[Session, None, None]:
             request.state.request_db = db
         yield db
     finally:
+        # The org-scope stamp is bound to the request: never let it outlive the
+        # session. In production the session is discarded anyway, but clearing
+        # here keeps the contract explicit for any reused-session path.
+        clear_org_scope(db)
         db.close()
 
 
@@ -314,6 +319,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
         if support_org:
             request.state.org_slug = support_org.slug
         request.state.user_session = session
+        set_org_scope(db, session.org_id)
         return session
 
     origin_host = _get_origin_host(request)
@@ -347,6 +353,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
                 if not _is_mfa_bypass_allowed(request):
                     raise HTTPException(status_code=403, detail="MFA verification required")
             request.state.user_session = session
+            set_org_scope(db, session.org_id)
             return session
         if not membership:
             raise HTTPException(status_code=403, detail="No organization membership")
@@ -360,6 +367,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
                 if not _is_mfa_bypass_allowed(request):
                     raise HTTPException(status_code=403, detail="MFA verification required")
             request.state.user_session = session
+            set_org_scope(db, session.org_id)
             return session
         raise HTTPException(status_code=403, detail="Organization is scheduled for deletion")
 
@@ -393,6 +401,7 @@ def get_current_session(request: Request, db: Session = Depends(get_db)):
 
     request.state.org_slug = org.slug
     request.state.user_session = session
+    set_org_scope(db, session.org_id)
     return session
 
 
