@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.36](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.35...surrogacy-crm-platform-v0.91.36) (2026-06-15)
+
+
+### Bug Fixes
+
+* make stage change sheet scroll on short screens ([5d4f42f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d4f42f790df87613c37867c31e1bb4b5aedce25))
+
 ## [0.91.35](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.34...surrogacy-crm-platform-v0.91.35) (2026-06-15)
 
 
