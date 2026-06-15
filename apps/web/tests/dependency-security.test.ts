@@ -80,7 +80,7 @@ describe("Dependency security guards", () => {
         const wsOverride = packageJson.pnpm?.overrides?.ws
 
         expect(wsOverride).toBeDefined()
-        expect(compareVersions(wsOverride!, "8.20.1")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(wsOverride!, "8.21.0")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins picomatch to a non-vulnerable version in pnpm overrides", () => {
@@ -102,7 +102,7 @@ describe("Dependency security guards", () => {
         const viteOverride = packageJson.pnpm?.overrides?.vite
 
         expect(viteOverride).toBeDefined()
-        expect(compareVersions(viteOverride!, "7.3.2")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(viteOverride!, "7.3.5")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins Vitest to a non-vulnerable version", () => {
@@ -168,7 +168,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "8.20.1")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "8.21.0")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -196,7 +196,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "7.3.2")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "7.3.5")).toBeGreaterThanOrEqual(0)
         }
     })
 
