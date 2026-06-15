@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, use, useCallback, useEffect, useReducer, type ReactNode } from "react"
+import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { DateRangePreset } from "@/components/ui/date-range-picker"
 import { useAuth } from "@/lib/auth-context"
@@ -198,7 +199,7 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         const newUrl = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
         const currentUrl = currentQuery ? `/dashboard?${currentQuery}` : "/dashboard"
         if (newUrl === currentUrl) return
-        push(newUrl, { scroll: false })
+        push(newUrl as Route, { scroll: false })
     }, [push, searchParams])
 
     // Set date range

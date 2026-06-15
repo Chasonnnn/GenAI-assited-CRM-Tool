@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { Route } from "next"
 import { createContext, use, useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
 import { toast } from "sonner"
@@ -278,7 +279,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
             const basePath = `/surrogates/${surrogateId}`
             const nextPath = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
             const nextUrl = appendSearchToPath(nextPath, detailSearch)
-            replace(nextUrl, { scroll: false })
+            replace(nextUrl as Route, { scroll: false })
         },
         [detailSearch, surrogateId, replace, isTabValue]
     )
@@ -514,7 +515,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
 
     const archiveSurrogate = useCallback(async () => {
         await archiveMutation.mutateAsync(surrogateId)
-        push(returnTo)
+        push(returnTo as Route)
     }, [archiveMutation, surrogateId, push, returnTo])
 
     const restoreSurrogate = useCallback(async () => {
@@ -616,7 +617,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     }, [surrogateData, zoomForm, sendZoomInviteMutation, surrogateId, closeDialog, setZoomLastMeetingResult])
 
     const navigateToList = useCallback(() => {
-        push(returnTo)
+        push(returnTo as Route)
     }, [push, returnTo])
 
     const dataValue: SurrogateDetailDataContextValue = useMemo(() => ({

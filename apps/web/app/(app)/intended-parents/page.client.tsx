@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
+import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -166,7 +167,7 @@ export default function IntendedParentsPage() {
         const newUrl = nextQuery ? `/intended-parents?${nextQuery}` : "/intended-parents"
         const currentUrl = currentQuery ? `/intended-parents?${currentQuery}` : "/intended-parents"
         if (newUrl === currentUrl) return
-        replace(newUrl, { scroll: false })
+        replace(newUrl as Route, { scroll: false })
     }, [replace, searchParams])
 
     // Handle status filter change
