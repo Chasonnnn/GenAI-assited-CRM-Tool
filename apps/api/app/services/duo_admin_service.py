@@ -105,7 +105,7 @@ class DuoAdminClient:
 
     def __init__(self) -> None:
         self.integration_key = _sanitize_integration_key(settings.DUO_ADMIN_INTEGRATION_KEY)
-        self.secret_key = _sanitize_secret(settings.DUO_ADMIN_SECRET_KEY)
+        self.secret_key = _sanitize_secret(settings.DUO_ADMIN_SECRET_KEY.get_secret_value())
         self.host = _sanitize_host(settings.duo_admin_host)
         self.timeout = settings.DUO_ADMIN_TIMEOUT_SECONDS
 

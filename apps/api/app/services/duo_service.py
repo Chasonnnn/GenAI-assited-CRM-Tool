@@ -47,7 +47,12 @@ def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
     raw_client_id = _strip_invisible(settings.DUO_CLIENT_ID or "")
     client_id = re.sub(r"[^A-Za-z0-9]", "", raw_client_id)
 
-    client_secret = _strip_invisible(settings.DUO_CLIENT_SECRET or "").strip().strip('"').strip("'")
+    client_secret = (
+        _strip_invisible(settings.DUO_CLIENT_SECRET.get_secret_value() or "")
+        .strip()
+        .strip('"')
+        .strip("'")
+    )
     host = _strip_invisible(settings.DUO_API_HOST or "").strip().strip('"').strip("'")
     if "://" in host:
         # Allow users to paste "https://api-xxxxx.duosecurity.com" accidentally.

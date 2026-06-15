@@ -54,7 +54,7 @@ def platform_sender_configured() -> bool:
     # Sender is considered "configured" if we have the API key; the From header is
     # expected to be provided by templates at send time (or via PLATFORM_EMAIL_FROM
     # fallback).
-    return bool(settings.PLATFORM_RESEND_API_KEY)
+    return bool(settings.PLATFORM_RESEND_API_KEY.get_secret_value())
 
 
 def _result_from_log(log: EmailLog) -> JsonObject:
@@ -78,7 +78,7 @@ async def _send_resend_email(
     headers: dict[str, str] | None = None,
     attachments: list[dict[str, object]] | None = None,
 ) -> JsonObject:
-    api_key = settings.PLATFORM_RESEND_API_KEY
+    api_key = settings.PLATFORM_RESEND_API_KEY.get_secret_value()
     resolved_from = (from_email or "").strip() or (settings.PLATFORM_EMAIL_FROM or "").strip()
     if not api_key:
         return {

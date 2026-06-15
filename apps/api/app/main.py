@@ -173,13 +173,13 @@ def _record_api_error_alert(
 # Sentry Integration (optional, for production error tracking)
 # ============================================================================
 
-if settings.SENTRY_DSN and settings.ENV != "dev":
+if settings.SENTRY_DSN.get_secret_value() and settings.ENV != "dev":
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
     sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
+        dsn=settings.SENTRY_DSN.get_secret_value(),
         environment=settings.ENV,
         integrations=[
             FastApiIntegration(transaction_style="endpoint"),

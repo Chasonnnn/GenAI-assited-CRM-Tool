@@ -52,7 +52,7 @@ class MissingTargetsError(ValueError):
 
 def hmac_hash(value: str) -> str:
     """Salted HMAC for PII-safe but traceable logging."""
-    secret = settings.AUDIT_HMAC_SECRET or settings.JWT_SECRET
+    secret = settings.AUDIT_HMAC_SECRET.get_secret_value() or settings.JWT_SECRET.get_secret_value()
     return hmac.new(secret.encode(), value.encode(), hashlib.sha256).hexdigest()
 
 

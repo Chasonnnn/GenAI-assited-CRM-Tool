@@ -1196,7 +1196,7 @@ def create_shared_submission(
     if not form.published_schema_json:
         raise ValueError("Published form schema missing")
 
-    expected_challenge = (settings.FORMS_SHARED_CHALLENGE_SECRET or "").strip()
+    expected_challenge = (settings.FORMS_SHARED_CHALLENGE_SECRET.get_secret_value() or "").strip()
     if expected_challenge and challenge_token != expected_challenge:
         raise ValueError("Challenge verification failed")
 

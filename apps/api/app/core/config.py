@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Default secrets are placeholders for local/dev only; validated at runtime.
@@ -85,7 +85,10 @@ def _default_app_version() -> str:
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # validate_assignment coerces values assigned after construction (e.g. SecretStr
+    # fields set via monkeypatch in tests or rotated at runtime) through field
+    # validation, so a plain str assigned to a SecretStr field becomes a SecretStr.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", validate_assignment=True)
 
     # Environment (required - no default to prevent accidental dev mode in production)
     ENV: str
@@ -94,7 +97,7 @@ class Settings(BaseSettings):
     VERSION: str = Field(default_factory=_default_app_version)
 
     # Version Control Encryption (Fernet key for config snapshots)
-    VERSION_ENCRYPTION_KEY: str = ""  # Falls back to META_ENCRYPTION_KEY if empty
+    VERSION_ENCRYPTION_KEY: SecretStr = SecretStr("")  # Falls back to META_ENCRYPTION_KEY if empty
 
     # Proxy/Load Balancer Settings
     # Set to True when running behind nginx/Cloudflare to trust X-Forwarded-For
@@ -104,7 +107,9 @@ class Settings(BaseSettings):
     TRUST_PROXY_HOSTS: str = "127.0.0.1"
 
     # Database
-    DATABASE_URL: str
+    # SecretStr: the URL carries the DB password; keep it out of repr/model_dump/
+    # Sentry. Read via settings.DATABASE_URL.get_secret_value().
+    DATABASE_URL: SecretStr
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
@@ -114,14 +119,14 @@ class Settings(BaseSettings):
     DB_AUTO_MIGRATE: bool = False
 
     # Session Token (supports key rotation)
-    JWT_SECRET: str = ""
-    JWT_SECRET_PREVIOUS: str = ""  # Set during rotation, clear after
+    JWT_SECRET: SecretStr = SecretStr("")
+    JWT_SECRET_PREVIOUS: SecretStr = SecretStr("")  # Set during rotation, clear after
     JWT_EXPIRES_HOURS: int = 4
     COOKIE_SAMESITE: str = "lax"
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
-    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_CLIENT_SECRET: SecretStr = SecretStr("")
     GOOGLE_REDIRECT_URI: str = ""
 
     # Domain restriction (comma-separated)
@@ -149,13 +154,13 @@ class Settings(BaseSettings):
 
     # Platform/system email sender (Resend)
     # Intentionally separate from org-level campaign/workflow/direct email provider settings.
-    PLATFORM_RESEND_API_KEY: str = ""
-    PLATFORM_RESEND_WEBHOOK_SECRET: str = ""
+    PLATFORM_RESEND_API_KEY: SecretStr = SecretStr("")
+    PLATFORM_RESEND_WEBHOOK_SECRET: SecretStr = SecretStr("")
     # Optional fallback From header. Recommended: set per-template `from_email` in ops/system templates.
     PLATFORM_EMAIL_FROM: str = ""
 
     # HMAC secret for PII-safe audit logging (IP, user agent)
-    AUDIT_HMAC_SECRET: str = ""
+    AUDIT_HMAC_SECRET: SecretStr = SecretStr("")
 
     # Support session settings (platform admin role override)
     SUPPORT_SESSION_TTL_MINUTES: int = 60
@@ -167,17 +172,17 @@ class Settings(BaseSettings):
     UNSUBSCRIBE_TOKEN_TTL_DAYS: int = 365
 
     # Dev-only
-    DEV_SECRET: str = ""
+    DEV_SECRET: SecretStr = SecretStr("")
 
     # Meta Lead Ads webhook
-    META_VERIFY_TOKEN: str = ""
+    META_VERIFY_TOKEN: SecretStr = SecretStr("")
 
     # Meta Lead Ads API
     META_APP_ID: str = ""
-    META_APP_SECRET: str = ""
+    META_APP_SECRET: SecretStr = SecretStr("")
     META_TEST_MODE: bool = False  # Set to True only for local testing
     META_API_VERSION: str = "v24.0"
-    META_ENCRYPTION_KEY: str = ""  # Fernet key for encrypting page tokens
+    META_ENCRYPTION_KEY: SecretStr = SecretStr("")  # Fernet key for encrypting page tokens
     META_WEBHOOK_MAX_PAYLOAD_BYTES: int = 100000  # 100KB limit
 
     # Surrogate CSV import limits (preview/execute)
@@ -191,27 +196,27 @@ class Settings(BaseSettings):
     META_OAUTH_REDIRECT_URI: str = ""  # OAuth callback URL
 
     # Internal scheduled endpoints (cron jobs)
-    INTERNAL_SECRET: str = ""  # Secret for /internal/scheduled/* endpoints
+    INTERNAL_SECRET: SecretStr = SecretStr("")  # Secret for /internal/scheduled/* endpoints
 
     # Zoom OAuth (for per-user Zoom integration)
     ZOOM_CLIENT_ID: str = ""
-    ZOOM_CLIENT_SECRET: str = ""
+    ZOOM_CLIENT_SECRET: SecretStr = SecretStr("")
     ZOOM_REDIRECT_URI: str = ""
-    ZOOM_WEBHOOK_SECRET: str = ""  # Webhook verification token from Zoom app settings
+    ZOOM_WEBHOOK_SECRET: SecretStr = SecretStr("")  # Webhook verification token from Zoom app settings
 
     # Token Encryption (for storing OAuth tokens, AI API keys)
-    FERNET_KEY: str = ""  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    FERNET_KEY: SecretStr = SecretStr("")  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
     # PII Field Encryption (cases, intended parents, etc.)
-    DATA_ENCRYPTION_KEY: str = ""  # Fernet key for PII encryption at rest
-    PII_HASH_KEY: str = ""  # HMAC key for deterministic PII hashes
+    DATA_ENCRYPTION_KEY: SecretStr = SecretStr("")  # Fernet key for PII encryption at rest
+    PII_HASH_KEY: SecretStr = SecretStr("")  # HMAC key for deterministic PII hashes
 
     # Gmail OAuth (per-user, different from Google Login OAuth)
     GMAIL_REDIRECT_URI: str = ""
     # Gmail push notifications (users.watch via Cloud Pub/Sub)
     GMAIL_PUSH_TOPIC: str = ""  # projects/{project}/topics/{topic}
     GMAIL_PUSH_LABEL_IDS: str = ""  # Optional comma-separated Gmail label IDs (e.g. INBOX,SENT)
-    GMAIL_PUSH_WEBHOOK_TOKEN: str = ""  # Optional token query param for /webhooks/google-gmail
+    GMAIL_PUSH_WEBHOOK_TOKEN: SecretStr = SecretStr("")  # Optional token query param for /webhooks/google-gmail
     # Google Calendar OAuth (per-user, used for Meet + calendar sync)
     GOOGLE_CALENDAR_REDIRECT_URI: str = ""
     # Google Cloud OAuth (per-user, for Vertex AI setup)
@@ -219,11 +224,11 @@ class Settings(BaseSettings):
 
     # Workload Identity Federation (OIDC issuer for Vertex AI)
     WIF_OIDC_ISSUER: str = ""
-    WIF_OIDC_PRIVATE_KEY: str = ""  # PEM encoded RSA private key
+    WIF_OIDC_PRIVATE_KEY: SecretStr = SecretStr("")  # PEM encoded RSA private key
     WIF_OIDC_KEY_ID: str = ""  # Optional kid for JWKS
 
     # Error Tracking (optional, set in production)
-    SENTRY_DSN: str = ""  # Get from https://sentry.io
+    SENTRY_DSN: SecretStr = SecretStr("")  # Get from https://sentry.io
 
     # GCP Monitoring (Cloud Logging + Error Reporting)
     GCP_MONITORING_ENABLED: bool = True
@@ -256,7 +261,7 @@ class Settings(BaseSettings):
     FORMS_SHARED_DRAFT_RESUME_WINDOW_DAYS: int = 30
     # Optional static token checked on shared-intake submit via X-Intake-Challenge.
     # Leave empty to disable challenge verification.
-    FORMS_SHARED_CHALLENGE_SECRET: str = ""
+    FORMS_SHARED_CHALLENGE_SECRET: SecretStr = SecretStr("")
 
     # Analytics caching
     ANALYTICS_CACHE_TTL_SECONDS: int = 300
@@ -275,10 +280,10 @@ class Settings(BaseSettings):
     def model_post_init(self, __context) -> None:
         env = self.ENV.lower()
         if env in {"dev", "development", "test"}:
-            if not self.JWT_SECRET:
-                self.JWT_SECRET = DEFAULT_JWT_SECRET
-            if not self.DEV_SECRET:
-                self.DEV_SECRET = DEFAULT_DEV_SECRET
+            if not self.JWT_SECRET.get_secret_value():
+                self.JWT_SECRET = SecretStr(DEFAULT_JWT_SECRET)
+            if not self.DEV_SECRET.get_secret_value():
+                self.DEV_SECRET = SecretStr(DEFAULT_DEV_SECRET)
             if not self.API_BASE_URL:
                 self.API_BASE_URL = DEFAULT_API_BASE_URL
             if not self.FRONTEND_URL:
@@ -304,15 +309,17 @@ class Settings(BaseSettings):
             return
 
         errors: list[str] = []
-        if not self.JWT_SECRET or self.JWT_SECRET == DEFAULT_JWT_SECRET:
+        jwt_secret = self.JWT_SECRET.get_secret_value()
+        if not jwt_secret or jwt_secret == DEFAULT_JWT_SECRET:
             errors.append("JWT_SECRET must be set for non-dev environments")
-        if not self.DEV_SECRET or self.DEV_SECRET == DEFAULT_DEV_SECRET:
+        dev_secret = self.DEV_SECRET.get_secret_value()
+        if not dev_secret or dev_secret == DEFAULT_DEV_SECRET:
             errors.append("DEV_SECRET must be set for non-dev environments")
         if not self.API_BASE_URL:
             errors.append("API_BASE_URL must be set for non-dev environments")
         if self.META_TEST_MODE:
             errors.append("META_TEST_MODE must be false in non-dev environments")
-        if not self.META_VERIFY_TOKEN:
+        if not self.META_VERIFY_TOKEN.get_secret_value():
             errors.append("META_VERIFY_TOKEN must be set for non-dev environments")
 
         url_fields = [
@@ -332,10 +339,10 @@ class Settings(BaseSettings):
 
         # Enforce encryption keys in production
         encryption_keys = [
-            ("META_ENCRYPTION_KEY", self.META_ENCRYPTION_KEY),
-            ("FERNET_KEY", self.FERNET_KEY),
-            ("DATA_ENCRYPTION_KEY", self.DATA_ENCRYPTION_KEY),
-            ("PII_HASH_KEY", self.PII_HASH_KEY),
+            ("META_ENCRYPTION_KEY", self.META_ENCRYPTION_KEY.get_secret_value()),
+            ("FERNET_KEY", self.FERNET_KEY.get_secret_value()),
+            ("DATA_ENCRYPTION_KEY", self.DATA_ENCRYPTION_KEY.get_secret_value()),
+            ("PII_HASH_KEY", self.PII_HASH_KEY.get_secret_value()),
         ]
         for key_name, key_value in encryption_keys:
             if not key_value:
@@ -344,7 +351,7 @@ class Settings(BaseSettings):
         if not self.ATTACHMENT_SCAN_ENABLED:
             errors.append("ATTACHMENT_SCAN_ENABLED must be true in non-dev environments")
 
-        if not self.SENTRY_DSN:
+        if not self.SENTRY_DSN.get_secret_value():
             if not self.GCP_MONITORING_ENABLED:
                 errors.append(
                     "SENTRY_DSN must be set or GCP_MONITORING_ENABLED must be true in non-dev environments"
@@ -379,7 +386,7 @@ class Settings(BaseSettings):
     S3_PUBLIC_BASE_URL: str = ""  # Optional public base URL for assets
     S3_URL_STYLE: str = "path"  # path or virtual
     AWS_ACCESS_KEY_ID: str = ""
-    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_SECRET_ACCESS_KEY: SecretStr = SecretStr("")
     ATTACHMENT_SCAN_ENABLED: bool = False
     ATTACHMENT_SCAN_CLOUD_RUN_JOB_NAME: str = ""
     ATTACHMENT_SCAN_CLOUD_RUN_REGION: str = ""
@@ -395,11 +402,11 @@ class Settings(BaseSettings):
 
     # Duo MFA (Web SDK v4)
     DUO_CLIENT_ID: str = ""  # Integration key from Duo Admin
-    DUO_CLIENT_SECRET: str = ""  # Secret key from Duo Admin
+    DUO_CLIENT_SECRET: SecretStr = SecretStr("")  # Secret key from Duo Admin
     DUO_API_HOST: str = ""  # API hostname (api-XXXXX.duosecurity.com)
     DUO_REDIRECT_URI: str = ""
     DUO_ADMIN_INTEGRATION_KEY: str = ""
-    DUO_ADMIN_SECRET_KEY: str = ""
+    DUO_ADMIN_SECRET_KEY: SecretStr = SecretStr("")
     DUO_ADMIN_API_HOST: str = ""
     DUO_ADMIN_TIMEOUT_SECONDS: float = 10.0
 
@@ -408,7 +415,7 @@ class Settings(BaseSettings):
         """Check if Duo is configured."""
         return bool(
             (self.DUO_CLIENT_ID or "").strip()
-            and (self.DUO_CLIENT_SECRET or "").strip()
+            and self.DUO_CLIENT_SECRET.get_secret_value().strip()
             and (self.DUO_API_HOST or "").strip()
         )
 
@@ -422,7 +429,7 @@ class Settings(BaseSettings):
         """Check if Duo Admin API is configured."""
         return bool(
             (self.DUO_ADMIN_INTEGRATION_KEY or "").strip()
-            and (self.DUO_ADMIN_SECRET_KEY or "").strip()
+            and self.DUO_ADMIN_SECRET_KEY.get_secret_value().strip()
             and self.duo_admin_host
         )
 
@@ -487,9 +494,10 @@ class Settings(BaseSettings):
     @property
     def jwt_secrets(self) -> list[str]:
         """Returns list of valid secrets (current first, then previous if set)."""
-        secrets = [self.JWT_SECRET]
-        if self.JWT_SECRET_PREVIOUS:
-            secrets.append(self.JWT_SECRET_PREVIOUS)
+        secrets = [self.JWT_SECRET.get_secret_value()]
+        previous = self.JWT_SECRET_PREVIOUS.get_secret_value()
+        if previous:
+            secrets.append(previous)
         return secrets
 
     @property

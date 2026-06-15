@@ -491,7 +491,7 @@ class PlatformResendWebhookHandler:
             logger.warning("Platform Resend webhook payload too large")
             return {"status": "ok"}
 
-        secret = (settings.PLATFORM_RESEND_WEBHOOK_SECRET or "").strip()
+        secret = (settings.PLATFORM_RESEND_WEBHOOK_SECRET.get_secret_value() or "").strip()
         if not secret:
             logger.error("Platform Resend webhook secret not configured")
             raise HTTPException(status_code=500, detail="Webhook not configured")

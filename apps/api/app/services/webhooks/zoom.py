@@ -104,7 +104,7 @@ class ZoomWebhookHandler:
 
             # Encrypt the token with our webhook secret
             encrypted_token = hmac.new(
-                settings.ZOOM_WEBHOOK_SECRET.encode("utf-8"),
+                settings.ZOOM_WEBHOOK_SECRET.get_secret_value().encode("utf-8"),
                 plain_token.encode("utf-8"),
                 hashlib.sha256,
             ).hexdigest()
@@ -124,7 +124,7 @@ class ZoomWebhookHandler:
             logger.warning("Zoom webhook missing signature or timestamp")
             raise HTTPException(403, "Missing signature")
 
-        if not settings.ZOOM_WEBHOOK_SECRET:
+        if not settings.ZOOM_WEBHOOK_SECRET.get_secret_value():
             logger.error("ZOOM_WEBHOOK_SECRET not configured")
             raise HTTPException(500, "Webhook not configured")
 
@@ -133,7 +133,7 @@ class ZoomWebhookHandler:
             raise HTTPException(403, "Invalid signature")
 
         if not _verify_zoom_webhook_signature(
-            body, signature, timestamp, settings.ZOOM_WEBHOOK_SECRET
+            body, signature, timestamp, settings.ZOOM_WEBHOOK_SECRET.get_secret_value()
         ):
             logger.warning("Zoom webhook invalid signature")
             raise HTTPException(403, "Invalid signature")

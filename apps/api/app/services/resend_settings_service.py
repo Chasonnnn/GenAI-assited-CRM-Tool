@@ -26,7 +26,7 @@ RESEND_TIMEOUT = 10.0
 
 def _get_fernet() -> Fernet:
     """Get Fernet instance for encryption/decryption."""
-    key = settings.FERNET_KEY
+    key = settings.FERNET_KEY.get_secret_value()
     if not key:
         raise ValueError("FERNET_KEY not configured")
     return Fernet(key.encode())

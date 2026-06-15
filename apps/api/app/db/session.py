@@ -6,7 +6,7 @@ from app.core.config import Settings, settings
 
 
 def create_engine_with_settings(config: Settings):
-    url = make_url(config.DATABASE_URL)
+    url = make_url(config.DATABASE_URL.get_secret_value())
     backend = url.get_backend_name()
 
     connect_args = {}
@@ -26,7 +26,9 @@ def create_engine_with_settings(config: Settings):
             }
         )
 
-    return create_engine(config.DATABASE_URL, connect_args=connect_args, **pool_kwargs)
+    return create_engine(
+        config.DATABASE_URL.get_secret_value(), connect_args=connect_args, **pool_kwargs
+    )
 
 
 engine = create_engine_with_settings(settings)

@@ -42,7 +42,11 @@ router = APIRouter(prefix="/internal/scheduled", tags=["internal"])
 
 def verify_internal_secret(x_internal_secret: str = Header()):
     """Verify the internal secret header."""
-    expected = settings.INTERNAL_SECRET if hasattr(settings, "INTERNAL_SECRET") else None
+    expected = (
+        settings.INTERNAL_SECRET.get_secret_value()
+        if hasattr(settings, "INTERNAL_SECRET")
+        else None
+    )
     if not expected:
         raise HTTPException(status_code=501, detail="INTERNAL_SECRET not configured")
     if not verify_secret(x_internal_secret, expected):
