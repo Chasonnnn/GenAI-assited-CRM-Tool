@@ -21,6 +21,8 @@ jobs:
       - name: Run release-please
         uses: googleapis/release-please-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT or GitHub App token so Release Please PR updates are
+          # attributed to a trusted actor and pull_request CI can run normally.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json

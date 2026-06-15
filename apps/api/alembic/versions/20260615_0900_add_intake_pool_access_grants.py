@@ -70,4 +70,3 @@ def downgrade() -> None:
         table_name="intake_pool_access_grants",
     )
     op.drop_table("intake_pool_access_grants")
-
