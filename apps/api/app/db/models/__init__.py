@@ -27,6 +27,7 @@ from app.db.models.audit import AuditLog, DataRetentionPolicy, LegalHold
 from app.db.models.auth import (
     AdminActionLog,
     AuthIdentity,
+    IntakePoolAccessGrant,
     Membership,
     OrgCounter,
     OrgInvite,
@@ -197,6 +198,7 @@ __all__ = [
     "ConsentRecord",
     "EmbedSession",
     "ImportTemplate",
+    "IntakePoolAccessGrant",
     "IntegrationErrorRollup",
     "IntegrationHealth",
     "IntendedParent",

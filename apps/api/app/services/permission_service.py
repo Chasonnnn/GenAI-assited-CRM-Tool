@@ -407,9 +407,10 @@ def deprovision_member(
     active sessions, queue memberships, and permission overrides are removed.
     """
     from app.db.models import AuthIdentity, Queue, QueueMember, UserSession
-    from app.services import session_service
+    from app.services import intake_pool_access_service, session_service
 
     delete_user_overrides(db, org_id, user.id)
+    intake_pool_access_service.delete_user_grants(db, org_id, user.id)
 
     queue_ids = db.query(Queue.id).filter(Queue.organization_id == org_id)
     (

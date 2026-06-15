@@ -305,6 +305,47 @@ class UserPermissionOverride(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
 
+class IntakePoolAccessGrant(Base):
+    """
+    Grants one intake specialist access to another intake specialist's owned case pool.
+
+    The grant is dynamic: access follows the source user's current and future owned cases.
+    """
+
+    __tablename__ = "intake_pool_access_grants"
+    __table_args__ = (
+        Index("idx_intake_pool_grants_org_grantee", "organization_id", "grantee_user_id"),
+        Index("idx_intake_pool_grants_org_source", "organization_id", "source_user_id"),
+        UniqueConstraint(
+            "organization_id",
+            "source_user_id",
+            "grantee_user_id",
+            name="uq_intake_pool_grants_org_source_grantee",
+        ),
+        CheckConstraint("source_user_id <> grantee_user_id", name="ck_intake_pool_grants_no_self"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    grantee_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
+
+
 class AuthIdentity(Base):
     """
     Links a user to an external identity provider.

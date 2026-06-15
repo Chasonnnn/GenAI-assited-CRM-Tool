@@ -8,9 +8,10 @@ Endpoints for:
 
 from typing import Annotated
 
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -22,7 +23,7 @@ from app.core.permissions import (
     get_all_permissions,
     get_role_default_permissions,
 )
-from app.db.enums import Role
+from app.db.enums import AuditEventType, Role
 from app.schemas.auth import UserSession
 from app.services import permission_service
 from app.utils.presentation import humanize_identifier
@@ -138,6 +139,42 @@ class EffectivePermissions(BaseModel):
     overrides: list[OverrideRead]
 
 
+class IntakePoolGrantCreate(BaseModel):
+    """Create an intake pool access grant."""
+
+    source_user_id: UUID
+    grantee_user_id: UUID
+
+
+class IntakePoolGrantRead(BaseModel):
+    """Intake pool grant with source and grantee display details."""
+
+    id: UUID
+    source_user_id: UUID
+    source_user_name: str | None
+    source_user_email: str
+    grantee_user_id: UUID
+    grantee_user_name: str | None
+    grantee_user_email: str
+    created_by_user_id: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+def _role_value(role: Role | str) -> str:
+    return role.value if hasattr(role, "value") else role
+
+
+def _require_intake_pool_admin(session: UserSession) -> None:
+    if _role_value(session.role) in (Role.ADMIN.value, Role.DEVELOPER.value):
+        return
+    raise HTTPException(status_code=403, detail="Only admins can manage intake pool access")
+
+
+def _intake_pool_grant_response(row: dict) -> IntakePoolGrantRead:
+    return IntakePoolGrantRead(**row)
+
+
 def _build_effective_permissions_response(
     db: Session,
     org_id: UUID,
@@ -170,6 +207,132 @@ def _build_effective_permissions_response(
         permissions=sorted(effective),
         overrides=override_list,
     )
+
+
+# =============================================================================
+# Intake Pool Access Grants
+# =============================================================================
+
+
+@router.get("/intake-pool-grants", response_model=list[IntakePoolGrantRead])
+def list_intake_pool_grants(
+    grantee_user_id: Annotated[UUID | None, "fastapi_param"] = Query(
+        None,
+        description="Optionally limit grants to one grantee user",
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> list[IntakePoolGrantRead]:
+    """List intake pool grants for the current organization."""
+    _require_intake_pool_admin(session)
+
+    from app.services import intake_pool_access_service
+
+    return [
+        _intake_pool_grant_response(row)
+        for row in intake_pool_access_service.list_grants(
+            db,
+            session.org_id,
+            grantee_user_id=grantee_user_id,
+        )
+    ]
+
+
+@router.post(
+    "/intake-pool-grants",
+    response_model=IntakePoolGrantRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_intake_pool_grant(
+    data: IntakePoolGrantCreate,
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> IntakePoolGrantRead:
+    """Grant one intake specialist access to another intake specialist's pool."""
+    _require_intake_pool_admin(session)
+
+    from app.services import audit_service, intake_pool_access_service
+
+    try:
+        grant = intake_pool_access_service.create_grant(
+            db,
+            session.org_id,
+            source_user_id=data.source_user_id,
+            grantee_user_id=data.grantee_user_id,
+            actor_user_id=session.user_id,
+        )
+    except intake_pool_access_service.IntakePoolAccessError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SETTINGS_ORG_UPDATED,
+        actor_user_id=session.user_id,
+        target_type="intake_pool_access_grant",
+        target_id=grant.id,
+        request=request,
+        details={
+            "source_user_id": str(grant.source_user_id),
+            "grantee_user_id": str(grant.grantee_user_id),
+            "action": "created",
+        },
+    )
+    grant_id = grant.id
+    db.commit()
+
+    for row in intake_pool_access_service.list_grants(
+        db,
+        session.org_id,
+        grantee_user_id=data.grantee_user_id,
+    ):
+        if row["id"] == grant_id:
+            return _intake_pool_grant_response(row)
+
+    raise HTTPException(status_code=500, detail="Created grant could not be reloaded")
+
+
+@router.delete(
+    "/intake-pool-grants/{grant_id}",
+    dependencies=[Depends(require_csrf_header)],
+)
+def revoke_intake_pool_grant(
+    grant_id: UUID,
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+) -> object:
+    """Revoke an org-scoped intake pool grant."""
+    _require_intake_pool_admin(session)
+
+    from app.services import audit_service, intake_pool_access_service
+
+    grant = intake_pool_access_service.get_grant(db, session.org_id, grant_id)
+    if not grant:
+        raise HTTPException(status_code=404, detail="Intake pool grant not found")
+
+    source_user_id = grant.source_user_id
+    grantee_user_id = grant.grantee_user_id
+    intake_pool_access_service.revoke_grant(db, session.org_id, grant_id)
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.SETTINGS_ORG_UPDATED,
+        actor_user_id=session.user_id,
+        target_type="intake_pool_access_grant",
+        target_id=grant_id,
+        request=request,
+        details={
+            "source_user_id": str(source_user_id),
+            "grantee_user_id": str(grantee_user_id),
+            "action": "revoked",
+        },
+    )
+    db.commit()
+
+    return {"removed": True, "id": str(grant_id)}
 
 
 # =============================================================================
@@ -388,7 +551,7 @@ def update_member(
                 raise HTTPException(status_code=400, detail=str(e))
 
     if membership.role != old_role:
-        from app.services import audit_service, membership_service
+        from app.services import audit_service, intake_pool_access_service, membership_service
 
         audit_service.log_user_role_changed(
             db=db,
@@ -413,6 +576,8 @@ def update_member(
             user_id=user.id,
             new_role=membership.role,
         )
+        if membership.role != Role.INTAKE_SPECIALIST.value:
+            intake_pool_access_service.delete_user_grants(db, session.org_id, user.id)
     db.commit()
 
     # Return updated detail
