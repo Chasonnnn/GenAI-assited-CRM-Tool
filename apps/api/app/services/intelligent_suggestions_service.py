@@ -788,6 +788,15 @@ def _attention_unreached_ids(
     owner_filters = _attention_owner_filters(
         db, org_id=org_id, user_id=user_id, user_role=user_role
     )
+    from app.core.surrogate_access import build_surrogate_visibility_filter
+
+    visibility_filter = build_surrogate_visibility_filter(
+        db,
+        org_id,
+        user_role,
+        user_id,
+        surrogate_model=Surrogate,
+    )
     latest_activity_subquery = (
         db.query(
             SurrogateActivityLog.surrogate_id.label("surrogate_id"),
@@ -817,6 +826,7 @@ def _attention_unreached_ids(
             Surrogate.created_at < cutoff,
             last_touch_at < cutoff,
             or_(Surrogate.last_contacted_at.is_(None), Surrogate.last_contacted_at < cutoff),
+            visibility_filter,
             *owner_filters,
         )
         .all()
@@ -834,6 +844,15 @@ def _attention_stuck_ids(
 ) -> set[UUID]:
     owner_filters = _attention_owner_filters(
         db, org_id=org_id, user_id=user_id, user_role=user_role
+    )
+    from app.core.surrogate_access import build_surrogate_visibility_filter
+
+    visibility_filter = build_surrogate_visibility_filter(
+        db,
+        org_id,
+        user_role,
+        user_id,
+        surrogate_model=Surrogate,
     )
     cutoff = now_utc - timedelta(days=30)
 
@@ -867,6 +886,7 @@ def _attention_stuck_ids(
             # attention card links and the filtered list view show the same records.
             *dashboard_service.attention_stuck_stage_filters(),
             last_change_col < cutoff,
+            visibility_filter,
             *owner_filters,
         )
         .all()

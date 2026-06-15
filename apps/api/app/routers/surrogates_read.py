@@ -52,16 +52,45 @@ class IntelligentSuggestionSummaryRead(BaseModel):
     has_suggestions: bool
 
 
-def _require_owner_filter_access(session: UserSession, owner_id: UUID | None) -> None:
-    if (
-        owner_id
-        and owner_id != session.user_id
-        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+def _require_owner_filter_access(session: UserSession, db: Session, owner_id: UUID | None) -> None:
+    from app.services import intake_pool_access_service
+
+    if not owner_id or owner_id == session.user_id:
+        return
+    if session.role in (Role.ADMIN, Role.DEVELOPER):
+        return
+    if session.role == Role.INTAKE_SPECIALIST and intake_pool_access_service.has_pool_access(
+        db,
+        session.org_id,
+        source_user_id=owner_id,
+        grantee_user_id=session.user_id,
     ):
-        raise HTTPException(
-            status_code=403,
-            detail="Not authorized to view other users' surrogates",
+        return
+    if session.role == Role.CASE_MANAGER:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Not authorized to view other users' surrogates",
+    )
+
+
+@router.get("/accessible-owners")
+def list_accessible_surrogate_owners(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> list[dict[str, object]]:
+    """List assignees the current user may use as surrogate owner filters."""
+    if session.role in (Role.ADMIN, Role.DEVELOPER, Role.CASE_MANAGER):
+        return surrogate_service.list_assignees(db, session.org_id)
+    if session.role == Role.INTAKE_SPECIALIST:
+        from app.services import intake_pool_access_service
+
+        return intake_pool_access_service.list_accessible_intake_owners(
+            db,
+            session.org_id,
+            session.user_id,
         )
+    return []
 
 
 @router.get("/stats", response_model=SurrogateStats)
@@ -85,12 +114,7 @@ def get_surrogate_stats(
     ),
 ):
     """Get aggregated surrogate statistics for dashboard with period comparisons."""
-    if (
-        owner_id
-        and owner_id != session.user_id
-        and session.role not in (Role.ADMIN, Role.DEVELOPER)
-    ):
-        raise HTTPException(status_code=403, detail="Not authorized to view other users' stats")
+    _require_owner_filter_access(session, db, owner_id)
 
     start, end = analytics_service.parse_date_range(
         from_date,
@@ -106,6 +130,8 @@ def get_surrogate_stats(
         end=end if from_date or to_date else None,
         pipeline_id=pipeline_id,
         owner_id=owner_id,
+        role_filter=session.role,
+        user_id=session.user_id,
     )
 
     return SurrogateStats(
@@ -190,7 +216,7 @@ def list_surrogates(
     """List surrogates with filters and pagination."""
     from app.services import audit_service, permission_service
 
-    _require_owner_filter_access(session, owner_id)
+    _require_owner_filter_access(session, db, owner_id)
 
     exclude_stage_types = []
     if not permission_service.check_permission(
@@ -304,7 +330,7 @@ def list_surrogate_created_dates(
     """List distinct surrogate created_at dates for the current filter context."""
     from app.services import permission_service
 
-    _require_owner_filter_access(session, owner_id)
+    _require_owner_filter_access(session, db, owner_id)
 
     exclude_stage_types = []
     if not permission_service.check_permission(

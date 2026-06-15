@@ -48,8 +48,10 @@ def _should_scope_attention_to_owner(
 ) -> bool:
     if _is_admin_role(user_role):
         return False
+    if user_role in (Role.CASE_MANAGER, Role.CASE_MANAGER.value):
+        return False
     if user_role in (Role.INTAKE_SPECIALIST, Role.INTAKE_SPECIALIST.value):
-        return True
+        return False
     if not user_id:
         return False
     has_owned = (
@@ -244,6 +246,19 @@ def get_attention_items(
         ]
     elif owner_only:
         owner_filters = [Surrogate.id.is_(None)]
+    visibility_filters = []
+    if user_role:
+        from app.core.surrogate_access import build_surrogate_visibility_filter
+
+        visibility_filters.append(
+            build_surrogate_visibility_filter(
+                db,
+                org_id,
+                user_role,
+                user_id,
+                surrogate_model=Surrogate,
+            )
+        )
 
     # -------------------------------------------------------------------------
     # 1. Unreached Leads
@@ -283,6 +298,7 @@ def get_attention_items(
                 Surrogate.last_contacted_at.is_(None),
                 Surrogate.last_contacted_at < unreached_cutoff,
             ),
+            *visibility_filters,
             *owner_filters,
         )
     )
@@ -331,6 +347,7 @@ def get_attention_items(
                     Surrogate.last_contacted_at.is_(None),
                     Surrogate.last_contacted_at < unreached_cutoff,
                 ),
+                *visibility_filters,
                 *owner_filters,
             )
         )
@@ -359,17 +376,25 @@ def get_attention_items(
         task_filters.append(Task.id.is_(None))
 
     overdue_tasks_query = db.query(Task)
-    if pipeline_id:
+    needs_task_surrogate_join = pipeline_id is not None or (
+        user_role is not None and not _is_admin_role(user_role)
+    )
+    if needs_task_surrogate_join:
         overdue_tasks_query = overdue_tasks_query.join(
             Surrogate, Task.surrogate_id == Surrogate.id
-        ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+        )
         task_filters.extend(
             [
                 Surrogate.organization_id == org_id,
                 Surrogate.is_archived.is_(False),
-                PipelineStage.pipeline_id == pipeline_id,
+                *visibility_filters,
             ]
         )
+        if pipeline_id:
+            overdue_tasks_query = overdue_tasks_query.join(
+                PipelineStage, Surrogate.stage_id == PipelineStage.id
+            )
+            task_filters.append(PipelineStage.pipeline_id == pipeline_id)
 
     overdue_results = (
         overdue_tasks_query.filter(and_(*task_filters))
@@ -395,10 +420,14 @@ def get_attention_items(
         overdue_count = len(overdue_results)
     else:
         overdue_count_query = db.query(func.count(Task.id))
-        if pipeline_id:
+        if needs_task_surrogate_join:
             overdue_count_query = overdue_count_query.join(
                 Surrogate, Task.surrogate_id == Surrogate.id
-            ).join(PipelineStage, Surrogate.stage_id == PipelineStage.id)
+            )
+            if pipeline_id:
+                overdue_count_query = overdue_count_query.join(
+                    PipelineStage, Surrogate.stage_id == PipelineStage.id
+                )
 
         overdue_count = overdue_count_query.filter(and_(*task_filters)).scalar() or 0
 
@@ -440,6 +469,7 @@ def get_attention_items(
             Surrogate.is_archived.is_(False),
             *attention_stuck_stage_filters(),
             last_change_col < stuck_cutoff,
+            *visibility_filters,
             *owner_filters,
         )
     )
@@ -477,6 +507,7 @@ def get_attention_items(
                 Surrogate.is_archived.is_(False),
                 *attention_stuck_stage_filters(),
                 last_change_col < stuck_cutoff,
+                *visibility_filters,
                 *owner_filters,
             )
         )

@@ -12,13 +12,24 @@ from typing import TypedDict
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import and_, func, literal, or_, select, true, union_all
+from sqlalchemy import and_, false, func, literal, or_, select, true, union_all
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import OwnerType, Role
-from app.db.models import Attachment, Surrogate, EntityNote, IntendedParent, PipelineStage
+from app.core.surrogate_access import case_manager_approved_onward_joined_filter
+from app.db.enums import OwnerType, Role, SurrogateStatus
+from app.db.models import (
+    Attachment,
+    EntityNote,
+    IntakePoolAccessGrant,
+    IntendedParent,
+    Membership,
+    PipelineStage,
+    Queue,
+    Surrogate,
+    SurrogateStatusHistory,
+)
 from app.schemas.auth import UserSession
 from app.utils.normalization import escape_like_string, normalize_identifier, normalize_search_text
 
@@ -111,6 +122,7 @@ def _can_view_post_approval(permissions: set[str]) -> bool:
 
 
 def _build_surrogate_access_filter(
+    org_id: UUID,
     role: str,
     user_id: UUID,
     can_view_post_approval: bool,
@@ -121,13 +133,75 @@ def _build_surrogate_access_filter(
     if role == Role.DEVELOPER.value:
         return true()
 
-    if role in (Role.ADMIN.value, Role.CASE_MANAGER.value):
+    if role == Role.ADMIN.value:
         ownership_filter = true()
-    else:
-        ownership_filter = and_(
-            surrogate_table.c.owner_type == OwnerType.USER.value,
-            surrogate_table.c.owner_id == user_id,
+    elif role == Role.CASE_MANAGER.value:
+        ownership_filter = case_manager_approved_onward_joined_filter(surrogate_table, stage_table)
+    elif role == Role.INTAKE_SPECIALIST.value:
+        source_membership = Membership.__table__.alias("source_intake_grant_membership")
+        grantee_membership = Membership.__table__.alias("grantee_intake_grant_membership")
+        default_queue_id = (
+            select(Queue.id)
+            .where(
+                Queue.organization_id == org_id,
+                Queue.name == "Unassigned",
+                Queue.is_active.is_(True),
+            )
+            .scalar_subquery()
         )
+        granted_source_ids = (
+            select(IntakePoolAccessGrant.source_user_id)
+            .select_from(
+                IntakePoolAccessGrant.__table__
+                .join(
+                    source_membership,
+                    and_(
+                        source_membership.c.organization_id == org_id,
+                        source_membership.c.user_id == IntakePoolAccessGrant.source_user_id,
+                        source_membership.c.is_active.is_(True),
+                        source_membership.c.role == Role.INTAKE_SPECIALIST.value,
+                    ),
+                )
+                .join(
+                    grantee_membership,
+                    and_(
+                        grantee_membership.c.organization_id == org_id,
+                        grantee_membership.c.user_id == IntakePoolAccessGrant.grantee_user_id,
+                        grantee_membership.c.is_active.is_(True),
+                        grantee_membership.c.role == Role.INTAKE_SPECIALIST.value,
+                    ),
+                )
+            )
+            .where(
+                IntakePoolAccessGrant.organization_id == org_id,
+                IntakePoolAccessGrant.grantee_user_id == user_id,
+            )
+        )
+        followed_ids = (
+            select(SurrogateStatusHistory.surrogate_id)
+            .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
+            .where(
+                SurrogateStatusHistory.organization_id == org_id,
+                SurrogateStatusHistory.changed_by_user_id == user_id,
+                PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
+            )
+        )
+        ownership_filter = or_(
+            and_(
+                surrogate_table.c.owner_type == OwnerType.USER.value,
+                or_(
+                    surrogate_table.c.owner_id == user_id,
+                    surrogate_table.c.owner_id.in_(granted_source_ids),
+                ),
+            ),
+            and_(
+                surrogate_table.c.owner_type == OwnerType.QUEUE.value,
+                surrogate_table.c.owner_id == default_queue_id,
+            ),
+            surrogate_table.c.id.in_(followed_ids),
+        )
+    else:
+        ownership_filter = false()
 
     if can_view_post_approval:
         post_filter = true()
@@ -300,6 +374,7 @@ def _global_search_unified(
             return literal(None, type_=surrogate_table.c.full_name.type).label("surrogate_name")
 
         surrogate_access_filter = _build_surrogate_access_filter(
+            org_id,
             role,
             user_id,
             can_view_post_approval,
@@ -743,6 +818,7 @@ def _search_surrogates(
     surrogate_table = Surrogate.__table__.alias("s")
     stage_table = PipelineStage.__table__.alias("ps")
     surrogate_access_filter = _build_surrogate_access_filter(
+        org_id,
         role,
         user_id,
         can_view_post_approval,
@@ -943,6 +1019,7 @@ def _search_notes(
     surrogate_table = Surrogate.__table__.alias("s")
     stage_table = PipelineStage.__table__.alias("ps")
     surrogate_access_filter = _build_surrogate_access_filter(
+        org_id,
         role,
         user_id,
         can_view_post_approval,
@@ -1099,6 +1176,7 @@ def _search_attachments(
     surrogate_table = Surrogate.__table__.alias("s")
     stage_table = PipelineStage.__table__.alias("ps")
     surrogate_access_filter = _build_surrogate_access_filter(
+        org_id,
         role,
         user_id,
         can_view_post_approval,

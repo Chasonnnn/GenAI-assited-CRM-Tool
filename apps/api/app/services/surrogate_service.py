@@ -1339,9 +1339,7 @@ def _build_surrogate_filter_clauses(
     dynamic_filter: str | None = None,
 ) -> list:
     from app.db.enums import OwnerType as OwnerTypeEnum
-    from app.db.enums import Role as RoleEnum
-    from app.db.enums import SurrogateStatus
-    from app.db.models import PipelineStage, SurrogateStatusHistory
+    from app.db.models import PipelineStage
 
     filter_clauses = [Surrogate.organization_id == org_id]
 
@@ -1406,23 +1404,18 @@ def _build_surrogate_filter_clauses(
             ]
         )
 
-    if role_filter == RoleEnum.INTAKE_SPECIALIST.value or role_filter == RoleEnum.INTAKE_SPECIALIST:
-        if user_id:
-            owned_clause = (Surrogate.owner_type == OwnerTypeEnum.USER.value) & (
-                Surrogate.owner_id == user_id
+    if role_filter:
+        from app.core.surrogate_access import build_surrogate_visibility_filter
+
+        filter_clauses.append(
+            build_surrogate_visibility_filter(
+                db,
+                org_id,
+                role_filter,
+                user_id,
+                surrogate_model=Surrogate,
             )
-            followed_ids = (
-                select(SurrogateStatusHistory.surrogate_id)
-                .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
-                .where(
-                    SurrogateStatusHistory.organization_id == org_id,
-                    SurrogateStatusHistory.changed_by_user_id == user_id,
-                    PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
-                )
-            )
-            filter_clauses.append(or_(owned_clause, Surrogate.id.in_(followed_ids)))
-        else:
-            filter_clauses.append(Surrogate.id.is_(None))
+        )
 
     if stage_id:
         filter_clauses.append(Surrogate.stage_id == stage_id)
@@ -1560,8 +1553,8 @@ def list_surrogates(
         (surrogates, total_count or None, next_cursor)
     """
     import base64
-    from app.db.enums import Role, OwnerType, SurrogateStatus
-    from app.db.models import PipelineStage, Queue, SurrogateStatusHistory
+    from app.db.enums import OwnerType
+    from app.db.models import PipelineStage, Queue
     from datetime import datetime
     from sqlalchemy import asc, desc
 
@@ -1646,26 +1639,19 @@ def list_surrogates(
             ]
         )
 
-    # Role-based visibility filter (ownership-based)
-    if role_filter == Role.INTAKE_SPECIALIST.value or role_filter == Role.INTAKE_SPECIALIST:
-        # Intake specialists see owned surrogates + surrogates they moved to approved.
-        if user_id:
-            owned_clause = (Surrogate.owner_type == OwnerType.USER.value) & (
-                Surrogate.owner_id == user_id
+    # Role-based visibility filter.
+    if role_filter:
+        from app.core.surrogate_access import build_surrogate_visibility_filter
+
+        filter_clauses.append(
+            build_surrogate_visibility_filter(
+                db,
+                org_id,
+                role_filter,
+                user_id,
+                surrogate_model=Surrogate,
             )
-            followed_ids = (
-                select(SurrogateStatusHistory.surrogate_id)
-                .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
-                .where(
-                    SurrogateStatusHistory.organization_id == org_id,
-                    SurrogateStatusHistory.changed_by_user_id == user_id,
-                    PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
-                )
-            )
-            filter_clauses.append(or_(owned_clause, Surrogate.id.in_(followed_ids)))
-        else:
-            # No user_id → no owned surrogates
-            filter_clauses.append(Surrogate.id.is_(None))
+        )
 
     # Status filter
     if stage_id:
@@ -1965,6 +1951,8 @@ def get_surrogate_stats(
     end: datetime | None = None,
     pipeline_id: UUID | None = None,
     owner_id: UUID | None = None,
+    role_filter: Role | str | None = None,
+    user_id: UUID | None = None,
 ) -> dict:
     """
     Get aggregated surrogatestatistics for dashboard.
@@ -1999,6 +1987,18 @@ def get_surrogate_stats(
                 Surrogate.owner_id == owner_id,
             ]
         )
+    if role_filter:
+        from app.core.surrogate_access import build_surrogate_visibility_filter
+
+        surrogate_filters.append(
+            build_surrogate_visibility_filter(
+                db,
+                org_id,
+                role_filter,
+                user_id,
+                surrogate_model=Surrogate,
+            )
+        )
 
     task_filters = [
         Task.organization_id == org_id,
@@ -2014,20 +2014,39 @@ def get_surrogate_stats(
         )
 
     pending_tasks_stmt = select(func.count(Task.id)).select_from(Task).where(*task_filters)
-    needs_task_surrogate_join = pipeline_id is not None or start is not None or end is not None
+    needs_task_surrogate_join = (
+        pipeline_id is not None
+        or start is not None
+        or end is not None
+        or role_filter is not None
+    )
     if needs_task_surrogate_join:
         # Prevent implicit correlation with the outer Surrogate query.
         surrogate_for_tasks = aliased(Surrogate)
-        pending_tasks_stmt = pending_tasks_stmt.join(
-            surrogate_for_tasks, Task.surrogate_id == surrogate_for_tasks.id
-        ).where(
+        task_surrogate_filters = [
             surrogate_for_tasks.organization_id == org_id,
             surrogate_for_tasks.is_archived.is_(False),
+        ]
+        pending_tasks_stmt = pending_tasks_stmt.join(
+            surrogate_for_tasks, Task.surrogate_id == surrogate_for_tasks.id
         )
         if start:
-            pending_tasks_stmt = pending_tasks_stmt.where(surrogate_for_tasks.created_at >= start)
+            task_surrogate_filters.append(surrogate_for_tasks.created_at >= start)
         if end:
-            pending_tasks_stmt = pending_tasks_stmt.where(surrogate_for_tasks.created_at < end)
+            task_surrogate_filters.append(surrogate_for_tasks.created_at < end)
+        if role_filter:
+            from app.core.surrogate_access import build_surrogate_visibility_filter
+
+            task_surrogate_filters.append(
+                build_surrogate_visibility_filter(
+                    db,
+                    org_id,
+                    role_filter,
+                    user_id,
+                    surrogate_model=surrogate_for_tasks,
+                )
+            )
+        pending_tasks_stmt = pending_tasks_stmt.where(*task_surrogate_filters)
 
         if pipeline_id:
             stage_for_tasks = aliased(PipelineStage)

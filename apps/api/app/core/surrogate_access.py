@@ -1,21 +1,129 @@
-"""Surrogate access control - centralized permission checks for surrogate operations.
-
-Access is now owner-based (Salesforce-style):
-- owner_type="queue": any case_manager+ can access/claim
-- owner_type="user": owner, managers, or same-role users can access
-
-Permission-based filtering:
-- view_post_approval_surrogates: controls access to post_approval stage surrogates
-"""
+"""Surrogate access control - centralized permission checks for surrogate operations."""
 
 from uuid import UUID
 from fastapi import HTTPException, status
+from sqlalchemy import and_, false, func, literal, or_, select, true
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.enums import OwnerType, Role, SurrogateStatus
-from app.db.models import Surrogate
+from app.db.models import PipelineStage, Surrogate, SurrogateStatusHistory
 
 PRIORITY_MANAGER_ROLES = {Role.ADMIN.value, Role.DEVELOPER.value}
+
+
+def _role_value(user_role: Role | str | None) -> str | None:
+    return user_role.value if hasattr(user_role, "value") else user_role
+
+
+def _case_manager_approved_onward_filter(surrogate_model=Surrogate) -> ColumnElement[bool]:
+    """SQL filter for records at the effective `approved` stage or later."""
+    current_stage = PipelineStage.__table__.alias("current_stage_access")
+    paused_stage = PipelineStage.__table__.alias("paused_stage_access")
+    approved_stage = PipelineStage.__table__.alias("approved_stage_access")
+    effective_order = func.coalesce(paused_stage.c.order, current_stage.c.order)
+    return (
+        select(literal(1))
+        .select_from(
+            current_stage.outerjoin(
+                paused_stage,
+                paused_stage.c.id == surrogate_model.paused_from_stage_id,
+            ).join(
+                approved_stage,
+                and_(
+                    approved_stage.c.pipeline_id == current_stage.c.pipeline_id,
+                    approved_stage.c.stage_key == SurrogateStatus.APPROVED.value,
+                    approved_stage.c.is_active.is_(True),
+                ),
+            )
+        )
+        .where(
+            current_stage.c.id == surrogate_model.stage_id,
+            current_stage.c.is_active.is_(True),
+            effective_order >= approved_stage.c.order,
+        )
+        .exists()
+    )
+
+
+def case_manager_approved_onward_joined_filter(
+    surrogate_table,
+    stage_table,
+) -> ColumnElement[bool]:
+    """SQL filter for aliases where the current stage table is already joined."""
+    paused_stage = PipelineStage.__table__.alias("paused_stage_joined_access")
+    approved_stage = PipelineStage.__table__.alias("approved_stage_joined_access")
+    paused_order = (
+        select(paused_stage.c.order)
+        .where(paused_stage.c.id == surrogate_table.c.paused_from_stage_id)
+        .scalar_subquery()
+    )
+    approved_order = (
+        select(approved_stage.c.order)
+        .where(
+            approved_stage.c.pipeline_id == stage_table.c.pipeline_id,
+            approved_stage.c.stage_key == SurrogateStatus.APPROVED.value,
+            approved_stage.c.is_active.is_(True),
+        )
+        .scalar_subquery()
+    )
+    return and_(
+        stage_table.c.id.isnot(None),
+        func.coalesce(paused_order, stage_table.c.order) >= approved_order,
+    )
+
+
+def build_surrogate_visibility_filter(
+    db: Session,
+    org_id: UUID,
+    user_role: Role | str | None,
+    user_id: UUID | None,
+    *,
+    surrogate_model=Surrogate,
+    include_unassigned_queue: bool = True,
+) -> ColumnElement[bool]:
+    """Build the row-level surrogate visibility filter for list/count queries."""
+    role_str = _role_value(user_role)
+    if role_str in (Role.ADMIN.value, Role.DEVELOPER.value):
+        return true()
+    if not user_id:
+        return false()
+    if role_str == Role.CASE_MANAGER.value:
+        return _case_manager_approved_onward_filter(surrogate_model)
+    if role_str != Role.INTAKE_SPECIALIST.value:
+        return false()
+
+    from app.services import intake_pool_access_service, queue_service
+
+    owner_ids = {
+        user_id,
+        *intake_pool_access_service.get_source_user_ids_for_grantee(db, org_id, user_id),
+    }
+    owned_clause = and_(
+        surrogate_model.owner_type == OwnerType.USER.value,
+        surrogate_model.owner_id.in_(owner_ids),
+    )
+    followed_ids = (
+        select(SurrogateStatusHistory.surrogate_id)
+        .join(PipelineStage, SurrogateStatusHistory.to_stage_id == PipelineStage.id)
+        .where(
+            SurrogateStatusHistory.organization_id == org_id,
+            SurrogateStatusHistory.changed_by_user_id == user_id,
+            PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
+        )
+    )
+    clauses = [owned_clause, surrogate_model.id.in_(followed_ids)]
+
+    if include_unassigned_queue:
+        default_queue = queue_service.get_or_create_default_queue(db, org_id)
+        clauses.append(
+            and_(
+                surrogate_model.owner_type == OwnerType.QUEUE.value,
+                surrogate_model.owner_id == default_queue.id,
+            )
+        )
+
+    return or_(*clauses)
 
 
 def check_surrogate_access(
@@ -45,12 +153,17 @@ def check_surrogate_access(
     Raises:
         HTTPException: 403 if access denied
     """
-    # Normalize role to string
-    role_str = user_role.value if hasattr(user_role, "value") else user_role
+    role_str = _role_value(user_role)
 
     # Developers bypass all checks (immutable super-admin)
     if role_str == Role.DEVELOPER.value:
         return
+
+    if surrogate.is_archived and role_str != Role.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this surrogate",
+        )
 
     # Permission-based check for post-approval surrogates (applies to all roles including Manager)
     if db and org_id and user_id and surrogate.stage_id:
@@ -67,7 +180,17 @@ def check_surrogate_access(
             detail="Surrogate ownership is not set",
         )
 
-    _check_owner_based_access(surrogate, role_str, user_id, db=db, org_id=org_id)
+    if not db or not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this surrogate",
+        )
+
+    if not has_surrogate_record_access(db, surrogate, role_str, user_id, org_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this surrogate",
+        )
 
 
 def can_manage_surrogate_priority(user_role: Role | str) -> bool:
@@ -85,6 +208,72 @@ def ensure_can_manage_surrogate_priority(user_role: Role | str) -> None:
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Only admins and developers can manage lead priority",
     )
+
+
+def has_surrogate_record_access(
+    db: Session,
+    surrogate: Surrogate,
+    user_role: Role | str | None,
+    user_id: UUID | None,
+    org_id: UUID,
+) -> bool:
+    """Return whether the user can view this specific surrogate record."""
+    role_str = _role_value(user_role)
+    if role_str in (Role.ADMIN.value, Role.DEVELOPER.value):
+        return True
+    if not user_id:
+        return False
+    if surrogate.is_archived:
+        return False
+
+    if role_str == Role.CASE_MANAGER.value:
+        return _is_approved_onward(db, surrogate)
+
+    if role_str != Role.INTAKE_SPECIALIST.value:
+        return False
+
+    if surrogate.owner_type == OwnerType.USER.value:
+        if surrogate.owner_id == user_id:
+            return True
+        from app.services import intake_pool_access_service
+
+        if intake_pool_access_service.has_pool_access(
+            db,
+            org_id,
+            source_user_id=surrogate.owner_id,
+            grantee_user_id=user_id,
+        ):
+            return True
+
+    if surrogate.owner_type == OwnerType.QUEUE.value:
+        from app.services import queue_service
+
+        default_queue = queue_service.get_or_create_default_queue(db, org_id)
+        if surrogate.owner_id == default_queue.id:
+            return True
+
+    return _intake_has_follow_access(db, surrogate, org_id, user_id)
+
+
+def _is_approved_onward(db: Session, surrogate: Surrogate) -> bool:
+    """Return whether the surrogate's effective stage is at or after approved."""
+    from app.services import pipeline_service, surrogate_stage_context
+
+    stage = surrogate_stage_context.get_stage_context(db, surrogate).effective_stage
+    if not stage:
+        return False
+    approved_stage = pipeline_service.get_stage_by_key(
+        db,
+        stage.pipeline_id,
+        SurrogateStatus.APPROVED.value,
+    )
+    if not approved_stage:
+        approved_stage = pipeline_service.get_stage_by_system_role(
+            db,
+            stage.pipeline_id,
+            "approval_gate",
+        )
+    return bool(approved_stage and stage.order >= approved_stage.order)
 
 
 def _check_post_approval_access(
@@ -121,62 +310,6 @@ def _check_post_approval_access(
         )
 
 
-def _check_owner_based_access(
-    surrogate: Surrogate,
-    role_str: str,
-    user_id: UUID | None,
-    *,
-    db: Session | None = None,
-    org_id: UUID | None = None,
-) -> None:
-    """Owner-based access check."""
-
-    # Queue-owned surrogates: case_manager+ can access
-    if surrogate.owner_type == OwnerType.QUEUE.value:
-        if role_str == Role.CASE_MANAGER.value:
-            return  # Case managers can see queue items
-        if role_str == Role.INTAKE_SPECIALIST.value:
-            # Intake can see the system Unassigned queue and surrogates they follow.
-            if not db or not org_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You don't have access to this surrogate",
-                )
-            from app.services import queue_service
-
-            default_queue = queue_service.get_or_create_default_queue(db, org_id)
-            if default_queue and surrogate.owner_id == default_queue.id:
-                return
-            if _intake_has_follow_access(db, surrogate, org_id, user_id):
-                return
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this surrogate",
-            )
-        return
-
-    # User-owned surrogates
-    if surrogate.owner_type == OwnerType.USER.value:
-        # Owner can always access
-        if user_id and surrogate.owner_id == user_id:
-            return
-
-        # Case managers can see other case manager's surrogates
-        if role_str == Role.CASE_MANAGER.value:
-            return
-
-        # Intake specialists can see their own surrogates and surrogates they follow.
-        if role_str == Role.INTAKE_SPECIALIST.value:
-            if user_id and surrogate.owner_id == user_id:
-                return
-            if db and org_id and _intake_has_follow_access(db, surrogate, org_id, user_id):
-                return
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this surrogate",
-            )
-
-
 def _intake_has_follow_access(
     db: Session,
     surrogate: Surrogate,
@@ -200,7 +333,7 @@ def _intake_has_follow_access(
             SurrogateStatusHistory.surrogate_id == surrogate.id,
             SurrogateStatusHistory.organization_id == org_id,
             SurrogateStatusHistory.changed_by_user_id == user_id,
-            PipelineStage.slug == SurrogateStatus.APPROVED.value,
+            PipelineStage.stage_key == SurrogateStatus.APPROVED.value,
         )
         .first()
     )
@@ -219,39 +352,26 @@ def can_modify_surrogate(
     Check if user can modify this surrogate.
 
     Rules:
-    - Manager+ can always modify
-    - Owner can modify
-    - Case managers can modify any non-archived surrogate
-    - Intake specialists can modify their own surrogates and surrogates they follow
+    - Admin/developer can modify any non-archived surrogate
+    - Case managers can modify approved-onward surrogates they can access
+    - Intake specialists can modify owned, followed, or granted-pool surrogates
 
     Returns:
         True if user can modify, False otherwise
     """
-    # Normalize
-    role_str = user_role.value if hasattr(user_role, "value") else user_role
+    role_str = _role_value(user_role)
     user_uuid = UUID(user_id) if isinstance(user_id, str) else user_id
 
-    # Archived surrogates: only managers
+    # Archived surrogates: only admins/developers
     if surrogate.is_archived:
         return role_str in [Role.ADMIN.value, Role.DEVELOPER.value]
 
-    # Manager+ can always modify
+    # Admin/developer can always modify active cases.
     if role_str in [Role.ADMIN.value, Role.DEVELOPER.value]:
         return True
 
-    # Owner can modify
-    if surrogate.owner_id == user_uuid:
-        return True
-
-    # Case managers can modify non-archived surrogates
-    if role_str == Role.CASE_MANAGER.value:
-        return True
-
-    # Intake specialists: only their own, and not handed off
-    if role_str == Role.INTAKE_SPECIALIST.value:
-        if db and org_id and _intake_has_follow_access(db, surrogate, org_id, user_uuid):
-            return True
-        return surrogate.owner_type == OwnerType.USER.value and surrogate.owner_id == user_uuid
+    if db and org_id:
+        return has_surrogate_record_access(db, surrogate, role_str, user_uuid, org_id)
 
     return False
 
@@ -260,6 +380,9 @@ def can_access_surrogate(
     surrogate: Surrogate,
     user_role: Role | str,
     user_id: UUID | None = None,
+    *,
+    db: Session | None = None,
+    org_id: UUID | None = None,
 ) -> bool:
     """
     Non-raising version of check_surrogate_access for filtering.
@@ -267,7 +390,7 @@ def can_access_surrogate(
     Returns True if user can access, False otherwise.
     """
     try:
-        check_surrogate_access(surrogate, user_role, user_id)
+        check_surrogate_access(surrogate, user_role, user_id, db=db, org_id=org_id)
         return True
     except HTTPException:
         return False
