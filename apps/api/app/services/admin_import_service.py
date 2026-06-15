@@ -206,7 +206,7 @@ def _ensure_empty_org(db: Session, org_id: UUID) -> None:
         )
         or 0,
         "notification_settings": db.scalar(
-            select(func.count(UserNotificationSettings.id)).where(
+            select(func.count(UserNotificationSettings.user_id)).where(
                 UserNotificationSettings.organization_id == org_id
             )
         )
