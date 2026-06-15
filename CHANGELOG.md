@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.35](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.34...surrogacy-crm-platform-v0.91.35) (2026-06-15)
+
+
+### Bug Fixes
+
+* restrict intake visibility to assigned cases ([fd350a6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fd350a61653a08afa07d6436bc9412882aebc7f9))
+
 ## [0.91.34](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.33...surrogacy-crm-platform-v0.91.34) (2026-06-15)
 
 
