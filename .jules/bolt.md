@@ -1,0 +1,3 @@
+## 2025-06-15 - Optimize count queries in admin import and interview services
+**Learning:** Found an anti-pattern in `apps/api/app/services/admin_import_service.py` where `db.query(...).count()` was used repeatedly for checking if an org was empty, causing inefficient database subqueries and memory overhead. Similarly in `interview_service.py` `select(func.count())` without an explicit column was used which could be optimized.
+**Action:** Replaced `db.query(Model).filter(...).count()` with `db.scalar(select(func.count(Model.id)).where(...)) or 0` across SQLAlchemy queries. When computing simple count queries, explicitly use `select(func.count(Model.id))` to avoid inefficient subquery compilation and execution.

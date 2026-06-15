@@ -644,7 +644,7 @@ def get_notes_count(db: Session, interview_id: UUID) -> int:
     """Get count of notes for an interview."""
     return (
         db.scalar(
-            select(func.count())
+            select(func.count(InterviewNote.id))
             .select_from(InterviewNote)
             .where(InterviewNote.interview_id == interview_id)
         )
@@ -656,7 +656,7 @@ def get_attachments_count(db: Session, interview_id: UUID) -> int:
     """Get count of attachments for an interview."""
     return (
         db.scalar(
-            select(func.count())
+            select(func.count(InterviewAttachment.id))
             .select_from(InterviewAttachment)
             .where(InterviewAttachment.interview_id == interview_id)
         )
@@ -668,7 +668,7 @@ def get_versions_count(db: Session, interview_id: UUID) -> int:
     """Get count of versions for an interview."""
     return (
         db.scalar(
-            select(func.count())
+            select(func.count(InterviewTranscriptVersion.id))
             .select_from(InterviewTranscriptVersion)
             .where(InterviewTranscriptVersion.interview_id == interview_id)
         )
