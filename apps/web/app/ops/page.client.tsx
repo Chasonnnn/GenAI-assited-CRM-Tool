@@ -100,7 +100,7 @@ export default function OpsDashboard() {
                 setIsLoading(false);
             }
         }
-        fetchDashboard();
+        void fetchDashboard();
     }, []);
 
     if (isLoading) {

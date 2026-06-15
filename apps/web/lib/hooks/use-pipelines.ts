@@ -131,7 +131,7 @@ export function useCreatePipeline() {
             feature_config?: PipelineFeatureConfig;
         }) => pipelinesApi.createPipeline(name, entity_type, stages, feature_config),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
         },
     });
 }
@@ -150,12 +150,12 @@ export function useUpdatePipeline() {
             entityType?: PipelineEntityType;
         }) => pipelinesApi.updatePipeline(id, data, entityType),
         onSuccess: (_, { id, entityType = 'surrogate' }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
         },
     });
 }
@@ -167,7 +167,7 @@ export function useDeletePipeline() {
         mutationFn: ({ id, entityType = 'surrogate' }: { id: string; entityType?: PipelineEntityType }) =>
             pipelinesApi.deletePipeline(id, entityType),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
         },
     });
 }
@@ -186,12 +186,12 @@ export function useRollbackPipeline() {
             entityType?: PipelineEntityType;
         }) => pipelinesApi.rollbackPipeline(id, version, entityType),
         onSuccess: (_, { id, entityType = 'surrogate' }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
         },
     });
 }
@@ -222,13 +222,13 @@ export function useApplyPipelineDraft() {
             entityType?: PipelineEntityType;
         }) => pipelinesApi.applyPipelineDraft(id, data, entityType),
         onSuccess: (_, { id, entityType = 'surrogate' }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.dependencyGraph(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.dependencyGraph(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(id, entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
         },
     });
 }
@@ -244,12 +244,12 @@ export function useCreateStage() {
         mutationFn: ({ pipelineId, data }: { pipelineId: string; data: StageCreate }) =>
             pipelinesApi.createStage(pipelineId, data),
         onSuccess: (_, { pipelineId }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -261,11 +261,11 @@ export function useUpdateStage() {
         mutationFn: ({ pipelineId, stageId, data }: { pipelineId: string; stageId: string; data: StageUpdate }) =>
             pipelinesApi.updateStage(pipelineId, stageId, data),
         onSuccess: (_, { pipelineId }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -287,12 +287,12 @@ export function useDeleteStage() {
         }) =>
             pipelinesApi.deleteStage(pipelineId, stageId, migrateToStageId, expectedVersion),
         onSuccess: (_, { pipelineId }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.list() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }
@@ -312,11 +312,11 @@ export function useReorderStages() {
         }) =>
             pipelinesApi.reorderStages(pipelineId, orderedStageIds, expectedVersion),
         onSuccess: (_, { pipelineId }) => {
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
-            queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.semantics(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
+            void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
         },
     });
 }

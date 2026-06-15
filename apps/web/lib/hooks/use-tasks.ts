@@ -18,7 +18,7 @@ export const taskKeys = {
 
 function invalidateSurrogateActivity(queryClient: ReturnType<typeof useQueryClient>, surrogateId?: string | null) {
     if (!surrogateId) return;
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
 }
 
 /**
@@ -54,7 +54,7 @@ export function useCreateTask() {
     return useMutation({
         mutationFn: tasksApi.createTask,
         onSuccess: (createdTask) => {
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             invalidateSurrogateActivity(queryClient, createdTask.surrogate_id);
         },
     });
@@ -70,7 +70,7 @@ export function useCreateTaskBatch() {
         mutationFn: (tasks: tasksApi.TaskCreatePayload[]) =>
             Promise.all(tasks.map((task) => tasksApi.createTask(task))),
         onSuccess: (createdTasks) => {
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             const surrogateIds = new Set<string>();
             for (const task of createdTasks) {
                 if (task.surrogate_id) {
@@ -95,7 +95,7 @@ export function useUpdateTask() {
             tasksApi.updateTask(taskId, data),
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             invalidateSurrogateActivity(queryClient, updatedTask.surrogate_id);
         },
     });
@@ -111,9 +111,9 @@ export function useCompleteTask() {
         mutationFn: tasksApi.completeTask,
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
             invalidateSurrogateActivity(queryClient, updatedTask.surrogate_id);
         },
     });
@@ -129,9 +129,9 @@ export function useUncompleteTask() {
         mutationFn: tasksApi.uncompleteTask,
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
             invalidateSurrogateActivity(queryClient, updatedTask.surrogate_id);
         },
     });
@@ -146,7 +146,7 @@ export function useDeleteTask() {
     return useMutation({
         mutationFn: tasksApi.deleteTask,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
         },
     });
 }
@@ -162,9 +162,9 @@ export function useBulkCompleteTasks() {
         mutationFn: tasksApi.bulkCompleteTasks,
         onSuccess: () => {
             // Invalidate all task list queries (covers both surrogate_id and intended_parent_id)
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats since pending_tasks count changes
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
         },
     });
 }
@@ -187,9 +187,9 @@ export function useResolveWorkflowApproval() {
         }) => tasksApi.resolveWorkflowApproval(taskId, decision, reason),
         onSuccess: (updatedTask) => {
             queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask);
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
             // Also invalidate dashboard stats
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
             invalidateSurrogateActivity(queryClient, updatedTask.surrogate_id);
         },
     });

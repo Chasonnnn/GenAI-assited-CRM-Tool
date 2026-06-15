@@ -27,28 +27,28 @@ export const surrogateKeys = {
 };
 
 export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogateId: string) {
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+    void queryClient.invalidateQueries({
         queryKey: ['analytics', 'activity-feed'],
         exact: false,
     });
 }
 
 function invalidateSurrogateDirectoryCaches(queryClient: QueryClient) {
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
 }
 
 function invalidateSurrogateMutationCaches(queryClient: QueryClient, surrogateId: string, options: { history?: boolean } = {}) {
     invalidateSurrogateCrmCaches(queryClient, surrogateId);
     if (options.history) {
-        queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
     }
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
-    queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+    void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
 }
 
 function invalidateSelectedSurrogateMutationCaches(
@@ -165,8 +165,8 @@ export function useCreateSurrogate() {
     return useMutation({
         mutationFn: surrogatesApi.createSurrogate,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
         },
     });
 }
@@ -193,7 +193,7 @@ export function useRevealSurrogateSensitiveInfo() {
     return useMutation({
         mutationFn: (surrogateId: string) => surrogatesApi.revealSurrogateSensitiveInfo(surrogateId),
         onSuccess: (_payload, surrogateId) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
         },
     });
 }
@@ -214,12 +214,12 @@ export function useChangeSurrogateStatus() {
                 queryClient.setQueryData(surrogateKeys.detail(response.surrogate.id), response.surrogate);
             }
             // Invalidate related queries
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
         },
     });
 }
@@ -262,7 +262,7 @@ export function useSendSurrogateEmail() {
             return result;
         },
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
         },
     });
 }
@@ -331,14 +331,14 @@ export function useBulkChangeStage() {
     return useMutation({
         mutationFn: surrogatesApi.bulkChangeStage,
         onSuccess: (_result, variables) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
-            queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
 
             for (const surrogateId of variables.surrogate_ids) {
-                queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-                queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
-                queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.history(surrogateId) });
             }
         },
     });
@@ -394,9 +394,9 @@ export function useApplySurrogateMassEditStage() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditStage,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
-            queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
         },
     });
 }
@@ -410,8 +410,8 @@ export function useApplySurrogateMassEditArchive() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditArchive,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
         },
     });
 }
@@ -446,9 +446,9 @@ export function useLogInterviewOutcome() {
             data: surrogatesApi.InterviewOutcomeCreatePayload;
         }) => surrogatesApi.logInterviewOutcome(surrogateId, data),
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
         },
     });
 }
@@ -483,13 +483,13 @@ export function useCreateContactAttempt() {
             surrogatesApi.createContactAttempt(surrogateId, data),
         onSuccess: (_, { surrogateId }) => {
             // Invalidate contact attempts summary
-            queryClient.invalidateQueries({ queryKey: contactAttemptKeys.all(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: contactAttemptKeys.all(surrogateId) });
             // Invalidate surrogate detail (contact_status may have changed)
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
             // Invalidate activity log (new activity entry)
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
             // Invalidate surrogate lists (status may have changed)
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
         },
     });
 }

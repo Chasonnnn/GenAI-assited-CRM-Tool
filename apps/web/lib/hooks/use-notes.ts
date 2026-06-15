@@ -34,9 +34,9 @@ export function useCreateNote() {
         mutationFn: ({ surrogateId, body }: { surrogateId: string; body: string }) =>
             notesApi.createNote(surrogateId, body),
         onSuccess: (newNote) => {
-            queryClient.invalidateQueries({ queryKey: noteKeys.forSurrogate(newNote.surrogate_id) });
+            void queryClient.invalidateQueries({ queryKey: noteKeys.forSurrogate(newNote.surrogate_id) });
             // Invalidate history/activity cache to show note_added immediately
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(newNote.surrogate_id), 'activity'],
                 exact: false,
             });
@@ -54,9 +54,9 @@ export function useDeleteNote() {
         mutationFn: ({ noteId, surrogateId: _surrogateId }: { noteId: string; surrogateId: string }) =>
             notesApi.deleteNote(noteId),
         onSuccess: (_, { surrogateId }) => {
-            queryClient.invalidateQueries({ queryKey: noteKeys.forSurrogate(surrogateId) });
+            void queryClient.invalidateQueries({ queryKey: noteKeys.forSurrogate(surrogateId) });
             // Invalidate history/activity cache to show note_deleted immediately
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(surrogateId), 'activity'],
                 exact: false,
             });

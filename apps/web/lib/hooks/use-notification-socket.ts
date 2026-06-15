@@ -96,7 +96,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                     if (message.type === 'notification') {
                         setLastNotification(message.data)
                         // Invalidate notifications query to trigger refetch
-                        queryClient.invalidateQueries({ queryKey: ['notifications'] })
+                        void queryClient.invalidateQueries({ queryKey: ['notifications'] })
                     } else if (message.type === 'count_update') {
                         setUnreadCount(message.data.count ?? null)
                     }

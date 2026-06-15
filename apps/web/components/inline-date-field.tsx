@@ -126,7 +126,7 @@ export function InlineDateField({
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter") {
             e.preventDefault()
-            handleSave()
+            void handleSave()
         } else if (e.key === "Escape") {
             handleCancel()
         }

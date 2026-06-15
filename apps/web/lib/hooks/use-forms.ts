@@ -82,20 +82,20 @@ function invalidateFormSubmissionMutationCaches(
     queryClient: QueryClient,
     submission: Pick<FormSubmissionRead, 'id' | 'form_id' | 'surrogate_id' | 'intake_lead_id'>
 ) {
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
         queryKey: formKeys.submissionLists(submission.form_id),
         exact: false,
     })
 
     if (submission.surrogate_id) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
             queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
         })
         invalidateSurrogateCrmCaches(queryClient, submission.surrogate_id)
     }
 
     if (submission.intake_lead_id) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
             queryKey: formKeys.intakeLead(submission.intake_lead_id),
         })
     }
@@ -106,13 +106,13 @@ function invalidateFormSubmissionFileMutationCaches(
     formId: string,
     surrogateId?: string | null
 ) {
-    queryClient.invalidateQueries({
+    void queryClient.invalidateQueries({
         queryKey: formKeys.submissionLists(formId),
         exact: false,
     })
 
     if (surrogateId) {
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
             queryKey: formKeys.surrogateSubmission(formId, surrogateId),
         })
     }
@@ -139,7 +139,7 @@ export function useCreateForm() {
     return useMutation({
         mutationFn: (payload: FormCreatePayload) => createForm(payload),
         onSuccess: (form) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.setQueryData(formKeys.detail(form.id), form)
         },
     })
@@ -152,7 +152,7 @@ export function useUpdateForm() {
         mutationFn: ({ formId, payload }: { formId: string; payload: FormUpdatePayload }) =>
             updateForm(formId, payload),
         onSuccess: (form) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.setQueryData(formKeys.detail(form.id), form)
         },
     })
@@ -164,7 +164,7 @@ export function useDeleteForm() {
     return useMutation({
         mutationFn: (formId: string) => deleteForm(formId),
         onSuccess: (_result, formId) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.removeQueries({ queryKey: formKeys.detail(formId) })
         },
     })
@@ -176,9 +176,9 @@ export function usePublishForm() {
     return useMutation({
         mutationFn: (formId: string) => publishForm(formId),
         onSuccess: (_result, formId) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
-            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
         },
     })
 }
@@ -198,7 +198,7 @@ export function useSetFormMappings() {
         mutationFn: ({ formId, mappings }: { formId: string; mappings: FormFieldMappingItem[] }) =>
             setFormMappings(formId, mappings),
         onSuccess: (_data, { formId }) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.mappings(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.mappings(formId) })
         },
     })
 }
@@ -235,7 +235,7 @@ export function useSetDefaultSurrogateApplicationForm() {
     return useMutation({
         mutationFn: (formId: string) => setDefaultSurrogateApplicationForm(formId),
         onSuccess: (form) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.setQueryData(formKeys.detail(form.id), form)
         },
     })
@@ -253,7 +253,7 @@ export function useUpdateFormDeliverySettings() {
             payload: FormDeliverySettings
         }) => updateFormDeliverySettings(formId, payload),
         onSuccess: (_settings, { formId }) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
         },
     })
 }
@@ -286,7 +286,7 @@ export function useCreateFormIntakeLink() {
             payload: FormIntakeLinkCreatePayload
         }) => createFormIntakeLink(formId, payload),
         onSuccess: (_result, { formId }) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
         },
     })
 }
@@ -304,8 +304,8 @@ export function useUpdateFormIntakeLink() {
             payload: FormIntakeLinkUpdatePayload
         }) => updateFormIntakeLink(linkId, payload),
         onSuccess: (_result, { formId, linkId }) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
-            queryClient.invalidateQueries({ queryKey: formKeys.embedHealth(linkId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.embedHealth(linkId) })
         },
     })
 }
@@ -316,8 +316,8 @@ export function useRotateFormIntakeLink() {
     return useMutation({
         mutationFn: ({ linkId }: { formId: string; linkId: string }) => rotateFormIntakeLink(linkId),
         onSuccess: (_result, { formId, linkId }) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
-            queryClient.invalidateQueries({ queryKey: formKeys.embedHealth(linkId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.embedHealth(linkId) })
         },
     })
 }
@@ -407,7 +407,7 @@ export function useResolveSubmissionMatch() {
         onSuccess: (result) => {
             const submission = result.submission
             invalidateFormSubmissionMutationCaches(queryClient, submission)
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: formKeys.submissionMatchCandidates(submission.id),
             })
         },
@@ -428,7 +428,7 @@ export function useRetrySubmissionMatch() {
         onSuccess: (result) => {
             const submission = result.submission
             invalidateFormSubmissionMutationCaches(queryClient, submission)
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: formKeys.submissionMatchCandidates(submission.id),
             })
         },
@@ -449,8 +449,8 @@ export function usePromoteIntakeLead() {
         mutationFn: ({ leadId, payload }: { leadId: string; payload?: PromoteIntakeLeadPayload }) =>
             promoteIntakeLead(leadId, payload),
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.intakeLead(result.intake_lead_id) })
-            queryClient.invalidateQueries({ queryKey: formKeys.all, exact: false })
+            void queryClient.invalidateQueries({ queryKey: formKeys.intakeLead(result.intake_lead_id) })
+            void queryClient.invalidateQueries({ queryKey: formKeys.all, exact: false })
             invalidateSurrogateCrmCaches(queryClient, result.surrogate_id)
         },
     })
@@ -534,7 +534,7 @@ export function useUseFormTemplate() {
         mutationFn: ({ templateId, payload }: { templateId: string; payload: FormTemplateUseRequest }) =>
             createFormFromTemplate(templateId, payload),
         onSuccess: (form) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             queryClient.setQueryData(formKeys.detail(form.id), form)
         },
     })
@@ -546,7 +546,7 @@ export function useDeleteFormTemplate() {
     return useMutation({
         mutationFn: (templateId: string) => deleteFormTemplate(templateId),
         onSuccess: (_result, templateId) => {
-            queryClient.invalidateQueries({ queryKey: formKeys.templates() })
+            void queryClient.invalidateQueries({ queryKey: formKeys.templates() })
             queryClient.removeQueries({ queryKey: formKeys.templateDetail(templateId) })
         },
     })

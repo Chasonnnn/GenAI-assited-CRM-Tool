@@ -58,8 +58,8 @@ export function useMarkRead() {
     return useMutation({
         mutationFn: markNotificationRead,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: [...notificationKeys.all, "list"] })
-            queryClient.invalidateQueries({ queryKey: notificationKeys.count() })
+            void queryClient.invalidateQueries({ queryKey: [...notificationKeys.all, "list"] })
+            void queryClient.invalidateQueries({ queryKey: notificationKeys.count() })
         },
     })
 }
@@ -70,8 +70,8 @@ export function useMarkAllRead() {
     return useMutation({
         mutationFn: markAllNotificationsRead,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: [...notificationKeys.all, "list"] })
-            queryClient.invalidateQueries({ queryKey: notificationKeys.count() })
+            void queryClient.invalidateQueries({ queryKey: [...notificationKeys.all, "list"] })
+            void queryClient.invalidateQueries({ queryKey: notificationKeys.count() })
         },
     })
 }

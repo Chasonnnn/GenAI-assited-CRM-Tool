@@ -25,8 +25,8 @@ export function useCreateBulkTasks() {
     return useMutation({
         mutationFn: (data: BulkTaskCreateRequest) => createBulkTasks(data),
         onSuccess: (_result, variables) => {
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
             if (variables.surrogate_id) {
                 invalidateSurrogateCrmCaches(queryClient, variables.surrogate_id)
             }

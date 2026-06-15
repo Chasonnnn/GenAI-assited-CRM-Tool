@@ -104,7 +104,7 @@ export default function AgenciesPage() {
             }
         }
 
-        fetchAgencies();
+        void fetchAgencies();
 
         return () => {
             isCurrent = false;

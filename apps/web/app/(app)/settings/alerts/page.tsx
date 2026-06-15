@@ -51,8 +51,8 @@ export default function AlertsPage() {
     const snoozeAlert = useSnoozeAlert()
 
     const handleRefresh = () => {
-        refetchSummary()
-        refetchAlerts()
+        void refetchSummary()
+        void refetchAlerts()
     }
 
     const totalOpen = (summary?.warn ?? 0) + (summary?.error ?? 0) + (summary?.critical ?? 0)

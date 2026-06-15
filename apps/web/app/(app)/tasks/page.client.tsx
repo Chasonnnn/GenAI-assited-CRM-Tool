@@ -316,8 +316,8 @@ export default function TasksPage() {
     const isLoading = loadingIncomplete
     const hasError = incompleteError || completedError
     const handleRetry = () => {
-        refetchIncomplete()
-        refetchCompleted()
+        void refetchIncomplete()
+        void refetchCompleted()
     }
 
     useEffect(() => {

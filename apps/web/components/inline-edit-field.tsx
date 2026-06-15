@@ -129,7 +129,7 @@ export function InlineEditField({
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter") {
             e.preventDefault()
-            handleSave()
+            void handleSave()
         } else if (e.key === "Escape") {
             handleCancel()
         }
@@ -180,7 +180,7 @@ export function InlineEditField({
                     onBlur={() => {
                         // Delay to allow button clicks
                         setTimeout(() => {
-                            if (isEditing && !isSaving) handleSave()
+                            if (isEditing && !isSaving) void handleSave()
                         }, 200)
                     }}
                     className={cn("h-7 text-sm", error && "border-destructive")}

@@ -413,7 +413,7 @@ function BriefComposer({
     const handleFiles = (files: FileList | File[] | null) => {
         const fileList = files ? Array.from(files) : []
         if (fileList.length === 0) return
-        onFiles(fileList)
+        void onFiles(fileList)
     }
 
     const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {

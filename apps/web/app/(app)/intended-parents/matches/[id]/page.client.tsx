@@ -172,20 +172,20 @@ export default function MatchDetailPage() {
         const intendedParentId = entityIds?.intended_parent_id ?? match?.intended_parent_id
 
         if (surrogateId) {
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) })
-            queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+            void queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(surrogateId), "activity"],
             })
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(surrogateId), "history"],
             })
         }
 
         if (intendedParentId) {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(intendedParentId) })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.history(intendedParentId) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(intendedParentId) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.history(intendedParentId) })
         }
     }
 
@@ -193,7 +193,7 @@ export default function MatchDetailPage() {
     const handleAcceptMatch = async () => {
         const updatedMatch = await acceptMatchMutation.mutateAsync({ matchId })
         invalidateMatchSourceQueries(updatedMatch)
-        queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
     }
 
     // Handle Reject match
@@ -203,8 +203,8 @@ export default function MatchDetailPage() {
             data: { rejection_reason: reason },
         })
         invalidateMatchSourceQueries(updatedMatch)
-        queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
-        queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+        void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
     const handleCancelMatch = async (reason?: string) => {
@@ -213,8 +213,8 @@ export default function MatchDetailPage() {
             data: reason ? { reason } : {},
         })
         invalidateMatchSourceQueries(updatedMatch)
-        queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
-        queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+        void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
     // Handle Add Note
@@ -253,9 +253,9 @@ export default function MatchDetailPage() {
             await deleteAttachmentMutation.mutateAsync({ attachmentId, surrogateId: surrogateId || "" })
             // Invalidate the appropriate query based on source
             if (source === "surrogate" && match?.surrogate_id) {
-                queryClient.invalidateQueries({ queryKey: ["attachments", match.surrogate_id] })
+                void queryClient.invalidateQueries({ queryKey: ["attachments", match.surrogate_id] })
             } else if (source === "ip" && match?.intended_parent_id) {
-                queryClient.invalidateQueries({ queryKey: ["ip-attachments", match.intended_parent_id] })
+                void queryClient.invalidateQueries({ queryKey: ["ip-attachments", match.intended_parent_id] })
             }
             toast.success("File deleted successfully")
         } catch {
@@ -291,7 +291,7 @@ export default function MatchDetailPage() {
                     ...(data.due_date ? { due_date: data.due_date } : {}),
                 })
             }
-            queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
             toast.success("Task created successfully")
         } catch {
             toast.error("Failed to create task")

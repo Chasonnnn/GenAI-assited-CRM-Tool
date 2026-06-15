@@ -635,7 +635,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 setIsLoading(false)
             }
         }
-        loadForm()
+        void loadForm()
     }, [draftSessionExists, draftSessionId, token, isPreview])
 
     React.useEffect(() => {

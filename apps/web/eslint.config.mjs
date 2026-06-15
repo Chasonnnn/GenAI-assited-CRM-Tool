@@ -43,5 +43,28 @@ export default tseslint.config(
       'unused-imports/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
     },
+  },
+  // Type-aware promise safety — applied only to in-project source files.
+  // Config files, tests, and other tsconfig-excluded files are skipped so the
+  // project service never has to resolve a file outside the TS program.
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    ignores: ['**/*.config.{ts,mts}', 'tests/**', 'vitest.config.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      // Keep the dangerous checks (async callbacks where a sync void is
+      // expected) but allow async JSX event handlers like onClick={async ...},
+      // which React handles safely and are idiomatic here.
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+    },
   }
 );

@@ -1218,7 +1218,7 @@ export default function EmailTemplatesPage() {
             },
             {
                 onSuccess: () => {
-                    refetchSignature()
+                    void refetchSignature()
                 },
             }
         )
@@ -1226,14 +1226,18 @@ export default function EmailTemplatesPage() {
 
     const handleUploadPhoto = (file: File) => {
         uploadPhotoMutation.mutate(file, {
-            onSuccess: () => refetchSignature(),
+            onSuccess: () => {
+                void refetchSignature()
+            },
         })
     }
 
     const handleDeletePhoto = () => {
         if (confirm("Remove your signature photo? Your profile avatar will be used instead.")) {
             deletePhotoMutation.mutate(undefined, {
-                onSuccess: () => refetchSignature(),
+                onSuccess: () => {
+                    void refetchSignature()
+                },
             })
         }
     }

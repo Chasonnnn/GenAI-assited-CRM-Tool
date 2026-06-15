@@ -879,7 +879,7 @@ export default function AIAssistantPage() {
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter" && !e.shiftKey) {
                                         e.preventDefault()
-                                        handleSend()
+                                        void handleSend()
                                     }
                                 }}
                                 className="flex-1 text-sm"

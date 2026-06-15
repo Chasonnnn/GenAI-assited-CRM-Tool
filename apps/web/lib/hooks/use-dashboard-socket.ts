@@ -92,7 +92,7 @@ export function useDashboardSocket(enabled: boolean = true) {
                 if (message.type === 'stats_update') {
                     // Stats payloads are org-wide; invalidate all keyed variants so
                     // owner/date filtered queries refetch with their own params.
-                    queryClient.invalidateQueries({
+                    void queryClient.invalidateQueries({
                         queryKey: surrogateKeys.stats(),
                         refetchType: 'active',
                     })

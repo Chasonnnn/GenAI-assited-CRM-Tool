@@ -117,7 +117,7 @@ export default function AuditLogPage() {
     useEffect(() => {
         if (!hasPendingExports) return
         const timer = setInterval(() => {
-            refetchExports()
+            void refetchExports()
         }, 8000)
         return () => clearInterval(timer)
     }, [hasPendingExports, refetchExports])

@@ -174,7 +174,7 @@ function BookingLinkCard() {
 
     const copyLink = () => {
         if (link?.full_url) {
-            navigator.clipboard.writeText(link.full_url)
+            void navigator.clipboard.writeText(link.full_url)
             setCopied(true)
             setTimeout(() => setCopied(false), 2000)
         }

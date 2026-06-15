@@ -60,8 +60,8 @@ export function useResolveAlert() {
         mutationFn: opsApi.resolveAlert,
         onSuccess: () => {
             // Use prefix matching to invalidate all alert queries regardless of params
-            queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
-            queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
+            void queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
+            void queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
         onError: (error) => {
             toast.error(getErrorMessage(error, 'Failed to resolve alert'));
@@ -79,9 +79,9 @@ export function useAcknowledgeAlert() {
         mutationFn: opsApi.acknowledgeAlert,
         onSuccess: () => {
             // Use prefix matching to invalidate all alert queries regardless of params
-            queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
+            void queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
             // Acknowledge changes status, affecting summary counts
-            queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
+            void queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
         onError: (error) => {
             toast.error(getErrorMessage(error, 'Failed to acknowledge alert'));
@@ -100,8 +100,8 @@ export function useSnoozeAlert() {
             opsApi.snoozeAlert(alertId, hours),
         onSuccess: () => {
             // Use prefix matching to invalidate all alert queries regardless of params
-            queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
-            queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
+            void queryClient.invalidateQueries({ queryKey: [...opsKeys.all, 'alerts'] });
+            void queryClient.invalidateQueries({ queryKey: opsKeys.alertsSummary() });
         },
         onError: (error) => {
             toast.error(getErrorMessage(error, 'Failed to snooze alert'));

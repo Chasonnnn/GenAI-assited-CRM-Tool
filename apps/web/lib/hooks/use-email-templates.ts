@@ -65,7 +65,7 @@ export function useCreateEmailTemplate() {
     return useMutation({
         mutationFn: (data: EmailTemplateCreate) => createTemplate(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },
     })
 }
@@ -77,8 +77,8 @@ export function useUpdateEmailTemplate() {
         mutationFn: ({ id, data }: { id: string; data: EmailTemplateUpdate }) =>
             updateTemplate(id, data),
         onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.detail(id) })
         },
     })
 }
@@ -89,7 +89,7 @@ export function useDeleteEmailTemplate() {
     return useMutation({
         mutationFn: (id: string) => deleteTemplate(id),
         onSuccess: (_result, id) => {
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
             queryClient.removeQueries({ queryKey: emailTemplateKeys.detail(id) })
         },
     })
@@ -137,7 +137,7 @@ export function useCopyTemplateToPersonal() {
         mutationFn: ({ id, data }: { id: string; data: EmailTemplateCopyRequest }) =>
             copyTemplateToPersonal(id, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },
     })
 }
@@ -149,7 +149,7 @@ export function useShareTemplateWithOrg() {
         mutationFn: ({ id, data }: { id: string; data: EmailTemplateShareRequest }) =>
             shareTemplateWithOrg(id, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },
     })
 }
@@ -180,7 +180,7 @@ export function useCopyTemplateFromLibrary() {
         mutationFn: ({ id, data }: { id: string; data: EmailTemplateCopyRequest }) =>
             copyTemplateFromLibrary(id, data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: emailTemplateKeys.lists() })
         },
     })
 }

@@ -92,7 +92,7 @@ export function useCreatePlatformEmailTemplate() {
     return useMutation({
         mutationFn: (payload: PlatformEmailTemplateCreate) => createPlatformEmailTemplate(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
         },
     })
 }
@@ -103,8 +103,8 @@ export function useUpdatePlatformEmailTemplate() {
         mutationFn: ({ id, payload }: { id: string; payload: PlatformEmailTemplateUpdate }) =>
             updatePlatformEmailTemplate(id, payload),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
         },
     })
 }
@@ -115,8 +115,8 @@ export function usePublishPlatformEmailTemplate() {
         mutationFn: ({ id, payload }: { id: string; payload: TemplatePublishRequest }) =>
             publishPlatformEmailTemplate(id, payload),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
         },
     })
 }
@@ -126,7 +126,7 @@ export function useDeletePlatformEmailTemplate() {
     return useMutation({
         mutationFn: ({ id }: { id: string }) => deletePlatformEmailTemplate(id),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.emails() })
             queryClient.removeQueries({ queryKey: platformTemplateKeys.emailDetail(id) })
         },
     })
@@ -170,7 +170,7 @@ export function useCreatePlatformFormTemplate() {
     return useMutation({
         mutationFn: (payload: PlatformFormTemplateCreate) => createPlatformFormTemplate(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
         },
     })
 }
@@ -181,8 +181,8 @@ export function useUpdatePlatformFormTemplate() {
         mutationFn: ({ id, payload }: { id: string; payload: PlatformFormTemplateUpdate }) =>
             updatePlatformFormTemplate(id, payload),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },
     })
 }
@@ -193,8 +193,8 @@ export function usePublishPlatformFormTemplate() {
         mutationFn: ({ id, payload }: { id: string; payload: TemplatePublishRequest }) =>
             publishPlatformFormTemplate(id, payload),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },
     })
 }
@@ -204,7 +204,7 @@ export function useDeletePlatformFormTemplate() {
     return useMutation({
         mutationFn: ({ id }: { id: string }) => deletePlatformFormTemplate(id),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
             queryClient.removeQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },
     })
@@ -231,7 +231,7 @@ export function useCreatePlatformWorkflowTemplate() {
         mutationFn: (payload: PlatformWorkflowTemplateCreate) =>
             createPlatformWorkflowTemplate(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
         },
     })
 }
@@ -242,8 +242,8 @@ export function useUpdatePlatformWorkflowTemplate() {
         mutationFn: ({ id, payload }: { id: string; payload: PlatformWorkflowTemplateUpdate }) =>
             updatePlatformWorkflowTemplate(id, payload),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
         },
     })
 }
@@ -254,8 +254,8 @@ export function usePublishPlatformWorkflowTemplate() {
         mutationFn: ({ id, payload }: { id: string; payload: TemplatePublishRequest }) =>
             publishPlatformWorkflowTemplate(id, payload),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
         },
     })
 }
@@ -265,7 +265,7 @@ export function useDeletePlatformWorkflowTemplate() {
     return useMutation({
         mutationFn: ({ id }: { id: string }) => deletePlatformWorkflowTemplate(id),
         onSuccess: (_data, { id }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.workflows() })
             queryClient.removeQueries({ queryKey: platformTemplateKeys.workflowDetail(id) })
         },
     })
@@ -284,8 +284,8 @@ export function useCreatePlatformSystemEmailTemplate() {
         mutationFn: (payload: PlatformSystemEmailTemplateCreate) =>
             createPlatformSystemEmailTemplate(payload),
         onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
+            void queryClient.invalidateQueries({
                 queryKey: platformTemplateKeys.systemDetail(data.system_key),
             })
         },
@@ -319,8 +319,8 @@ export function useUpdatePlatformSystemEmailTemplate() {
             expected_version?: number
         } }) => updatePlatformSystemEmailTemplate(systemKey, payload),
         onSuccess: (_data, { systemKey }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.systemDetail(systemKey) })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.systemDetail(systemKey) })
         },
     })
 }
@@ -331,7 +331,7 @@ export function useDeletePlatformSystemEmailTemplate() {
         mutationFn: ({ systemKey }: { systemKey: string }) =>
             deletePlatformSystemEmailTemplate(systemKey),
         onSuccess: (_data, { systemKey }) => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.system() })
             queryClient.removeQueries({ queryKey: platformTemplateKeys.systemDetail(systemKey) })
         },
     })
@@ -363,7 +363,7 @@ export function useUpdatePlatformEmailBranding() {
     return useMutation({
         mutationFn: (payload: PlatformEmailBranding) => updatePlatformEmailBranding(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
         },
     })
 }
@@ -373,7 +373,7 @@ export function useUploadPlatformEmailBrandingLogo() {
     return useMutation({
         mutationFn: (file: File) => uploadPlatformEmailBrandingLogo(file),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
+            void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.branding() })
         },
     })
 }

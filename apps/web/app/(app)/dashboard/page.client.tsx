@@ -162,10 +162,10 @@ function DashboardContent() {
 
     // Refresh all dashboard data
     const handleRefresh = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ["surrogates", "stats"] })
-        queryClient.invalidateQueries({ queryKey: ["analytics"] })
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] })
-        queryClient.invalidateQueries({ queryKey: taskKeys.all })
+        void queryClient.invalidateQueries({ queryKey: ["surrogates", "stats"] })
+        void queryClient.invalidateQueries({ queryKey: ["analytics"] })
+        void queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+        void queryClient.invalidateQueries({ queryKey: taskKeys.all })
     }, [queryClient])
 
     // Current date for header

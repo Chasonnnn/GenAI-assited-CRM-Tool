@@ -702,7 +702,7 @@ function useIntelligentSuggestionsController() {
   }, [buildRuleDraft])
 
   useEffect(() => {
-    loadSettings()
+    void loadSettings()
   }, [loadSettings])
 
   useEffect(() => {

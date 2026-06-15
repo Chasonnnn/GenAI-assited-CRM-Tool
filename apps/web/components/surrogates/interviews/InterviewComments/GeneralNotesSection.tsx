@@ -60,7 +60,7 @@ export function GeneralNotesSection({ className }: GeneralNotesSectionProps) {
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                                         e.preventDefault()
-                                        submitGeneralNote()
+                                        void submitGeneralNote()
                                     } else if (e.key === "Escape") {
                                         cancelAddingGeneralNote()
                                     }

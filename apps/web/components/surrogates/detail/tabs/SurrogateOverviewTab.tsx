@@ -774,7 +774,7 @@ function InlineWeightField({
                     onKeyDown={(event) => {
                         if (event.key === "Enter") {
                             event.preventDefault()
-                            handleSave()
+                            void handleSave()
                         } else if (event.key === "Escape") {
                             handleCancel()
                         }
@@ -1104,7 +1104,7 @@ export function SurrogateOverviewTab() {
     const hasAnyPersonalInfoSection = showSurrogatePersonalInfo || showPartnerInfo
 
     const copyEmail = () => {
-        navigator.clipboard.writeText(surrogateData.email)
+        void navigator.clipboard.writeText(surrogateData.email)
         setCopiedEmail(true)
         setTimeout(() => setCopiedEmail(false), 2000)
     }

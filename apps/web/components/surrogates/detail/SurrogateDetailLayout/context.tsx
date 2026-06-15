@@ -492,7 +492,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
             toast.success(`Stage updated to ${targetStageLabel}`, {
                 action: {
                     label: "Undo (5 min)",
-                    onClick: async () => {
+                    onClick: () => void (async () => {
                         try {
                             await changeStatusMutation.mutateAsync({
                                 surrogateId,
@@ -503,7 +503,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
                             const message = error instanceof Error ? error.message : "Undo failed"
                             toast.error(message)
                         }
-                    },
+                    })(),
                 },
                 duration: 60000,
             })
@@ -584,7 +584,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
                 password: result.password,
                 start_time: formatMeetingTimeForInvite(zoomForm.startAt),
             })
-            navigator.clipboard.writeText(result.join_url)
+            void navigator.clipboard.writeText(result.join_url)
         } catch {
             // Error handled by react-query
         }

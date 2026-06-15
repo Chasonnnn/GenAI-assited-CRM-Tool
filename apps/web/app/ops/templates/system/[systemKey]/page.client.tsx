@@ -326,7 +326,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const toggleOrg = (orgId: string, next: boolean) => {
         setSelectedOrgIds((prev) => {
             if (next && !prev.includes(orgId)) {
-                ensureMembersLoaded(orgId)
+                void ensureMembersLoaded(orgId)
                 return [...prev, orgId]
             }
             if (!next) {
@@ -393,7 +393,9 @@ export default function PlatformSystemEmailTemplatePage() {
             return
         }
         setSelectedOrgIds((prev) => Array.from(new Set([...prev, ...filteredIds])))
-        filteredIds.forEach((orgId) => ensureMembersLoaded(orgId))
+        filteredIds.forEach((orgId) => {
+            void ensureMembersLoaded(orgId)
+        })
     }
 
     const totalSelectedUsers = useMemo(() => {

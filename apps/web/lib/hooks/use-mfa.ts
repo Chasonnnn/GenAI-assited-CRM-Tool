@@ -50,7 +50,7 @@ export function useRegenerateRecoveryCodes() {
     return useMutation({
         mutationFn: mfaApi.regenerateRecoveryCodes,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
+            void queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
         },
     });
 }
@@ -65,7 +65,7 @@ export function useCompleteMFAChallenge() {
         mutationFn: mfaApi.completeMFAChallenge,
         onSuccess: () => {
             // Invalidate user session to refetch with mfa_verified=true
-            queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+            void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
         },
     });
 }
@@ -79,7 +79,7 @@ export function useDisableMFA() {
     return useMutation({
         mutationFn: mfaApi.disableMFA,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
+            void queryClient.invalidateQueries({ queryKey: mfaKeys.status() });
         },
     });
 }

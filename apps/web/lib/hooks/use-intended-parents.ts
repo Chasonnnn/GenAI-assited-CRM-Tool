@@ -108,8 +108,8 @@ export function useCreateIntendedParent() {
     return useMutation({
         mutationFn: (data: IntendedParentCreate) => createIntendedParent(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
         },
     })
 }
@@ -121,8 +121,8 @@ export function useUpdateIntendedParent() {
         mutationFn: ({ id, data }: { id: string; data: IntendedParentUpdate }) =>
             updateIntendedParent(id, data),
         onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
         },
     })
 }
@@ -140,10 +140,10 @@ export function useUpdateIntendedParentStatus() {
                     response.intended_parent
                 )
             }
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.history(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.history(id) })
         },
     })
 }
@@ -154,9 +154,9 @@ export function useArchiveIntendedParent() {
     return useMutation({
         mutationFn: (id: string) => archiveIntendedParent(id),
         onSuccess: (_, id) => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
         },
     })
 }
@@ -167,9 +167,9 @@ export function useRestoreIntendedParent() {
     return useMutation({
         mutationFn: (id: string) => restoreIntendedParent(id),
         onSuccess: (_, id) => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
         },
     })
 }
@@ -180,8 +180,8 @@ export function useDeleteIntendedParent() {
     return useMutation({
         mutationFn: (id: string) => deleteIntendedParent(id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.stats() })
         },
     })
 }
@@ -194,8 +194,8 @@ export function useCreateIntendedParentNote() {
         mutationFn: ({ id, data }: { id: string; data: EntityNoteCreate }) =>
             createIntendedParentNote(id, data),
         onSuccess: (_, { id }) => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.notes(id) })
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.notes(id) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.detail(id) })
         },
     })
 }
@@ -207,7 +207,7 @@ export function useDeleteIntendedParentNote() {
         mutationFn: ({ ipId, noteId }: { ipId: string; noteId: string }) =>
             deleteIntendedParentNote(ipId, noteId),
         onSuccess: (_, { ipId }) => {
-            queryClient.invalidateQueries({ queryKey: intendedParentKeys.notes(ipId) })
+            void queryClient.invalidateQueries({ queryKey: intendedParentKeys.notes(ipId) })
         },
     })
 }

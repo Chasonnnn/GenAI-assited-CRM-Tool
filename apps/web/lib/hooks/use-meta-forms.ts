@@ -46,7 +46,7 @@ export function useSyncMetaForms() {
     return useMutation({
         mutationFn: (payload?: { page_id?: string }) => syncMetaForms(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
         },
     })
 }
@@ -56,9 +56,9 @@ export function useUpdateMetaFormMapping(formId: string) {
     return useMutation({
         mutationFn: (payload: MetaFormMappingUpdate) => updateMetaFormMapping(formId, payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.unconvertedLeads(formId) })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.unconvertedLeads(formId) })
         },
     })
 }
@@ -68,9 +68,9 @@ export function useReconvertMetaFormLeads(formId: string) {
     return useMutation({
         mutationFn: () => reconvertMetaFormLeads(formId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.unconvertedLeads(formId) })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.unconvertedLeads(formId) })
         },
     })
 }
@@ -80,7 +80,7 @@ export function useDeleteMetaForm() {
     return useMutation({
         mutationFn: (formId: string) => deleteMetaForm(formId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
         },
     })
 }

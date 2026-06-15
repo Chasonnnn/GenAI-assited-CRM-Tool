@@ -34,10 +34,10 @@ export function useUploadAttachment() {
         mutationFn: ({ surrogateId, file }: { surrogateId: string; file: File }) =>
             attachmentsApi.upload(surrogateId, file),
         onSuccess: (data, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
-            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId, "images"] })
+            void queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
+            void queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId, "images"] })
             // Invalidate history/activity cache to show attachment_added immediately
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(variables.surrogateId), 'activity'],
                 exact: false,
             })
@@ -84,10 +84,10 @@ export function useDeleteAttachment() {
         mutationFn: ({ attachmentId, surrogateId: _surrogateId }: { attachmentId: string; surrogateId: string }) =>
             attachmentsApi.delete(attachmentId),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
-            queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId, "images"] })
+            void queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId] })
+            void queryClient.invalidateQueries({ queryKey: ["attachments", variables.surrogateId, "images"] })
             // Invalidate history/activity cache to show attachment_deleted immediately
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
                 queryKey: [...surrogateKeys.detail(variables.surrogateId), 'activity'],
                 exact: false,
             })
@@ -111,7 +111,7 @@ export function useUploadIPAttachment() {
         mutationFn: ({ ipId, file }: { ipId: string; file: File }) =>
             attachmentsApi.uploadForIP(ipId, file),
         onSuccess: (data, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["ip-attachments", variables.ipId] })
+            void queryClient.invalidateQueries({ queryKey: ["ip-attachments", variables.ipId] })
         },
     })
 }

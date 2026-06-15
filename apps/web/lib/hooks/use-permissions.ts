@@ -59,8 +59,8 @@ export function useUpdateMember() {
         mutationFn: ({ memberId, data }: { memberId: string; data: MemberUpdate }) =>
             updateMember(memberId, data),
         onSuccess: (_, { memberId }) => {
-            queryClient.invalidateQueries({ queryKey: KEYS.member(memberId) })
-            queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.member(memberId) })
+            void queryClient.invalidateQueries({ queryKey: KEYS.members })
         },
     })
 }
@@ -71,7 +71,7 @@ export function useRemoveMember() {
     return useMutation({
         mutationFn: (memberId: string) => removeMember(memberId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.members })
         },
     })
 }
@@ -106,8 +106,8 @@ export function useUpdateRolePermissions() {
         mutationFn: ({ role, permissions }: { role: string; permissions: Record<string, boolean> }) =>
             updateRolePermissions(role, permissions),
         onSuccess: (_, { role }) => {
-            queryClient.invalidateQueries({ queryKey: KEYS.role(role) })
-            queryClient.invalidateQueries({ queryKey: KEYS.roles })
+            void queryClient.invalidateQueries({ queryKey: KEYS.role(role) })
+            void queryClient.invalidateQueries({ queryKey: KEYS.roles })
         },
     })
 }
@@ -119,7 +119,7 @@ export function useBulkUpdateRoles() {
         mutationFn: ({ memberIds, role }: { memberIds: string[]; role: string }) =>
             bulkUpdateRoles(memberIds, role),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: KEYS.members })
+            void queryClient.invalidateQueries({ queryKey: KEYS.members })
         },
     })
 }

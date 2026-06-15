@@ -36,7 +36,7 @@ export function useUpsertRetentionPolicy() {
     return useMutation({
         mutationFn: (data: RetentionPolicyUpsert) => upsertRetentionPolicy(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: complianceKeys.policies() })
+            void queryClient.invalidateQueries({ queryKey: complianceKeys.policies() })
         },
     })
 }
@@ -53,7 +53,7 @@ export function useCreateLegalHold() {
     return useMutation({
         mutationFn: (data: LegalHoldCreate) => createLegalHold(data),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
+            void queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
         },
     })
 }
@@ -63,7 +63,7 @@ export function useReleaseLegalHold() {
     return useMutation({
         mutationFn: (id: string) => releaseLegalHold(id),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
+            void queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
         },
     })
 }
@@ -82,9 +82,9 @@ export function useExecutePurge() {
     return useMutation({
         mutationFn: () => executePurge(),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: complianceKeys.purgePreview() })
-            queryClient.invalidateQueries({ queryKey: complianceKeys.policies() })
-            queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
+            void queryClient.invalidateQueries({ queryKey: complianceKeys.purgePreview() })
+            void queryClient.invalidateQueries({ queryKey: complianceKeys.policies() })
+            void queryClient.invalidateQueries({ queryKey: complianceKeys.holds() })
         },
     })
 }

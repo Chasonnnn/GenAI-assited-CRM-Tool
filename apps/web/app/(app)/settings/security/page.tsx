@@ -53,7 +53,7 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
     const [copied, setCopied] = useState(false)
 
     const handleCopy = () => {
-        navigator.clipboard.writeText(codes.join("\n"))
+        void navigator.clipboard.writeText(codes.join("\n"))
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }

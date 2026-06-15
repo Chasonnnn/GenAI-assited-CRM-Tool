@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (typeof window === 'undefined') {
-            fetchUser();
+            void fetchUser();
             return;
         }
 
@@ -76,11 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        fetchUser();
+        void fetchUser();
     }, []);
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, error, refetch: fetchUser }}>
+        <AuthContext.Provider value={{ user, isLoading, error, refetch: () => { void fetchUser(); } }}>
             {children}
         </AuthContext.Provider>
     );
