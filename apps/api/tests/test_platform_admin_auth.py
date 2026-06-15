@@ -45,7 +45,7 @@ async def test_dev_login_sets_cookie_domain_for_session_and_csrf(
 
     response = await client.post(
         f"/dev/login-as/{test_user.id}",
-        headers={"X-Dev-Secret": settings.DEV_SECRET},
+        headers={"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()},
     )
     assert response.status_code == 200
 

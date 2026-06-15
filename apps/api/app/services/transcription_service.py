@@ -216,7 +216,7 @@ async def transcribe_audio(
             and vertex_service_account_email
         ):
             raise TranscriptionError("Vertex AI configuration is incomplete")
-        if not settings.WIF_OIDC_PRIVATE_KEY:
+        if not settings.WIF_OIDC_PRIVATE_KEY.get_secret_value():
             raise TranscriptionError("Vertex WIF is not configured")
         if not organization_id:
             raise TranscriptionError("Organization is required for Vertex WIF")

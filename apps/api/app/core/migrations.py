@@ -39,7 +39,7 @@ def _get_alembic_config() -> Config:
     if not alembic_ini.is_file():
         raise FileNotFoundError(f"Alembic config not found at {alembic_ini}")
     config = Config(str(alembic_ini))
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.get_secret_value())
     return config
 
 

@@ -55,10 +55,12 @@ def verify_signature(payload: bytes, signature: str) -> bool:
     if not signature or not signature.startswith("sha256="):
         return False
 
-    if not settings.META_APP_SECRET:
+    if not settings.META_APP_SECRET.get_secret_value():
         return False
 
-    expected = hmac.new(settings.META_APP_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    expected = hmac.new(
+        settings.META_APP_SECRET.get_secret_value().encode(), payload, hashlib.sha256
+    ).hexdigest()
 
     return hmac.compare_digest(f"sha256={expected}", signature)
 
@@ -70,11 +72,13 @@ def compute_appsecret_proof(access_token: str) -> str:
     This is HMAC-SHA256 of the access token with the app secret.
     Required for secure server-to-server API calls.
     """
-    if not settings.META_APP_SECRET:
+    if not settings.META_APP_SECRET.get_secret_value():
         return ""
 
     return hmac.new(
-        settings.META_APP_SECRET.encode(), access_token.encode(), hashlib.sha256
+        settings.META_APP_SECRET.get_secret_value().encode(),
+        access_token.encode(),
+        hashlib.sha256,
     ).hexdigest()
 
 

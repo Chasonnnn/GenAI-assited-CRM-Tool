@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -88,7 +89,7 @@ export default function MatchesPage() {
         const newUrl = nextQuery ? `/intended-parents/matches?${nextQuery}` : "/intended-parents/matches"
         const currentUrl = currentQuery ? `/intended-parents/matches?${currentQuery}` : "/intended-parents/matches"
         if (newUrl === currentUrl) return
-        replace(newUrl, { scroll: false })
+        replace(newUrl as Route, { scroll: false })
     }, [replace, searchParams])
 
     const handleStatusChange = useCallback((value: string) => {

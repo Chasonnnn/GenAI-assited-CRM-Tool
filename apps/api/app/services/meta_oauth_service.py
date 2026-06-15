@@ -114,7 +114,7 @@ async def exchange_code_for_token(code: str) -> dict:
     """
     params = {
         "client_id": settings.META_APP_ID,
-        "client_secret": settings.META_APP_SECRET,
+        "client_secret": settings.META_APP_SECRET.get_secret_value(),
         "redirect_uri": settings.META_OAUTH_REDIRECT_URI,
         "code": code,
     }
@@ -141,7 +141,7 @@ async def exchange_for_long_lived_token(short_token: str) -> dict:
     params = {
         "grant_type": "fb_exchange_token",
         "client_id": settings.META_APP_ID,
-        "client_secret": settings.META_APP_SECRET,
+        "client_secret": settings.META_APP_SECRET.get_secret_value(),
         "fb_exchange_token": short_token,
     }
 
@@ -193,7 +193,7 @@ async def debug_token(token: str) -> list[str]:
     url = f"{_graph_base()}/debug_token"
     params = {
         "input_token": token,
-        "access_token": f"{settings.META_APP_ID}|{settings.META_APP_SECRET}",
+        "access_token": f"{settings.META_APP_ID}|{settings.META_APP_SECRET.get_secret_value()}",
     }
 
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:

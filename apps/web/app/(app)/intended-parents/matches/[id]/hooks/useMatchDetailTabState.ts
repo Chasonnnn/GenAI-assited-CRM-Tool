@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 
 export type TabType = "notes" | "files" | "tasks" | "activity"
@@ -62,7 +63,7 @@ export function useMatchDetailTabState(matchId: string) {
                 : `/intended-parents/matches/${matchId}`
             if (nextUrl === currentUrl) return
 
-            replace(nextUrl, { scroll: false })
+            replace(nextUrl as Route, { scroll: false })
         },
         [matchId, replace, searchParams]
     )

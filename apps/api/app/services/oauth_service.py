@@ -41,7 +41,7 @@ def _is_expired(expires_at: datetime) -> bool:
 
 def _get_fernet() -> Fernet:
     """Get Fernet instance for encryption/decryption."""
-    key = settings.FERNET_KEY
+    key = settings.FERNET_KEY.get_secret_value()
     if not key:
         raise ValueError("FERNET_KEY not configured")
     return Fernet(key.encode())
@@ -229,7 +229,7 @@ async def exchange_gmail_code(code: str, redirect_uri: str) -> JsonObject:
             GMAIL_TOKEN_URL,
             data={
                 "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET.get_secret_value(),
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
@@ -258,7 +258,7 @@ async def refresh_gmail_token(refresh_token: str) -> JsonObject | None:
                 GMAIL_TOKEN_URL,
                 data={
                     "client_id": settings.GOOGLE_CLIENT_ID,
-                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET.get_secret_value(),
                     "refresh_token": refresh_token,
                     "grant_type": "refresh_token",
                 },
@@ -335,7 +335,7 @@ async def exchange_zoom_code(code: str, redirect_uri: str) -> JsonObject:
     import base64
 
     credentials = base64.b64encode(
-        f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
+        f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET.get_secret_value()}".encode()
     ).decode()
 
     async with httpx.AsyncClient() as client:
@@ -372,7 +372,7 @@ async def refresh_zoom_token(refresh_token: str) -> JsonObject | None:
 
     try:
         credentials = base64.b64encode(
-            f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
+            f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET.get_secret_value()}".encode()
         ).decode()
 
         async with httpx.AsyncClient() as client:

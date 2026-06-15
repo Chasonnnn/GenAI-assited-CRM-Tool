@@ -173,13 +173,13 @@ def _record_api_error_alert(
 # Sentry Integration (optional, for production error tracking)
 # ============================================================================
 
-if settings.SENTRY_DSN and settings.ENV != "dev":
+if settings.SENTRY_DSN.get_secret_value() and settings.ENV != "dev":
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
     sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
+        dsn=settings.SENTRY_DSN.get_secret_value(),
         environment=settings.ENV,
         integrations=[
             FastApiIntegration(transaction_style="endpoint"),
@@ -580,6 +580,27 @@ async def structured_request_logging_middleware(request: Request, call_next):
                 latency_ms=latency_ms,
             ),
         )
+
+
+@app.middleware("http")
+async def clear_org_scope_middleware(request: Request, call_next):
+    """Bound the multi-tenant org-scope to the request lifecycle.
+
+    ``get_current_session`` stamps the authenticated org onto the request's DB
+    session so the org-scoping backstop (app/db/org_scope.py) is active inside
+    handlers. In production each request gets a fresh session discarded at
+    request end, but the test harness shares one session across the request and
+    its direct assertions — so we explicitly clear the stamp here, ensuring the
+    scope can never leak past the request that set it.
+    """
+    from app.db.org_scope import clear_org_scope
+
+    try:
+        return await call_next(request)
+    finally:
+        db = getattr(request.state, "request_db", None)
+        if db is not None:
+            clear_org_scope(db)
 
 
 # ============================================================================

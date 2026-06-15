@@ -34,9 +34,9 @@ def _verify_dev_secret(x_dev_secret: str = Header()):
     """
     if not settings.is_dev:
         raise HTTPException(status_code=403, detail="Dev endpoints are only available in dev/test.")
-    if not settings.DEV_SECRET:
+    if not settings.DEV_SECRET.get_secret_value():
         raise HTTPException(status_code=501, detail="DEV_SECRET not configured")
-    if not verify_secret(x_dev_secret, settings.DEV_SECRET):
+    if not verify_secret(x_dev_secret, settings.DEV_SECRET.get_secret_value()):
         raise HTTPException(status_code=403, detail="Invalid dev secret")
 
 

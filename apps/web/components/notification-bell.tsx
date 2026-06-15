@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { Route } from "next"
 import { Bell, BellOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
@@ -83,7 +84,7 @@ export function NotificationBell() {
             markRead.mutate(notification.id)
         }
 
-        push(getNotificationHref(notification))
+        push(getNotificationHref(notification) as Route)
     }
 
     const handleMarkAllRead = () => {

@@ -228,7 +228,7 @@ async def send_lead_event_for_account(
         "access_token": token,
     }
 
-    if settings.META_APP_SECRET:
+    if settings.META_APP_SECRET.get_secret_value():
         payload["appsecret_proof"] = compute_appsecret_proof(token)
 
     url = f"{CAPI_URL}/{ad_account.pixel_id}/events"

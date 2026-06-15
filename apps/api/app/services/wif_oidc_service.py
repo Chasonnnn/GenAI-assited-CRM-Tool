@@ -27,14 +27,16 @@ def _normalize_issuer(issuer: str) -> str:
 
 
 def is_configured() -> bool:
-    return bool(settings.WIF_OIDC_PRIVATE_KEY.strip())
+    return bool(settings.WIF_OIDC_PRIVATE_KEY.get_secret_value().strip())
 
 
 @lru_cache(maxsize=1)
 def _load_private_key() -> rsa.RSAPrivateKey:
-    if not settings.WIF_OIDC_PRIVATE_KEY:
+    if not settings.WIF_OIDC_PRIVATE_KEY.get_secret_value():
         raise ValueError("WIF_OIDC_PRIVATE_KEY not configured")
-    return serialization.load_pem_private_key(settings.WIF_OIDC_PRIVATE_KEY.encode(), password=None)
+    return serialization.load_pem_private_key(
+        settings.WIF_OIDC_PRIVATE_KEY.get_secret_value().encode(), password=None
+    )
 
 
 @lru_cache(maxsize=1)

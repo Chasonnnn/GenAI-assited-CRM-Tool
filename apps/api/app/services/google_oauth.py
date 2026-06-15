@@ -37,7 +37,7 @@ async def exchange_code_for_tokens(code: str) -> dict:
             data={
                 "code": code,
                 "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET.get_secret_value(),
                 "redirect_uri": settings.GOOGLE_REDIRECT_URI,
                 "grant_type": "authorization_code",
             },

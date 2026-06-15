@@ -56,7 +56,7 @@ def create_session_token(
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
     }
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
 
 
 def create_support_session_token(
@@ -88,7 +88,7 @@ def create_support_session_token(
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
     }
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
 
 
 def decode_session_token(token: str) -> dict:
@@ -137,7 +137,7 @@ def create_export_token(
     }
     if variant:
         payload["variant"] = variant
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
 
 
 def decode_export_token(token: str) -> dict:
