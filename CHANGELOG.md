@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.34](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.33...surrogacy-crm-platform-v0.91.34) (2026-06-15)
+
+
+### Features
+
+* add intake pool access grants ([5a60e59](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5a60e59cb141ccdfe5208b7c2e619e938e30f1b5))
+* **api:** request-scoped multi-tenant org-scoping backstop ([#511](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/511)) ([bfae8b5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bfae8b50021ca13499e64eeb59b09f37ef56b420))
+* **api:** type all credentials as Pydantic SecretStr ([#509](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/509)) ([7ed1df6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7ed1df645566f2321b7d19f2d8a6a71809533c42))
+* enforce surrogate access policy ([819b030](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/819b030855e3c53fe0317d0f5c147c1096c1c623))
+* manage intake pool access in web ([fbef7f2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fbef7f203d1981b897937ec40fbce022d6e4a12a))
+* **web:** enable type-aware promise-safety ESLint rules ([#510](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/510)) ([99d10f5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/99d10f57ceb6fdb282dd7b49a49017af36762643))
+
+
+### Bug Fixes
+
+* align release automation and grant timestamps ([96225ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/96225bab271235c7a0cbe4f6d90686422e4977d5))
+* skip ci for release-only prs ([2d789e1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2d789e1996a2baec161306643aea47dd8b5fe3a9))
+
+
+### Maintenance
+
+* **web:** adopt Next 16 / React 19 modernization quick wins (Phase 0) ([#508](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/508)) ([148608c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/148608c2981f2d5e20d5b4f16c944e3105cbe152))
+
 ## [0.91.33](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.32...surrogacy-crm-platform-v0.91.33) (2026-06-14)
 
 
