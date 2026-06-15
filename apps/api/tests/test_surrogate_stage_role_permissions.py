@@ -7,18 +7,44 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
+from app.core.encryption import hash_email
 from app.core.security import create_session_token
-from app.db.enums import Role
-from app.db.models import Membership, User
+from app.db.enums import OwnerType, Role
+from app.db.models import Membership, PipelineStage, Surrogate, User
 from app.main import app
 from app.services import pipeline_service, session_service
+from app.utils.normalization import normalize_email
 
 
 def _get_stage_id(db, org_id: UUID, slug: str) -> UUID:
+    return _get_stage(db, org_id, slug).id
+
+
+def _get_stage(db, org_id: UUID, slug: str) -> PipelineStage:
     pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
     stage = pipeline_service.get_stage_by_slug(db, pipeline.id, slug)
     assert stage is not None
-    return stage.id
+    return stage
+
+
+def _create_owned_surrogate(db, org_id: UUID, owner_id: UUID, stage: PipelineStage) -> Surrogate:
+    email = normalize_email(f"stage-role-{uuid.uuid4().hex[:8]}@example.com")
+    surrogate = Surrogate(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        surrogate_number=f"S{uuid.uuid4().int % 90000 + 10000:05d}",
+        stage_id=stage.id,
+        status_label=stage.label,
+        owner_type=OwnerType.USER.value,
+        owner_id=owner_id,
+        created_by_user_id=owner_id,
+        full_name=f"Case Manager Stage {uuid.uuid4().hex[:6]}",
+        email=email,
+        email_hash=hash_email(email),
+    )
+    db.add(surrogate)
+    db.flush()
+    return surrogate
 
 
 @asynccontextmanager
@@ -98,47 +124,44 @@ async def test_case_manager_can_read_default_pipeline_without_manage_permission(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("terminal_slug", ["lost", "disqualified"])
 async def test_case_manager_can_change_from_post_approval_to_terminal(db, test_org, terminal_slug):
-    ready_to_match_stage_id = _get_stage_id(db, test_org.id, "ready_to_match")
+    ready_to_match_stage = _get_stage(db, test_org.id, "ready_to_match")
     terminal_stage_id = _get_stage_id(db, test_org.id, terminal_slug)
 
-    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (_, client):
-        surrogate_id = await _create_surrogate(client, "Case Manager Stage")
-
-        to_ready = await client.patch(
-            f"/surrogates/{surrogate_id}/status",
-            json={"stage_id": str(ready_to_match_stage_id)},
+    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (case_manager, client):
+        surrogate = _create_owned_surrogate(
+            db,
+            test_org.id,
+            case_manager.id,
+            ready_to_match_stage,
         )
-        assert to_ready.status_code == 200, to_ready.text
-        assert to_ready.json()["status"] == "applied"
 
         to_terminal = await client.patch(
-            f"/surrogates/{surrogate_id}/status",
+            f"/surrogates/{surrogate.id}/status",
             json={"stage_id": str(terminal_stage_id)},
         )
         assert to_terminal.status_code == 200, to_terminal.text
         assert to_terminal.json()["status"] == "applied"
 
-        detail = await client.get(f"/surrogates/{surrogate_id}")
+        detail = await client.get(f"/surrogates/{surrogate.id}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["stage_id"] == str(terminal_stage_id)
 
 
 @pytest.mark.asyncio
 async def test_case_manager_can_move_post_approval_case_to_on_hold(db, test_org):
-    ready_to_match_stage_id = _get_stage_id(db, test_org.id, "ready_to_match")
+    ready_to_match_stage = _get_stage(db, test_org.id, "ready_to_match")
     on_hold_stage_id = _get_stage_id(db, test_org.id, "on_hold")
 
-    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (_, client):
-        surrogate_id = await _create_surrogate(client, "Case Manager On Hold")
-
-        to_ready = await client.patch(
-            f"/surrogates/{surrogate_id}/status",
-            json={"stage_id": str(ready_to_match_stage_id)},
+    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (case_manager, client):
+        surrogate = _create_owned_surrogate(
+            db,
+            test_org.id,
+            case_manager.id,
+            ready_to_match_stage,
         )
-        assert to_ready.status_code == 200, to_ready.text
 
         to_on_hold = await client.patch(
-            f"/surrogates/{surrogate_id}/status",
+            f"/surrogates/{surrogate.id}/status",
             json={"stage_id": str(on_hold_stage_id), "reason": "Waiting on availability"},
         )
         assert to_on_hold.status_code == 200, to_on_hold.text

@@ -64,6 +64,7 @@ const mockUseRestoreSurrogate = vi.fn()
 const mockUseUpdateSurrogate = vi.fn()
 const mockUseCreateSurrogate = vi.fn()
 const mockUseAssignees = vi.fn()
+const mockUseAccessibleSurrogateOwners = vi.fn()
 const mockUseBulkAssign = vi.fn()
 const mockUseBulkArchive = vi.fn()
 const mockUseIntelligentSuggestionSummary = vi.fn()
@@ -77,6 +78,7 @@ vi.mock('@/lib/hooks/use-surrogates', () => ({
     useUpdateSurrogate: () => mockUseUpdateSurrogate(),
     useCreateSurrogate: () => mockUseCreateSurrogate(),
     useAssignees: () => mockUseAssignees(),
+    useAccessibleSurrogateOwners: () => mockUseAccessibleSurrogateOwners(),
     useBulkAssign: () => mockUseBulkAssign(),
     useBulkArchive: () => mockUseBulkArchive(),
     useBulkChangeStage: () => mockUseBulkChangeStage(),
@@ -188,6 +190,7 @@ describe('SurrogatesPage', () => {
         mockUseUpdateSurrogate.mockReset()
         mockUseCreateSurrogate.mockReset()
         mockUseAssignees.mockReset()
+        mockUseAccessibleSurrogateOwners.mockReset()
         mockUseBulkAssign.mockReset()
         mockUseBulkArchive.mockReset()
         mockUseBulkChangeStage.mockReset()
@@ -204,6 +207,7 @@ describe('SurrogatesPage', () => {
         mockUseUpdateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCreateSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseAssignees.mockReturnValue({ data: [] })
+        mockUseAccessibleSurrogateOwners.mockReturnValue({ data: [] })
         mockUseBulkAssign.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkArchive.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseBulkChangeStage.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })

@@ -8,9 +8,9 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Membership, User, UserPermissionOverride
+from app.db.models import Membership, Surrogate, User, UserPermissionOverride
 from app.main import app
-from app.services import session_service
+from app.services import pipeline_service, session_service
 
 
 def _create_user_with_membership(db, org_id, role: Role) -> User:
@@ -34,6 +34,17 @@ def _create_user_with_membership(db, org_id, role: Role) -> User:
     )
     db.flush()
     return user
+
+
+def _move_surrogate_to_approved(db, org_id, surrogate_id: str) -> None:
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    approved_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "approved")
+    assert approved_stage is not None
+    surrogate = db.get(Surrogate, uuid.UUID(surrogate_id))
+    assert surrogate is not None
+    surrogate.stage_id = approved_stage.id
+    surrogate.status_label = approved_stage.label
+    db.flush()
 
 
 @asynccontextmanager
@@ -123,6 +134,7 @@ async def test_priority_toggle_requires_admin_or_developer(db, test_org, authed_
     )
     assert create_res.status_code == 201, create_res.text
     surrogate_id = create_res.json()["id"]
+    _move_surrogate_to_approved(db, test_org.id, surrogate_id)
 
     case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
 
@@ -147,6 +159,7 @@ async def test_priority_change_in_general_update_requires_admin_or_developer(
     )
     assert create_res.status_code == 201, create_res.text
     surrogate_id = create_res.json()["id"]
+    _move_surrogate_to_approved(db, test_org.id, surrogate_id)
 
     case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
 
@@ -185,6 +198,7 @@ async def test_non_priority_update_still_requires_edit_permission(db, test_org, 
     )
     assert create_res.status_code == 201, create_res.text
     surrogate_id = create_res.json()["id"]
+    _move_surrogate_to_approved(db, test_org.id, surrogate_id)
 
     case_manager = _create_user_with_membership(db, test_org.id, Role.CASE_MANAGER)
     db.add(

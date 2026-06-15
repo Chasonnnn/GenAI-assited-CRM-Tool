@@ -12,7 +12,7 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role
-from app.db.models import Surrogate, IntendedParent, Match, Membership, Task, User
+from app.db.models import PipelineStage, Surrogate, IntendedParent, Match, Membership, Task, User
 from app.main import app
 from app.routers.ai_schedule import ParseScheduleRequest
 from app.schemas.ai_tasks import BulkTaskCreateRequest
@@ -80,6 +80,32 @@ def _create_match(db, org_id, user_id, stage):
     db.add(match)
     db.flush()
     return match
+
+
+def _create_approved_stage(db, default_stage):
+    approved_stage = pipeline_service.get_stage_by_key(
+        db,
+        default_stage.pipeline_id,
+        "approved",
+    )
+    if approved_stage is not None:
+        return approved_stage
+
+    approved_stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=default_stage.pipeline_id,
+        stage_key="approved",
+        slug="approved",
+        label="Approved",
+        color="#22C55E",
+        stage_type="post_approval",
+        order=default_stage.order + 1,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    db.add(approved_stage)
+    db.flush()
+    return approved_stage
 
 
 def test_parse_schedule_accepts_case_id_alias():
@@ -168,7 +194,8 @@ async def test_bulk_task_creation_allows_case_manager(
     default_stage,
     db,
 ):
-    case = _create_case(db, test_org.id, case_manager_user.id, default_stage)
+    approved_stage = _create_approved_stage(db, default_stage)
+    case = _create_case(db, test_org.id, case_manager_user.id, approved_stage)
 
     response = await case_manager_client.post(
         "/ai/create-bulk-tasks",
@@ -232,7 +259,8 @@ async def test_bulk_task_creation_match_links_case_and_ip(
     default_stage,
     db,
 ):
-    match = _create_match(db, test_org.id, case_manager_user.id, default_stage)
+    approved_stage = _create_approved_stage(db, default_stage)
+    match = _create_match(db, test_org.id, case_manager_user.id, approved_stage)
 
     response = await case_manager_client.post(
         "/ai/create-bulk-tasks",
@@ -267,7 +295,8 @@ async def test_bulk_task_creation_idempotent_persists(
     default_stage,
     db,
 ):
-    case = _create_case(db, test_org.id, case_manager_user.id, default_stage)
+    approved_stage = _create_approved_stage(db, default_stage)
+    case = _create_case(db, test_org.id, case_manager_user.id, approved_stage)
     request_id = uuid.uuid4()
     payload = {
         "request_id": str(request_id),

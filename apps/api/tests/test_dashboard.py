@@ -81,7 +81,7 @@ async def role_client(db, org, role: Role):
 
 @pytest.mark.asyncio
 async def test_attention_scoped_to_owner_when_owned(db, test_org, default_stage):
-    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+    async with role_client(db, test_org, Role.INTAKE_SPECIALIST) as (client, user):
         other_user = User(
             id=uuid.uuid4(),
             email=f"other-{uuid.uuid4().hex[:8]}@test.com",
@@ -171,8 +171,8 @@ async def test_attention_case_manager_orgwide_when_no_owned(db, test_org, defaul
         response = await client.get("/dashboard/attention")
         assert response.status_code == 200
         data = response.json()
-        assert data["unreached_count"] == 1
-        assert data["unreached_leads"][0]["id"] == str(other.id)
+        assert data["unreached_count"] == 0
+        assert data["unreached_leads"] == []
 
 
 @pytest.mark.asyncio
@@ -217,7 +217,7 @@ async def test_attention_admin_sees_orgwide(db, test_org, default_stage):
 
 @pytest.mark.asyncio
 async def test_attention_unreached_excludes_recent_updates(db, test_org, default_stage):
-    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+    async with role_client(db, test_org, Role.ADMIN) as (client, user):
         now = datetime.now(timezone.utc)
         stale = Surrogate(
             id=uuid.uuid4(),
@@ -279,7 +279,7 @@ async def test_attention_unreached_excludes_recent_updates(db, test_org, default
 
 @pytest.mark.asyncio
 async def test_attention_unreached_excludes_recent_activity_logs(db, test_org, default_stage):
-    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+    async with role_client(db, test_org, Role.ADMIN) as (client, user):
         now = datetime.now(timezone.utc)
         stale = Surrogate(
             id=uuid.uuid4(),
@@ -335,8 +335,8 @@ async def test_attention_unreached_excludes_recent_activity_logs(db, test_org, d
 
 
 @pytest.mark.asyncio
-async def test_attention_assignee_filter_requires_admin(db, test_org, default_stage):
-    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, _user):
+async def test_attention_assignee_filter_blocks_ungranted_intake(db, test_org, default_stage):
+    async with role_client(db, test_org, Role.INTAKE_SPECIALIST) as (client, _user):
         other_user = User(
             id=uuid.uuid4(),
             email=f"other-{uuid.uuid4().hex[:8]}@test.com",
@@ -401,7 +401,7 @@ async def test_attention_assignee_filter_admin(db, test_org, default_stage):
 
 @pytest.mark.asyncio
 async def test_attention_stuck_includes_no_history(db, test_org, default_stage):
-    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+    async with role_client(db, test_org, Role.ADMIN) as (client, user):
         now = datetime.now(timezone.utc)
         stuck = Surrogate(
             id=uuid.uuid4(),
@@ -521,7 +521,7 @@ async def test_attention_stuck_excludes_post_approval_stages_but_keeps_approved(
 async def test_attention_stuck_excludes_terminal_and_paused_stage_keys_even_with_legacy_types(
     db, test_org, default_stage
 ):
-    async with role_client(db, test_org, Role.CASE_MANAGER) as (client, user):
+    async with role_client(db, test_org, Role.ADMIN) as (client, user):
         legacy_excluded_stages = [
             PipelineStage(
                 id=uuid.uuid4(),

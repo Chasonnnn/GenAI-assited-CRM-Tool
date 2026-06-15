@@ -116,6 +116,7 @@ def test_search_service_helpers():
     assert search_service._can_view_post_approval(perms) is False
 
     developer_filter = search_service._build_surrogate_access_filter(
+        org_id=uuid4(),
         role=Role.DEVELOPER.value,
         user_id=uuid4(),
         can_view_post_approval=True,

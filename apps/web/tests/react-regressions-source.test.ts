@@ -263,6 +263,26 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("export default SurrogatesPageClient")
     })
 
+    it("limits intake assignee filters to accessible owner pools", () => {
+        const source = readSource("app/(app)/surrogates/page.client.tsx")
+
+        expect(source).toContain("useAccessibleSurrogateOwners")
+        expect(source).toContain("const canUseIntakePoolFilter = user?.role === \"intake_specialist\"")
+        expect(source).toContain("const assigneeFilterOptions = canUseOrgAssigneeFilter")
+        expect(source).toContain("getAssigneeFilterLabel(value, assigneeFilterOptions)")
+        expect(source).not.toContain("getAssigneeFilterLabel(ownerFilter, assignees)")
+    })
+
+    it("keeps intake pool grants separate from permission overrides in team settings", () => {
+        const source = readSource("app/(app)/settings/team/members/[id]/page.client.tsx")
+
+        expect(source).toContain("useIntakePoolGrants")
+        expect(source).toContain("useCreateIntakePoolGrant")
+        expect(source).toContain("useRevokeIntakePoolGrant")
+        expect(source).toContain("Intake Pool Access")
+        expect(source).toContain("currentRole === \"intake_specialist\"")
+    })
+
     it("keeps test-only factories and interview internals private", () => {
         const handlersSource = readSource("tests/mocks/handlers.ts")
         const interviewWrapperSource = readSource("components/surrogates/interviews/SurrogateInterviewTab.tsx")

@@ -2888,6 +2888,22 @@
       "422"
     ]
   },
+  "/settings/permissions/intake-pool-grants": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/settings/permissions/intake-pool-grants/{grant_id}": {
+    "DELETE": [
+      "200",
+      "422"
+    ]
+  },
   "/settings/permissions/members": {
     "GET": [
       "200"
@@ -3075,6 +3091,11 @@
     "POST": [
       "201",
       "422"
+    ]
+  },
+  "/surrogates/accessible-owners": {
+    "GET": [
+      "200"
     ]
   },
   "/surrogates/assignees": {
