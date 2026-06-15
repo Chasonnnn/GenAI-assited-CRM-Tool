@@ -1,5 +1,5 @@
 import React from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import EmbedFormPageClient from "../app/embed/forms/[slug]/page.client"
@@ -69,8 +69,18 @@ const embedForm = {
     embed_theme_json: {},
 }
 
+let addEventListenerSpy: ReturnType<typeof vi.spyOn> | null = null
+
+async function waitForEmbedMessageListener() {
+    await waitFor(() => {
+        expect(addEventListenerSpy?.mock.calls.some(([eventName]) => eventName === "message")).toBe(true)
+    })
+}
+
 describe("EmbedFormPageClient", () => {
     beforeEach(() => {
+        addEventListenerSpy?.mockRestore()
+        addEventListenerSpy = vi.spyOn(window, "addEventListener")
         vi.clearAllMocks()
         window.history.replaceState(null, "", "?parent_origin=https%3A%2F%2Fwww.ewisurrogacy.com")
         getEmbedPublicForm.mockResolvedValue(embedForm)
@@ -87,6 +97,11 @@ describe("EmbedFormPageClient", () => {
         })
     })
 
+    afterEach(() => {
+        addEventListenerSpy?.mockRestore()
+        addEventListenerSpy = null
+    })
+
     it("loads via parent origin, creates a sanitized embed session, and submits lead answers", async () => {
         render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
 
@@ -97,6 +112,7 @@ describe("EmbedFormPageClient", () => {
         expect(getEmbedPublicForm).toHaveBeenCalledWith("lead-form", "https://www.ewisurrogacy.com")
         expect(screen.getByRole("main")).toHaveClass("max-w-[760px]", "py-4")
         expect(screen.getByLabelText(/full name/i)).toHaveClass("h-10")
+        await waitForEmbedMessageListener()
 
         window.dispatchEvent(
             new MessageEvent("message", {
@@ -149,6 +165,7 @@ describe("EmbedFormPageClient", () => {
         render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
 
         expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
 
         const initMessage = new MessageEvent("message", {
             origin: "https://www.ewisurrogacy.com",
