@@ -514,7 +514,7 @@ function WorkflowTemplateHeader({
         <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="icon" aria-label="Back to workflow templates" onClick={onBack}>
-                    <ArrowLeftIcon className="size-5" />
+                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
                 </Button>
                 <Input
                     id="workflow-name"
@@ -1157,7 +1157,7 @@ function WorkflowTemplateConditionRow({
                         onChange={(value) => updateCondition(index, { value })}
                     />
                     <Button size="icon" variant="ghost" aria-label="Remove condition" onClick={() => removeCondition(index)}>
-                        <XIcon className="size-4" />
+                        <XIcon className="size-4" aria-hidden="true" />
                     </Button>
                 </div>
             </CardContent>
@@ -1861,7 +1861,7 @@ function WorkflowTemplateActionCard({
                         </SelectContent>
                     </Select>
                     <Button size="icon" variant="ghost" aria-label="Remove action" onClick={() => removeAction(index)}>
-                        <XIcon className="size-4" />
+                        <XIcon className="size-4" aria-hidden="true" />
                     </Button>
                 </div>
 

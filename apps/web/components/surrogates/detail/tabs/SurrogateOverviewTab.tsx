@@ -343,7 +343,7 @@ function InlineSelectField({
                         disabled={isSaving}
                         aria-label={`Save ${label}`}
                     >
-                        <CheckIcon className="size-3 text-green-600" />
+                        <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                     </Button>
                 )}
                 <Button
@@ -355,7 +355,7 @@ function InlineSelectField({
                     disabled={isSaving}
                     aria-label={`Cancel ${label}`}
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -524,7 +524,7 @@ function InlineHeightField({
                     disabled={isSaving}
                     aria-label="Save Height"
                 >
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -535,7 +535,7 @@ function InlineHeightField({
                     disabled={isSaving}
                     aria-label="Cancel Height"
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -658,7 +658,7 @@ function InlineRaceField({
                     disabled={isSaving}
                     aria-label={`Save ${fieldLabel}`}
                 >
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -669,7 +669,7 @@ function InlineRaceField({
                     disabled={isSaving}
                     aria-label={`Cancel ${fieldLabel}`}
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}
@@ -794,7 +794,7 @@ function InlineWeightField({
                     disabled={isSaving}
                     aria-label="Save Weight"
                 >
-                    <CheckIcon className="size-3 text-green-600" />
+                    <CheckIcon className="size-3 text-green-600" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -805,7 +805,7 @@ function InlineWeightField({
                     disabled={isSaving}
                     aria-label="Cancel Weight"
                 >
-                    <XIcon className="size-3 text-destructive" />
+                    <XIcon className="size-3 text-destructive" aria-hidden="true" />
                 </Button>
             </div>
             {error && <p className="text-xs text-destructive">{error}</p>}

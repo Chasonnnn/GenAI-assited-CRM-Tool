@@ -435,7 +435,7 @@ export default function FormsListPage() {
                                                                         aria-label={`Open menu for ${form.name}`}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                     >
-                                                                        <MoreVerticalIcon className="size-4" />
+                                                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                                                     </Button>
                                                                 }
                                                             />
@@ -552,7 +552,7 @@ export default function FormsListPage() {
                                                                             className="size-8"
                                                                             aria-label={`Open menu for template ${template.name}`}
                                                                         >
-                                                                            <MoreVerticalIcon className="size-4" />
+                                                                            <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                                                         </Button>
                                                                     }
                                                                 />

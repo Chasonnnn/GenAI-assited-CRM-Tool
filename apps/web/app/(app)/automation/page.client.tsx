@@ -1476,7 +1476,7 @@ export default function AutomationPageClient({
                                                                 className="size-8"
                                                                 aria-label={`Actions for workflow ${workflow.name}`}
                                                             >
-                                                                <MoreVerticalIcon className="size-4" />
+                                                                <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                                             </Button>
                                                         }
                                                     />

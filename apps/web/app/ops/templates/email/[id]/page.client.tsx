@@ -946,7 +946,7 @@ function TemplatePageHeader({
         <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="icon" aria-label="Back to email templates" onClick={onBack}>
-                    <ArrowLeftIcon className="size-5" />
+                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
                 </Button>
                 <Input
                     id="template-name"

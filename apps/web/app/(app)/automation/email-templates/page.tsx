@@ -452,7 +452,7 @@ function TemplateCard({
                                         className="size-8 shrink-0"
                                         aria-label={`Actions for ${template.name}`}
                                     >
-                                        <MoreVerticalIcon className="size-4" />
+                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                     </Button>
                                 }
                             />

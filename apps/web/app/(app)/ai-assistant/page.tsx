@@ -892,7 +892,7 @@ export default function AIAssistantPage() {
                                     variant="outline"
                                     aria-label="Stop generating"
                                 >
-                                    <StopCircleIcon className="size-4" />
+                                    <StopCircleIcon className="size-4" aria-hidden="true" />
                                 </Button>
                             ) : (
                                 <Button
@@ -901,7 +901,7 @@ export default function AIAssistantPage() {
                                     disabled={!message.trim() || !isAIEnabled}
                                     aria-label="Send message"
                                 >
-                                    <SendIcon className="size-4" />
+                                    <SendIcon className="size-4" aria-hidden="true" />
                                 </Button>
                             )}
                         </div>
