@@ -286,6 +286,7 @@ def list_my_sessions(
     "/me/sessions/{session_id}",
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.exempt
 def revoke_session(
     session_id: UUIDType,
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
@@ -321,6 +322,7 @@ def revoke_session(
     "/me/sessions",
     dependencies=[Depends(require_csrf_header)],
 )
+@limiter.exempt
 def revoke_all_sessions(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
