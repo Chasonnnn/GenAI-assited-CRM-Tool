@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
@@ -132,57 +132,100 @@ def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
 
 def _ensure_empty_org(db: Session, org_id: UUID) -> None:
     checks = {
-        "surrogates": db.query(Surrogate).filter(Surrogate.organization_id == org_id).count(),
-        "forms": db.query(Form).filter(Form.organization_id == org_id).count(),
-        "form_logos": db.query(FormLogo).filter(FormLogo.organization_id == org_id).count(),
-        "form_field_mappings": db.query(FormFieldMapping)
-        .join(Form, FormFieldMapping.form_id == Form.id)
-        .filter(Form.organization_id == org_id)
-        .count(),
-        "appointment_types": db.query(AppointmentType)
-        .filter(AppointmentType.organization_id == org_id)
-        .count(),
-        "availability_rules": db.query(AvailabilityRule)
-        .filter(AvailabilityRule.organization_id == org_id)
-        .count(),
-        "availability_overrides": db.query(AvailabilityOverride)
-        .filter(AvailabilityOverride.organization_id == org_id)
-        .count(),
-        "booking_links": db.query(BookingLink)
-        .filter(BookingLink.organization_id == org_id)
-        .count(),
-        "pipelines": db.query(Pipeline).filter(Pipeline.organization_id == org_id).count(),
-        "pipeline_stages": db.query(PipelineStage)
-        .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
-        .filter(Pipeline.organization_id == org_id)
-        .count(),
-        "workflows": db.query(AutomationWorkflow)
-        .filter(AutomationWorkflow.organization_id == org_id)
-        .count(),
-        "workflow_templates": db.query(WorkflowTemplate)
-        .filter(WorkflowTemplate.organization_id == org_id)
-        .count(),
-        "email_templates": db.query(EmailTemplate)
-        .filter(EmailTemplate.organization_id == org_id)
-        .count(),
-        "meta_leads": db.query(MetaLead).filter(MetaLead.organization_id == org_id).count(),
-        "queues": db.query(Queue).filter(Queue.organization_id == org_id).count(),
-        "queue_members": db.query(QueueMember)
-        .join(Queue, QueueMember.queue_id == Queue.id)
-        .filter(Queue.organization_id == org_id)
-        .count(),
-        "notification_settings": db.query(UserNotificationSettings)
-        .filter(UserNotificationSettings.organization_id == org_id)
-        .count(),
-        "integrations": db.query(UserIntegration)
-        .join(User, UserIntegration.user_id == User.id)
-        .join(Membership, Membership.user_id == User.id)
-        .filter(Membership.organization_id == org_id)
-        .count(),
-        "ai_settings": db.query(AISettings).filter(AISettings.organization_id == org_id).count(),
-        "meta_pages": db.query(MetaPageMapping)
-        .filter(MetaPageMapping.organization_id == org_id)
-        .count(),
+        "surrogates": db.scalar(
+            select(func.count(Surrogate.id)).where(Surrogate.organization_id == org_id)
+        )
+        or 0,
+        "forms": db.scalar(select(func.count(Form.id)).where(Form.organization_id == org_id)) or 0,
+        "form_logos": db.scalar(
+            select(func.count(FormLogo.id)).where(FormLogo.organization_id == org_id)
+        )
+        or 0,
+        "form_field_mappings": db.scalar(
+            select(func.count(FormFieldMapping.id))
+            .join(Form, FormFieldMapping.form_id == Form.id)
+            .where(Form.organization_id == org_id)
+        )
+        or 0,
+        "appointment_types": db.scalar(
+            select(func.count(AppointmentType.id)).where(AppointmentType.organization_id == org_id)
+        )
+        or 0,
+        "availability_rules": db.scalar(
+            select(func.count(AvailabilityRule.id)).where(
+                AvailabilityRule.organization_id == org_id
+            )
+        )
+        or 0,
+        "availability_overrides": db.scalar(
+            select(func.count(AvailabilityOverride.id)).where(
+                AvailabilityOverride.organization_id == org_id
+            )
+        )
+        or 0,
+        "booking_links": db.scalar(
+            select(func.count(BookingLink.id)).where(BookingLink.organization_id == org_id)
+        )
+        or 0,
+        "pipelines": db.scalar(
+            select(func.count(Pipeline.id)).where(Pipeline.organization_id == org_id)
+        )
+        or 0,
+        "pipeline_stages": db.scalar(
+            select(func.count(PipelineStage.id))
+            .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
+            .where(Pipeline.organization_id == org_id)
+        )
+        or 0,
+        "workflows": db.scalar(
+            select(func.count(AutomationWorkflow.id)).where(
+                AutomationWorkflow.organization_id == org_id
+            )
+        )
+        or 0,
+        "workflow_templates": db.scalar(
+            select(func.count(WorkflowTemplate.id)).where(
+                WorkflowTemplate.organization_id == org_id
+            )
+        )
+        or 0,
+        "email_templates": db.scalar(
+            select(func.count(EmailTemplate.id)).where(EmailTemplate.organization_id == org_id)
+        )
+        or 0,
+        "meta_leads": db.scalar(
+            select(func.count(MetaLead.id)).where(MetaLead.organization_id == org_id)
+        )
+        or 0,
+        "queues": db.scalar(select(func.count(Queue.id)).where(Queue.organization_id == org_id))
+        or 0,
+        "queue_members": db.scalar(
+            select(func.count(QueueMember.id))
+            .join(Queue, QueueMember.queue_id == Queue.id)
+            .where(Queue.organization_id == org_id)
+        )
+        or 0,
+        "notification_settings": db.scalar(
+            select(func.count(UserNotificationSettings.id)).where(
+                UserNotificationSettings.organization_id == org_id
+            )
+        )
+        or 0,
+        "integrations": db.scalar(
+            select(func.count(UserIntegration.id))
+            .join(User, UserIntegration.user_id == User.id)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.organization_id == org_id)
+        )
+        or 0,
+        "ai_settings": db.scalar(
+            select(func.count(AISettings.id)).where(AISettings.organization_id == org_id)
+        )
+        or 0,
+        "meta_pages": db.scalar(
+            select(func.count(MetaPageMapping.id)).where(MetaPageMapping.organization_id == org_id)
+        )
+        or 0,
     }
 
     blocking = {key: value for key, value in checks.items() if value}

@@ -1,0 +1,3 @@
+## 2024-06-20 - Performance: Replace query.count() with select(func.count())
+**Learning:** Performing count queries in SQLAlchemy via `db.query(Model).filter(...).count()` generates inefficient subqueries (e.g., `SELECT count(*) FROM (SELECT ...)`). Using `db.scalar(select(func.count(Model.id)).where(...))` produces a direct, optimized aggregate count, significantly reducing database CPU load and query execution time.
+**Action:** Always prefer `db.scalar(select(func.count(Model.id)).where(...))` for simple count queries, especially in loops, mass calculations, or where many aggregate counts are generated together.
