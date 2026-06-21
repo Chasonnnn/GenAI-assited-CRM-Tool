@@ -132,80 +132,66 @@ def _load_json(archive: zipfile.ZipFile, name: str, default: Any) -> Any:
 
 def _ensure_empty_org(db: Session, org_id: UUID) -> None:
     checks = {
-        "surrogates": db.scalar(
-            select(func.count(Surrogate.id)).where(Surrogate.organization_id == org_id)
-        ),
-        "forms": db.scalar(select(func.count(Form.id)).where(Form.organization_id == org_id)),
-        "form_logos": db.scalar(
-            select(func.count(FormLogo.id)).where(FormLogo.organization_id == org_id)
-        ),
+        "surrogates": db.scalar(select(func.count(1)).where(Surrogate.organization_id == org_id)),
+        "forms": db.scalar(select(func.count(1)).where(Form.organization_id == org_id)),
+        "form_logos": db.scalar(select(func.count(1)).where(FormLogo.organization_id == org_id)),
         "form_field_mappings": db.scalar(
             select(func.count(FormFieldMapping.id))
+            .select_from(FormFieldMapping)
             .join(Form, FormFieldMapping.form_id == Form.id)
             .where(Form.organization_id == org_id)
         ),
         "appointment_types": db.scalar(
-            select(func.count(AppointmentType.id)).where(AppointmentType.organization_id == org_id)
+            select(func.count(1)).where(AppointmentType.organization_id == org_id)
         ),
         "availability_rules": db.scalar(
-            select(func.count(AvailabilityRule.id)).where(
-                AvailabilityRule.organization_id == org_id
-            )
+            select(func.count(1)).where(AvailabilityRule.organization_id == org_id)
         ),
         "availability_overrides": db.scalar(
-            select(func.count(AvailabilityOverride.id)).where(
-                AvailabilityOverride.organization_id == org_id
-            )
+            select(func.count(1)).where(AvailabilityOverride.organization_id == org_id)
         ),
         "booking_links": db.scalar(
-            select(func.count(BookingLink.id)).where(BookingLink.organization_id == org_id)
+            select(func.count(1)).where(BookingLink.organization_id == org_id)
         ),
-        "pipelines": db.scalar(
-            select(func.count(Pipeline.id)).where(Pipeline.organization_id == org_id)
-        ),
+        "pipelines": db.scalar(select(func.count(1)).where(Pipeline.organization_id == org_id)),
         "pipeline_stages": db.scalar(
             select(func.count(PipelineStage.id))
+            .select_from(PipelineStage)
             .join(Pipeline, PipelineStage.pipeline_id == Pipeline.id)
             .where(Pipeline.organization_id == org_id)
         ),
         "workflows": db.scalar(
-            select(func.count(AutomationWorkflow.id)).where(
-                AutomationWorkflow.organization_id == org_id
-            )
+            select(func.count(1)).where(AutomationWorkflow.organization_id == org_id)
         ),
         "workflow_templates": db.scalar(
-            select(func.count(WorkflowTemplate.id)).where(
-                WorkflowTemplate.organization_id == org_id
-            )
+            select(func.count(1)).where(WorkflowTemplate.organization_id == org_id)
         ),
         "email_templates": db.scalar(
-            select(func.count(EmailTemplate.id)).where(EmailTemplate.organization_id == org_id)
+            select(func.count(1)).where(EmailTemplate.organization_id == org_id)
         ),
-        "meta_leads": db.scalar(
-            select(func.count(MetaLead.id)).where(MetaLead.organization_id == org_id)
-        ),
-        "queues": db.scalar(select(func.count(Queue.id)).where(Queue.organization_id == org_id)),
+        "meta_leads": db.scalar(select(func.count(1)).where(MetaLead.organization_id == org_id)),
+        "queues": db.scalar(select(func.count(1)).where(Queue.organization_id == org_id)),
         "queue_members": db.scalar(
             select(func.count(QueueMember.id))
+            .select_from(QueueMember)
             .join(Queue, QueueMember.queue_id == Queue.id)
             .where(Queue.organization_id == org_id)
         ),
         "notification_settings": db.scalar(
-            select(func.count(UserNotificationSettings.id)).where(
+            select(func.count(UserNotificationSettings.user_id)).where(
                 UserNotificationSettings.organization_id == org_id
             )
         ),
         "integrations": db.scalar(
             select(func.count(UserIntegration.id))
+            .select_from(UserIntegration)
             .join(User, UserIntegration.user_id == User.id)
             .join(Membership, Membership.user_id == User.id)
             .where(Membership.organization_id == org_id)
         ),
-        "ai_settings": db.scalar(
-            select(func.count(AISettings.id)).where(AISettings.organization_id == org_id)
-        ),
+        "ai_settings": db.scalar(select(func.count(1)).where(AISettings.organization_id == org_id)),
         "meta_pages": db.scalar(
-            select(func.count(MetaPageMapping.id)).where(MetaPageMapping.organization_id == org_id)
+            select(func.count(1)).where(MetaPageMapping.organization_id == org_id)
         ),
     }
 
@@ -807,7 +793,7 @@ def import_org_config_zip(db: Session, org_id: UUID, content: bytes) -> dict[str
 
 
 def import_surrogates_csv(db: Session, org_id: UUID, content: bytes) -> int:
-    if db.scalar(select(func.count(Surrogate.id)).where(Surrogate.organization_id == org_id)):
+    if db.scalar(select(func.count(1)).where(Surrogate.organization_id == org_id)):
         raise ValueError("Organization already has surrogates; import requires an empty org.")
     text_content = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text_content))
