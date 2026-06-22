@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.37](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.36...surrogacy-crm-platform-v0.91.37) (2026-06-22)
+
+
+### Bug Fixes
+
+* clean up deprovisioned user integrations ([7e3f330](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7e3f330faa6ef8949c551c088e1818c2417ff7dd))
+* harden auth revocation and import counts ([a203013](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a2030134f3814ef2c5208537f2a57d516a3711c7))
+* publish lead capture forms with default links ([ea42a37](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ea42a37ba23f346fd36bfb9c765e80262ff7cd64))
+* resolve frontend audit and compiler warnings ([5d0d0bd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d0d0bd6b0ec07e8c7e6511d6bc8d47edee8a031))
+* restore CI form publish expectations ([3dadbd9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3dadbd9e1d54ce50702f0a429d0cd115ebbb81f7))
+* update audited backend dependency pins ([09735f0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/09735f025940fe281deed9db1e52acc3cbb4c952))
+* update audited frontend dependency pins ([e040dfe](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e040dfe32936bab9bfa7d2e98c64bec330ed2cf0))
+
 ## [0.91.36](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.35...surrogacy-crm-platform-v0.91.36) (2026-06-15)
 
 
