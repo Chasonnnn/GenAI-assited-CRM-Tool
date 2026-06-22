@@ -28,9 +28,11 @@ from app.db.models import (
     OrgCounter,
     Surrogate,
     User,
+    UserNotificationSettings,
     WorkflowTemplate,
 )
 from app.main import app
+from app.services.admin_import_service import _ensure_empty_org
 
 
 @pytest.fixture(scope="function")
@@ -113,6 +115,23 @@ def _build_surrogates_csv(rows: list[dict]) -> bytes:
 
 
 class TestAdminImports:
+    def test_ensure_empty_org_counts_notification_settings_without_id(
+        self,
+        db,
+        test_org,
+        test_user,
+    ):
+        db.add(
+            UserNotificationSettings(
+                user_id=test_user.id,
+                organization_id=test_org.id,
+            )
+        )
+        db.commit()
+
+        with pytest.raises(ValueError, match="notification_settings"):
+            _ensure_empty_org(db, test_org.id)
+
     @pytest.mark.asyncio
     async def test_import_config_requires_developer(self, non_dev_client):
         zip_bytes = _build_config_zip({"organization.json": {}})

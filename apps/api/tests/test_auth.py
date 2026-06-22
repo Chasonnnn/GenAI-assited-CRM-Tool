@@ -49,6 +49,16 @@ def test_auth_error_response_clears_account_hint_without_selected_email():
     assert cookies[AUTH_ERROR_ACCOUNT_HINT_COOKIE]["max-age"] == "0"
 
 
+def test_session_revocation_routes_are_rate_limit_exempt():
+    from app.core.rate_limit import limiter
+
+    exempt_routes = getattr(limiter, "_exempt_routes", set())
+
+    assert "app.routers.auth.revoke_session" in exempt_routes
+    assert "app.routers.auth.revoke_all_sessions" in exempt_routes
+    assert "app.routers.auth.logout" not in exempt_routes
+
+
 def _response_cookies(response) -> SimpleCookie:
     cookies = SimpleCookie()
     for key, value in response.raw_headers:
