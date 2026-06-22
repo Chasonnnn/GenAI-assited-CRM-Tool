@@ -248,6 +248,7 @@ def ensure_default_intake_link(
         expires_at=None,
         max_submissions=None,
         utm_defaults=None,
+        tracking_mode=DEFAULT_SHARED_INTAKE_TRACKING_MODE,
     )
 
 

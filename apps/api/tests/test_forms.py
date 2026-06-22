@@ -277,6 +277,75 @@ async def test_publish_form_auto_generates_default_shared_intake_link(authed_cli
 
 
 @pytest.mark.asyncio
+async def test_publish_lead_capture_form_with_sensitive_fields_uses_internal_default_link(
+    authed_client, db, test_org
+):
+    schema = {
+        "pages": [
+            {
+                "title": "Pre-questionnaire",
+                "fields": [
+                    {
+                        "key": "email",
+                        "label": "Email",
+                        "type": "email",
+                        "required": True,
+                        "sensitivity": "contact",
+                    },
+                    {
+                        "key": "full_name",
+                        "label": "Full name",
+                        "type": "text",
+                        "required": True,
+                        "sensitivity": "identity",
+                    },
+                    {
+                        "key": "phone",
+                        "label": "Phone number",
+                        "type": "phone",
+                        "required": True,
+                        "sensitivity": "contact",
+                    },
+                    {
+                        "key": "height_ft",
+                        "label": "Height",
+                        "type": "number",
+                        "required": True,
+                        "sensitivity": "sensitive_health",
+                    },
+                ],
+            }
+        ]
+    }
+
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Lead Capture With Sensitive Fields",
+            "purpose": "lead_capture",
+            "form_schema": schema,
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+    form_uuid = uuid.UUID(form_id)
+
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    links = (
+        db.query(FormIntakeLink)
+        .filter(
+            FormIntakeLink.organization_id == test_org.id,
+            FormIntakeLink.form_id == form_uuid,
+        )
+        .all()
+    )
+    assert len(links) == 1
+    assert links[0].tracking_mode == "internal_only"
+
+
+@pytest.mark.asyncio
 async def test_publish_form_auto_provisions_default_intake_routing_workflow(
     authed_client, db, test_org, test_user
 ):
