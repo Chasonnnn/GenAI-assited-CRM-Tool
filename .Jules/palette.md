@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## $(date +%Y-%m-%d) - Redundant Announcements on Action Triggers
+**Learning:** Decorative or illustrative icons (like `MoreVerticalIcon` and `UserPlusIcon`) inside a trigger element (like a `DropdownMenuTrigger`) that already has an explicit `aria-label` will cause screen readers to announce them twice or read confusing text if not hidden.
+**Action:** Always add `aria-hidden="true"` to SVG icons that provide purely visual cues within a button/trigger that already has an `aria-label` or clear text content.
