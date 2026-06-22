@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -83,13 +83,17 @@ export default function ComplianceSettingsPage() {
 
     useEffect(() => {
         if (!policies) return
-        setPolicyEdits((prev) => (Object.keys(prev).length ? prev : { ...policyMap }))
+        startTransition(() => {
+            setPolicyEdits((prev) => (Object.keys(prev).length ? prev : { ...policyMap }))
+        })
     }, [policies, policyMap])
 
     useEffect(() => {
         if (!legalHolds?.pages) return
         if (holdsPage > legalHolds.pages) {
-            setHoldsPage(legalHolds.pages)
+            startTransition(() => {
+                setHoldsPage(legalHolds.pages)
+            })
         }
     }, [holdsPage, legalHolds?.pages])
 

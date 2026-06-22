@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -127,10 +127,12 @@ export default function MetaFormMappingPage() {
         })
 
         const touched = new Set<string>(rules.map((rule) => rule.csv_column))
-        setTouchedColumns(touched)
         const behavior = data.unknown_column_behavior || "metadata"
-        setUnknownColumnBehavior(behavior)
-        setMappings(applyUnknownColumnBehavior(merged, behavior, touched))
+        startTransition(() => {
+            setTouchedColumns(touched)
+            setUnknownColumnBehavior(behavior)
+            setMappings(applyUnknownColumnBehavior(merged, behavior, touched))
+        })
     }, [data])
 
     const updateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => {

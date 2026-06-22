@@ -59,7 +59,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    const connect = useCallback(() => {
+    const connect = useCallback(function connectSocket() {
         if (!user || !enabled) return
 
         const existing = wsRef.current
@@ -128,7 +128,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
                 if (manualCloseRef.current) {
                     manualCloseRef.current = false
-                    connect()
+                    connectSocket()
                     return
                 }
 
@@ -138,7 +138,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                     reconnectAttempts.current++
 
                     reconnectTimeout.current = setTimeout(() => {
-                        connect()
+                        connectSocket()
                     }, delay)
                 }
             }

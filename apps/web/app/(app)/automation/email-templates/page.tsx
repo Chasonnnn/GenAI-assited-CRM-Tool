@@ -452,7 +452,7 @@ function TemplateCard({
                                         className="size-8 shrink-0"
                                         aria-label={`Actions for ${template.name}`}
                                     >
-                                        <MoreVerticalIcon className="size-4" />
+                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                     </Button>
                                 }
                             />
@@ -655,7 +655,9 @@ export default function EmailTemplatesPage() {
 
     useEffect(() => {
         if (!showPreview) {
-            setLibraryPreviewId(null)
+            React.startTransition(() => {
+                setLibraryPreviewId(null)
+            })
         }
     }, [showPreview])
 
@@ -773,7 +775,9 @@ export default function EmailTemplatesPage() {
     useEffect(() => {
         if (!testSendOpen) return
         if (!testSendToEmail.trim() && user?.email) {
-            setTestSendToEmail(user.email)
+            React.startTransition(() => {
+                setTestSendToEmail(user.email)
+            })
         }
     }, [testSendOpen, testSendToEmail, user?.email])
 
@@ -783,13 +787,15 @@ export default function EmailTemplatesPage() {
         if (testSendEditableVariables.length === 0) return
 
         // Initialize defaults once per dialog open.
-        setTestSendVariables((prev) => {
-            if (Object.keys(prev).length > 0) return prev
-            const next: Record<string, string> = {}
-            for (const variableName of testSendEditableVariables) {
-                next[variableName] = buildTestVariableSample(variableName)
-            }
-            return next
+        React.startTransition(() => {
+            setTestSendVariables((prev) => {
+                if (Object.keys(prev).length > 0) return prev
+                const next: Record<string, string> = {}
+                for (const variableName of testSendEditableVariables) {
+                    next[variableName] = buildTestVariableSample(variableName)
+                }
+                return next
+            })
         })
     }, [buildTestVariableSample, testSendEditableVariables, testSendOpen, testSendTemplateDetail])
 
@@ -856,12 +862,14 @@ export default function EmailTemplatesPage() {
     // Load signature data on mount
     useEffect(() => {
         if (signatureData) {
-            setSignatureName(signatureData.signature_name || "")
-            setSignatureTitle(signatureData.signature_title || "")
-            setSignaturePhone(signatureData.signature_phone || "")
-            setSignatureLinkedin(signatureData.signature_linkedin || "")
-            setSignatureTwitter(signatureData.signature_twitter || "")
-            setSignatureInstagram(signatureData.signature_instagram || "")
+            React.startTransition(() => {
+                setSignatureName(signatureData.signature_name || "")
+                setSignatureTitle(signatureData.signature_title || "")
+                setSignaturePhone(signatureData.signature_phone || "")
+                setSignatureLinkedin(signatureData.signature_linkedin || "")
+                setSignatureTwitter(signatureData.signature_twitter || "")
+                setSignatureInstagram(signatureData.signature_instagram || "")
+            })
         }
     }, [signatureData])
 
@@ -890,14 +898,16 @@ export default function EmailTemplatesPage() {
 
     useEffect(() => {
         if (!fullTemplate || !editingTemplate || !fullTemplate.body) return
-        if (!templateBody) {
-            setTemplateBody(fullTemplate.body)
-        }
-        if (!templateBodyModeTouched) {
-            const complex = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(fullTemplate.body)
-            setTemplateBodyMode(complex ? "html" : "visual")
-            setActiveInsertionTarget(null)
-        }
+        React.startTransition(() => {
+            if (!templateBody) {
+                setTemplateBody(fullTemplate.body)
+            }
+            if (!templateBodyModeTouched) {
+                const complex = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(fullTemplate.body)
+                setTemplateBodyMode(complex ? "html" : "visual")
+                setActiveInsertionTarget(null)
+            }
+        })
     }, [fullTemplate, editingTemplate, templateBody, templateBodyModeTouched])
 
     const handleSave = () => {
@@ -1026,12 +1036,12 @@ export default function EmailTemplatesPage() {
             return editingTemplate.scope
         }
         return templateScope
-    }, [editingTemplate?.scope, libraryPreviewId, templateScope])
+    }, [editingTemplate, libraryPreviewId, templateScope])
 
     const previewSubjectTemplate = React.useMemo(() => {
         if (libraryPreviewId && libraryTemplateDetail?.subject) return libraryTemplateDetail.subject
         return templateSubject
-    }, [libraryPreviewId, libraryTemplateDetail?.subject, templateSubject])
+    }, [libraryPreviewId, libraryTemplateDetail, templateSubject])
 
     const previewSubject = React.useMemo(
         () =>
@@ -1137,11 +1147,15 @@ export default function EmailTemplatesPage() {
 
         if (libraryPreviewId) {
             if (!libraryTemplateDetail) return
-            setPreviewHtml(buildPreviewHtml(libraryTemplateDetail.body))
+            React.startTransition(() => {
+                setPreviewHtml(buildPreviewHtml(libraryTemplateDetail.body))
+            })
             return
         }
 
-        setPreviewHtml(buildPreviewHtml(templateBody))
+        React.startTransition(() => {
+            setPreviewHtml(buildPreviewHtml(templateBody))
+        })
     }, [buildPreviewHtml, libraryPreviewId, libraryTemplateDetail, showPreview, templateBody])
 
     const handlePreview = () => {

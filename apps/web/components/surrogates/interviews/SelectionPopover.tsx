@@ -44,9 +44,11 @@ export function SelectionPopover({
     const containerRefRef = useRef(containerRef)
     const onSelectionStateChangeRef = useRef(onSelectionStateChange)
 
-    disabledRef.current = disabled
-    containerRefRef.current = containerRef
-    onSelectionStateChangeRef.current = onSelectionStateChange
+    useEffect(() => {
+        disabledRef.current = disabled
+        containerRefRef.current = containerRef
+        onSelectionStateChangeRef.current = onSelectionStateChange
+    }, [containerRef, disabled, onSelectionStateChange])
 
     const setSelectionActive = useCallback((active: boolean) => {
         if (selectionActiveRef.current === active) return
@@ -129,7 +131,9 @@ export function SelectionPopover({
     }, [setSelectionActive])
 
     const handleSelectionChangeRef = useRef(handleSelectionChange)
-    handleSelectionChangeRef.current = handleSelectionChange
+    useEffect(() => {
+        handleSelectionChangeRef.current = handleSelectionChange
+    }, [handleSelectionChange])
 
     // Listen for selection changes
     useEffect(() => {

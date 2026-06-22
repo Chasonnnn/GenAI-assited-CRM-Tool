@@ -58,7 +58,40 @@ describe("Dependency security guards", () => {
         const dompurifyVersion = packageJson.dependencies?.dompurify?.replace(/^[^\d]*/, "")
 
         expect(dompurifyVersion).toBeDefined()
-        expect(compareVersions(dompurifyVersion!, "3.4.6")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(dompurifyVersion!, "3.4.11")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins markdown-it to a non-vulnerable version", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const markdownItVersion = packageJson.dependencies?.["markdown-it"]?.replace(/^[^\d]*/, "")
+
+        expect(markdownItVersion).toBeDefined()
+        expect(compareVersions(markdownItVersion!, "14.2.0")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins js-yaml to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const jsYamlOverride = packageJson.pnpm?.overrides?.["js-yaml"]
+
+        expect(jsYamlOverride).toBeDefined()
+        expect(compareVersions(jsYamlOverride!, "4.2.0")).toBeGreaterThanOrEqual(0)
+    })
+
+    it("pins @babel/core to a non-vulnerable version in pnpm overrides", () => {
+        const packageJson = JSON.parse(
+            readFileSync(join(process.cwd(), "package.json"), "utf8"),
+        ) as PackageJson
+
+        const babelCoreOverride = packageJson.pnpm?.overrides?.["@babel/core"]
+
+        expect(babelCoreOverride).toBeDefined()
+        expect(compareVersions(babelCoreOverride!, "7.29.6")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins PostCSS to a non-vulnerable version in pnpm overrides", () => {
@@ -211,6 +244,62 @@ describe("Dependency security guards", () => {
 
         for (const resolvedVersion of resolvedVersions) {
             expect(compareVersions(resolvedVersion, "4.1.0")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable DOMPurify versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}dompurify@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "3.4.11")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable markdown-it versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}markdown-it@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "14.2.0")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable js-yaml versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}js-yaml@(\d+\.\d+\.\d+):/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "4.2.0")).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("resolves only non-vulnerable @babel/core versions in pnpm-lock.yaml", () => {
+        const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
+        const resolvedVersions = Array.from(
+            lockfile.matchAll(/^\s{2}'@babel\/core@(\d+\.\d+\.\d+)':/gm),
+            (match) => match[1],
+        )
+
+        expect(resolvedVersions.length).toBeGreaterThan(0)
+
+        for (const resolvedVersion of resolvedVersions) {
+            expect(compareVersions(resolvedVersion, "7.29.6")).toBeGreaterThanOrEqual(0)
         }
     })
 })

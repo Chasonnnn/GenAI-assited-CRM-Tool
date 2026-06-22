@@ -1429,20 +1429,20 @@ export function UnifiedCalendar({
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm">
                         <Button variant="ghost" size="sm" onClick={() => navigate("prev")} aria-label="Previous period">
-                            <ChevronLeftIcon className="size-4" />
+                            <ChevronLeftIcon className="size-4" aria-hidden="true" />
                         </Button>
                         <div className="min-w-[160px] px-2 text-center sm:min-w-[200px]">
                             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                                 Calendar
                             </p>
-                            <h2 className="truncate text-lg font-semibold">
+                            <h2 className="truncate text-lg font-semibold" aria-live="polite">
                                 {viewType === "month" && format(currentDate, "MMMM yyyy")}
                                 {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
                                 {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
                             </h2>
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => navigate("next")} aria-label="Next period">
-                            <ChevronRightIcon className="size-4" />
+                            <ChevronRightIcon className="size-4" aria-hidden="true" />
                         </Button>
                     </div>
                     <Button variant="outline" size="sm" onClick={handleTodayClick}>

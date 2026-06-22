@@ -167,14 +167,12 @@ function escapeHtml(raw: string): string {
 }
 
 function HighlightedTemplateText({ text }: { text: string }) {
-    let offset = 0
+    const parts = text.split(TEMPLATE_HIGHLIGHT_RE).filter(Boolean)
 
     return (
         <>
-            {text.split(TEMPLATE_HIGHLIGHT_RE).map((part) => {
-                if (!part) return null
-                const key = `${offset}:${part}`
-                offset += part.length
+            {parts.map((part, index) => {
+                const key = `${index}:${part}`
                 const isVariable = /^\{\{[^}]+\}\}$/.test(part)
 
                 return isVariable ? (

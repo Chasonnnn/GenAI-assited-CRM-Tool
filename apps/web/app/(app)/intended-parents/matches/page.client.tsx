@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { startTransition, useState, useEffect, useCallback, useRef } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -117,8 +117,10 @@ export default function MatchesPage() {
         }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
-            setPage(1)
-            updateUrlParams(statusFilter, debouncedSearch, 1)
+            startTransition(() => {
+                setPage(1)
+                updateUrlParams(statusFilter, debouncedSearch, 1)
+            })
         }
     }, [debouncedSearch, searchParams, statusFilter, updateUrlParams])
 
@@ -126,20 +128,22 @@ export default function MatchesPage() {
         const nextStatus = searchParams.get("status") && (searchParams.get("status") === "all" || isMatchStatus(searchParams.get("status") as string))
             ? (searchParams.get("status") as MatchStatusFilter)
             : "all"
-        if (nextStatus !== statusFilter) {
-            setStatusFilter(nextStatus)
-        }
         const nextSearch = searchParams.get("q") || ""
-        if (nextSearch !== search) {
-            setSearch(nextSearch)
-        }
-        if (nextSearch !== debouncedSearch) {
-            setDebouncedSearch(nextSearch)
-        }
         const nextPage = parsePageParam(searchParams.get("page"))
-        if (nextPage !== page) {
-            setPage(nextPage)
-        }
+        startTransition(() => {
+            if (nextStatus !== statusFilter) {
+                setStatusFilter(nextStatus)
+            }
+            if (nextSearch !== search) {
+                setSearch(nextSearch)
+            }
+            if (nextSearch !== debouncedSearch) {
+                setDebouncedSearch(nextSearch)
+            }
+            if (nextPage !== page) {
+                setPage(nextPage)
+            }
+        })
     }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const filters = {

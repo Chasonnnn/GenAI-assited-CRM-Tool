@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useMemo, useState } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1563,12 +1563,14 @@ function StageEditor({
     const [expandedStageIds, setExpandedStageIds] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
-        setExpandedStageIds((current) => {
-            const next: Record<string, boolean> = {}
-            for (const stage of stages) {
-                next[stage.id] = current[stage.id] ?? false
-            }
-            return next
+        startTransition(() => {
+            setExpandedStageIds((current) => {
+                const next: Record<string, boolean> = {}
+                for (const stage of stages) {
+                    next[stage.id] = current[stage.id] ?? false
+                }
+                return next
+            })
         })
     }, [stages])
 
@@ -1656,12 +1658,14 @@ function JourneyMilestonesEditor({
     const [expandedMilestones, setExpandedMilestones] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
-        setExpandedMilestones((current) => {
-            const next: Record<string, boolean> = {}
-            for (const milestone of featureConfig.journey.milestones) {
-                next[milestone.slug] = current[milestone.slug] ?? false
-            }
-            return next
+        startTransition(() => {
+            setExpandedMilestones((current) => {
+                const next: Record<string, boolean> = {}
+                for (const milestone of featureConfig.journey.milestones) {
+                    next[milestone.slug] = current[milestone.slug] ?? false
+                }
+                return next
+            })
         })
     }, [featureConfig.journey.milestones])
 
@@ -2362,7 +2366,7 @@ function usePipelineSettingsEditor() {
                 ? { expected_version: pipeline.current_version }
                 : {}),
         }
-    }, [baselineDraftFingerprint, debouncedDraft, debouncedDraftFingerprint, pipeline?.current_version])
+    }, [baselineDraftFingerprint, debouncedDraft, debouncedDraftFingerprint, pipeline])
     const previewDraftFingerprint = useMemo(
         () => (previewDraftPayload ? JSON.stringify(previewDraftPayload) : ""),
         [previewDraftPayload],

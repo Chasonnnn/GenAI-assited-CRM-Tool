@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,15 +17,13 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default function OpsLoginPageClient() {
     const [isLoading, setIsLoading] = useState(false);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [errorMessage] = useState<string | null>(() => {
+        if (typeof window === 'undefined') return null;
+        const errorCode = new URLSearchParams(window.location.search).get('error');
+        return errorCode ? ERROR_MESSAGES[errorCode] || 'An error occurred.' : null;
+    });
 
     const apiBase = getAuthApiBase();
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const errorCode = new URLSearchParams(window.location.search).get('error');
-        setErrorMessage(errorCode ? ERROR_MESSAGES[errorCode] || 'An error occurred.' : null);
-    }, []);
 
     const handleGoogleLogin = () => {
         setIsLoading(true);

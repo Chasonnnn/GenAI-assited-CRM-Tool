@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useInterviewComments, getMinSidebarHeight } from "./context"
 
 export function ConnectorLines() {
@@ -10,6 +11,24 @@ export function ConnectorLines() {
         newComment,
         transcriptRef,
     } = useInterviewComments()
+    const [transcriptHeight, setTranscriptHeight] = useState(0)
+
+    useEffect(() => {
+        const transcript = transcriptRef.current
+        if (!transcript) return
+
+        const updateTranscriptHeight = () => {
+            setTranscriptHeight(transcript.scrollHeight)
+        }
+
+        updateTranscriptHeight()
+        const resizeObserver = new ResizeObserver(updateTranscriptHeight)
+        resizeObserver.observe(transcript)
+
+        return () => {
+            resizeObserver.disconnect()
+        }
+    }, [transcriptRef])
 
     // Only render when there's an active note or pending comment
     if (!activeNoteId && newComment.type !== "pending") {
@@ -48,7 +67,7 @@ export function ConnectorLines() {
                 width: "100%",
                 height: layoutMinHeight || Math.max(
                     getMinSidebarHeight(commentPositions),
-                    transcriptRef.current?.scrollHeight ?? 0
+                    transcriptHeight
                 ),
             }}
         >

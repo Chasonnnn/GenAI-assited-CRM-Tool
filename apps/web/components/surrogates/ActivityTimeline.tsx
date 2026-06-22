@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, startTransition, useEffect, useMemo, useRef, useState } from "react"
 import Link from "@/components/app-link"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
@@ -679,7 +679,9 @@ export function ActivityTimeline({
             return
         }
         lastSyncedOpenStageId.current = defaultOpenStageId
-        setOpenStageIds(defaultOpenStageId ? new Set([defaultOpenStageId]) : new Set())
+        startTransition(() => {
+            setOpenStageIds(defaultOpenStageId ? new Set([defaultOpenStageId]) : new Set())
+        })
     }, [defaultOpenStageId])
 
     // Task categorization

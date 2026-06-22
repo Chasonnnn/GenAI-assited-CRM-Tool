@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type ReactNode, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
 const POINTER_QUERIES = ["(any-pointer: fine)", "(pointer: fine)"]
@@ -215,13 +215,17 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
     }, [activateFromScroll, resolveTableContainer])
 
     useEffect(() => {
-        setIsMounted(true)
+        startTransition(() => {
+            setIsMounted(true)
+        })
 
         if (typeof window === "undefined" || !window.matchMedia) return
 
         const mediaQueries = [...POINTER_QUERIES, ...HOVER_QUERIES].map((query) => window.matchMedia(query))
         const handleMediaChange = () => {
-            setIsDesktopPointer(detectPointerCapability())
+            startTransition(() => {
+                setIsDesktopPointer(detectPointerCapability())
+            })
         }
 
         handleMediaChange()
@@ -253,8 +257,10 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
 
     useEffect(() => {
         if (!isDesktopPointer) {
-            setIsActive(false)
-            setIsFadingOut(false)
+            startTransition(() => {
+                setIsActive(false)
+                setIsFadingOut(false)
+            })
             clearHideTimeout()
             clearFadeTimeout()
             return
@@ -313,7 +319,9 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
             resizeObserver.observe(tableElement)
         }
 
-        updateMetrics()
+        startTransition(() => {
+            updateMetrics()
+        })
 
         return () => {
             resizeObserver.disconnect()
@@ -339,7 +347,9 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         const floatingViewport = floatingViewportRef.current
         if (!tableContainer || !floatingViewport) return
         floatingViewport.scrollLeft = tableContainer.scrollLeft
-        setScrollLeft(tableContainer.scrollLeft)
+        startTransition(() => {
+            setScrollLeft(tableContainer.scrollLeft)
+        })
     }, [isActive, metrics.contentWidth, resolveTableContainer])
 
     const isEligibleToRender =

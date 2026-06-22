@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useEffect, useMemo, useState } from "react"
+import { type ReactNode, startTransition, useEffect, useMemo, useState } from "react"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -342,8 +342,14 @@ export default function TemplatesPage() {
             return TABS.includes(tabParam as TemplatesTab) ? (tabParam as TemplatesTab) : "email"
         }
 
-        setActiveTab(readTabFromUrl())
-        const handlePopState = () => setActiveTab(readTabFromUrl())
+        startTransition(() => {
+            setActiveTab(readTabFromUrl())
+        })
+        const handlePopState = () => {
+            startTransition(() => {
+                setActiveTab(readTabFromUrl())
+            })
+        }
         window.addEventListener("popstate", handlePopState)
         return () => window.removeEventListener("popstate", handlePopState)
     }, [])

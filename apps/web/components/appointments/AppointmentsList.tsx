@@ -10,7 +10,7 @@
  * - Detail side panel
  */
 
-import { useEffect, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -232,12 +232,14 @@ export function AppointmentDetailDialog({
             startInRescheduleMode && RESCHEDULABLE_STATUSES.has(appointment.status)
         const defaultRescheduleDate = format(parseISO(appointment.scheduled_start), "yyyy-MM-dd")
 
-        setCancelReason("")
-        setShowCancelForm(false)
-        setShowRescheduleForm(canStartInRescheduleMode)
-        setRescheduleError(null)
-        setRescheduleDate(initialRescheduleDate || defaultRescheduleDate)
-        setSelectedSlotStart(null)
+        startTransition(() => {
+            setCancelReason("")
+            setShowCancelForm(false)
+            setShowRescheduleForm(canStartInRescheduleMode)
+            setRescheduleError(null)
+            setRescheduleDate(initialRescheduleDate || defaultRescheduleDate)
+            setSelectedSlotStart(null)
+        })
     }, [appointment, open, initialRescheduleDate, startInRescheduleMode])
 
     if (!appointmentId) return null

@@ -66,9 +66,11 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
         if (!isEntityPage && entityId) {
             // User navigated away from an entity page
             // Keep the panel open but clear the context indicator
-            setEntityType(null)
-            setEntityId(null)
-            setEntityName(null)
+            React.startTransition(() => {
+                setEntityType(null)
+                setEntityId(null)
+                setEntityName(null)
+            })
         }
     }, [pathname, entityId])
 

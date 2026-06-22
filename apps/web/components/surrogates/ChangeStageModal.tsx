@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { startTransition, useState, useMemo, useEffect } from "react"
 import { format, startOfDay, isBefore } from "date-fns"
 import {
     AlertCircleIcon,
@@ -121,20 +121,22 @@ export function ChangeStageModal({
     // Reset state when modal opens
     useEffect(() => {
         if (open) {
-            setCalendarToday(new Date())
-            setSelectedStageId(null)
-            setEffectiveNow(true)
-            setSelectedDate(undefined)
-            setSelectedTime("")
-            setReason("")
-            setDeliveryBabyGender(initialDeliveryBabyGender ?? "")
-            setDeliveryBabyWeight(initialDeliveryBabyWeight ?? "")
-            setOnHoldFollowUpMonths("none")
-            setInterviewDate(undefined)
-            setInterviewHourInput("")
-            setInterviewMinuteInput("")
-            setInterviewMeridiem("PM")
-            setInterviewDatePickerOpen(false)
+            startTransition(() => {
+                setCalendarToday(new Date())
+                setSelectedStageId(null)
+                setEffectiveNow(true)
+                setSelectedDate(undefined)
+                setSelectedTime("")
+                setReason("")
+                setDeliveryBabyGender(initialDeliveryBabyGender ?? "")
+                setDeliveryBabyWeight(initialDeliveryBabyWeight ?? "")
+                setOnHoldFollowUpMonths("none")
+                setInterviewDate(undefined)
+                setInterviewHourInput("")
+                setInterviewMinuteInput("")
+                setInterviewMeridiem("PM")
+                setInterviewDatePickerOpen(false)
+            })
         }
     }, [open, initialDeliveryBabyGender, initialDeliveryBabyWeight])
     const calendarStartOfToday = useMemo(
@@ -172,11 +174,13 @@ export function ChangeStageModal({
 
     useEffect(() => {
         if (!isInterviewScheduledStage) return
-        setInterviewDate(undefined)
-        setInterviewHourInput("")
-        setInterviewMinuteInput("")
-        setInterviewMeridiem("PM")
-        setInterviewDatePickerOpen(false)
+        startTransition(() => {
+            setInterviewDate(undefined)
+            setInterviewHourInput("")
+            setInterviewMinuteInput("")
+            setInterviewMeridiem("PM")
+            setInterviewDatePickerOpen(false)
+        })
     }, [isInterviewScheduledStage])
 
     const isResumeSelection = useMemo(() => {

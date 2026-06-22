@@ -9,7 +9,7 @@
  * - Calendar view reuses UnifiedCalendar (same as My Tasks)
  */
 
-import { useState, useEffect, useMemo } from "react"
+import { startTransition, useState, useEffect, useMemo } from "react"
 import { isPast, isToday, isFuture, parseISO, startOfDay } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -88,11 +88,13 @@ export function SurrogateTasksCalendar({
 
     // Load persisted view preference
     useEffect(() => {
-        setMounted(true)
         const stored = localStorage.getItem(getStorageKey(surrogateId))
-        if (stored === "calendar" || stored === "list") {
-            setViewMode(stored)
-        }
+        startTransition(() => {
+            setMounted(true)
+            if (stored === "calendar" || stored === "list") {
+                setViewMode(stored)
+            }
+        })
     }, [surrogateId])
 
     // Persist view preference

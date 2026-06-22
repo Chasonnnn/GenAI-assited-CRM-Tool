@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useReducer, useRef, useState } from "react"
+import { startTransition, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -729,7 +729,9 @@ export default function AutomationPageClient({
         if (!canManageAutomation) return
         if (workflowScopeTabTouchedRef.current) return
         if (workflowScopeTab !== "personal") return
-        setWorkflowScopeTab("org")
+        startTransition(() => {
+            setWorkflowScopeTab("org")
+        })
     }, [canManageAutomation, hasInitialScopeParam, workflowScopeTab])
 
     const workflowSetupSessionIdRef = useRef<string | null>(null)
@@ -1476,7 +1478,7 @@ export default function AutomationPageClient({
                                                                 className="size-8"
                                                                 aria-label={`Actions for workflow ${workflow.name}`}
                                                             >
-                                                                <MoreVerticalIcon className="size-4" />
+                                                                <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                                             </Button>
                                                         }
                                                     />

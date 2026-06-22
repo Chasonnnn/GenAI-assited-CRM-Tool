@@ -36,7 +36,10 @@ function Carousel({
     plugins
   )
   const setApiRef = React.useRef(setApi)
-  setApiRef.current = setApi
+
+  React.useEffect(() => {
+    setApiRef.current = setApi
+  }, [setApi])
 
   const scrollPrev = React.useCallback(() => {
     api?.scrollPrev()

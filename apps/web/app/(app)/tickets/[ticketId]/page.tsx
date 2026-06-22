@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { ShieldAlertIcon } from 'lucide-react'
@@ -73,10 +73,12 @@ export default function TicketDetailPage() {
 
     useEffect(() => {
         if (!data?.ticket) return
-        setStatusValue(data.ticket.status)
-        setPriorityValue(data.ticket.priority)
-        setReplyTo(data.ticket.requester_email || '')
-        setSurrogateId(data.ticket.surrogate_id || '')
+        startTransition(() => {
+            setStatusValue(data.ticket.status)
+            setPriorityValue(data.ticket.priority)
+            setReplyTo(data.ticket.requester_email || '')
+            setSurrogateId(data.ticket.surrogate_id || '')
+        })
     }, [data?.ticket])
 
     const handleUpdate = async () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -213,7 +213,9 @@ export default function CampaignDetailPage() {
 
     useEffect(() => {
         if (shouldAutoOpenEdit && canEdit) {
-            setShowEditDialog(true)
+            startTransition(() => {
+                setShowEditDialog(true)
+            })
         }
     }, [shouldAutoOpenEdit, canEdit])
 
@@ -226,16 +228,18 @@ export default function CampaignDetailPage() {
         const recipientType =
             campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
 
-        setEditName(campaign.name)
-        setEditDescription(campaign.description ?? "")
-        setEditTemplateId(campaign.email_template_id)
-        setEditRecipientType(recipientType)
-        setEditStages(recipientType === "intended_parent" ? stageSlugs : stageIds)
-        setEditStates(states)
-        setEditIncludeUnsubscribed(!!campaign.include_unsubscribed)
-        setEditScheduledAt(
-            campaign.scheduled_at ? toLocalDateTimeInput(new Date(campaign.scheduled_at)) : ""
-        )
+        startTransition(() => {
+            setEditName(campaign.name)
+            setEditDescription(campaign.description ?? "")
+            setEditTemplateId(campaign.email_template_id)
+            setEditRecipientType(recipientType)
+            setEditStages(recipientType === "intended_parent" ? stageSlugs : stageIds)
+            setEditStates(states)
+            setEditIncludeUnsubscribed(!!campaign.include_unsubscribed)
+            setEditScheduledAt(
+                campaign.scheduled_at ? toLocalDateTimeInput(new Date(campaign.scheduled_at)) : ""
+            )
+        })
     }, [campaign, showEditDialog])
 
     const buildEditFilterCriteria = () => {

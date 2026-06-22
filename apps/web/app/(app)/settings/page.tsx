@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, use, useEffect, useState, useRef, useCallback, useMemo } from "react"
+import { Suspense, startTransition, use, useEffect, useState, useRef, useCallback, useMemo } from "react"
 import type { Route } from "next"
 import NextImage from "next/image"
 import { useRouter } from "next/navigation"
@@ -788,8 +788,11 @@ function SocialLinksSection() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (orgSig?.signature_social_links) {
-      setLinks(orgSig.signature_social_links)
+    const socialLinks = orgSig?.signature_social_links
+    if (socialLinks) {
+      startTransition(() => {
+        setLinks(socialLinks)
+      })
     }
   }, [orgSig])
 

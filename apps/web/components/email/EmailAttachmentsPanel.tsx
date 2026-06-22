@@ -91,7 +91,10 @@ export function EmailAttachmentsPanel({
     const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<string[]>([])
     const [uploadError, setUploadError] = React.useState<string | null>(null)
     const onSelectionChangeRef = React.useRef(onSelectionChange)
-    onSelectionChangeRef.current = onSelectionChange
+
+    React.useEffect(() => {
+        onSelectionChangeRef.current = onSelectionChange
+    }, [onSelectionChange])
 
     const selectedAttachmentIdSet = React.useMemo(
         () => new Set(selectedAttachmentIds),

@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { startTransition, useState, useEffect, useCallback, useRef } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
@@ -78,9 +78,8 @@ export default function TasksPage() {
     const urlOwnerId = searchParams.get("owner_id")
     const canViewOtherOwners = ["admin", "developer"].includes(currentUser?.role || "")
     const ownerOverride = canViewOtherOwners && urlOwnerId ? urlOwnerId : null
-    const handledFocusRef = useRef<FocusTarget | null>(null)
     const focusTarget = isFocusTarget(urlFocus) ? urlFocus : null
-    const pendingFocus = focusTarget && handledFocusRef.current !== focusTarget ? focusTarget : null
+    const handledFocusRef = useRef<FocusTarget | null>(null)
 
     const [filter, setFilter] = useState<FilterType>(
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
@@ -321,49 +320,53 @@ export default function TasksPage() {
     }
 
     useEffect(() => {
-        if (!pendingFocus || pendingFocus === "approvals") {
+        if (!focusTarget || handledFocusRef.current === focusTarget || focusTarget === "approvals") {
             return
         }
         if (view === "calendar") {
-            setView("list")
-            localStorage.setItem("tasks-view", "list")
+            startTransition(() => {
+                setView("list")
+                localStorage.setItem("tasks-view", "list")
+            })
         }
-    }, [pendingFocus, view])
+    }, [focusTarget, view])
 
     useEffect(() => {
-        if (!pendingFocus) return
-        if (pendingFocus !== "approvals" && view !== "list") return
+        if (!focusTarget || handledFocusRef.current === focusTarget) return
+        if (focusTarget !== "approvals" && view !== "list") return
         if (isLoading) return
-        if (pendingFocus === "approvals" && (loadingApprovals || loadingStatusRequests || loadingImportApprovals)) return
+        if (focusTarget === "approvals" && (loadingApprovals || loadingStatusRequests || loadingImportApprovals)) return
 
         const targetId =
-            pendingFocus === "approvals"
+            focusTarget === "approvals"
                 ? "tasks-approvals"
-                : pendingFocus === "tasks"
+                : focusTarget === "tasks"
                     ? "tasks-list"
-                    : `tasks-${pendingFocus}`
+                    : `tasks-${focusTarget}`
         const target =
             document.getElementById(targetId) || document.getElementById("tasks-list")
         if (!target) return
 
         target.scrollIntoView({ behavior: "smooth", block: "start" })
-        handledFocusRef.current = pendingFocus
-    }, [pendingFocus, view, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
+        handledFocusRef.current = focusTarget
+    }, [focusTarget, view, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
 
     useEffect(() => {
         const visibleIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
-        setSelectedTaskIds((prev) => {
-            if (prev.size === 0) return prev
-            let changed = false
-            const next = new Set<string>()
-            for (const taskId of prev) {
-                if (visibleIds.has(taskId)) {
-                    next.add(taskId)
-                } else {
-                    changed = true
+        startTransition(() => {
+            setSelectedTaskIds((prev) => {
+                if (prev.size === 0) return prev
+                let changed = false
+                const next = new Set<string>()
+                for (const taskId of prev) {
+                    if (visibleIds.has(taskId)) {
+                        next.add(taskId)
+                    } else {
+                        changed = true
+                    }
                 }
-            }
-            return changed ? next : prev
+                return changed ? next : prev
+            })
         })
     }, [incompleteTasks?.items])
 

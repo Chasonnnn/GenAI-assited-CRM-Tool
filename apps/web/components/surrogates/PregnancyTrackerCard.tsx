@@ -249,9 +249,9 @@ export function PregnancyTrackerCard({
                                         aria-label="Cancel Embryo Stage"
                                     >
                                         {isSavingEmbryoStage ? (
-                                            <Loader2Icon className="size-3 animate-spin" />
+                                            <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
                                         ) : (
-                                            <XIcon className="size-3 text-destructive" />
+                                            <XIcon className="size-3 text-destructive" aria-hidden="true" />
                                         )}
                                     </Button>
                                 </div>

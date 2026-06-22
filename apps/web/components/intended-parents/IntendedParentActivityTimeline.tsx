@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, startTransition, useEffect, useMemo, useRef, useState } from "react"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
     ActivityIcon,
@@ -356,7 +356,9 @@ export function IntendedParentActivityTimeline({
         const defaultStageKey = hasCurrentStage ? currentStageId : `missing:${currentStageId}`
         if (lastDefaultStageKey.current === defaultStageKey) return
         lastDefaultStageKey.current = defaultStageKey
-        setOpenStageIds(hasCurrentStage ? new Set([currentStageId]) : new Set())
+        startTransition(() => {
+            setOpenStageIds(hasCurrentStage ? new Set([currentStageId]) : new Set())
+        })
     }, [currentStageId, hasCurrentStage])
 
     const { overdueTasks, upcomingTasks } = useMemo(() => {

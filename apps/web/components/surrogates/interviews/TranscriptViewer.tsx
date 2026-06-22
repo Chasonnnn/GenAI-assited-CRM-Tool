@@ -238,10 +238,12 @@ export function TranscriptViewer({
     const handleKeyDownRef = useRef(handleKeyDown)
     const handleMouseDownRef = useRef(handleMouseDown)
 
-    handleMouseUpRef.current = handleMouseUp
-    handleClickRef.current = handleClick
-    handleKeyDownRef.current = handleKeyDown
-    handleMouseDownRef.current = handleMouseDown
+    useEffect(() => {
+        handleMouseUpRef.current = handleMouseUp
+        handleClickRef.current = handleClick
+        handleKeyDownRef.current = handleKeyDown
+        handleMouseDownRef.current = handleMouseDown
+    }, [handleClick, handleKeyDown, handleMouseDown, handleMouseUp])
 
     // Set up event listeners
     useEffect(() => {

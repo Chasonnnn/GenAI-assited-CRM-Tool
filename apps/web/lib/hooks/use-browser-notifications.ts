@@ -8,7 +8,7 @@
  * Call showNotification(title, options) to show a notification
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { Route } from 'next'
 import { useRouter } from 'next/navigation'
 import { getNotificationHref } from '@/lib/utils/notification-routing'
@@ -22,17 +22,12 @@ interface UseBrowserNotificationsOptions {
 
 export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOptions = {}) {
     const router = useRouter()
-    const [isSupported, setIsSupported] = useState(false)
-    const [permission, setPermission] = useState<NotificationPermission>('default')
-
-    // Check support on mount
-    useEffect(() => {
-        const supported = typeof window !== 'undefined' && 'Notification' in window
-        setIsSupported(supported)
-        if (supported) {
-            setPermission(Notification.permission as NotificationPermission)
-        }
-    }, [])
+    const [isSupported] = useState(() => typeof window !== 'undefined' && 'Notification' in window)
+    const [permission, setPermission] = useState<NotificationPermission>(() =>
+        typeof window !== 'undefined' && 'Notification' in window
+            ? Notification.permission as NotificationPermission
+            : 'default'
+    )
 
     // Request notification permission
     const requestPermission = useCallback(async (): Promise<NotificationPermission> => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -170,7 +170,9 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
 
     useEffect(() => {
         if (!isAdmin && workflowScope !== "personal") {
-            setWorkflowScope("personal")
+            startTransition(() => {
+                setWorkflowScope("personal")
+            })
         }
     }, [isAdmin, workflowScope])
 

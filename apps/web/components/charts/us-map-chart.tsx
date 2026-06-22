@@ -51,7 +51,7 @@ export function USMapChart({
     }, [data])
 
     // Calculate color scale
-    const colorScale = useMemo(() => {
+    const colorScale = (() => {
         if (!data || data.length === 0) return () => "#f0f0f0"
         const counts = data.map(d => d.count)
         const max = Math.max(...counts)
@@ -65,7 +65,7 @@ export function USMapChart({
                 "#0ea5e9",
                 "#0284c7",
             ])
-    }, [data])
+    })()
 
     if (isLoading) {
         return (

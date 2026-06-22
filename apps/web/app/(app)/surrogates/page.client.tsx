@@ -561,7 +561,7 @@ export function SurrogatesPageClient() {
                 sortOrder,
             )
         })
-    }, [sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
+    }, [sourceFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder, setStageFilter])
 
     const handleSourceChange = useCallback((source: SourceFilter) => {
         startFilterTransition(() => {
@@ -582,7 +582,7 @@ export function SurrogatesPageClient() {
                 sortOrder,
             )
         })
-    }, [stageFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
+    }, [stageFilter, queueFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder, setSourceFilter])
 
     const handleQueueChange = useCallback((queue: string) => {
         startFilterTransition(() => {
@@ -603,7 +603,7 @@ export function SurrogatesPageClient() {
                 sortOrder,
             )
         })
-    }, [stageFilter, sourceFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
+    }, [stageFilter, sourceFilter, debouncedSearch, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder, setQueueFilter])
 
     const handleOwnerChange = useCallback((owner: string) => {
         startFilterTransition(() => {
@@ -624,7 +624,7 @@ export function SurrogatesPageClient() {
                 sortOrder,
             )
         })
-    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
+    }, [stageFilter, sourceFilter, queueFilter, debouncedSearch, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder, setOwnerFilter])
 
     const handleDynamicFilterChange = useCallback((nextDynamicFilter: DynamicSurrogateFilter | null) => {
         startFilterTransition(() => {
@@ -804,21 +804,23 @@ export function SurrogatesPageClient() {
         }
         const urlSearchValue = getCanonicalSearchParamValue(searchParams)
         if (debouncedSearch !== urlSearchValue) {
-            setPage(1)
-            updateUrlParams(
-                stageFilter,
-                sourceFilter,
-                queueFilter,
-                debouncedSearch,
-                ownerFilter,
-                1,
-                dateRange,
-                customRange,
-                dynamicFilter,
-                priorityOnly,
-                sortBy,
-                sortOrder,
-            )
+            startFilterTransition(() => {
+                setPage(1)
+                updateUrlParams(
+                    stageFilter,
+                    sourceFilter,
+                    queueFilter,
+                    debouncedSearch,
+                    ownerFilter,
+                    1,
+                    dateRange,
+                    customRange,
+                    dynamicFilter,
+                    priorityOnly,
+                    sortBy,
+                    sortOrder,
+                )
+            })
         }
     }, [debouncedSearch, searchParams, stageFilter, sourceFilter, queueFilter, ownerFilter, updateUrlParams, dateRange, customRange, dynamicFilter, priorityOnly, sortBy, sortOrder])
 
@@ -828,63 +830,64 @@ export function SurrogatesPageClient() {
         const nextDynamicFilter = isDynamicSurrogateFilter(dynamicFilterParam)
             ? dynamicFilterParam
             : null
-        if (nextDynamicFilter !== dynamicFilter) {
-            setDynamicFilter(nextDynamicFilter)
-        }
-
         const nextStage = searchParams.get("stage") || "all"
-        if (nextStage !== stageFilter) {
-            setStageFilter(nextStage)
-        }
         const nextSource = isSourceFilter(searchParams.get("source")) ? searchParams.get("source") as SourceFilter : "all"
-        if (nextSource !== sourceFilter) {
-            setSourceFilter(nextSource)
-        }
         const nextQueue = searchParams.get("queue") || "all"
-        if (nextQueue !== queueFilter) {
-            setQueueFilter(nextQueue)
-        }
         const nextOwner = canFilterByAssignee ? (searchParams.get("owner_id") || "all") : "all"
-        if (nextOwner !== ownerFilter) {
-            setOwnerFilter(nextOwner)
-        }
         const nextPriorityOnly = searchParams.get("priority") === "only"
-        if (nextPriorityOnly !== priorityOnly) {
-            setPriorityOnly(nextPriorityOnly)
-        }
         const nextSearch = getCanonicalSearchParamValue(searchParams)
-        if (nextSearch !== searchQuery) {
-            setSearchQuery(nextSearch)
-        }
-        if (nextSearch !== debouncedSearch) {
-            setDebouncedSearch(nextSearch)
-        }
         const nextSortBy = searchParams.get("sort_by") || null
-        if (nextSortBy !== sortBy) {
-            setSortBy(nextSortBy)
-        }
         const nextSortOrder = parseSortOrderParam(searchParams.get("sort_order"))
-        if (nextSortOrder !== sortOrder) {
-            setSortOrder(nextSortOrder)
-        }
-
         const nextPage = parsePageParam(searchParams.get("page"))
-        if (nextPage !== page) {
-            setPage(nextPage)
-        }
         const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
-        if (nextRange !== dateRange) {
-            setDateRange(nextRange)
-        }
-        if (nextRange === "custom") {
-            const nextFrom = parseDateParam(searchParams.get("from"))
-            const nextTo = parseDateParam(searchParams.get("to"))
-            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                setCustomRange({ from: nextFrom, to: nextTo })
+        const nextFrom = nextRange === "custom" ? parseDateParam(searchParams.get("from")) : undefined
+        const nextTo = nextRange === "custom" ? parseDateParam(searchParams.get("to")) : undefined
+
+        startFilterTransition(() => {
+            if (nextDynamicFilter !== dynamicFilter) {
+                setDynamicFilter(nextDynamicFilter)
             }
-        } else if (customRange.from || customRange.to) {
-            setCustomRange({ from: undefined, to: undefined })
-        }
+            if (nextStage !== stageFilter) {
+                setStageFilter(nextStage)
+            }
+            if (nextSource !== sourceFilter) {
+                setSourceFilter(nextSource)
+            }
+            if (nextQueue !== queueFilter) {
+                setQueueFilter(nextQueue)
+            }
+            if (nextOwner !== ownerFilter) {
+                setOwnerFilter(nextOwner)
+            }
+            if (nextPriorityOnly !== priorityOnly) {
+                setPriorityOnly(nextPriorityOnly)
+            }
+            if (nextSearch !== searchQuery) {
+                setSearchQuery(nextSearch)
+            }
+            if (nextSearch !== debouncedSearch) {
+                setDebouncedSearch(nextSearch)
+            }
+            if (nextSortBy !== sortBy) {
+                setSortBy(nextSortBy)
+            }
+            if (nextSortOrder !== sortOrder) {
+                setSortOrder(nextSortOrder)
+            }
+            if (nextPage !== page) {
+                setPage(nextPage)
+            }
+            if (nextRange !== dateRange) {
+                setDateRange(nextRange)
+            }
+            if (nextRange === "custom") {
+                if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
+                    setCustomRange({ from: nextFrom, to: nextTo })
+                }
+            } else if (customRange.from || customRange.to) {
+                setCustomRange({ from: undefined, to: undefined })
+            }
+        })
 
     }, [canFilterByAssignee, currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1024,7 +1027,24 @@ export function SurrogatesPageClient() {
         setSelectedSurrogates(new Set())
         // Clear URL params
         replace('/surrogates', { scroll: false })
-    }, [replace])
+    }, [
+        replace,
+        setCustomRange,
+        setDateRange,
+        setDebouncedSearch,
+        setDynamicFilter,
+        setIsMoreFiltersOpen,
+        setOwnerFilter,
+        setPage,
+        setPriorityOnly,
+        setQueueFilter,
+        setSearchQuery,
+        setSelectedSurrogates,
+        setSortBy,
+        setSortOrder,
+        setSourceFilter,
+        setStageFilter,
+    ])
 
     const clearActiveFilter = useCallback((
         filterKey: "intelligent" | "stage" | "date" | "source" | "queue" | "owner" | "dynamic" | "priority" | "search"

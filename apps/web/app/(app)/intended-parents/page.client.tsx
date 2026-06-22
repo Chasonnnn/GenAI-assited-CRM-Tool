@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { startTransition, useState, useCallback, useEffect, useRef } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -175,7 +175,7 @@ export default function IntendedParentsPage() {
         setStatusFilter(status)
         setPage(1)
         updateUrlParams(status, debouncedSearch, 1, dateRange, customRange)
-    }, [debouncedSearch, updateUrlParams, dateRange, customRange])
+    }, [debouncedSearch, updateUrlParams, dateRange, customRange, setStatusFilter])
 
     const handlePageChange = useCallback((nextPage: number) => {
         setPage(nextPage)
@@ -214,41 +214,45 @@ export default function IntendedParentsPage() {
         }
         const urlSearchValue = searchParams.get("q") || ""
         if (debouncedSearch !== urlSearchValue) {
-            setPage(1)
-            updateUrlParams(statusFilter, debouncedSearch, 1, dateRange, customRange)
+            startTransition(() => {
+                setPage(1)
+                updateUrlParams(statusFilter, debouncedSearch, 1, dateRange, customRange)
+            })
         }
     }, [debouncedSearch, searchParams, statusFilter, updateUrlParams, dateRange, customRange])
 
     // Sync state when URL changes (back/forward)
     useEffect(() => {
         const nextStatus = searchParams.get("status") || "all"
-        if (nextStatus !== statusFilter) {
-            setStatusFilter(nextStatus)
-        }
         const nextSearch = searchParams.get("q") || ""
-        if (nextSearch !== search) {
-            setSearch(nextSearch)
-        }
-        if (nextSearch !== debouncedSearch) {
-            setDebouncedSearch(nextSearch)
-        }
         const nextPage = parsePageParam(searchParams.get("page"))
-        if (nextPage !== page) {
-            setPage(nextPage)
-        }
         const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
-        if (nextRange !== dateRange) {
-            setDateRange(nextRange)
-        }
-        if (nextRange === "custom") {
-            const nextFrom = parseDateParam(searchParams.get("from"))
-            const nextTo = parseDateParam(searchParams.get("to"))
-            if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                setCustomRange({ from: nextFrom, to: nextTo })
+        const nextFrom = nextRange === "custom" ? parseDateParam(searchParams.get("from")) : undefined
+        const nextTo = nextRange === "custom" ? parseDateParam(searchParams.get("to")) : undefined
+        startTransition(() => {
+            if (nextStatus !== statusFilter) {
+                setStatusFilter(nextStatus)
             }
-        } else if (customRange.from || customRange.to) {
-            setCustomRange({ from: undefined, to: undefined })
-        }
+            if (nextSearch !== search) {
+                setSearch(nextSearch)
+            }
+            if (nextSearch !== debouncedSearch) {
+                setDebouncedSearch(nextSearch)
+            }
+            if (nextPage !== page) {
+                setPage(nextPage)
+            }
+            if (nextRange !== dateRange) {
+                setDateRange(nextRange)
+            }
+            if (nextRange === "custom") {
+                if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
+                    setCustomRange({ from: nextFrom, to: nextTo })
+                }
+            } else if (customRange.from || customRange.to) {
+                setCustomRange({ from: undefined, to: undefined })
+            }
+        })
     }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Form state

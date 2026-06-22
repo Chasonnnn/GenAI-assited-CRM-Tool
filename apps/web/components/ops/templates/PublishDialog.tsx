@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { listOrganizations, type OrganizationSummary } from "@/lib/api/platform"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -45,9 +45,11 @@ export function PublishDialog({
 
     useEffect(() => {
         if (!open) return
-        setMode(defaultPublishAll ? "all" : "selected")
-        setSelectedOrgIds(initialOrgIds)
-        setSearch("")
+        startTransition(() => {
+            setMode(defaultPublishAll ? "all" : "selected")
+            setSelectedOrgIds(initialOrgIds)
+            setSearch("")
+        })
     }, [open, defaultPublishAll, initialOrgIds])
 
     const { data, isLoading: orgsLoading } = useQuery({

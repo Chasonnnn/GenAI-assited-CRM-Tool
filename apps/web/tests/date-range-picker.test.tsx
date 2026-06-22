@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react"
 import { describe, expect, it } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
@@ -100,16 +100,18 @@ function SurrogatesDateRangeHarness() {
             }
             : EMPTY_CUSTOM_RANGE
 
-        setSelection((current) => {
-            if (
-                current.dateRange === nextRange
-                && datesEqual(current.customRange.from, nextCustomRange.from)
-                && datesEqual(current.customRange.to, nextCustomRange.to)
-            ) {
-                return current
-            }
+        startTransition(() => {
+            setSelection((current) => {
+                if (
+                    current.dateRange === nextRange
+                    && datesEqual(current.customRange.from, nextCustomRange.from)
+                    && datesEqual(current.customRange.to, nextCustomRange.to)
+                ) {
+                    return current
+                }
 
-            return { dateRange: nextRange, customRange: nextCustomRange }
+                return { dateRange: nextRange, customRange: nextCustomRange }
+            })
         })
     }, [searchParams])
 

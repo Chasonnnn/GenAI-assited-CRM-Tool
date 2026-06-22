@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { startTransition, useCallback, useEffect, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
@@ -72,7 +72,9 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
     // Reset query when dialog closes
     useEffect(() => {
         if (!open) {
-            setQuery("")
+            startTransition(() => {
+                setQuery("")
+            })
         }
     }, [open])
 

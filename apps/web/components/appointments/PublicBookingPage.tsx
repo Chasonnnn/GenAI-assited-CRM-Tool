@@ -13,7 +13,7 @@
  * - Confirmation view
  */
 
-import { useState, useEffect, useMemo } from "react"
+import { startTransition, useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -984,7 +984,11 @@ export function PublicBookingPage({
     useEffect(() => {
         try {
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-            if (tz) setTimezone(tz)
+            if (tz) {
+                startTransition(() => {
+                    setTimezone(tz)
+                })
+            }
         } catch {
             // Use default
         }
@@ -998,8 +1002,11 @@ export function PublicBookingPage({
     const pageError = isPreview ? previewPageQuery.error : publicPageQuery.error
 
     useEffect(() => {
-        if (pageData?.org_timezone && timezone === "America/Los_Angeles") {
-            setTimezone(pageData.org_timezone)
+        const orgTimezone = pageData?.org_timezone
+        if (orgTimezone && timezone === "America/Los_Angeles") {
+            startTransition(() => {
+                setTimezone(orgTimezone)
+            })
         }
     }, [pageData?.org_timezone, timezone])
 
@@ -1045,15 +1052,17 @@ export function PublicBookingPage({
     const meetingModeReady = !requiresMeetingModeSelection || Boolean(selectedMeetingMode)
 
     useEffect(() => {
-        if (!selectedType) {
-            setSelectedMeetingMode(null)
-            return
-        }
-        if (selectedTypeModes.length === 1) {
-            setSelectedMeetingMode(selectedTypeModes[0] ?? null)
-        } else {
-            setSelectedMeetingMode(null)
-        }
+        startTransition(() => {
+            if (!selectedType) {
+                setSelectedMeetingMode(null)
+                return
+            }
+            if (selectedTypeModes.length === 1) {
+                setSelectedMeetingMode(selectedTypeModes[0] ?? null)
+            } else {
+                setSelectedMeetingMode(null)
+            }
+        })
     }, [selectedType, selectedTypeModes])
 
     const availableDates = useMemo(() => {

@@ -41,7 +41,7 @@ export function useDashboardSocket(enabled: boolean = true) {
     const errorLoggedRef = useRef(false);
     const [isConnected, setIsConnected] = useState(false);
 
-    const connect = useCallback(() => {
+    const connect = useCallback(function connectSocket() {
         if (!enabled || !user) {
             return;
         }
@@ -116,7 +116,7 @@ export function useDashboardSocket(enabled: boolean = true) {
 
                 if (manualCloseRef.current) {
                     manualCloseRef.current = false;
-                    connect();
+                    connectSocket();
                     return;
                 }
 
@@ -132,7 +132,7 @@ export function useDashboardSocket(enabled: boolean = true) {
 
                 // Reconnect with exponential backoff
                 reconnectTimeoutRef.current = setTimeout(() => {
-                    connect();
+                    connectSocket();
                 }, reconnectDelayRef.current);
 
                 // Double the delay for next attempt (up to max)

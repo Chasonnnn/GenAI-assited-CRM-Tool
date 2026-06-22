@@ -11,7 +11,7 @@
  * - Google Calendar connection warning
  */
 
-import { useState, useEffect } from "react"
+import { startTransition, useState, useEffect } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -253,25 +253,27 @@ function AvailabilityRulesCard() {
     useEffect(() => {
         if (!rules) return
 
-        setAvailabilityState((current) => {
-            if (current.localRules.length > 0) return current
+        startTransition(() => {
+            setAvailabilityState((current) => {
+                if (current.localRules.length > 0) return current
 
-            const rulesByDay = new Map(rules.map((rule) => [rule.day_of_week, rule]))
-            const initialRules = DAYS_OF_WEEK.map((day) => {
-                const existing = rulesByDay.get(day.value)
+                const rulesByDay = new Map(rules.map((rule) => [rule.day_of_week, rule]))
+                const initialRules = DAYS_OF_WEEK.map((day) => {
+                    const existing = rulesByDay.get(day.value)
+                    return {
+                        day_of_week: day.value,
+                        start_time: existing?.start_time || "09:00",
+                        end_time: existing?.end_time || "17:00",
+                        enabled: !!existing,
+                    }
+                })
+                const firstRule = rules[0]
                 return {
-                    day_of_week: day.value,
-                    start_time: existing?.start_time || "09:00",
-                    end_time: existing?.end_time || "17:00",
-                    enabled: !!existing,
+                    ...current,
+                    localRules: initialRules,
+                    timezone: firstRule?.timezone ?? user?.org_timezone ?? current.timezone,
                 }
             })
-            const firstRule = rules[0]
-            return {
-                ...current,
-                localRules: initialRules,
-                timezone: firstRule?.timezone ?? user?.org_timezone ?? current.timezone,
-            }
         })
     }, [rules, user?.org_timezone])
 

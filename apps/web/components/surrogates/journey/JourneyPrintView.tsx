@@ -24,20 +24,34 @@ interface PhaseWithMilestones {
 export function JourneyPrintView({ journey }: JourneyPrintViewProps) {
     const generatedDate = format(new Date(), "MMMM yyyy")
 
-    let globalIndex = 0
-    const phasesWithMeta: PhaseWithMilestones[] = journey.phases.map((phase) => ({
-        slug: phase.slug,
-        label: phase.label,
-        milestones: phase.milestones.map((milestone) => {
-            const meta: MilestoneWithMeta = {
-                milestone,
-                globalIndex,
-                side: globalIndex % 2 === 0 ? "left" : "right",
+    const phasesWithMeta: PhaseWithMilestones[] = journey.phases.reduce<{
+        phases: PhaseWithMilestones[]
+        nextIndex: number
+    }>(
+        (acc, phase) => {
+            const milestones = phase.milestones.map((milestone, milestoneIndex) => {
+                const globalIndex = acc.nextIndex + milestoneIndex
+                return {
+                    milestone,
+                    globalIndex,
+                    side: globalIndex % 2 === 0 ? "left" : "right",
+                } satisfies MilestoneWithMeta
+            })
+
+            return {
+                phases: [
+                    ...acc.phases,
+                    {
+                        slug: phase.slug,
+                        label: phase.label,
+                        milestones,
+                    },
+                ],
+                nextIndex: acc.nextIndex + phase.milestones.length,
             }
-            globalIndex += 1
-            return meta
-        }),
-    }))
+        },
+        { phases: [], nextIndex: 0 },
+    ).phases
 
     return (
         <div data-journey-print="ready" className="min-h-screen bg-background text-foreground">
