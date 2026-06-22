@@ -404,9 +404,10 @@ def deprovision_member(
     Remove a member's organization access and login bindings.
 
     User rows are retained for audit references, but membership, provider identity,
-    active sessions, queue memberships, and permission overrides are removed.
+    active sessions, OAuth integrations, queue memberships, and permission overrides
+    are removed.
     """
-    from app.db.models import AuthIdentity, Queue, QueueMember, UserSession
+    from app.db.models import AuthIdentity, Queue, QueueMember, UserIntegration, UserSession
     from app.services import intake_pool_access_service, session_service
 
     delete_user_overrides(db, org_id, user.id)
@@ -443,6 +444,11 @@ def deprovision_member(
     (
         db.query(AuthIdentity)
         .filter(AuthIdentity.user_id == user.id)
+        .delete(synchronize_session=False)
+    )
+    (
+        db.query(UserIntegration)
+        .filter(UserIntegration.user_id == user.id)
         .delete(synchronize_session=False)
     )
 

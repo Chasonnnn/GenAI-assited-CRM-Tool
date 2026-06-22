@@ -21,6 +21,7 @@ from app.db.models import (
     QueueMember,
     RolePermission,
     User,
+    UserIntegration,
     UserPermissionOverride,
     UserSession,
 )
@@ -253,7 +254,21 @@ def test_deprovision_member_removes_auth_surface_and_membership(db, org_a, case_
         session_token_hash="old-session-token-hash",
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    db.add_all([identity, queue, override, session])
+    gmail_integration = UserIntegration(
+        user_id=case_manager_user.id,
+        integration_type="gmail",
+        access_token_encrypted="encrypted-access-token",
+        refresh_token_encrypted="encrypted-refresh-token",
+        account_email=case_manager_user.email,
+    )
+    calendar_integration = UserIntegration(
+        user_id=case_manager_user.id,
+        integration_type="google_calendar",
+        access_token_encrypted="encrypted-calendar-access-token",
+        refresh_token_encrypted="encrypted-calendar-refresh-token",
+        account_email=case_manager_user.email,
+    )
+    db.add_all([identity, queue, override, session, gmail_integration, calendar_integration])
     db.flush()
     queue_member = QueueMember(queue_id=queue.id, user_id=case_manager_user.id)
     db.add(queue_member)
@@ -265,6 +280,10 @@ def test_deprovision_member_removes_auth_surface_and_membership(db, org_a, case_
     assert db.get(Membership, membership.id) is None
     assert db.query(AuthIdentity).filter(AuthIdentity.user_id == case_manager_user.id).count() == 0
     assert db.query(UserSession).filter(UserSession.user_id == case_manager_user.id).count() == 0
+    assert (
+        db.query(UserIntegration).filter(UserIntegration.user_id == case_manager_user.id).count()
+        == 0
+    )
     assert (
         db.query(UserPermissionOverride)
         .filter(UserPermissionOverride.user_id == case_manager_user.id)
