@@ -34,9 +34,10 @@ def test_dependency_pins_match_security_fixes():
         "fastapi": "0.136.3",
         "idna": "3.15",
         "pillow": "12.2.0",
-        "pypdf": "6.13.2",
+        "pypdf": "6.13.3",
         "python-multipart": "0.0.31",
         "starlette": "1.3.1",
+        "pydantic-settings": "2.14.2",
     }
     expected_test_exact_pins = {"pytest": "9.0.3"}
 
