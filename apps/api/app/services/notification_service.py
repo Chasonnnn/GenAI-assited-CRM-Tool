@@ -12,7 +12,7 @@ import logging
 import threading
 import asyncio
 import anyio
-from sqlalchemy import or_
+from sqlalchemy import or_, func, select
 from sqlalchemy.orm import Session
 
 from app.db.enums import NotificationType, Role, OwnerType
@@ -276,13 +276,14 @@ def get_unread_count(
 ) -> int:
     """Get count of unread notifications."""
     return (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == user_id,
-            Notification.organization_id == org_id,
-            Notification.read_at.is_(None),
+        db.scalar(
+            select(func.count(Notification.id)).where(
+                Notification.user_id == user_id,
+                Notification.organization_id == org_id,
+                Notification.read_at.is_(None),
+            )
         )
-        .count()
+        or 0
     )
 
 

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 import uuid
 
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, select
 from sqlalchemy.orm import Session
 
 from app.db.enums import Role
@@ -75,14 +75,14 @@ def list_pending_invites(db: Session, org_id: uuid.UUID) -> list[OrgInvite]:
 def count_pending_invites(db: Session, org_id: uuid.UUID) -> int:
     """Count active pending invites for rate limiting."""
     return (
-        db.query(func.count(OrgInvite.id))
-        .filter(
-            OrgInvite.organization_id == org_id,
-            OrgInvite.accepted_at.is_(None),
-            OrgInvite.revoked_at.is_(None),
-            or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
+        db.scalar(
+            select(func.count(OrgInvite.id)).where(
+                OrgInvite.organization_id == org_id,
+                OrgInvite.accepted_at.is_(None),
+                OrgInvite.revoked_at.is_(None),
+                or_(OrgInvite.expires_at.is_(None), OrgInvite.expires_at > func.now()),
+            )
         )
-        .scalar()
         or 0
     )
 
