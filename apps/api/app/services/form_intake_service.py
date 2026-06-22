@@ -81,8 +81,12 @@ PRIVACY_SAFE_FIELD_POLICY_MODES = {
 logger = logging.getLogger(__name__)
 
 
-def _default_tracking_mode_for_form(form: Form) -> str:
+def _default_tracking_mode_for_form(db: Session, form: Form) -> str:
     if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+        try:
+            form_service.validate_privacy_safe_lead_schema(db, form)
+        except ValueError:
+            return DEFAULT_SHARED_INTAKE_TRACKING_MODE
         return DEFAULT_EMBED_TRACKING_MODE
     return DEFAULT_SHARED_INTAKE_TRACKING_MODE
 
@@ -197,7 +201,7 @@ def create_intake_link(
         utm_defaults=utm_defaults or None,
         embed_enabled=bool(embed_enabled),
         allowed_embed_origins=embed_policy_service.normalize_allowed_origins(allowed_embed_origins),
-        tracking_mode=tracking_mode or _default_tracking_mode_for_form(form),
+        tracking_mode=tracking_mode or _default_tracking_mode_for_form(db, form),
         consent_text=(consent_text or "").strip() or None,
         privacy_policy_url=(privacy_policy_url or "").strip() or None,
         thank_you_config=thank_you_config or {},
@@ -248,7 +252,7 @@ def ensure_default_intake_link(
         expires_at=None,
         max_submissions=None,
         utm_defaults=None,
-        tracking_mode=DEFAULT_SHARED_INTAKE_TRACKING_MODE,
+        tracking_mode=_default_tracking_mode_for_form(db, form),
     )
 
 

@@ -1547,9 +1547,10 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/tasks/page.client.tsx")
 
         expect(source).toContain("const handledFocusRef = useRef<FocusTarget | null>(null)")
-        expect(source).toContain("const pendingFocus =")
-        expect(source).toContain("handledFocusRef.current = pendingFocus")
+        expect(source).toContain("handledFocusRef.current === focusTarget")
+        expect(source).toContain("handledFocusRef.current = focusTarget")
         expect(source).not.toContain("const [pendingFocus, setPendingFocus]")
+        expect(source).not.toContain("const pendingFocus =")
         expect(source).not.toContain("setPendingFocus(")
     })
 
