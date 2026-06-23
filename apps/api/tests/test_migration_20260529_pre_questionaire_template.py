@@ -32,7 +32,9 @@ def test_pre_questionaire_template_schema_matches_requested_short_form():
     fields = schema["pages"][0]["fields"]
 
     assert schema["pages"][0]["title"] == "Pre-questionnaire"
+    assert schema["public_eyebrow"] == "Pre-questionnaire"
     assert schema["public_title"] == "EWI pre-questionnaire"
+    assert schema["public_subtitle"] == migration.TEMPLATE_DESCRIPTION
     assert (
         migration.TEMPLATE_DESCRIPTION
         == "Answer a few quick questions so our team can review basic eligibility and follow up."

@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest"
 
-import { buildFormSchema, buildMappings, createBuilderField, schemaToPages } from "@/lib/forms/form-builder-document"
+import {
+    buildFormSchema,
+    buildMappings,
+    createBuilderField,
+    schemaToMetadata,
+    schemaToPages,
+} from "@/lib/forms/form-builder-document"
 import { PRESET_FIELD_GROUPS } from "@/lib/forms/form-builder-library"
 
 const metadata = {
+    publicEyebrow: "",
     publicTitle: "",
+    publicSubtitle: "",
     logoUrl: "",
     privacyNotice: "",
 }
@@ -107,5 +115,39 @@ describe("form builder field mappings", () => {
             { field_key: "full_name", surrogate_field: "full_name" },
             { field_key: "email", surrogate_field: "email" },
         ])
+    })
+})
+
+describe("form builder public header metadata", () => {
+    it("preserves intentionally empty public header fields", () => {
+        const schema = buildFormSchema(
+            [
+                {
+                    id: 1,
+                    name: "Eligibility",
+                    fields: [],
+                },
+            ],
+            metadata,
+        )
+
+        expect(schema.public_eyebrow).toBe("")
+        expect(schema.public_title).toBe("")
+        expect(schema.public_subtitle).toBe("")
+    })
+
+    it("does not backfill blank public header metadata from page title", () => {
+        const metadataFromSchema = schemaToMetadata({
+            pages: [
+                {
+                    title: "Eligibility",
+                    fields: [],
+                },
+            ],
+        })
+
+        expect(metadataFromSchema.publicEyebrow).toBe("")
+        expect(metadataFromSchema.publicTitle).toBe("")
+        expect(metadataFromSchema.publicSubtitle).toBe("")
     })
 })

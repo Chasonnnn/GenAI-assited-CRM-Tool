@@ -182,7 +182,11 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
 
         expect(screen.getByText("Form Settings")).toBeInTheDocument()
-        expect(screen.getByLabelText("Form Name")).toBeInTheDocument()
+        expect(screen.getByLabelText("Internal template name")).toBeInTheDocument()
+        expect(screen.getByText("Public Header")).toBeInTheDocument()
+        expect(screen.getByLabelText("Eyebrow")).toBeInTheDocument()
+        expect(screen.getByLabelText("Title")).toBeInTheDocument()
+        expect(screen.getByLabelText("Subtitle")).toBeInTheDocument()
         expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
     })
 
@@ -381,6 +385,8 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.change(formNameInput, { target: { value: "Enterprise Intake" } })
 
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
+        fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Enterprise Intake" } })
 
         fireEvent.click(screen.getByRole("tab", { name: /^preview$/i }))
 
