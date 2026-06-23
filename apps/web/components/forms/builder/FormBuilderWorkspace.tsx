@@ -85,7 +85,9 @@ type FormBuilderWorkspaceProps = {
     mappingOptions: FormSurrogateFieldOption[]
     formName: string
     formDescription: string
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     fieldLibrarySearch: string
     fieldLibraryCategory: string
     onFieldLibrarySearchChange: (value: string) => void
@@ -433,7 +435,9 @@ function EditCanvas({
     canvasFrameClass,
     formName,
     formDescription,
+    publicEyebrow,
     publicTitle,
+    publicSubtitle,
     currentPage,
     selectedField,
     isDragging,
@@ -452,7 +456,9 @@ function EditCanvas({
     canvasFrameClass: string
     formName: string
     formDescription: string
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     currentPage: BuilderFormPage
     selectedField: string | null
     isDragging: boolean
@@ -467,7 +473,9 @@ function EditCanvas({
     onDuplicateField: (fieldId: string) => void
     onDeleteField: (fieldId: string) => void
 }) {
-    const displayTitle = publicTitle.trim() || formName.trim() || "Untitled form"
+    const displayTitle = publicTitle.trim()
+    const displayEyebrow = publicEyebrow.trim()
+    const displaySubtitle = publicSubtitle.trim()
 
     return (
         <section data-testid="form-builder-canvas" className="min-h-0 min-w-0 overflow-y-auto bg-muted/20 p-4 sm:p-6 xl:p-8">
@@ -479,14 +487,18 @@ function EditCanvas({
                 >
                     <div data-testid="form-builder-page-shell" className={cn("min-h-[58rem] space-y-6", canvasFrameClass)}>
                         <div className="space-y-1 border-b border-stone-200/80 pb-4">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
-                                {currentPage.name || "Current page"}
-                            </p>
-                            <h1 className="text-2xl font-semibold tracking-tight text-stone-900 md:text-[28px]">
-                                {displayTitle}
-                            </h1>
-                            {formDescription.trim() ? (
-                                <p className="max-w-2xl text-sm text-stone-500">{formDescription.trim()}</p>
+                            {displayEyebrow ? (
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+                                    {displayEyebrow}
+                                </p>
+                            ) : null}
+                            {displayTitle ? (
+                                <h1 className="text-2xl font-semibold tracking-tight text-stone-900 md:text-[28px]">
+                                    {displayTitle}
+                                </h1>
+                            ) : null}
+                            {displaySubtitle ? (
+                                <p className="max-w-2xl text-sm text-stone-500">{displaySubtitle}</p>
                             ) : null}
                         </div>
 
@@ -1143,7 +1155,9 @@ export function FormBuilderWorkspace({
     mappingOptions,
     formName,
     formDescription,
+    publicEyebrow,
     publicTitle,
+    publicSubtitle,
     fieldLibrarySearch,
     fieldLibraryCategory,
     onFieldLibrarySearchChange,
@@ -1189,7 +1203,9 @@ export function FormBuilderWorkspace({
                         canvasFrameClass={canvasFrameClass}
                         formName={formName}
                         formDescription={formDescription}
+                        publicEyebrow={publicEyebrow}
                         publicTitle={publicTitle}
+                        publicSubtitle={publicSubtitle}
                         currentPage={document.currentPage}
                         selectedField={document.selectedField}
                         isDragging={document.isDragging}

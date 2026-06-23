@@ -13,7 +13,9 @@ type TemplateBuilderState = {
     hasHydrated: boolean
     formName: string
     formDescription: string
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     logoUrl: string
     privacyNotice: string
     maxFileSizeMb: number
@@ -53,7 +55,9 @@ const buildInitialState = (isNewForm: boolean): TemplateBuilderState => ({
     hasHydrated: isNewForm,
     formName: isNewForm ? "" : "Surrogate Application Form",
     formDescription: "",
+    publicEyebrow: "",
     publicTitle: "",
+    publicSubtitle: "",
     logoUrl: "",
     privacyNotice: "",
     maxFileSizeMb: 10,
@@ -92,7 +96,9 @@ function reducer(state: TemplateBuilderState, action: TemplateBuilderAction): Te
                 hasHydrated: true,
                 formName: action.payload.name,
                 formDescription: action.payload.description,
+                publicEyebrow: metadata.publicEyebrow,
                 publicTitle: metadata.publicTitle,
+                publicSubtitle: metadata.publicSubtitle,
                 logoUrl: metadata.logoUrl,
                 privacyNotice: metadata.privacyNotice,
                 maxFileSizeMb: Math.max(

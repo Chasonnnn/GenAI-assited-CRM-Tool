@@ -15,7 +15,9 @@ type AutomationBuilderState = {
     formName: string
     formDescription: string
     formPurpose: FormPurpose
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     logoUrl: string
     privacyNotice: string
     maxFileSizeMb: number
@@ -59,7 +61,9 @@ const buildInitialState = (isNewForm: boolean): AutomationBuilderState => ({
     formName: isNewForm ? "" : "Surrogate Application Form",
     formDescription: "",
     formPurpose: "surrogate_application",
+    publicEyebrow: "",
     publicTitle: "",
+    publicSubtitle: "",
     logoUrl: "",
     privacyNotice: "",
     maxFileSizeMb: 10,
@@ -103,7 +107,9 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
                 formName: action.payload.form.name,
                 formDescription: action.payload.form.description ?? "",
                 formPurpose: action.payload.form.purpose ?? "surrogate_application",
+                publicEyebrow: metadata.publicEyebrow,
                 publicTitle: metadata.publicTitle,
+                publicSubtitle: metadata.publicSubtitle,
                 logoUrl: metadata.logoUrl,
                 privacyNotice: metadata.privacyNotice,
                 maxFileSizeMb: Math.max(1, Math.round((action.payload.form.max_file_size_bytes ?? 10485760) / (1024 * 1024))),

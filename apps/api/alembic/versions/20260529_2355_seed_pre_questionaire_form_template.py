@@ -178,7 +178,9 @@ def _schema() -> dict:
                 ],
             }
         ],
+        "public_eyebrow": "Pre-questionnaire",
         "public_title": "EWI pre-questionnaire",
+        "public_subtitle": TEMPLATE_DESCRIPTION,
         "privacy_notice": COMPLIANCE_NOTICE,
     }
 

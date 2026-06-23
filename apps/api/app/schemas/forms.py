@@ -118,7 +118,9 @@ class FormPage(BaseModel):
 
 class FormSchema(BaseModel):
     pages: list[FormPage]
+    public_eyebrow: str | None = Field(None, max_length=120)
     public_title: str | None = Field(None, max_length=200)
+    public_subtitle: str | None = Field(None, max_length=500)
     logo_url: str | None = Field(None, max_length=1000)
     privacy_notice: str | None = None
 

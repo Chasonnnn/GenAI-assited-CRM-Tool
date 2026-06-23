@@ -5,6 +5,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 interface PublicFormHeaderProps {
+    eyebrow?: string | null | undefined
     publicTitle: string
     description?: string | null | undefined
     resolvedLogoUrl?: string | null
@@ -23,6 +24,7 @@ function getMetadataTone(metadata: ReactNode): "success" | "warning" | "error" |
 }
 
 export function PublicFormHeader({
+    eyebrow,
     publicTitle,
     description,
     resolvedLogoUrl,
@@ -32,7 +34,10 @@ export function PublicFormHeader({
     children,
 }: PublicFormHeaderProps) {
     const metadataTone = getMetadataTone(metadata)
-    const fallbackInitial = publicTitle.trim().charAt(0).toUpperCase() || "S"
+    const titleText = publicTitle.trim()
+    const fallbackInitial = titleText.charAt(0).toUpperCase()
+    const eyebrowText = eyebrow?.trim()
+    const descriptionText = description?.trim()
 
     return (
         <header className="py-5 md:py-7">
@@ -45,7 +50,7 @@ export function PublicFormHeader({
                                     <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 px-2 py-1">
                                         <Image
                                             src={resolvedLogoUrl}
-                                            alt={`${publicTitle} logo`}
+                                            alt={titleText ? `${titleText} logo` : "Form logo"}
                                             width={112}
                                             height={56}
                                             unoptimized
@@ -53,20 +58,29 @@ export function PublicFormHeader({
                                             onError={onLogoError}
                                         />
                                     </div>
-                                ) : (
+                                ) : fallbackInitial ? (
                                     <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-violet-600 shadow-[0_10px_24px_rgba(79,70,229,0.24)]">
                                         <span className="text-lg font-semibold text-white">
                                             {fallbackInitial}
                                         </span>
                                     </div>
-                                )}
+                                ) : null}
                                 <div className="min-w-0">
-                                    <h1 className="text-2xl font-semibold leading-tight tracking-tight text-stone-950 md:text-[28px]">
-                                        {publicTitle}
-                                    </h1>
-                                    <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600 md:text-base">
-                                        {description || "Thank you for your interest in our program"}
-                                    </p>
+                                    {eyebrowText ? (
+                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+                                            {eyebrowText}
+                                        </p>
+                                    ) : null}
+                                    {titleText ? (
+                                        <h1 className="text-2xl font-semibold leading-tight tracking-tight text-stone-950 md:text-[28px]">
+                                            {titleText}
+                                        </h1>
+                                    ) : null}
+                                    {descriptionText ? (
+                                        <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600 md:text-base">
+                                            {descriptionText}
+                                        </p>
+                                    ) : null}
                                 </div>
                             </div>
                             <div

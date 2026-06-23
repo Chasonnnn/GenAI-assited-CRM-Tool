@@ -16,7 +16,9 @@ type FormBuilderCanvasPreviewProps = {
     activePage: number
     formName: string
     formDescription: string
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     resolvedLogoUrl: string
     privacyNotice: string
     previewDevice: "desktop" | "mobile"
@@ -117,7 +119,9 @@ export function FormBuilderCanvasPreview({
     activePage,
     formName,
     formDescription,
+    publicEyebrow,
     publicTitle,
+    publicSubtitle,
     resolvedLogoUrl,
     privacyNotice,
     previewDevice,
@@ -131,11 +135,13 @@ export function FormBuilderCanvasPreview({
     const previewSchema = useMemo(
         () =>
             buildFormSchema(pages, {
+                publicEyebrow,
                 publicTitle,
+                publicSubtitle,
                 logoUrl: resolvedLogoUrl,
                 privacyNotice,
             }),
-        [pages, privacyNotice, publicTitle, resolvedLogoUrl],
+        [pages, privacyNotice, publicEyebrow, publicSubtitle, publicTitle, resolvedLogoUrl],
     )
 
     const activeIndex = Math.max(0, pages.findIndex((page) => page.id === activePage))
@@ -149,9 +155,9 @@ export function FormBuilderCanvasPreview({
         [answers, previewPage?.fields],
     )
 
-    const previewTitle = publicTitle.trim() || formName.trim() || "Untitled Form"
-    const previewDescription =
-        formDescription.trim() || "Preview how applicants will experience this page."
+    const previewTitle = publicTitle.trim()
+    const previewEyebrow = publicEyebrow.trim()
+    const previewDescription = publicSubtitle.trim()
 
     return (
         <div
@@ -162,6 +168,7 @@ export function FormBuilderCanvasPreview({
             )}
         >
             <PublicFormHeader
+                eyebrow={previewEyebrow}
                 publicTitle={previewTitle}
                 description={previewDescription}
                 resolvedLogoUrl={resolvedLogoUrl || null}

@@ -47,7 +47,9 @@ export type BuilderFormPage = {
 }
 
 export type BuilderSchemaMetadata = {
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     logoUrl: string
     privacyNotice: string
 }
@@ -121,7 +123,9 @@ const toFieldRows = (
 }
 
 export function buildFormSchema(pages: BuilderFormPage[], metadata: BuilderSchemaMetadata): FormSchema {
+    const publicEyebrow = metadata.publicEyebrow.trim()
     const publicTitle = metadata.publicTitle.trim()
+    const publicSubtitle = metadata.publicSubtitle.trim()
     const logoUrl = metadata.logoUrl.trim()
     const privacyNotice = metadata.privacyNotice.trim()
 
@@ -159,7 +163,9 @@ export function buildFormSchema(pages: BuilderFormPage[], metadata: BuilderSchem
                 sensitivity: inferFieldSensitivity(field),
             })),
         })),
-        public_title: publicTitle || null,
+        public_eyebrow: publicEyebrow,
+        public_title: publicTitle,
+        public_subtitle: publicSubtitle,
         logo_url: logoUrl || null,
         privacy_notice: privacyNotice || null,
     }
@@ -220,7 +226,9 @@ export function schemaToPages(schema: FormSchema, mappings: Map<string, string>)
 
 export function schemaToMetadata(schema?: FormSchema | null): BuilderSchemaMetadata {
     return {
+        publicEyebrow: schema?.public_eyebrow ?? "",
         publicTitle: schema?.public_title ?? "",
+        publicSubtitle: schema?.public_subtitle ?? "",
         logoUrl: schema?.logo_url ?? "",
         privacyNotice: schema?.privacy_notice ?? "",
     }

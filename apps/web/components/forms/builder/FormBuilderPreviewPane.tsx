@@ -11,7 +11,9 @@ type FormBuilderPreviewPaneProps = {
     activePage: number
     formName: string
     formDescription: string
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     resolvedLogoUrl: string
     privacyNotice: string
     previewDevice: "desktop" | "mobile"
@@ -26,7 +28,9 @@ export function FormBuilderPreviewPane({
     activePage,
     formName,
     formDescription,
+    publicEyebrow,
     publicTitle,
+    publicSubtitle,
     resolvedLogoUrl,
     privacyNotice,
     previewDevice,
@@ -71,7 +75,9 @@ export function FormBuilderPreviewPane({
                     activePage={activePage}
                     formName={formName}
                     formDescription={formDescription}
+                    publicEyebrow={publicEyebrow}
                     publicTitle={publicTitle}
+                    publicSubtitle={publicSubtitle}
                     resolvedLogoUrl={resolvedLogoUrl}
                     privacyNotice={privacyNotice}
                     previewDevice={previewDevice}

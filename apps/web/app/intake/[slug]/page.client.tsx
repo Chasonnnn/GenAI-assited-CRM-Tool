@@ -842,10 +842,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
 
     const pages = formConfig?.form_schema.pages || []
     const hasAnyFileFields = pages.some((page) => page.fields.some((field) => field.type === "file"))
-    const publicTitle =
-        formConfig?.form_schema.public_title?.trim() ||
-        formConfig?.name ||
-        "Surrogate Application"
+    const publicTitle = formConfig?.form_schema.public_title?.trim() ?? ""
+    const publicEyebrow = formConfig?.form_schema.public_eyebrow?.trim() ?? ""
+    const publicSubtitle = formConfig?.form_schema.public_subtitle?.trim() ?? ""
     const logoUrl = formConfig?.form_schema.logo_url?.trim() || ""
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ""
     const resolvedLogoUrl =
@@ -1409,8 +1408,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     return (
         <div className={cn(publicFormPageClassName, "pb-12")}>
             <PublicFormHeader
+                eyebrow={publicEyebrow}
                 publicTitle={publicTitle}
-                description={formConfig?.description}
+                description={publicSubtitle}
                 resolvedLogoUrl={resolvedLogoUrl}
                 showLogo={showLogo}
                 onLogoError={() => setLogoError(true)}

@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea"
 type TemplateFormSettingsPanelProps = {
     formName: string
     formDescription: string
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     logoUrl: string
     resolvedLogoUrl: string
     privacyNotice: string
@@ -20,7 +22,9 @@ type TemplateFormSettingsPanelProps = {
     allowedMimeTypesText: string
     onFormNameChange: (value: string) => void
     onFormDescriptionChange: (value: string) => void
+    onPublicEyebrowChange: (value: string) => void
     onPublicTitleChange: (value: string) => void
+    onPublicSubtitleChange: (value: string) => void
     onLogoUrlChange: (value: string) => void
     onPrivacyNoticeChange: (value: string) => void
     onMaxFileSizeMbChange: (value: number) => void
@@ -31,7 +35,9 @@ type TemplateFormSettingsPanelProps = {
 export function TemplateFormSettingsPanel({
     formName,
     formDescription,
+    publicEyebrow,
     publicTitle,
+    publicSubtitle,
     logoUrl,
     resolvedLogoUrl,
     privacyNotice,
@@ -40,7 +46,9 @@ export function TemplateFormSettingsPanel({
     allowedMimeTypesText,
     onFormNameChange,
     onFormDescriptionChange,
+    onPublicEyebrowChange,
     onPublicTitleChange,
+    onPublicSubtitleChange,
     onLogoUrlChange,
     onPrivacyNoticeChange,
     onMaxFileSizeMbChange,
@@ -62,7 +70,7 @@ export function TemplateFormSettingsPanel({
 
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <Label htmlFor="settings-form-name">Form Name</Label>
+                        <Label htmlFor="settings-form-name">Internal template name</Label>
                         <Input
                             id="settings-form-name"
                             value={formName}
@@ -71,24 +79,56 @@ export function TemplateFormSettingsPanel({
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="settings-form-description">Description</Label>
+                        <Label htmlFor="settings-form-description">Internal description</Label>
                         <Textarea
                             id="settings-form-description"
                             value={formDescription}
                             onChange={(e) => onFormDescriptionChange(e.target.value)}
                             rows={3}
-                            placeholder="Describe the purpose of this form"
+                            placeholder="Describe the purpose of this template for your team"
                         />
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="settings-public-title">Public Title</Label>
-                        <Input
-                            id="settings-public-title"
-                            value={publicTitle}
-                            onChange={(e) => onPublicTitleChange(e.target.value)}
-                            placeholder="Business or program title shown to applicants"
-                        />
+                    <div className="space-y-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h4 className="text-sm font-semibold">Public Header</h4>
+                                <p className="text-xs text-stone-500">
+                                    These lines appear at the top of forms created from this template.
+                                </p>
+                            </div>
+                            <Badge variant="outline">Applicant-facing</Badge>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="settings-public-eyebrow">Eyebrow</Label>
+                                <Input
+                                    id="settings-public-eyebrow"
+                                    value={publicEyebrow}
+                                    onChange={(e) => onPublicEyebrowChange(e.target.value)}
+                                    placeholder="PRE-QUESTIONNAIRE"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="settings-public-title">Title</Label>
+                                <Input
+                                    id="settings-public-title"
+                                    value={publicTitle}
+                                    onChange={(e) => onPublicTitleChange(e.target.value)}
+                                    placeholder="EWI pre-questionnaire"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="settings-public-subtitle">Subtitle</Label>
+                            <Textarea
+                                id="settings-public-subtitle"
+                                value={publicSubtitle}
+                                onChange={(e) => onPublicSubtitleChange(e.target.value)}
+                                rows={3}
+                                placeholder="Answer a few quick questions so our team can review basic eligibility and follow up."
+                            />
+                        </div>
                     </div>
 
                     <div className="space-y-2">

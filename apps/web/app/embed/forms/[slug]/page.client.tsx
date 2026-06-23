@@ -339,12 +339,19 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                 <main className="mx-auto w-full max-w-[760px] px-4 py-4 sm:px-6 sm:py-6">
                     <section className="border border-stone-200/80 bg-white px-4 py-5 shadow-[0_18px_60px_rgba(31,38,58,0.08)] sm:px-6 sm:py-6">
                         <div className="mb-5 border-b border-stone-200/80 pb-4">
-                            <h1 className="text-[22px] font-semibold leading-tight text-stone-950">
-                                {formConfig.form_schema.public_title || formConfig.name}
-                            </h1>
-                            {formConfig.description ? (
+                            {formConfig.form_schema.public_eyebrow?.trim() ? (
+                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+                                    {formConfig.form_schema.public_eyebrow.trim()}
+                                </p>
+                            ) : null}
+                            {formConfig.form_schema.public_title?.trim() ? (
+                                <h1 className="text-[22px] font-semibold leading-tight text-stone-950">
+                                    {formConfig.form_schema.public_title.trim()}
+                                </h1>
+                            ) : null}
+                            {formConfig.form_schema.public_subtitle?.trim() ? (
                                 <p className="mt-2 max-w-[54ch] text-[14px] leading-6 text-stone-600">
-                                    {formConfig.description}
+                                    {formConfig.form_schema.public_subtitle.trim()}
                                 </p>
                             ) : null}
                         </div>

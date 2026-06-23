@@ -26,7 +26,9 @@ type AutomationFormSettingsPanelProps = {
     formName: string
     formDescription: string
     formPurpose: FormPurpose
+    publicEyebrow: string
     publicTitle: string
+    publicSubtitle: string
     logoUrl: string
     resolvedLogoUrl: string
     privacyNotice: string
@@ -46,7 +48,9 @@ type AutomationFormSettingsPanelProps = {
     onFormNameChange: (value: string) => void
     onFormDescriptionChange: (value: string) => void
     onFormPurposeChange: (value: FormPurpose) => void
+    onPublicEyebrowChange: (value: string) => void
     onPublicTitleChange: (value: string) => void
+    onPublicSubtitleChange: (value: string) => void
     onLogoUrlChange: (value: string) => void
     onPrivacyNoticeChange: (value: string) => void
     onDefaultTemplateChange: (value: string | null) => void
@@ -67,7 +71,9 @@ export function AutomationFormSettingsPanel({
     formName,
     formDescription,
     formPurpose,
+    publicEyebrow,
     publicTitle,
+    publicSubtitle,
     logoUrl,
     resolvedLogoUrl,
     privacyNotice,
@@ -87,7 +93,9 @@ export function AutomationFormSettingsPanel({
     onFormNameChange,
     onFormDescriptionChange,
     onFormPurposeChange,
+    onPublicEyebrowChange,
     onPublicTitleChange,
+    onPublicSubtitleChange,
     onLogoUrlChange,
     onPrivacyNoticeChange,
     onDefaultTemplateChange,
@@ -120,7 +128,7 @@ export function AutomationFormSettingsPanel({
 
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <Label htmlFor="settings-form-name">Form Name</Label>
+                        <Label htmlFor="settings-form-name">Internal form name</Label>
                         <Input
                             id="settings-form-name"
                             value={formName}
@@ -129,13 +137,13 @@ export function AutomationFormSettingsPanel({
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="settings-form-description">Description</Label>
+                        <Label htmlFor="settings-form-description">Internal description</Label>
                         <Textarea
                             id="settings-form-description"
                             value={formDescription}
                             onChange={(e) => onFormDescriptionChange(e.target.value)}
                             rows={3}
-                            placeholder="Describe the purpose of this form"
+                            placeholder="Describe the purpose of this form for your team"
                         />
                     </div>
 
@@ -164,16 +172,6 @@ export function AutomationFormSettingsPanel({
                         <p className="text-xs text-stone-500">
                             Use lead capture for embeddable contact forms and surrogate application for full intake.
                         </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="settings-public-title">Public Title</Label>
-                        <Input
-                            id="settings-public-title"
-                            value={publicTitle}
-                            onChange={(e) => onPublicTitleChange(e.target.value)}
-                            placeholder="Business or program title shown to applicants"
-                        />
                     </div>
 
                     <div className="space-y-2">
@@ -334,6 +332,48 @@ export function AutomationFormSettingsPanel({
                                     Publish this form before setting it as default.
                                 </p>
                             )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 rounded-lg border border-stone-200 bg-stone-50/70 p-4 dark:border-stone-800 dark:bg-stone-950/40">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h4 className="text-sm font-semibold">Public Form Title & Subtitle</h4>
+                                <p className="text-xs text-stone-500">
+                                    Edit the header shown on the shared link, QR page, and website embed.
+                                </p>
+                            </div>
+                            <Badge variant="outline">Applicant-facing</Badge>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="settings-public-eyebrow">Eyebrow</Label>
+                                <Input
+                                    id="settings-public-eyebrow"
+                                    value={publicEyebrow}
+                                    onChange={(e) => onPublicEyebrowChange(e.target.value)}
+                                    placeholder="PRE-QUESTIONNAIRE"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="settings-public-title">Title</Label>
+                                <Input
+                                    id="settings-public-title"
+                                    value={publicTitle}
+                                    onChange={(e) => onPublicTitleChange(e.target.value)}
+                                    placeholder="EWI pre-questionnaire"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="settings-public-subtitle">Subtitle</Label>
+                            <Textarea
+                                id="settings-public-subtitle"
+                                value={publicSubtitle}
+                                onChange={(e) => onPublicSubtitleChange(e.target.value)}
+                                rows={3}
+                                placeholder="Answer a few quick questions so our team can review basic eligibility and follow up."
+                            />
                         </div>
                     </div>
 

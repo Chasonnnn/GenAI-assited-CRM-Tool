@@ -115,7 +115,9 @@ interface FormPage {
 
 export interface FormSchema {
     pages: FormPage[]
+    public_eyebrow?: string | null
     public_title?: string | null
+    public_subtitle?: string | null
     logo_url?: string | null
     privacy_notice?: string | null
 }
