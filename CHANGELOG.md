@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.39](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.38...surrogacy-crm-platform-v0.91.39) (2026-06-23)
+
+
+### Bug Fixes
+
+* **forms:** constrain share dialog layout ([bc3d1aa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bc3d1aaa38a3bb7caf10c47db2c58dfeddf35b93))
+
 ## [0.91.38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.37...surrogacy-crm-platform-v0.91.38) (2026-06-23)
 
 
