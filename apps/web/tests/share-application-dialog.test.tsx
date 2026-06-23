@@ -48,6 +48,37 @@ const health: FormEmbedHealthRead = {
 }
 
 describe("ShareApplicationDialog", () => {
+    it("keeps the share modal constrained and wrap-safe", () => {
+        render(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={link}
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={vi.fn()}
+                embedHealth={health}
+            />,
+        )
+
+        const dialog = document.body.querySelector('[data-slot="alert-dialog-content"]')
+        const tabs = document.body.querySelector('[data-slot="tabs"]')
+        const tabList = document.body.querySelector('[data-slot="tabs-list"]')
+        const footer = document.body.querySelector('[data-slot="alert-dialog-footer"]')
+
+        expect(dialog).toHaveClass(
+            "w-[calc(100vw-2rem)]",
+            "max-w-2xl",
+            "data-[size=default]:sm:max-w-2xl",
+            "overflow-x-hidden",
+            "overflow-y-auto",
+        )
+        expect(tabs).toHaveClass("min-w-0", "overflow-hidden")
+        expect(tabList).toHaveClass("min-w-0")
+        expect(footer).toHaveClass("flex-col", "sm:flex-wrap")
+    })
+
     it("renders embed health check time as a stable calendar date", () => {
         render(
             <ShareApplicationDialog

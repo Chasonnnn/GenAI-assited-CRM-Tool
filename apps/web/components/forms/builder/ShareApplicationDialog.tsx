@@ -128,22 +128,28 @@ export function ShareApplicationDialog({
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
+            <AlertDialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-2xl gap-4 overflow-x-hidden overflow-y-auto p-4 data-[size=default]:max-w-2xl data-[size=default]:sm:max-w-2xl sm:p-6">
+                <AlertDialogHeader className="min-w-0">
                     <AlertDialogTitle>Share Application Intake</AlertDialogTitle>
-                    <AlertDialogDescription>
+                    <AlertDialogDescription className="break-words">
                         Choose how you want to distribute this published application form.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
-                <Tabs defaultValue="hosted" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="hosted">Hosted Link</TabsTrigger>
-                        <TabsTrigger value="qr">QR Code</TabsTrigger>
-                        <TabsTrigger value="embed">Embed</TabsTrigger>
+                <Tabs defaultValue="hosted" className="min-w-0 w-full overflow-hidden">
+                    <TabsList className="grid h-auto w-full min-w-0 grid-cols-3 rounded-2xl sm:h-9">
+                        <TabsTrigger value="hosted" className="min-w-0 px-1.5 text-xs sm:px-2 sm:text-sm">
+                            <span className="truncate">Hosted Link</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="qr" className="min-w-0 px-1.5 text-xs sm:px-2 sm:text-sm">
+                            <span className="truncate">QR Code</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="embed" className="min-w-0 px-1.5 text-xs sm:px-2 sm:text-sm">
+                            <span className="truncate">Embed</span>
+                        </TabsTrigger>
                     </TabsList>
-                    <TabsContent value="hosted" className="mt-4">
+                    <TabsContent value="hosted" className="mt-4 min-w-0">
                         {selectedQrLink?.intake_url ? (
-                            <div className="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+                            <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
                                 <div className="font-medium text-stone-900 dark:text-stone-100">
                                     {selectedQrLink.event_name || selectedQrLink.campaign_name || "Shared intake link"}
                                 </div>
@@ -153,17 +159,20 @@ export function ShareApplicationDialog({
                             <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
                         )}
                     </TabsContent>
-                    <TabsContent value="qr" className="mt-4">
-                        <div className="rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+                    <TabsContent value="qr" className="mt-4 min-w-0">
+                        <div className="min-w-0 max-w-full rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
                             Use the QR download actions below for the selected hosted link.
                         </div>
                     </TabsContent>
-                    <TabsContent value="embed" className="mt-4 space-y-3">
+                    <TabsContent
+                        value="embed"
+                        className="mt-4 max-h-[min(48vh,32rem)] min-w-0 space-y-3 overflow-y-auto overflow-x-hidden pr-1"
+                    >
                         {selectedQrLink ? (
                             <>
-                                <div className="space-y-4 rounded-md border border-stone-200 p-3 dark:border-stone-800">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2">
+                                <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-md border border-stone-200 p-3 dark:border-stone-800">
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
                                             <EmbedHealthStatusBadge health={embedHealth} />
                                             {embedHealth?.updated_at ? (
                                                 <span className="text-xs text-stone-500">
@@ -175,6 +184,7 @@ export function ShareApplicationDialog({
                                             type="button"
                                             variant="outline"
                                             size="sm"
+                                            className="shrink-0"
                                             onClick={onRefreshEmbedHealth}
                                             disabled={!selectedQrLink || isEmbedHealthFetching}
                                         >
@@ -185,15 +195,15 @@ export function ShareApplicationDialog({
                                         </Button>
                                     </div>
                                     {embedHealth ? (
-                                        <div className="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-900/40">
+                                        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-900/40">
                                             {embedHealth.checks.map((check) => (
-                                                <div key={check.key} className="flex gap-2 text-xs">
+                                                <div key={check.key} className="flex min-w-0 gap-2 text-xs">
                                                     <EmbedHealthCheckIcon status={check.status} />
-                                                    <div>
+                                                    <div className="min-w-0">
                                                         <div className="font-medium text-stone-900 dark:text-stone-100">
                                                             {check.label}
                                                         </div>
-                                                        <div className="text-stone-500">{check.message}</div>
+                                                        <div className="break-words text-stone-500">{check.message}</div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -225,6 +235,7 @@ export function ShareApplicationDialog({
                                             }
                                             placeholder="https://www.clientsite.com"
                                             rows={3}
+                                            className="min-w-0"
                                             disabled={isEmbedSettingsPending}
                                         />
                                     </div>
@@ -240,7 +251,7 @@ export function ShareApplicationDialog({
                                             }
                                             disabled={isEmbedSettingsPending}
                                         >
-                                            <SelectTrigger id="sf-embed-tracking">
+                                            <SelectTrigger id="sf-embed-tracking" className="min-w-0">
                                                 <SelectValue>
                                                     {(value: string | null) =>
                                                         getTrackingModeLabel((value as TrackingMode | null) ?? "enhanced_match_lead")
@@ -268,6 +279,7 @@ export function ShareApplicationDialog({
                                             }
                                             placeholder="I agree to be contacted about my inquiry."
                                             rows={3}
+                                            className="min-w-0"
                                             disabled={isEmbedSettingsPending}
                                         />
                                     </div>
@@ -280,12 +292,12 @@ export function ShareApplicationDialog({
                                         Save Embed Settings
                                     </Button>
                                 </div>
-                                <div className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+                                <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
                                     <div className="mb-2 flex items-center gap-2 font-medium text-stone-900 dark:text-stone-100">
                                         <Code2Icon className="size-4" />
                                         Website embed
                                     </div>
-                                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded border border-stone-200 bg-white p-3 font-mono text-[11px] leading-5 dark:border-stone-800 dark:bg-stone-950">
+                                    <pre className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded border border-stone-200 bg-white p-3 font-mono text-[11px] leading-5 dark:border-stone-800 dark:bg-stone-950">
                                         {embedSnippet}
                                     </pre>
                                 </div>
@@ -294,11 +306,11 @@ export function ShareApplicationDialog({
                                         Embedding is disabled for this link until allowed origins are configured.
                                     </p>
                                 ) : selectedQrLink.allowed_embed_origins.length > 0 ? (
-                                    <p className="text-xs text-stone-500">
+                                    <p className="break-words text-xs text-stone-500">
                                         Allowed origins: {selectedQrLink.allowed_embed_origins.join(", ")}
                                     </p>
                                 ) : null}
-                                <Button type="button" variant="outline" onClick={copyEmbedSnippet}>
+                                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={copyEmbedSnippet}>
                                     <CopyIcon className="mr-2 size-4" />
                                     Copy Embed
                                 </Button>
@@ -308,11 +320,12 @@ export function ShareApplicationDialog({
                         )}
                     </TabsContent>
                 </Tabs>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Close</AlertDialogCancel>
+                <AlertDialogFooter className="min-w-0 flex-col sm:flex-row sm:flex-wrap">
+                    <AlertDialogCancel className="w-full sm:w-auto">Close</AlertDialogCancel>
                     <Button
                         type="button"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         disabled={!selectedQrLink}
                         onClick={async () => {
                             if (!selectedQrLink) return
@@ -326,6 +339,7 @@ export function ShareApplicationDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         disabled={!selectedQrLink}
                         onClick={() => {
                             if (!selectedQrLink) return
@@ -338,6 +352,7 @@ export function ShareApplicationDialog({
                     </Button>
                     <Button
                         type="button"
+                        className="w-full sm:w-auto"
                         disabled={!selectedQrLink}
                         onClick={() => {
                             if (!selectedQrLink) return
