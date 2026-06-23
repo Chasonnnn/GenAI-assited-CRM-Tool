@@ -9,8 +9,6 @@ import type { BuilderFormPage } from "@/lib/forms/form-builder-document"
 type FormBuilderPreviewPaneProps = {
     pages: BuilderFormPage[]
     activePage: number
-    formName: string
-    formDescription: string
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -26,8 +24,6 @@ type FormBuilderPreviewPaneProps = {
 export function FormBuilderPreviewPane({
     pages,
     activePage,
-    formName,
-    formDescription,
     publicEyebrow,
     publicTitle,
     publicSubtitle,
@@ -73,8 +69,6 @@ export function FormBuilderPreviewPane({
                 <FormBuilderCanvasPreview
                     pages={pages}
                     activePage={activePage}
-                    formName={formName}
-                    formDescription={formDescription}
                     publicEyebrow={publicEyebrow}
                     publicTitle={publicTitle}
                     publicSubtitle={publicSubtitle}

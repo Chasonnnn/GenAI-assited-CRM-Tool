@@ -501,8 +501,6 @@ export function useTemplateFormBuilderPage() {
             desktopCanvasWidthClass: "max-w-[min(100%,76rem)]",
             canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
             mappingOptions: surrogateFieldMappings,
-            formName: state.formName,
-            formDescription: state.formDescription,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -515,8 +513,6 @@ export function useTemplateFormBuilderPage() {
         previewProps: {
             pages,
             activePage,
-            formName: state.formName,
-            formDescription: state.formDescription,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,

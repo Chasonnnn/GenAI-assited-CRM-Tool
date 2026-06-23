@@ -1071,8 +1071,6 @@ export function useAutomationFormBuilderPage() {
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
             canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
             mappingOptions: surrogateFieldMappings,
-            formName: state.formName,
-            formDescription: state.formDescription,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -1085,8 +1083,6 @@ export function useAutomationFormBuilderPage() {
         previewProps: {
             pages,
             activePage,
-            formName: state.formName,
-            formDescription: state.formDescription,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,

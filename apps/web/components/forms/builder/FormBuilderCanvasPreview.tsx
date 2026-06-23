@@ -14,8 +14,6 @@ import { cn } from "@/lib/utils"
 type FormBuilderCanvasPreviewProps = {
     pages: BuilderFormPage[]
     activePage: number
-    formName: string
-    formDescription: string
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -117,8 +115,6 @@ function PreviewFallbackField({ field }: { field: FormField }) {
 export function FormBuilderCanvasPreview({
     pages,
     activePage,
-    formName,
-    formDescription,
     publicEyebrow,
     publicTitle,
     publicSubtitle,

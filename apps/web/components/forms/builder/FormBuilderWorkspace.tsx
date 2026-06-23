@@ -83,8 +83,6 @@ type FormBuilderWorkspaceProps = {
     desktopCanvasWidthClass: string
     canvasFrameClass: string
     mappingOptions: FormSurrogateFieldOption[]
-    formName: string
-    formDescription: string
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -433,8 +431,6 @@ function PageStrip({
 function EditCanvas({
     desktopCanvasWidthClass,
     canvasFrameClass,
-    formName,
-    formDescription,
     publicEyebrow,
     publicTitle,
     publicSubtitle,
@@ -454,8 +450,6 @@ function EditCanvas({
 }: {
     desktopCanvasWidthClass: string
     canvasFrameClass: string
-    formName: string
-    formDescription: string
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -1153,8 +1147,6 @@ export function FormBuilderWorkspace({
     desktopCanvasWidthClass,
     canvasFrameClass,
     mappingOptions,
-    formName,
-    formDescription,
     publicEyebrow,
     publicTitle,
     publicSubtitle,
@@ -1201,8 +1193,6 @@ export function FormBuilderWorkspace({
                     <EditCanvas
                         desktopCanvasWidthClass={desktopCanvasWidthClass}
                         canvasFrameClass={canvasFrameClass}
-                        formName={formName}
-                        formDescription={formDescription}
                         publicEyebrow={publicEyebrow}
                         publicTitle={publicTitle}
                         publicSubtitle={publicSubtitle}
