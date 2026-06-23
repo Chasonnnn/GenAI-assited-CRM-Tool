@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.37...surrogacy-crm-platform-v0.91.38) (2026-06-23)
+
+
+### Features
+
+* **forms:** support editable public form headers ([b3d0856](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3d0856e884616691fa95872194961756c640b07))
+
+
+### Maintenance
+
+* **forms:** drop unused preview props ([3470893](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/347089357a24709ca19e2c26a90e047df63b5a68))
+
 ## [0.91.37](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.36...surrogacy-crm-platform-v0.91.37) (2026-06-22)
 
 
