@@ -161,6 +161,96 @@ def test_build_meta_crm_dataset_payload_ignores_invalid_click_ids():
     assert "fbc" not in payload["data"][0]["user_data"]
 
 
+def test_build_website_lead_payload_uses_website_shape_without_sensitive_fields():
+    from app.services import meta_crm_dataset_service
+
+    event_time = datetime(2026, 3, 8, 4, 0, 0, tzinfo=timezone.utc)
+    payload = meta_crm_dataset_service.build_website_lead_event_payload(
+        event_time=event_time,
+        event_source_url="https://ewi-surrogacy.com",
+        include_hashed_pii=True,
+        email="Lead@example.com",
+        phone="+1 (555) 123-4567",
+        fbc="fb.1.1772942400.test-click-id",
+        fbp="fb.1.1772942400.browser-id",
+        event_id="sf_lead_submission-1",
+        source="meta",
+        campaign="spring-surrogate",
+        test_event_code="TEST123",
+    )
+
+    assert payload["test_event_code"] == "TEST123"
+    event_data = payload["data"][0]
+    assert event_data["event_name"] == "Lead"
+    assert event_data["event_time"] == int(event_time.timestamp())
+    assert event_data["event_id"] == "sf_lead_submission-1"
+    assert event_data["action_source"] == "website"
+    assert event_data["event_source_url"] == "https://ewi-surrogacy.com"
+    assert event_data["custom_data"] == {
+        "content_name": "lead_capture",
+        "content_category": "intake",
+        "event_source": "website",
+        "source": "meta",
+        "campaign": "spring-surrogate",
+    }
+    user_data = event_data["user_data"]
+    assert user_data["fbc"] == "fb.1.1772942400.test-click-id"
+    assert user_data["fbp"] == "fb.1.1772942400.browser-id"
+    assert user_data["em"]
+    assert user_data["ph"]
+    assert "fn" not in user_data
+    assert "ln" not in user_data
+    assert "answers" not in event_data
+    assert "height" not in str(event_data).lower()
+    assert "weight" not in str(event_data).lower()
+
+
+def test_enqueue_website_lead_event_skips_without_match_keys(db, test_org):
+    from app.db.enums import JobType
+    from app.db.models import Job, MetaCrmDatasetEvent
+    from app.services import meta_crm_dataset_service, meta_crm_dataset_settings_service
+
+    settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    settings.dataset_id = "1428122951556949"
+    settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_access_token(
+        "meta-token"
+    )
+    settings.enabled = True
+    settings.send_hashed_pii = False
+    db.commit()
+
+    submission_id = uuid4()
+    result = meta_crm_dataset_service.enqueue_website_lead_event(
+        db,
+        organization_id=test_org.id,
+        lead_id="intake-lead-1",
+        submission_id=submission_id,
+        event_source_url="https://ewi-surrogacy.com",
+        attribution={},
+        email="lead@example.com",
+        phone="+1 (555) 123-4567",
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "missing_user_data"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .first()
+        is None
+    )
+    monitor_event = (
+        db.query(MetaCrmDatasetEvent)
+        .filter(MetaCrmDatasetEvent.event_id == f"sf_lead_{submission_id}")
+        .one()
+    )
+    assert monitor_event.status == "skipped"
+    assert monitor_event.reason == "missing_user_data"
+
+
 def test_enqueue_meta_crm_dataset_stage_event_includes_fbc_from_meta_lead(db, test_org, test_user):
     from app.db.enums import JobType, SurrogateSource
     from app.db.models import Job, MetaLead

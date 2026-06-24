@@ -31,6 +31,7 @@ META_GRAPH_BASE_URL = "https://graph.facebook.com"
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 MAX_META_LEAD_AGE = timedelta(days=90)
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
+DEFAULT_WEBSITE_EVENT_SOURCE_URL = "https://ewi-surrogacy.com"
 
 
 def _now_utc() -> datetime:
@@ -106,6 +107,13 @@ def _normalize_meta_click_id(value: str | None) -> str | None:
     return normalized
 
 
+def _normalize_meta_browser_id(value: str | None) -> str | None:
+    normalized = (value or "").strip()
+    if not normalized or not normalized.startswith("fb."):
+        return None
+    return normalized
+
+
 def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
     return _normalize_meta_click_id(
         _find_json_value_by_key(meta_lead.field_data_raw or {}, FBC_CANDIDATE_KEYS)
@@ -144,6 +152,37 @@ def _skip_event(
         "queued": False,
         "reason": reason,
         "event_name": event_name,
+        "event_id": event_id,
+        "lead_id": lead_id,
+    }
+
+
+def _skip_website_lead_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    source: str,
+    reason: str,
+    event_id: str,
+    lead_id: str,
+) -> dict[str, object]:
+    meta_crm_dataset_monitor_service.record_skipped_event(
+        db=db,
+        org_id=org_id,
+        source=source,
+        reason=reason,
+        event_id=event_id,
+        event_name="Lead",
+        lead_id=lead_id,
+        stage_key="lead_created",
+        stage_slug="lead_created",
+        stage_label="Lead Created",
+        surrogate_id=None,
+    )
+    return {
+        "queued": False,
+        "reason": reason,
+        "event_name": "Lead",
         "event_id": event_id,
         "lead_id": lead_id,
     }
@@ -191,6 +230,204 @@ def build_stage_event_payload(
     if test_event_code:
         payload["test_event_code"] = test_event_code
     return payload
+
+
+def build_website_lead_event_payload(
+    *,
+    event_time: datetime,
+    event_source_url: str | None,
+    include_hashed_pii: bool,
+    email: str | None,
+    phone: str | None,
+    fbc: str | None = None,
+    fbp: str | None = None,
+    event_id: str | None = None,
+    source: str | None = None,
+    campaign: str | None = None,
+    test_event_code: str | None = None,
+) -> dict:
+    user_data: dict[str, object] = {}
+    normalized_fbc = _normalize_meta_click_id(fbc)
+    normalized_fbp = _normalize_meta_browser_id(fbp)
+    if normalized_fbc:
+        user_data["fbc"] = normalized_fbc
+    if normalized_fbp:
+        user_data["fbp"] = normalized_fbp
+    if include_hashed_pii:
+        if email and "@" in email and "placeholder" not in email:
+            user_data["em"] = [meta_capi.hash_for_capi(email)]
+        if phone:
+            phone_digits = "".join(ch for ch in phone if ch.isdigit())
+            if len(phone_digits) >= 10:
+                user_data["ph"] = [meta_capi.hash_for_capi(phone_digits)]
+
+    source_url = (event_source_url or "").strip() or DEFAULT_WEBSITE_EVENT_SOURCE_URL
+    custom_data = {
+        "content_name": "lead_capture",
+        "content_category": "intake",
+        "event_source": "website",
+    }
+    if source:
+        custom_data["source"] = source[:100]
+    if campaign:
+        custom_data["campaign"] = campaign[:200]
+
+    event_payload = {
+        "event_name": "Lead",
+        "event_time": int(event_time.astimezone(timezone.utc).timestamp()),
+        "action_source": "website",
+        "event_source_url": source_url[:1000],
+        "custom_data": custom_data,
+        "user_data": user_data,
+    }
+    if event_id:
+        event_payload["event_id"] = event_id
+
+    payload = {"data": [event_payload]}
+    if test_event_code:
+        payload["test_event_code"] = test_event_code
+    return payload
+
+
+def enqueue_website_lead_event(
+    db: Session,
+    *,
+    organization_id: UUID,
+    lead_id: str,
+    submission_id: UUID,
+    event_source_url: str | None,
+    attribution: dict[str, str],
+    email: str | None,
+    phone: str | None,
+    effective_at: datetime | None = None,
+    source: str = "form_embed",
+) -> dict[str, object]:
+    event_time = effective_at or _now_utc()
+    event_id = f"sf_lead_{submission_id}"
+
+    settings_row = meta_crm_dataset_settings_service.get_settings(db, organization_id)
+    if not settings_row or not settings_row.enabled:
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="disabled",
+            event_id=event_id,
+            lead_id=lead_id,
+        )
+    if not settings_row.dataset_id:
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="missing_dataset_id",
+            event_id=event_id,
+            lead_id=lead_id,
+        )
+    if not settings_row.access_token_encrypted:
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="missing_access_token",
+            event_id=event_id,
+            lead_id=lead_id,
+        )
+
+    body = build_website_lead_event_payload(
+        event_time=event_time,
+        event_source_url=event_source_url,
+        include_hashed_pii=settings_row.send_hashed_pii,
+        email=email,
+        phone=phone,
+        fbc=attribution.get("fbc"),
+        fbp=attribution.get("fbp"),
+        event_id=event_id,
+        source=attribution.get("utm_source"),
+        campaign=attribution.get("utm_campaign"),
+        test_event_code=settings_row.test_event_code,
+    )
+    event_data = body["data"][0]
+    if not event_data.get("user_data"):
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="missing_user_data",
+            event_id=event_id,
+            lead_id=lead_id,
+        )
+    job_payload = {
+        "settings_id": str(settings_row.id),
+        "dataset_id": settings_row.dataset_id,
+        "body": body,
+    }
+    idempotency_key = event_id
+
+    existing_job = job_service.get_job_by_idempotency_key(
+        db, org_id=organization_id, idempotency_key=idempotency_key
+    )
+    if existing_job:
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="duplicate",
+            event_id=event_id,
+            lead_id=lead_id,
+        ) | {"idempotency_key": idempotency_key}
+
+    try:
+        job = job_service.schedule_job(
+            db=db,
+            org_id=organization_id,
+            job_type=JobType.META_CRM_DATASET_EVENT,
+            payload=job_payload,
+            idempotency_key=idempotency_key,
+        )
+        meta_crm_dataset_monitor_service.record_queued_event(
+            db=db,
+            org_id=organization_id,
+            job_id=job.id,
+            source=source,
+            event_id=event_id,
+            event_name="Lead",
+            lead_id=lead_id,
+            stage_key="lead_created",
+            stage_slug="lead_created",
+            stage_label="Lead Created",
+            surrogate_id=None,
+        )
+        return {
+            "queued": True,
+            "reason": None,
+            "event_name": "Lead",
+            "event_id": event_id,
+            "lead_id": lead_id,
+            "idempotency_key": idempotency_key,
+        }
+    except IntegrityError:
+        db.rollback()
+        logger.info("Skipping duplicate website Meta CRM dataset event for key=%s", idempotency_key)
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="duplicate",
+            event_id=event_id,
+            lead_id=lead_id,
+        ) | {"idempotency_key": idempotency_key}
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Failed to enqueue website Meta CRM dataset event: %s", exc)
+        return _skip_website_lead_event(
+            db,
+            org_id=organization_id,
+            source=source,
+            reason="enqueue_failed",
+            event_id=event_id,
+            lead_id=lead_id,
+        ) | {"idempotency_key": idempotency_key}
 
 
 def enqueue_stage_event(

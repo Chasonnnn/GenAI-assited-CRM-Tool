@@ -37,6 +37,27 @@ const SCRIPT = `
     return window.location.origin;
   }
 
+  function readCookie(name) {
+    var prefix = name + "=";
+    var parts = document.cookie ? document.cookie.split(";") : [];
+    for (var index = 0; index < parts.length; index += 1) {
+      var part = parts[index].trim();
+      if (part.indexOf(prefix) === 0) {
+        try {
+          return decodeURIComponent(part.slice(prefix.length));
+        } catch (_) {
+          return part.slice(prefix.length);
+        }
+      }
+    }
+    return "";
+  }
+
+  function buildFbcFromClickId(fbclid) {
+    if (!fbclid) return "";
+    return "fb.1." + Math.floor(Date.now() / 1000) + "." + fbclid;
+  }
+
   function collectAttribution() {
     var params = new URLSearchParams(window.location.search);
     var data = {};
@@ -44,13 +65,18 @@ const SCRIPT = `
       var value = params.get(key);
       if (value) data[key] = value;
     });
+    var cookieFbp = readCookie("_fbp");
+    var cookieFbc = readCookie("_fbc");
+    if (cookieFbp && !data.fbp) data.fbp = cookieFbp;
+    if (cookieFbc && !data.fbc) data.fbc = cookieFbc;
+    if (data.fbclid && !data.fbc) data.fbc = buildFbcFromClickId(data.fbclid);
     if (document.referrer) {
       try {
         var referrerUrl = new URL(document.referrer);
         data.referrer = referrerUrl.origin + referrerUrl.pathname;
       } catch (_) {}
     }
-    data.landing_url = window.location.origin + window.location.pathname;
+    data.landing_url = window.location.href.split("#")[0];
     return data;
   }
 
@@ -97,6 +123,12 @@ const SCRIPT = `
         }
         if (event.data.type === "sf:form:resize" && typeof event.data.height === "number") {
           iframe.style.height = Math.max(320, Math.ceil(event.data.height)) + "px";
+        }
+        if (event.data.type === "sf:form:started") {
+          container.dispatchEvent(new CustomEvent("sf:form:started", {
+            bubbles: true,
+            detail: {}
+          }));
         }
         if (event.data.type === "sf:form:submitted") {
           container.dispatchEvent(new CustomEvent("sf:form:submitted", {

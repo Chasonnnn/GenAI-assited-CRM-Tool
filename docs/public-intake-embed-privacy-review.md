@@ -9,6 +9,7 @@ Public Intake Embed is a privacy-safe website intake and CRM routing surface. It
 4. The iframe creates a short-lived embed session for the allowed parent origin.
 5. The applicant submits a lead-capture form.
 6. SurrogacyForce stores CRM intake records and queues privacy-safe tracking metadata when enabled.
+7. When CRM Meta Dataset delivery is configured, `internal_only` embeds may queue a CRM-owned server-side `Lead` event after successful lead creation.
 
 ## Captured Internally
 - Full name.
@@ -58,7 +59,15 @@ Public Intake Embed is a privacy-safe website intake and CRM routing surface. It
 - generic content metadata
 - allowlisted non-sensitive campaign fields when present
 
-The feature does not inject Meta Pixel into the customer site and does not read or write customer-site cookies.
+`internal_only` does not create a SurrogacyForce `TrackingEventLog`. If the org-level
+Meta CRM Dataset integration is enabled, successful embed lead creation queues a
+server-side CRM Dataset `Lead` event with website attribution, `_fbc`/`_fbp` when
+present, and hashed email/phone only when the dataset setting allows hashed PII.
+
+The feature does not inject Meta Pixel into the customer site and does not write
+customer-site cookies. The embed script may read existing first-party `_fbp` and
+`_fbc` cookies set by the customer site's Meta Pixel so the CRM can preserve
+attribution for server-side deduplication and matching.
 
 ## Field Classification Rules
 Lead-capture fields must have a sensitivity classification. In privacy-safe mode, publish/embed settings are blocked if the form contains:
@@ -90,4 +99,3 @@ Avoid this wording:
 - [ ] Tracking log payload has no PII or answers.
 - [ ] postMessage payload has no PII or answers.
 - [ ] Browser console has no accidental answer logging.
-

@@ -84,10 +84,15 @@ SurrogacyForce stores the lead submission, consent snapshot, allowed attribution
 
 Privacy-safe ad tracking does not send form answers, sensitive fields, uploaded files, qualification status, or hashed contact information to ad platforms by default.
 
+When the CRM Meta Dataset integration is enabled, successful website-embed
+submissions can send a CRM-owned server-side `Lead` event after lead creation.
+That event may include allowed attribution values and hashed email/phone only if
+the CRM dataset setting is configured to send hashed PII; it still must not send
+questionnaire answers or sensitive fields.
+
 ## Known Limitations
 - Custom domains are not part of v1.
 - Native DOM embed is not part of v1.
 - Full landing-page builder is not part of v1.
 - Arbitrary customer pixels are not supported on embedded forms.
 - Advertising-platform classification may still apply to your website or campaign destination.
-

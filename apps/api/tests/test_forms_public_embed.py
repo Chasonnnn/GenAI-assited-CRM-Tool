@@ -6,12 +6,15 @@ import uuid
 
 import pytest
 
+from app.db.enums import JobType
 from app.db.models import (
     ConsentRecord,
     EmbedSession,
     FormSubmission,
     IntakeLead,
+    Job,
     LeadAttribution,
+    MetaCrmDatasetEvent,
     TrackingEventLog,
 )
 
@@ -394,6 +397,133 @@ async def test_embed_submit_requires_valid_session_and_published_version(
         },
     )
     assert wrong_version_res.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_internal_only_embed_submit_queues_crm_dataset_lead_without_sensitive_answers(
+    authed_client,
+    db,
+    test_org,
+):
+    from app.services import meta_crm_dataset_settings_service
+
+    _form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    allowed_origin = "https://ewi-surrogacy.com"
+
+    settings = meta_crm_dataset_settings_service.get_or_create_settings(db, test_org.id)
+    settings.dataset_id = "1428122951556949"
+    settings.access_token_encrypted = meta_crm_dataset_settings_service.encrypt_access_token(
+        "meta-token"
+    )
+    settings.enabled = True
+    settings.send_hashed_pii = True
+    db.commit()
+
+    link_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [allowed_origin],
+            "tracking_mode": "internal_only",
+            "consent_text": "I agree to be contacted.",
+        },
+    )
+    assert link_res.status_code == 200
+
+    public_res = await authed_client.get(
+        f"/forms/public/embed/{slug}",
+        headers={"origin": allowed_origin},
+    )
+    assert public_res.status_code == 200
+    public_payload = public_res.json()
+
+    session_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={
+            "parent_origin": allowed_origin,
+            "attribution": {
+                "utm_source": "meta",
+                "utm_campaign": "spring-surrogate",
+                "fbclid": "fb-test-click",
+                "fbc": "fb.1.1772942400.fb-test-click",
+                "fbp": "fb.1.1772942400.1234567890",
+                "landing_url": "https://ewi-surrogacy.com",
+                "medical_condition": "do not send",
+            },
+        },
+    )
+    assert session_res.status_code == 200
+
+    submit_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": session_res.json()["session_token"],
+            "idempotency_key": "idem-internal-crm-dataset",
+            "published_version_id": public_payload["published_version_id"],
+            "answers": {
+                "full_name": "Internal Lead",
+                "email": "internal-lead@example.com",
+                "phone": "+1 (555) 222-3333",
+                "state": "CA",
+                "free_text_medical_notes": "private text",
+            },
+            "consent": {"accepted": True},
+            "attribution": {},
+        },
+    )
+    assert submit_res.status_code == 200
+    submission_id = uuid.UUID(submit_res.json()["id"])
+    intake_lead_id = submit_res.json()["intake_lead_id"]
+
+    assert (
+        db.query(TrackingEventLog)
+        .filter(TrackingEventLog.form_submission_id == submission_id)
+        .first()
+        is None
+    )
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .one()
+    )
+    event_data = job.payload["body"]["data"][0]
+    assert event_data["event_name"] == "Lead"
+    assert event_data["event_id"] == f"sf_lead_{submission_id}"
+    assert event_data["action_source"] == "website"
+    assert event_data["event_source_url"] == "https://ewi-surrogacy.com"
+    assert event_data["custom_data"] == {
+        "content_name": "lead_capture",
+        "content_category": "intake",
+        "event_source": "website",
+        "source": "meta",
+        "campaign": "spring-surrogate",
+    }
+    user_data = event_data["user_data"]
+    assert user_data["fbc"] == "fb.1.1772942400.fb-test-click"
+    assert user_data["fbp"] == "fb.1.1772942400.1234567890"
+    assert user_data["em"]
+    assert user_data["ph"]
+    assert "fn" not in user_data
+    assert "ln" not in user_data
+    assert "answers" not in event_data
+    assert "medical" not in str(event_data)
+    assert "private text" not in str(event_data)
+    assert "internal-lead@example.com" not in str(event_data)
+    assert "+15552223333" not in str(event_data)
+
+    monitor_event = (
+        db.query(MetaCrmDatasetEvent)
+        .filter(MetaCrmDatasetEvent.event_id == f"sf_lead_{submission_id}")
+        .one()
+    )
+    assert monitor_event.status == "queued"
+    assert monitor_event.event_name == "Lead"
+    assert monitor_event.lead_id == intake_lead_id
+    assert monitor_event.stage_key == "lead_created"
 
 
 @pytest.mark.asyncio

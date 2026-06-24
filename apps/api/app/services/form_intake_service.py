@@ -42,7 +42,13 @@ from app.db.models import (
     TrackingEventLog,
 )
 from app.schemas.surrogate import SurrogateCreate
-from app.services import embed_policy_service, form_service, form_submission_service, meta_capi
+from app.services import (
+    embed_policy_service,
+    form_service,
+    form_submission_service,
+    meta_capi,
+    meta_crm_dataset_service,
+)
 from app.utils.normalization import (
     normalize_email,
     normalize_name,
@@ -1564,6 +1570,18 @@ def submit_lead_capture_embed(
         )
     db.commit()
     db.refresh(submission)
+    if link.tracking_mode == TrackingMode.INTERNAL_ONLY.value:
+        meta_crm_dataset_service.enqueue_website_lead_event(
+            db,
+            organization_id=link.organization_id,
+            lead_id=str(lead.id),
+            submission_id=submission.id,
+            event_source_url=sanitized_attribution.get("landing_url") or session.parent_origin,
+            attribution=sanitized_attribution,
+            email=identity.get("email"),
+            phone=identity.get("phone"),
+        )
+        db.refresh(submission)
     _trigger_form_submitted_workflow(db, submission=submission)
     _trigger_intake_lead_created_workflow(
         db,

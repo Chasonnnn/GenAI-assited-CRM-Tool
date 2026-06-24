@@ -82,7 +82,10 @@ Check:
 - setup health `Tracking policy`
 - `TrackingEventLog` for the submission
 
-No Meta event should be logged when tracking mode is `internal_only` or `disabled`.
+No SurrogacyForce `TrackingEventLog` should be logged when tracking mode is
+`internal_only` or `disabled`. If the org-level Meta CRM Dataset integration is
+enabled, `internal_only` embed submissions can still queue a CRM-owned server
+`Lead` event in `MetaCrmDatasetEvent` after the intake lead is created.
 
 ## Rollback
 Preferred rollback order:
@@ -116,4 +119,3 @@ Rollback expectations:
    - disallowed origin
    - mobile viewport
 9. Verify CRM, attribution, consent, tracking log, and setup health.
-
