@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.40](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.39...surrogacy-crm-platform-v0.91.40) (2026-06-24)
+
+
+### Bug Fixes
+
+* queue CRM dataset leads from internal embeds ([6050c03](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6050c03164e02b6eac60f54852b758ca4aa2400d))
+* select published form for workflow templates ([b3eeecb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b3eeecb7d46276efea7e639e394c108fb069b449))
+
 ## [0.91.39](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.38...surrogacy-crm-platform-v0.91.39) (2026-06-23)
 
 
