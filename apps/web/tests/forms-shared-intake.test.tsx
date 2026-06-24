@@ -147,6 +147,22 @@ describe('Shared Intake Public Page', () => {
         expect(shell).toHaveClass('text-stone-900')
     })
 
+    it('renders the configured public logo in the hosted intake header', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                logo_url: 'https://cdn.example.com/ewi-logo.png',
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        const logo = await screen.findByRole('img', { name: 'Event Intake Form logo' })
+        expect(logo).toHaveAttribute('src', 'https://cdn.example.com/ewi-logo.png')
+        expect(screen.queryByText('E')).not.toBeInTheDocument()
+    })
+
     it('renders the first intake step as active progress', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,

@@ -96,6 +96,47 @@ async def _create_published_lead_capture_form(authed_client) -> tuple[str, str, 
 
 
 @pytest.mark.asyncio
+async def test_embed_public_form_uses_latest_logo_branding_without_republish(
+    authed_client, db, test_org
+):
+    form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    allowed_origin = "https://www.ewisurrogacy.com"
+    logo_url = f"/forms/public/{test_org.id}/signature-logo"
+    updated_schema = _lead_capture_schema()
+    updated_schema["public_title"] = "Unpublished Lead Capture Title"
+    updated_schema["logo_url"] = logo_url
+
+    test_org.signature_logo_url = "logos/ewi-signature.png"
+    db.add(test_org)
+    db.commit()
+
+    update_res = await authed_client.patch(
+        f"/forms/{form_id}",
+        json={"form_schema": updated_schema},
+    )
+    assert update_res.status_code == 200
+
+    link_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [allowed_origin],
+            "tracking_mode": "privacy_safe_lead",
+        },
+    )
+    assert link_res.status_code == 200
+
+    public_res = await authed_client.get(
+        f"/forms/public/embed/{slug}",
+        headers={"origin": allowed_origin},
+    )
+    assert public_res.status_code == 200
+    public_schema = public_res.json()["form_schema"]
+    assert public_schema["logo_url"] == logo_url
+    assert public_schema["public_title"] == "Become a Surrogate"
+
+
+@pytest.mark.asyncio
 async def test_lead_capture_publish_requires_name_and_contact_but_not_date_of_birth(
     authed_client,
 ):

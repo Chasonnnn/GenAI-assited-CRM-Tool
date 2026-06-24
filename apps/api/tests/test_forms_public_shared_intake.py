@@ -122,6 +122,47 @@ async def _create_published_form_and_shared_link(authed_client):
 
 
 @pytest.mark.asyncio
+async def test_shared_public_intake_uses_latest_logo_branding_without_republish(
+    authed_client, db, test_org
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    logo_url = f"/forms/public/{test_org.id}/signature-logo"
+    updated_schema = {
+        "pages": [
+            {
+                "title": "Identity",
+                "fields": [
+                    {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
+                    {"key": "date_of_birth", "label": "DOB", "type": "date", "required": True},
+                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "email", "label": "Email", "type": "email", "required": True},
+                ],
+            }
+        ],
+        "public_title": "EWI pre-questionnaire",
+        "logo_url": logo_url,
+    }
+
+    test_org.signature_logo_url = "logos/ewi-signature.png"
+    db.add(test_org)
+    db.commit()
+
+    update_res = await authed_client.patch(
+        f"/forms/{form_id}",
+        json={"form_schema": updated_schema},
+    )
+    assert update_res.status_code == 200
+    assert update_res.json()["form_schema"]["logo_url"] == logo_url
+    assert update_res.json()["published_schema"].get("logo_url") is None
+
+    public_res = await authed_client.get(f"/forms/public/intake/{slug}")
+    assert public_res.status_code == 200
+    public_schema = public_res.json()["form_schema"]
+    assert public_schema["logo_url"] == logo_url
+    assert public_schema.get("public_title") is None
+
+
+@pytest.mark.asyncio
 async def test_shared_submit_blocks_unresolved_duplicate_applicant(authed_client):
     _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
     answers = {

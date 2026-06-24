@@ -55,6 +55,22 @@ def _schema_or_none(schema_json: dict | None) -> FormSchema | None:
         return None
 
 
+def _public_schema_for_form(form) -> FormSchema | None:
+    schema = _schema_or_none(form.published_schema_json)
+    if not schema:
+        return None
+
+    schema = form_service.normalize_form_schema_logo_url(schema, form.organization_id)
+    current_schema = _schema_or_none(form.schema_json)
+    if current_schema:
+        current_schema = form_service.normalize_form_schema_logo_url(
+            current_schema,
+            form.organization_id,
+        )
+        schema = schema.model_copy(update={"logo_url": current_schema.logo_url})
+    return schema
+
+
 def _get_public_org_from_request(request: Request, db: Session):
     host = (request.headers.get("host") or "").split(":")[0].lower()
     org = org_service.get_org_by_host(db, host)
@@ -191,10 +207,9 @@ def get_shared_public_form(
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
 
-    schema = _schema_or_none(form.published_schema_json)
+    schema = _public_schema_for_form(form)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
-    schema = form_service.normalize_form_schema_logo_url(schema, intake_link.organization_id)
 
     return FormIntakePublicRead(
         form_id=form.id,
@@ -237,10 +252,9 @@ def get_embed_public_form(
         form=form,
         link=intake_link,
     )
-    schema = _schema_or_none(form.published_schema_json)
+    schema = _public_schema_for_form(form)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
-    schema = form_service.normalize_form_schema_logo_url(schema, intake_link.organization_id)
 
     return FormEmbedPublicRead(
         form_id=form.id,
