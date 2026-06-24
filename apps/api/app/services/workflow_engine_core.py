@@ -768,10 +768,12 @@ class WorkflowEngineCore:
         workflow: AutomationWorkflow,
         entity_id: UUID,
     ) -> str | None:
-        """Generate dedupe key for sweep-based triggers."""
+        """Generate deterministic dedupe keys for triggers that must run once per entity."""
         trigger_type = workflow.trigger_type
 
-        # Only dedupe for scheduled/sweep triggers
+        if trigger_type in ["form_submitted", "intake_lead_created"]:
+            return f"{workflow.id}:{entity_id}:{trigger_type}"
+
         if trigger_type in ["scheduled", "inactivity", "task_due", "task_overdue"]:
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             return f"{workflow.id}:{entity_id}:{trigger_type}:{today}"

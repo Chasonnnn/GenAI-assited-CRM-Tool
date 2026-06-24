@@ -11,7 +11,6 @@ from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
     FormIntakeLink,
-    FormSubmission,
     Surrogate,
 )
 from app.utils.normalization import (
@@ -521,20 +520,8 @@ async def test_auto_match_keeps_new_submission_ambiguous_when_surrogate_already_
             )
         },
     )
-    assert resubmission_res.status_code == 200
-    second_payload = resubmission_res.json()
-    assert second_payload["outcome"] == "ambiguous_review"
-    assert second_payload["surrogate_id"] is None
-
-    second_submission = (
-        db.query(FormSubmission)
-        .filter(FormSubmission.id == uuid.UUID(second_payload["id"]))
-        .first()
-    )
-    assert second_submission is not None
-    assert second_submission.surrogate_id is None
-    assert second_submission.match_status == "ambiguous_review"
-    assert second_submission.match_reason == "existing_submission_for_surrogate"
+    assert resubmission_res.status_code == 409
+    assert "already pending review" in resubmission_res.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
@@ -950,7 +937,7 @@ async def test_shared_submit_accepts_custom_identity_fields_when_mapped(authed_c
         },
     )
     assert submission_res.status_code == 200
-    assert submission_res.json()["outcome"] == "ambiguous_review"
+    assert submission_res.json()["outcome"] == "workflow_pending"
 
 
 @pytest.mark.asyncio

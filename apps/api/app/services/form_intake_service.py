@@ -15,7 +15,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.encryption import hash_email, hash_phone
+from app.core.encryption import hash_date_of_birth, hash_email, hash_phone
 from app.db.enums import (
     FormPurpose,
     FormLinkMode,
@@ -85,6 +85,11 @@ PRIVACY_SAFE_FIELD_POLICY_MODES = {
     TrackingMode.ENHANCED_MATCH_LEAD.value,
 }
 logger = logging.getLogger(__name__)
+DUPLICATE_APPLICANT_MESSAGE = "An intake submission is already pending review."
+
+
+class DuplicateApplicantSubmissionError(ValueError):
+    """Raised when a public applicant already has an unresolved submission."""
 
 
 def _default_tracking_mode_for_form(db: Session, form: Form) -> str:
@@ -879,11 +884,13 @@ def _extract_identity_partial(
     email = normalize_email(str(email_raw)) if email_raw not in (None, "") else None
     email_hash = hash_email(email) if email else None
     phone_hash = hash_phone(phone) if phone else None
+    dob_hash = hash_date_of_birth(dob) if dob else None
 
     return {
         "full_name": full_name,
         "full_name_normalized": full_name_normalized,
         "date_of_birth": dob,
+        "date_of_birth_hash": dob_hash,
         "phone": phone,
         "phone_hash": phone_hash,
         "email": email,
@@ -992,6 +999,90 @@ def _detect_duplicate_recent_submission(
         ):
             return True
     return False
+
+
+def _has_unresolved_duplicate_applicant_submission(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    identity: dict[str, Any],
+    exclude_submission_id: uuid.UUID | None = None,
+) -> bool:
+    full_name_normalized = identity.get("full_name_normalized")
+    email_hash = identity.get("email_hash")
+    phone_hash = identity.get("phone_hash")
+    date_of_birth_hash = identity.get("date_of_birth_hash")
+
+    if not full_name_normalized or (not email_hash and not phone_hash):
+        return False
+
+    contact_filters = []
+    if email_hash:
+        contact_filters.append(FormSubmission.email_hash == email_hash)
+    if phone_hash:
+        contact_filters.append(FormSubmission.phone_hash == phone_hash)
+
+    query = (
+        db.query(FormSubmission.id)
+        .outerjoin(
+            IntakeLead,
+            FormSubmission.intake_lead_id == IntakeLead.id,
+        )
+        .filter(
+            FormSubmission.organization_id == link.organization_id,
+            FormSubmission.form_id == link.form_id,
+            FormSubmission.full_name_normalized == full_name_normalized,
+            or_(*contact_filters),
+            or_(
+                FormSubmission.status == FormSubmissionStatus.PENDING_REVIEW.value,
+                IntakeLead.status == IntakeLeadStatus.PENDING_REVIEW.value,
+            ),
+        )
+    )
+    if exclude_submission_id:
+        query = query.filter(FormSubmission.id != exclude_submission_id)
+    if date_of_birth_hash:
+        query = query.filter(
+            or_(
+                FormSubmission.date_of_birth_hash == date_of_birth_hash,
+                FormSubmission.date_of_birth_hash.is_(None),
+            )
+        )
+    else:
+        query = query.filter(FormSubmission.date_of_birth_hash.is_(None))
+
+    if query.first() is not None:
+        return True
+
+    lead_contact_filters = []
+    if email_hash:
+        lead_contact_filters.append(IntakeLead.email_hash == email_hash)
+    if phone_hash:
+        lead_contact_filters.append(IntakeLead.phone_hash == phone_hash)
+    lead_candidates = (
+        db.query(IntakeLead)
+        .filter(
+            IntakeLead.organization_id == link.organization_id,
+            IntakeLead.form_id == link.form_id,
+            IntakeLead.status == IntakeLeadStatus.PENDING_REVIEW.value,
+            IntakeLead.full_name_normalized == full_name_normalized,
+            or_(*lead_contact_filters),
+        )
+        .limit(25)
+        .all()
+    )
+    target_dob = identity.get("date_of_birth")
+    return any(candidate.date_of_birth == target_dob for candidate in lead_candidates)
+
+
+def _raise_if_duplicate_applicant_submission(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    identity: dict[str, Any],
+) -> None:
+    if _has_unresolved_duplicate_applicant_submission(db, link=link, identity=identity):
+        raise DuplicateApplicantSubmissionError(DUPLICATE_APPLICANT_MESSAGE)
 
 
 def _create_intake_lead(
@@ -1110,6 +1201,7 @@ def _normalize_shared_outcome(match_status: str | None) -> str:
         FormSubmissionMatchStatus.LINKED.value,
         FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
         FormSubmissionMatchStatus.LEAD_CREATED.value,
+        FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
     }:
         return match_status
     return FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
@@ -1133,6 +1225,7 @@ def _create_shared_submission(
     form_schema_hash: str | None = None,
     consent_text_hash: str | None = None,
     tracking_policy_hash: str | None = None,
+    identity: dict[str, Any] | None = None,
 ) -> FormSubmission:
     schema = form_submission_service.parse_schema(form.published_schema_json or {})
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
@@ -1150,6 +1243,9 @@ def _create_shared_submission(
     )
     validated_content_types = form_submission_service._validate_files(form, files or [])  # type: ignore[attr-defined]
     mapping_snapshot = form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    if identity is None:
+        mapping_lookup = _build_form_mapping_lookup(db, form.id)
+        identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
     now = datetime.now(timezone.utc)
 
     submission = FormSubmission(
@@ -1163,6 +1259,11 @@ def _create_shared_submission(
         form_schema_hash=form_schema_hash,
         consent_text_hash=consent_text_hash,
         tracking_policy_hash=tracking_policy_hash,
+        full_name_normalized=(identity or {}).get("full_name_normalized"),
+        date_of_birth=(identity or {}).get("date_of_birth"),
+        date_of_birth_hash=(identity or {}).get("date_of_birth_hash"),
+        email_hash=(identity or {}).get("email_hash"),
+        phone_hash=(identity or {}).get("phone_hash"),
         source_mode=FormLinkMode.SHARED.value,
         status=FormSubmissionStatus.PENDING_REVIEW.value,
         match_status=match_status,
@@ -1201,6 +1302,7 @@ def create_shared_submission(
     file_field_keys: list[str] | None = None,
     source_metadata: dict[str, Any] | None = None,
     challenge_token: str | None = None,
+    idempotency_key: str | None = None,
 ) -> tuple[FormSubmission, str]:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
@@ -1211,30 +1313,33 @@ def create_shared_submission(
     if expected_challenge and challenge_token != expected_challenge:
         raise ValueError("Challenge verification failed")
 
+    normalized_idempotency_key = (idempotency_key or "").strip()[:128] or None
+    if normalized_idempotency_key:
+        existing = _get_idempotent_embed_submission(
+            db,
+            link=link,
+            idempotency_key=normalized_idempotency_key,
+        )
+        if existing:
+            return existing, _normalize_shared_outcome(existing.match_status)
+
     mapping_lookup = _build_form_mapping_lookup(db, form.id)
     identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
-
-    if _detect_duplicate_recent_submission(
-        db,
-        link=link,
-        identity=identity,
-        mapping_lookup=mapping_lookup,
-    ):
-        raise ValueError(
-            "Duplicate submission detected. Please contact support if this is unexpected."
-        )
+    _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
     submission = _create_shared_submission(
         db,
         form=form,
         link=link,
         answers=answers,
+        identity=identity,
         files=files or [],
         file_field_keys=file_field_keys,
         surrogate_id=None,
         intake_lead_id=None,
-        match_status=FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
+        match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
         match_reason="workflow_pending",
         matched_at=None,
+        idempotency_key=normalized_idempotency_key,
     )
     clear_shared_drafts_for_identity(
         db,
@@ -1481,7 +1586,7 @@ def submit_lead_capture_embed(
         idempotency_key=idempotency_key,
     )
     if existing:
-        return existing, FormSubmissionMatchStatus.LEAD_CREATED.value
+        return existing, _normalize_shared_outcome(existing.match_status)
 
     session = embed_policy_service.validate_embed_session(
         db,
@@ -1511,6 +1616,7 @@ def submit_lead_capture_embed(
 
     mapping_lookup = _build_form_mapping_lookup(db, form.id)
     identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
+    _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
     sanitized_attribution = sanitize_embed_attribution(
         {**(session.attribution_snapshot_json or {}), **(attribution or {})}
     )
@@ -1520,20 +1626,21 @@ def submit_lead_capture_embed(
         form=form,
         link=link,
         answers=answers,
+        identity=identity,
         files=[],
         file_field_keys=None,
         surrogate_id=None,
         intake_lead_id=None,
-        match_status=FormSubmissionMatchStatus.LEAD_CREATED.value,
-        match_reason="lead_capture_embed",
-        matched_at=datetime.now(timezone.utc),
+        match_status=FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
+        match_reason="workflow_pending",
+        matched_at=None,
         published_version_id=version.id,
         idempotency_key=idempotency_key,
         form_schema_hash=version.form_version_hash,
         consent_text_hash=version.consent_text_hash,
         tracking_policy_hash=version.tracking_policy_hash,
     )
-    attribution_record = _create_lead_attribution(
+    _create_lead_attribution(
         db,
         link=link,
         submission=submission,
@@ -1547,18 +1654,6 @@ def submit_lead_capture_embed(
         accepted=consent_accepted,
         session=session,
     )
-    lead = _create_intake_lead(
-        db,
-        org_id=link.organization_id,
-        form=form,
-        link=link,
-        identity=identity,
-        source_metadata={"attribution_id": str(attribution_record.id)},
-        form_submission_id=submission.id,
-        source="form_embed",
-        lead_type="surrogate",
-    )
-    submission.intake_lead_id = lead.id
     session.consumed_at = datetime.now(timezone.utc)
     if link.tracking_mode in META_TRACKING_MODES:
         _enqueue_privacy_safe_tracking_event(
@@ -1574,7 +1669,6 @@ def submit_lead_capture_embed(
         meta_crm_dataset_service.enqueue_website_lead_event(
             db,
             organization_id=link.organization_id,
-            lead_id=str(lead.id),
             submission_id=submission.id,
             event_source_url=sanitized_attribution.get("landing_url") or session.parent_origin,
             attribution=sanitized_attribution,
@@ -1583,14 +1677,8 @@ def submit_lead_capture_embed(
         )
         db.refresh(submission)
     _trigger_form_submitted_workflow(db, submission=submission)
-    _trigger_intake_lead_created_workflow(
-        db,
-        lead=lead,
-        form_id=form.id,
-        submission_id=submission.id,
-    )
     db.refresh(submission)
-    return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
+    return submission, _normalize_shared_outcome(submission.match_status)
 
 
 def auto_match_submission(
@@ -1616,9 +1704,23 @@ def auto_match_submission(
     if submission.intake_lead_id:
         return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
 
+    form = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == submission.organization_id,
+            Form.id == submission.form_id,
+        )
+        .first()
+    )
+    if not form:
+        raise ValueError("Form not found")
+
     answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
     mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
-    identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+        identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
+    else:
+        identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
 
     phone_matches = _match_rule_phone(db, org_id=submission.organization_id, identity=identity)
     email_matches: list[Surrogate] = []
@@ -1772,7 +1874,10 @@ def create_intake_lead_for_submission(
 
     answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
     mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
-    identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
+        identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
+    else:
+        identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
     metadata: dict[str, Any] = {"submission_id": str(submission.id)}
     if source:
         metadata["source"] = source
@@ -1780,6 +1885,11 @@ def create_intake_lead_for_submission(
         metadata["campaign_name"] = link.campaign_name
     if link and link.event_name:
         metadata["event_name"] = link.event_name
+    lead_source = source or (
+        "form_embed"
+        if link and form.purpose == FormPurpose.LEAD_CAPTURE.value and link.embed_enabled
+        else "shared_intake"
+    )
 
     lead = _create_intake_lead(
         db,
@@ -1789,6 +1899,8 @@ def create_intake_lead_for_submission(
         identity=identity,
         source_metadata=metadata,
         user_id=user_id,
+        form_submission_id=submission.id,
+        source=lead_source,
     )
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
@@ -1800,6 +1912,12 @@ def create_intake_lead_for_submission(
     db.commit()
     db.refresh(submission)
     db.refresh(lead)
+    meta_crm_dataset_service.link_website_lead_event_to_intake_lead(
+        db,
+        organization_id=submission.organization_id,
+        submission_id=submission.id,
+        intake_lead_id=lead.id,
+    )
 
     _trigger_intake_lead_created_workflow(
         db,

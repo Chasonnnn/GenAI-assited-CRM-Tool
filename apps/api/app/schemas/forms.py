@@ -283,7 +283,7 @@ class FormDraftStatusRead(BaseModel):
 
 
 FormLinkMode = Literal["shared"]
-SharedSubmissionOutcome = Literal["linked", "ambiguous_review", "lead_created"]
+SharedSubmissionOutcome = Literal["workflow_pending", "linked", "ambiguous_review", "lead_created"]
 
 
 class FormIntakeLinkCreate(BaseModel):

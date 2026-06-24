@@ -73,12 +73,21 @@ class MetaCrmDatasetEventResponse(BaseModel):
     event_id: str | None = None
     event_name: str | None = None
     lead_id: str | None = None
+    form_submission_id: UUID | None = None
+    intake_lead_id: UUID | None = None
     stage_key: str | None = None
     stage_slug: str | None = None
     stage_label: str | None = None
     surrogate_id: UUID | None = None
     attempts: int
     last_error: str | None = None
+    retry_state: str | None = None
+    provider_status_code: int | None = None
+    provider_response_id: str | None = None
+    provider_response: dict | None = None
+    provider_response_metadata: dict | None = None
+    provider_error: dict | None = None
+    provider_error_metadata: dict | None = None
     created_at: datetime
     updated_at: datetime
     delivered_at: datetime | None = None
@@ -276,6 +285,23 @@ def _serialize_settings(
 
 
 def _serialize_event(event) -> MetaCrmDatasetEventResponse:
+    can_retry = event.status == "failed" and event.job_id is not None
+    if can_retry:
+        retry_state = "retryable"
+    elif event.status == "queued":
+        retry_state = "queued"
+    elif event.status == "delivered":
+        retry_state = "delivered"
+    else:
+        retry_state = "not_retryable"
+    provider_metadata = {
+        key: value
+        for key, value in {
+            "status_code": event.provider_status_code,
+            "response_id": event.provider_response_id,
+        }.items()
+        if value is not None
+    } or None
     return MetaCrmDatasetEventResponse(
         id=event.id,
         source=event.source,
@@ -284,15 +310,24 @@ def _serialize_event(event) -> MetaCrmDatasetEventResponse:
         event_id=event.event_id,
         event_name=event.event_name,
         lead_id=event.lead_id,
+        form_submission_id=event.form_submission_id,
+        intake_lead_id=event.intake_lead_id,
         stage_key=event.stage_key,
         stage_slug=event.stage_slug,
         stage_label=event.stage_label,
         surrogate_id=event.surrogate_id,
         attempts=event.attempts,
         last_error=event.last_error,
+        retry_state=retry_state,
+        provider_status_code=event.provider_status_code,
+        provider_response_id=event.provider_response_id,
+        provider_response=event.provider_response_json,
+        provider_response_metadata=provider_metadata,
+        provider_error=event.provider_error_json,
+        provider_error_metadata=provider_metadata,
         created_at=event.created_at,
         updated_at=event.updated_at,
         delivered_at=event.delivered_at,
         last_attempt_at=event.last_attempt_at,
-        can_retry=event.status == "failed" and event.job_id is not None,
+        can_retry=can_retry,
     )

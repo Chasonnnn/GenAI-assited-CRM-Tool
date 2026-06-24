@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+from datetime import date, datetime
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -111,6 +112,21 @@ def hash_phone(phone: str | None) -> str:
     except ValueError:
         normalized = phone.strip()
     return hash_pii(normalized, purpose="phone")
+
+
+def hash_date_of_birth(value: date | datetime | str | None) -> str:
+    """Normalize and hash a date of birth for deterministic duplicate checks."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        normalized = value.date().isoformat()
+    elif isinstance(value, date):
+        normalized = value.isoformat()
+    else:
+        normalized = str(value).strip()
+    if not normalized:
+        return ""
+    return hash_pii(normalized, purpose="date_of_birth")
 
 
 def is_encryption_configured() -> bool:

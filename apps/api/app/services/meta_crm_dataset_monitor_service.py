@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -52,6 +53,29 @@ def _persist(create_fn, *, db: Session | None = None) -> None:
         logger.exception("Failed to persist Meta CRM dataset monitoring event")
 
 
+def _sanitize_provider_payload(payload: Any) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    if isinstance(payload, dict):
+        sanitized: dict[str, Any] = {}
+        for key, value in payload.items():
+            lowered_key = str(key).lower()
+            if any(token in lowered_key for token in ("token", "secret", "authorization")):
+                continue
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                text = str(value) if isinstance(value, str) else value
+                sanitized[str(key)[:80]] = text[:1000] if isinstance(text, str) else text
+            elif isinstance(value, list):
+                sanitized[str(key)[:80]] = value[:10]
+            elif isinstance(value, dict):
+                sanitized[str(key)[:80]] = _sanitize_provider_payload(value)
+        return sanitized
+    try:
+        return {"raw": json.dumps(payload, default=str)[:1000]}
+    except Exception:
+        return {"raw": str(payload)[:1000]}
+
+
 def _create_event_record(
     db: Session,
     *,
@@ -63,12 +87,18 @@ def _create_event_record(
     event_id: str | None = None,
     event_name: str | None = None,
     lead_id: str | None = None,
+    form_submission_id: UUID | None = None,
+    intake_lead_id: UUID | None = None,
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
     surrogate_id: UUID | None = None,
     attempts: int = 0,
     last_error: str | None = None,
+    provider_status_code: int | None = None,
+    provider_response_id: str | None = None,
+    provider_response_json: dict[str, Any] | None = None,
+    provider_error_json: dict[str, Any] | None = None,
 ) -> MetaCrmDatasetEvent:
     now = _now_utc()
     event = MetaCrmDatasetEvent(
@@ -80,12 +110,18 @@ def _create_event_record(
         event_id=event_id,
         event_name=event_name,
         lead_id=lead_id,
+        form_submission_id=form_submission_id,
+        intake_lead_id=intake_lead_id,
         stage_key=stage_key,
         stage_slug=stage_slug,
         stage_label=stage_label,
         surrogate_id=surrogate_id,
         attempts=attempts,
         last_error=last_error,
+        provider_status_code=provider_status_code,
+        provider_response_id=provider_response_id,
+        provider_response_json=_sanitize_provider_payload(provider_response_json),
+        provider_error_json=_sanitize_provider_payload(provider_error_json),
         created_at=now,
         updated_at=now,
         last_attempt_at=now if status in {"failed", "delivered"} else None,
@@ -104,6 +140,8 @@ def record_skipped_event(
     event_id: str | None = None,
     event_name: str | None = None,
     lead_id: str | None = None,
+    form_submission_id: UUID | None = None,
+    intake_lead_id: UUID | None = None,
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
@@ -120,6 +158,8 @@ def record_skipped_event(
             event_id=event_id,
             event_name=event_name,
             lead_id=lead_id,
+            form_submission_id=form_submission_id,
+            intake_lead_id=intake_lead_id,
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
@@ -137,6 +177,8 @@ def record_queued_event(
     event_id: str | None = None,
     event_name: str | None = None,
     lead_id: str | None = None,
+    form_submission_id: UUID | None = None,
+    intake_lead_id: UUID | None = None,
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
@@ -155,6 +197,8 @@ def record_queued_event(
             event_id=event_id,
             event_name=event_name,
             lead_id=lead_id,
+            form_submission_id=form_submission_id,
+            intake_lead_id=intake_lead_id,
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
@@ -181,6 +225,69 @@ def mark_job_delivered(*, job_id: UUID, attempts: int, db: Session | None = None
         event.delivered_at = now
 
     _persist(_update, db=db)
+
+
+def record_provider_result(
+    *,
+    job_id: UUID,
+    provider_status_code: int | None,
+    provider_response_json: dict[str, Any] | None = None,
+    provider_error_json: dict[str, Any] | None = None,
+    provider_response_id: str | None = None,
+    db: Session | None = None,
+) -> None:
+    def _update(inner_db: Session) -> None:
+        event = (
+            inner_db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job_id).first()
+        )
+        if not event:
+            return
+        event.provider_status_code = provider_status_code
+        event.provider_response_json = _sanitize_provider_payload(provider_response_json)
+        event.provider_error_json = _sanitize_provider_payload(provider_error_json)
+        event.provider_response_id = provider_response_id
+        event.updated_at = _now_utc()
+
+    _persist(_update, db=db)
+
+
+def link_website_lead_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    submission_id: UUID,
+    intake_lead_id: UUID,
+) -> None:
+    event_id = f"sf_lead_{submission_id}"
+    event = (
+        db.query(MetaCrmDatasetEvent)
+        .filter(
+            MetaCrmDatasetEvent.organization_id == org_id,
+            MetaCrmDatasetEvent.event_id == event_id,
+        )
+        .order_by(MetaCrmDatasetEvent.created_at.desc())
+        .first()
+    )
+    if not event:
+        return
+    event.intake_lead_id = intake_lead_id
+    event.updated_at = _now_utc()
+    db.commit()
+
+
+def attach_intake_lead_to_submission_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    submission_id: UUID,
+    intake_lead_id: UUID,
+) -> None:
+    link_website_lead_event(
+        db,
+        org_id=org_id,
+        submission_id=submission_id,
+        intake_lead_id=intake_lead_id,
+    )
 
 
 def mark_job_failed(

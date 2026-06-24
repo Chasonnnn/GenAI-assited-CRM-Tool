@@ -164,7 +164,9 @@ def _skip_website_lead_event(
     source: str,
     reason: str,
     event_id: str,
-    lead_id: str,
+    submission_id: UUID,
+    intake_lead_id: UUID | None = None,
+    lead_id: str | None = None,
 ) -> dict[str, object]:
     meta_crm_dataset_monitor_service.record_skipped_event(
         db=db,
@@ -174,9 +176,11 @@ def _skip_website_lead_event(
         event_id=event_id,
         event_name="Lead",
         lead_id=lead_id,
-        stage_key="lead_created",
-        stage_slug="lead_created",
-        stage_label="Lead Created",
+        form_submission_id=submission_id,
+        intake_lead_id=intake_lead_id,
+        stage_key="form_submitted",
+        stage_slug="form_submitted",
+        stage_label="Form Submitted",
         surrogate_id=None,
     )
     return {
@@ -293,12 +297,13 @@ def enqueue_website_lead_event(
     db: Session,
     *,
     organization_id: UUID,
-    lead_id: str,
     submission_id: UUID,
     event_source_url: str | None,
     attribution: dict[str, str],
     email: str | None,
     phone: str | None,
+    intake_lead_id: UUID | None = None,
+    lead_id: str | None = None,
     effective_at: datetime | None = None,
     source: str = "form_embed",
 ) -> dict[str, object]:
@@ -313,6 +318,8 @@ def enqueue_website_lead_event(
             source=source,
             reason="disabled",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         )
     if not settings_row.dataset_id:
@@ -322,6 +329,8 @@ def enqueue_website_lead_event(
             source=source,
             reason="missing_dataset_id",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         )
     if not settings_row.access_token_encrypted:
@@ -331,6 +340,8 @@ def enqueue_website_lead_event(
             source=source,
             reason="missing_access_token",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         )
 
@@ -355,6 +366,8 @@ def enqueue_website_lead_event(
             source=source,
             reason="missing_user_data",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         )
     job_payload = {
@@ -374,6 +387,8 @@ def enqueue_website_lead_event(
             source=source,
             reason="duplicate",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         ) | {"idempotency_key": idempotency_key}
 
@@ -393,9 +408,11 @@ def enqueue_website_lead_event(
             event_id=event_id,
             event_name="Lead",
             lead_id=lead_id,
-            stage_key="lead_created",
-            stage_slug="lead_created",
-            stage_label="Lead Created",
+            form_submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
+            stage_key="form_submitted",
+            stage_slug="form_submitted",
+            stage_label="Form Submitted",
             surrogate_id=None,
         )
         return {
@@ -415,6 +432,8 @@ def enqueue_website_lead_event(
             source=source,
             reason="duplicate",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         ) | {"idempotency_key": idempotency_key}
     except Exception as exc:
@@ -426,8 +445,26 @@ def enqueue_website_lead_event(
             source=source,
             reason="enqueue_failed",
             event_id=event_id,
+            submission_id=submission_id,
+            intake_lead_id=intake_lead_id,
             lead_id=lead_id,
         ) | {"idempotency_key": idempotency_key}
+
+
+def link_website_lead_event_to_intake_lead(
+    db: Session,
+    *,
+    organization_id: UUID,
+    submission_id: UUID,
+    intake_lead_id: UUID,
+) -> None:
+    meta_crm_dataset_monitor_service.attach_intake_lead_to_submission_event(
+        db=db,
+        org_id=organization_id,
+        submission_id=submission_id,
+        intake_lead_id=intake_lead_id,
+    )
+    db.commit()
 
 
 def enqueue_stage_event(
@@ -757,5 +794,32 @@ async def process_job(db: Session, job) -> None:
     )
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         response = await client.post(url, json=body)
+    try:
+        provider_payload = response.json()
+    except Exception:
+        provider_payload = {"raw": response.text[:1000]}
+    provider_body = provider_payload if isinstance(provider_payload, dict) else {"body": provider_payload}
+    provider_response_id = (
+        str(provider_body.get("fbtrace_id")) if provider_body.get("fbtrace_id") is not None else None
+    )
+    provider_metadata = {
+        "status_code": response.status_code,
+        "response_id": provider_response_id,
+        "body": provider_body,
+    }
     if response.status_code != 200:
-        raise Exception(f"Meta CRM dataset error {response.status_code}: {response.text[:500]}")
+        meta_crm_dataset_monitor_service.record_provider_result(
+            db=db,
+            job_id=job.id,
+            provider_status_code=response.status_code,
+            provider_error_json=provider_metadata,
+            provider_response_id=provider_response_id,
+        )
+        raise Exception(f"Meta CRM dataset error {response.status_code}")
+    meta_crm_dataset_monitor_service.record_provider_result(
+        db=db,
+        job_id=job.id,
+        provider_status_code=response.status_code,
+        provider_response_json=provider_metadata,
+        provider_response_id=provider_response_id,
+    )

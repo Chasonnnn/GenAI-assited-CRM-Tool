@@ -8,6 +8,7 @@ import pytest
 
 from app.db.enums import JobType
 from app.db.models import (
+    AutomationWorkflow,
     ConsentRecord,
     EmbedSession,
     FormSubmission,
@@ -16,7 +17,17 @@ from app.db.models import (
     LeadAttribution,
     MetaCrmDatasetEvent,
     TrackingEventLog,
+    WorkflowExecution,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter_between_tests():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 def _lead_capture_schema(
@@ -154,7 +165,7 @@ async def test_enhanced_match_lead_publish_blocks_sensitive_and_unclassified_fie
 
 
 @pytest.mark.asyncio
-async def test_embed_session_submit_creates_lead_attribution_consent_and_tracking(
+async def test_embed_session_submit_stores_submission_attribution_consent_and_tracking_without_workflow(
     authed_client,
     db,
 ):
@@ -253,8 +264,8 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "lead_created"
-    assert payload["intake_lead_id"]
+    assert payload["outcome"] == "workflow_pending"
+    assert payload["intake_lead_id"] is None
 
     duplicate_res = await authed_client.post(
         f"/forms/public/embed/{slug}/submit",
@@ -274,6 +285,7 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     )
     assert duplicate_res.status_code == 200
     assert duplicate_res.json()["id"] == payload["id"]
+    assert duplicate_res.json()["outcome"] == "workflow_pending"
 
     submission_id = uuid.UUID(payload["id"])
     link_uuid = uuid.UUID(link_id)
@@ -284,15 +296,17 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
     assert submission.form_schema_hash
     assert submission.consent_text_hash
     assert submission.tracking_policy_hash
+    assert submission.match_status == "workflow_pending"
+    assert submission.full_name_normalized == "embed lead"
+    assert submission.email_hash
+    assert submission.phone_hash
 
-    lead = (
-        db.query(IntakeLead).filter(IntakeLead.id == uuid.UUID(payload["intake_lead_id"])).first()
+    assert (
+        db.query(IntakeLead)
+        .filter(IntakeLead.form_submission_id == submission_id)
+        .first()
+        is None
     )
-    assert lead is not None
-    assert lead.form_submission_id == submission_id
-    assert lead.source == "form_embed"
-    assert lead.email_hash
-    assert lead.phone_hash
 
     attribution = (
         db.query(LeadAttribution).filter(LeadAttribution.form_submission_id == submission_id).one()
@@ -340,6 +354,257 @@ async def test_embed_session_submit_creates_lead_attribution_consent_and_trackin
 
     embed_session = db.query(EmbedSession).filter(EmbedSession.intake_link_id == link_uuid).one()
     assert embed_session.consumed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_embed_submit_enabled_workflow_creates_one_lead(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    allowed_origin = "https://www.ewisurrogacy.com"
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Create embed lead {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead", "source": "form_embed"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    link_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [allowed_origin],
+            "tracking_mode": "internal_only",
+            "consent_text": "I agree to be contacted about my inquiry.",
+        },
+    )
+    assert link_res.status_code == 200
+
+    public_res = await authed_client.get(
+        f"/forms/public/embed/{slug}",
+        headers={"origin": allowed_origin},
+    )
+    assert public_res.status_code == 200
+    session_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": allowed_origin, "attribution": {}},
+    )
+    assert session_res.status_code == 200
+
+    submit_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": session_res.json()["session_token"],
+            "idempotency_key": "idem-embed-workflow",
+            "published_version_id": public_res.json()["published_version_id"],
+            "answers": {
+                "full_name": "Workflow Embed Lead",
+                "email": "workflow-embed@example.com",
+                "phone": "+1 (555) 481-0902",
+                "state": "CA",
+            },
+            "consent": {"accepted": True},
+            "attribution": {},
+        },
+    )
+    assert submit_res.status_code == 200
+    payload = submit_res.json()
+    assert payload["outcome"] == "lead_created"
+    assert payload["intake_lead_id"] is not None
+
+    submission_id = uuid.UUID(payload["id"])
+    lead_count = (
+        db.query(IntakeLead)
+        .filter(IntakeLead.organization_id == test_org.id)
+        .filter(IntakeLead.form_submission_id == submission_id)
+        .count()
+    )
+    assert lead_count == 1
+
+    from app.services import workflow_triggers
+
+    submission = db.query(FormSubmission).filter(FormSubmission.id == submission_id).one()
+    workflow_triggers.trigger_form_submitted(
+        db=db,
+        org_id=test_org.id,
+        form_id=uuid.UUID(form_id),
+        submission_id=submission.id,
+        submitted_at=submission.submitted_at,
+        surrogate_id=submission.surrogate_id,
+        source_mode=submission.source_mode,
+        entity_owner_id=None,
+    )
+    assert (
+        db.query(IntakeLead)
+        .filter(IntakeLead.organization_id == test_org.id)
+        .filter(IntakeLead.full_name == "Workflow Embed Lead")
+        .count()
+        == 1
+    )
+    assert (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.organization_id == test_org.id,
+            WorkflowExecution.workflow_id == workflow.id,
+            WorkflowExecution.entity_id == submission_id,
+        )
+        .count()
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_embed_submit_duplicate_applicant_returns_conflict(
+    authed_client,
+):
+    _form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    allowed_origin = "https://www.ewisurrogacy.com"
+
+    link_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [allowed_origin],
+            "tracking_mode": "enhanced_match_lead",
+            "consent_text": "I agree to be contacted.",
+        },
+    )
+    assert link_res.status_code == 200
+    public_res = await authed_client.get(
+        f"/forms/public/embed/{slug}",
+        headers={"origin": allowed_origin},
+    )
+    assert public_res.status_code == 200
+
+    first_session = await authed_client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": allowed_origin, "attribution": {}},
+    )
+    assert first_session.status_code == 200
+    first_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": first_session.json()["session_token"],
+            "idempotency_key": "idem-duplicate-original",
+            "published_version_id": public_res.json()["published_version_id"],
+            "answers": {
+                "full_name": "Duplicate Embed",
+                "email": "duplicate-embed@example.com",
+                "phone": "+1 (555) 222-7788",
+            },
+            "consent": {"accepted": True},
+            "attribution": {},
+        },
+    )
+    assert first_res.status_code == 200
+
+    second_session = await authed_client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": allowed_origin, "attribution": {}},
+    )
+    assert second_session.status_code == 200
+    duplicate_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": second_session.json()["session_token"],
+            "idempotency_key": "idem-duplicate-new",
+            "published_version_id": public_res.json()["published_version_id"],
+            "answers": {
+                "full_name": "Duplicate Embed",
+                "email": "duplicate-embed@example.com",
+                "phone": "+1 (555) 222-7788",
+            },
+            "consent": {"accepted": True},
+            "attribution": {},
+        },
+    )
+    assert duplicate_res.status_code == 409
+    detail = duplicate_res.json()["detail"]
+    assert "already pending review" in detail.lower()
+    assert "duplicate-embed@example.com" not in detail
+    assert "Duplicate Embed" not in detail
+
+
+@pytest.mark.asyncio
+async def test_embed_submit_blocks_unresolved_duplicate_applicant(
+    authed_client,
+):
+    _form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    allowed_origin = "https://www.ewisurrogacy.com"
+
+    link_res = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [allowed_origin],
+            "tracking_mode": "internal_only",
+            "consent_text": "I agree to be contacted about my inquiry.",
+        },
+    )
+    assert link_res.status_code == 200
+    public_res = await authed_client.get(
+        f"/forms/public/embed/{slug}",
+        headers={"origin": allowed_origin},
+    )
+    assert public_res.status_code == 200
+
+    async def start_session() -> str:
+        session_res = await authed_client.post(
+            f"/forms/public/embed/{slug}/session",
+            json={"parent_origin": allowed_origin, "attribution": {}},
+        )
+        assert session_res.status_code == 200
+        return session_res.json()["session_token"]
+
+    answers = {
+        "full_name": "Duplicate Embed Lead",
+        "email": "duplicate-embed@example.com",
+        "phone": "+1 (555) 481-0999",
+        "state": "CA",
+    }
+    first_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": await start_session(),
+            "idempotency_key": "idem-embed-duplicate-1",
+            "published_version_id": public_res.json()["published_version_id"],
+            "answers": answers,
+            "consent": {"accepted": True},
+            "attribution": {},
+        },
+    )
+    assert first_res.status_code == 200
+
+    duplicate_res = await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": await start_session(),
+            "idempotency_key": "idem-embed-duplicate-2",
+            "published_version_id": public_res.json()["published_version_id"],
+            "answers": answers,
+            "consent": {"accepted": True},
+            "attribution": {},
+        },
+    )
+    assert duplicate_res.status_code == 409
+    detail = duplicate_res.json()["detail"]
+    assert "already pending review" in detail.lower()
+    assert "duplicate-embed@example.com" not in detail
+    assert "Duplicate Embed Lead" not in detail
 
 
 @pytest.mark.asyncio
@@ -473,7 +738,8 @@ async def test_internal_only_embed_submit_queues_crm_dataset_lead_without_sensit
     )
     assert submit_res.status_code == 200
     submission_id = uuid.UUID(submit_res.json()["id"])
-    intake_lead_id = submit_res.json()["intake_lead_id"]
+    assert submit_res.json()["outcome"] == "workflow_pending"
+    assert submit_res.json()["intake_lead_id"] is None
 
     assert (
         db.query(TrackingEventLog)
@@ -522,8 +788,10 @@ async def test_internal_only_embed_submit_queues_crm_dataset_lead_without_sensit
     )
     assert monitor_event.status == "queued"
     assert monitor_event.event_name == "Lead"
-    assert monitor_event.lead_id == intake_lead_id
-    assert monitor_event.stage_key == "lead_created"
+    assert monitor_event.lead_id is None
+    assert monitor_event.form_submission_id == submission_id
+    assert monitor_event.intake_lead_id is None
+    assert monitor_event.stage_key == "form_submitted"
 
 
 @pytest.mark.asyncio

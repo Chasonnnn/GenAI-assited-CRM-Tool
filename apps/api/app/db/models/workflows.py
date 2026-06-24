@@ -176,6 +176,12 @@ class WorkflowExecution(Base):
             "status",
             postgresql_where=text("status = 'paused'"),
         ),
+        Index(
+            "uq_workflow_execution_dedupe_key",
+            "dedupe_key",
+            unique=True,
+            postgresql_where=text("dedupe_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

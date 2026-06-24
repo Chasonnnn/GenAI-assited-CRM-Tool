@@ -30,6 +30,18 @@ from app.utils.normalization import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter_between_tests(monkeypatch):
+    from app.core import rate_limit
+    from app.core.rate_limit import limiter
+
+    client_key = f"shared-intake-test-{uuid.uuid4().hex}"
+    monkeypatch.setattr(rate_limit, "get_client_ip", lambda request: client_key)
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
 def _create_surrogate(
     db,
     *,
@@ -110,6 +122,35 @@ async def _create_published_form_and_shared_link(authed_client):
 
 
 @pytest.mark.asyncio
+async def test_shared_submit_blocks_unresolved_duplicate_applicant(authed_client):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    answers = {
+        "full_name": "Duplicate Shared Candidate",
+        "date_of_birth": "1992-02-20",
+        "phone": "+1 (555) 401-9090",
+        "email": "duplicate-shared@example.com",
+    }
+
+    first_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={"answers": json.dumps(answers)},
+    )
+    assert first_res.status_code == 200
+    assert first_res.json()["outcome"] == "workflow_pending"
+    assert first_res.json()["intake_lead_id"] is None
+
+    duplicate_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={"answers": json.dumps(answers)},
+    )
+    assert duplicate_res.status_code == 409
+    detail = duplicate_res.json()["detail"]
+    assert "already pending review" in detail.lower()
+    assert "duplicate-shared@example.com" not in detail
+    assert "Duplicate Shared Candidate" not in detail
+
+
+@pytest.mark.asyncio
 async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_item(
     authed_client, db
 ):
@@ -148,7 +189,7 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
     )
     assert submit_res.status_code == 200
     submission_payload = submit_res.json()
-    assert submission_payload["outcome"] == "ambiguous_review"
+    assert submission_payload["outcome"] == "workflow_pending"
     assert submission_payload["surrogate_id"] is None
     assert submission_payload["intake_lead_id"] is None
 
@@ -159,6 +200,7 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
     )
     assert submission is not None
     assert submission.source_mode == "shared"
+    assert submission.match_status == "workflow_pending"
     assert submission.intake_link_id == uuid.UUID(link_id)
     assert submission.answers_json["email"] == answers["email"]
 
@@ -168,7 +210,7 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
 
     list_res = await authed_client.get(
         f"/forms/{form_id}/submissions",
-        params={"source_mode": "shared", "match_status": "ambiguous_review"},
+        params={"source_mode": "shared", "match_status": "workflow_pending"},
     )
     assert list_res.status_code == 200
     listed = list_res.json()
@@ -508,7 +550,7 @@ async def test_shared_submit_clears_matching_drafts_across_links(authed_client, 
 
 
 @pytest.mark.asyncio
-async def test_shared_submit_no_match_defaults_to_ambiguous_review_without_workflow_actions(
+async def test_shared_submit_no_match_defaults_to_workflow_pending_without_workflow_actions(
     authed_client,
     db,
     test_org,
@@ -529,14 +571,14 @@ async def test_shared_submit_no_match_defaults_to_ambiguous_review_without_workf
     )
     assert submit_res.status_code == 200
     body = submit_res.json()
-    assert body["outcome"] == "ambiguous_review"
+    assert body["outcome"] == "workflow_pending"
     assert body["surrogate_id"] is None
     assert body["intake_lead_id"] is None
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == body["id"]).first()
     assert submission is not None
     assert submission.source_mode == "shared"
-    assert submission.match_status == FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
+    assert submission.match_status == FormSubmissionMatchStatus.WORKFLOW_PENDING.value
     assert submission.intake_lead_id is None
 
     lead = (
@@ -548,6 +590,52 @@ async def test_shared_submit_no_match_defaults_to_ambiguous_review_without_workf
         .first()
     )
     assert lead is None
+
+
+@pytest.mark.asyncio
+async def test_shared_submit_duplicate_applicant_conflicts_but_same_idempotency_returns_original(
+    authed_client,
+):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    payload = {
+        "full_name": "Hosted Duplicate",
+        "date_of_birth": "1993-04-12",
+        "phone": "+1 (555) 100-1001",
+        "email": "hosted-duplicate@example.com",
+    }
+    first_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(payload),
+            "idempotency_key": "hosted-duplicate-idem",
+        },
+    )
+    assert first_res.status_code == 200
+    first_body = first_res.json()
+
+    same_request_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(payload),
+            "idempotency_key": "hosted-duplicate-idem",
+        },
+    )
+    assert same_request_res.status_code == 200
+    assert same_request_res.json()["id"] == first_body["id"]
+
+    duplicate_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(payload),
+            "idempotency_key": "hosted-duplicate-new-idem",
+        },
+    )
+    assert duplicate_res.status_code == 409
+    detail = duplicate_res.json()["detail"]
+    assert "already pending review" in detail.lower()
+    assert "hosted-duplicate@example.com" not in detail
+    assert "Hosted Duplicate" not in detail
 
 
 @pytest.mark.asyncio

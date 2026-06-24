@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -28,6 +28,7 @@ from app.db.enums import (
     FormSubmissionMatchStatus,
     FormSubmissionStatus,
 )
+from app.db.types import EncryptedDate
 
 if TYPE_CHECKING:
     from app.db.models import Organization, Surrogate, User
@@ -185,6 +186,24 @@ class FormSubmission(Base):
             unique=True,
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
+        Index(
+            "idx_form_submission_duplicate_email",
+            "organization_id",
+            "form_id",
+            "full_name_normalized",
+            "date_of_birth_hash",
+            "email_hash",
+            postgresql_where=text("email_hash IS NOT NULL"),
+        ),
+        Index(
+            "idx_form_submission_duplicate_phone",
+            "organization_id",
+            "form_id",
+            "full_name_normalized",
+            "date_of_birth_hash",
+            "phone_hash",
+            postgresql_where=text("phone_hash IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -222,6 +241,11 @@ class FormSubmission(Base):
     form_schema_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     consent_text_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tracking_policy_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    full_name_normalized: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(EncryptedDate, nullable=True)
+    date_of_birth_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_mode: Mapped[str] = mapped_column(
         String(20),
         server_default=text("'shared'"),

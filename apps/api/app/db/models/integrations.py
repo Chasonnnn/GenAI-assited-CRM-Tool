@@ -306,6 +306,8 @@ class MetaCrmDatasetEvent(Base):
     event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     event_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     lead_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    form_submission_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    intake_lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     stage_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
     stage_slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
     stage_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -313,6 +315,10 @@ class MetaCrmDatasetEvent(Base):
 
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    provider_response_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    provider_error_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
@@ -333,6 +339,18 @@ class MetaCrmDatasetEvent(Base):
             "idx_meta_crm_dataset_events_org_status",
             "organization_id",
             "status",
+            "created_at",
+        ),
+        Index(
+            "idx_meta_crm_dataset_events_submission",
+            "organization_id",
+            "form_submission_id",
+            "created_at",
+        ),
+        Index(
+            "idx_meta_crm_dataset_events_intake_lead",
+            "organization_id",
+            "intake_lead_id",
             "created_at",
         ),
         Index(

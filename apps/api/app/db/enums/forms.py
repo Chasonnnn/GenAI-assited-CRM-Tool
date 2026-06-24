@@ -62,6 +62,7 @@ class FormLinkMode(str, Enum):
 class FormSubmissionMatchStatus(str, Enum):
     """Identity matching outcome for shared-link submissions."""
 
+    WORKFLOW_PENDING = "workflow_pending"
     LINKED = "linked"
     AMBIGUOUS_REVIEW = "ambiguous_review"
     LEAD_CREATED = "lead_created"

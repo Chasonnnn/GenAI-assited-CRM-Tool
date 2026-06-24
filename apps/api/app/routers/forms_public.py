@@ -338,6 +338,8 @@ def submit_embed_public_form(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except form_intake_service.DuplicateApplicantSubmissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FormSubmissionSharedResponse(
@@ -530,6 +532,7 @@ def submit_shared_public_form(
     answers: Annotated[str, "fastapi_param"] = Form(),
     files: Annotated[list[UploadFile] | None, "fastapi_param"] = File(default=None),
     file_field_keys: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    idempotency_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
@@ -574,6 +577,11 @@ def submit_shared_public_form(
         "user_agent": request.headers.get("user-agent"),
     }
     challenge_token = request.headers.get("x-intake-challenge")
+    resolved_idempotency_key = (
+        idempotency_key
+        or request.headers.get("idempotency-key")
+        or request.headers.get("x-idempotency-key")
+    )
 
     try:
         submission, outcome = form_intake_service.create_shared_submission(
@@ -585,7 +593,10 @@ def submit_shared_public_form(
             file_field_keys=parsed_keys,
             source_metadata=source_metadata,
             challenge_token=challenge_token,
+            idempotency_key=resolved_idempotency_key,
         )
+    except form_intake_service.DuplicateApplicantSubmissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
