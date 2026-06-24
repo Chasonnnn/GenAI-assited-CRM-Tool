@@ -414,7 +414,7 @@ class FormEmbedSubmitRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
     published_version_id: UUID
     answers: dict[str, object]
-    consent: FormEmbedConsentSubmit
+    consent: FormEmbedConsentSubmit | None = None
     attribution: dict[str, object] = Field(default_factory=dict)
 
 

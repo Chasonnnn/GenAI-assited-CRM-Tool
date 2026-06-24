@@ -53,7 +53,7 @@ const embedForm = {
             },
         ],
         public_title: "Become a Surrogate",
-        privacy_notice: null,
+        privacy_notice: "By submitting, you agree to be contacted by the intake team.",
     },
     max_file_size_bytes: 10 * 1024 * 1024,
     max_file_count: 0,
@@ -141,7 +141,9 @@ describe("EmbedFormPageClient", () => {
         fireEvent.change(screen.getByLabelText(/email/i), {
             target: { value: "embed@example.com" },
         })
-        fireEvent.click(screen.getByRole("checkbox"))
+        expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
+        expect(screen.queryByText("I agree to be contacted.")).not.toBeInTheDocument()
+        expect(screen.getByText(/By submitting, you agree/i)).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: /submit/i }))
 
         await waitFor(() => {
@@ -154,7 +156,6 @@ describe("EmbedFormPageClient", () => {
                         full_name: "Embed Lead",
                         email: "embed@example.com",
                     },
-                    consent: { accepted: true },
                 }),
             )
         })

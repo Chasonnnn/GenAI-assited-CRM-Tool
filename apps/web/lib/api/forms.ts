@@ -357,7 +357,7 @@ export interface FormEmbedSubmitPayload {
     idempotency_key: string
     published_version_id: string
     answers: JsonObject
-    consent: { accepted: boolean }
+    consent?: { accepted: boolean }
     attribution?: Record<string, unknown>
 }
 

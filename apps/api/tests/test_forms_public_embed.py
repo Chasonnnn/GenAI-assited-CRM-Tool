@@ -250,7 +250,6 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
                 "phone": "+1 (555) 481-0901",
                 "state": "CA",
             },
-            "consent": {"accepted": True},
             "attribution": {
                 "utm_source": "meta",
                 "utm_campaign": "spring-surrogate",

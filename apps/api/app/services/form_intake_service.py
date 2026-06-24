@@ -1607,8 +1607,6 @@ def submit_lead_capture_embed(
     )
     if not version:
         raise LookupError("Published version not found")
-    if link.consent_text and not consent_accepted:
-        raise ValueError("Consent is required")
     if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
         form_service.validate_privacy_safe_lead_schema(db, form)
     else:

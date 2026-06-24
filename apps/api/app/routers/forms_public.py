@@ -331,7 +331,7 @@ def submit_embed_public_form(
             idempotency_key=body.idempotency_key,
             published_version_id=body.published_version_id,
             answers=body.answers,
-            consent_accepted=body.consent.accepted,
+            consent_accepted=True,
             attribution=body.attribution,
         )
     except PermissionError as exc:

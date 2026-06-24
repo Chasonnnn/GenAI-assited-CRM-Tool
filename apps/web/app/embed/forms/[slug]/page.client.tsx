@@ -4,8 +4,6 @@ import * as React from "react"
 import { AlertTriangleIcon, CheckCircle2Icon, Loader2Icon, SendIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
 import { PublicFormFieldRenderer, type PublicFormAnswerValue } from "@/components/forms/PublicFormFieldRenderer"
 import { cn } from "@/lib/utils"
 import type { JsonObject } from "@/lib/types/json"
@@ -132,7 +130,6 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
     const [formConfig, setFormConfig] = React.useState<FormEmbedPublicRead | null>(null)
     const [sessionToken, setSessionToken] = React.useState<string | null>(null)
     const [answers, setAnswers] = React.useState<Answers>({})
-    const [accepted, setAccepted] = React.useState(false)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     const [isLoading, setIsLoading] = React.useState(true)
     const [isSubmitting, setIsSubmitting] = React.useState(false)
@@ -264,9 +261,6 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
             const fieldError = getFieldError(field, answers[field.key])
             if (fieldError) return fieldError
         }
-        if (formConfig?.consent.text && !accepted) {
-            return "Consent is required before submitting."
-        }
         if (!sessionToken) {
             return "This form session is not ready yet."
         }
@@ -290,7 +284,6 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                 idempotency_key: buildIdempotencyKey(),
                 published_version_id: formConfig.published_version_id,
                 answers: asJsonObject(answers),
-                consent: { accepted },
                 attribution: {},
             })
             setIsSubmitted(true)
@@ -369,34 +362,10 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                             />
                         ))}
 
-                        {formConfig.consent.text ? (
-                            <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50/70 p-3">
-                                <Checkbox
-                                    id="sf-embed-consent"
-                                    checked={accepted}
-                                    onCheckedChange={(checked) => setAccepted(checked === true)}
-                                    className="mt-0.5"
-                                />
-                                <Label
-                                    htmlFor="sf-embed-consent"
-                                    className="text-[13px] leading-6 text-stone-700"
-                                >
-                                    {formConfig.consent.text}
-                                    {formConfig.consent.privacy_policy_url ? (
-                                        <>
-                                            {" "}
-                                            <a
-                                                href={formConfig.consent.privacy_policy_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="font-medium text-primary underline underline-offset-2"
-                                            >
-                                                Privacy policy
-                                            </a>
-                                        </>
-                                    ) : null}
-                                </Label>
-                            </div>
+                        {formConfig.form_schema.privacy_notice?.trim() ? (
+                            <p className="rounded-md bg-stone-50 px-3 py-2 text-[12px] leading-5 text-stone-500">
+                                {formConfig.form_schema.privacy_notice.trim()}
+                            </p>
                         ) : null}
 
                         {error ? (
