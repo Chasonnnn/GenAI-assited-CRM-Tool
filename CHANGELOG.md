@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.42](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.41...surrogacy-crm-platform-v0.91.42) (2026-06-24)
+
+
+### Bug Fixes
+
+* Remove embed contact consent checkbox ([d90d16e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d90d16e9909510a71dd3a34a5353dd72404acd85))
+
 ## [0.91.41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.40...surrogacy-crm-platform-v0.91.41) (2026-06-24)
 
 
