@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.41](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.40...surrogacy-crm-platform-v0.91.41) (2026-06-24)
+
+
+### Features
+
+* Harden public intake submissions ([9f5410b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9f5410b19441a94260fd6efdf7d6207ba1895364))
+
 ## [0.91.40](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.39...surrogacy-crm-platform-v0.91.40) (2026-06-24)
 
 
