@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.db.enums import FormStatus
 from app.db.models import WorkflowTemplate, WorkflowTemplateTarget, AutomationWorkflow, Form
 
+FORM_TRIGGER_TYPES = {"form_started", "form_submitted", "intake_lead_created"}
+
 
 def list_templates(
     db: Session,
@@ -186,6 +188,7 @@ def use_template(
     is_enabled: bool = True,
     action_overrides: dict | None = None,
     scope: str = "org",
+    trigger_form_id: UUID | None = None,
 ) -> AutomationWorkflow:
     """Create a workflow from a template.
 
@@ -198,7 +201,23 @@ def use_template(
 
     # Resolve dynamic trigger references (for example, form name -> form id).
     trigger_config = dict(template.trigger_config or {})
-    if template.trigger_type in {"form_started", "form_submitted", "intake_lead_created"}:
+    if trigger_form_id is not None:
+        if template.trigger_type not in FORM_TRIGGER_TYPES:
+            raise ValueError("trigger_form_id is only valid for form-trigger workflow templates")
+        selected_form = (
+            db.query(Form)
+            .filter(
+                Form.id == trigger_form_id,
+                Form.organization_id == org_id,
+                Form.status == FormStatus.PUBLISHED.value,
+            )
+            .first()
+        )
+        if not selected_form:
+            raise ValueError("Selected published form not found in this organization")
+        trigger_config["form_id"] = str(selected_form.id)
+        trigger_config.pop("form_name", None)
+    elif template.trigger_type in FORM_TRIGGER_TYPES:
         form_name = trigger_config.get("form_name")
         if isinstance(form_name, str):
             normalized_form_name = form_name.strip()

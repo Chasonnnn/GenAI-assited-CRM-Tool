@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { startTransition, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +37,7 @@ import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
+import { listForms, type FormSummary } from "@/lib/api/forms"
 import type { WorkflowScope } from "@/lib/api/workflows"
 
 // Types
@@ -70,6 +71,11 @@ interface UseTemplateFormData {
     description: string
     is_enabled: boolean
     action_overrides?: Record<string, { template_id: string | null }>
+}
+
+interface UseTemplatePayload extends UseTemplateFormData {
+    scope: WorkflowScope
+    trigger_form_id?: string
 }
 
 interface TemplateCategory {
@@ -143,9 +149,14 @@ async function fetchTemplateCategories(): Promise<TemplateCategoriesResponse> {
 async function applyTemplateApi(
     templateId: string,
     data: UseTemplateFormData,
-    scope: WorkflowScope
+    scope: WorkflowScope,
+    triggerFormId?: string
 ) {
-    return api.post(`/templates/${templateId}/use`, { ...data, scope })
+    const payload: UseTemplatePayload = { ...data, scope }
+    if (triggerFormId) {
+        payload.trigger_form_id = triggerFormId
+    }
+    return api.post(`/templates/${templateId}/use`, payload)
 }
 
 interface WorkflowTemplatesPanelProps {
@@ -167,6 +178,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
         is_enabled: true,
         action_overrides: {},
     })
+    const [selectedTriggerFormId, setSelectedTriggerFormId] = useState("")
 
     useEffect(() => {
         if (!isAdmin && workflowScope !== "personal") {
@@ -199,18 +211,10 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
         queryFn: () => fetchTemplate(selectedTemplate!.id),
         enabled: !!selectedTemplate?.id,
     })
-
-    const useTemplateMutation = useMutation({
-        mutationFn: () => applyTemplateApi(selectedTemplate!.id, formData, workflowScope),
-        onSuccess: () => {
-            toast.success("Workflow created from template!")
-            void queryClient.invalidateQueries({ queryKey: ["workflows"] })
-            setSelectedTemplate(null)
-            setFormData({ name: "", description: "", is_enabled: true, action_overrides: {} })
-        },
-        onError: (err: Error) => {
-            toast.error(err.message)
-        },
+    const { data: forms = [], isLoading: isLoadingForms } = useQuery({
+        queryKey: ["forms", "list"],
+        queryFn: listForms,
+        enabled: !!selectedTemplateDetail,
     })
 
     const handleSelectTemplate = (template: WorkflowTemplateListItem) => {
@@ -221,10 +225,39 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
             is_enabled: true,
             action_overrides: {},
         })
+        setSelectedTriggerFormId("")
     }
 
     const globalTemplates = templates.filter((t) => t.is_global)
     const orgTemplates = templates.filter((t) => !t.is_global)
+    const triggerConfig = selectedTemplateDetail?.trigger_config ?? {}
+    const triggerFormName =
+        typeof triggerConfig.form_name === "string" ? triggerConfig.form_name.trim() : ""
+    const triggerFormId =
+        typeof triggerConfig.form_id === "string" ? triggerConfig.form_id.trim() : ""
+    const templateRequiresPublishedForm =
+        !!selectedTemplateDetail &&
+        (selectedTemplateDetail.trigger_type === "form_started" ||
+            !!triggerFormName ||
+            !!triggerFormId)
+    const publishedForms = useMemo(
+        () => forms.filter((form: FormSummary) => form.status === "published"),
+        [forms]
+    )
+    const autoSelectedForm =
+        (triggerFormId ? publishedForms.find((form) => form.id === triggerFormId) : undefined) ??
+        (triggerFormName
+            ? publishedForms.find((form) => form.name === triggerFormName)
+            : undefined) ??
+        (publishedForms.length === 1 ? publishedForms[0] : undefined)
+    const selectedPublishedForm = selectedTriggerFormId
+        ? publishedForms.find((form) => form.id === selectedTriggerFormId)
+        : undefined
+    const effectiveTriggerFormId = selectedPublishedForm?.id ?? autoSelectedForm?.id ?? ""
+    const getPublishedFormLabel = (formId: string | null | undefined) => {
+        if (!formId) return "Choose a published form"
+        return publishedForms.find((form) => form.id === formId)?.name ?? "Unknown published form"
+    }
     const missingEmailActions =
         selectedTemplate && selectedTemplateDetail?.actions
             ? selectedTemplateDetail.actions
@@ -247,10 +280,34 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
     const hasTemplateDetail = !selectedTemplate || !!selectedTemplateDetail
     const templateDetailErrorMessage =
         templateDetailError instanceof Error ? templateDetailError.message : "Failed to load template details"
+    const hasRequiredFormSelection =
+        !templateRequiresPublishedForm || (!isLoadingForms && !!effectiveTriggerFormId)
+
+    const useTemplateMutation = useMutation({
+        mutationFn: () =>
+            applyTemplateApi(
+                selectedTemplate!.id,
+                formData,
+                workflowScope,
+                templateRequiresPublishedForm ? effectiveTriggerFormId : undefined
+            ),
+        onSuccess: () => {
+            toast.success("Workflow created from template!")
+            void queryClient.invalidateQueries({ queryKey: ["workflows"] })
+            setSelectedTemplate(null)
+            setSelectedTriggerFormId("")
+            setFormData({ name: "", description: "", is_enabled: true, action_overrides: {} })
+        },
+        onError: (err: Error) => {
+            toast.error(err.message)
+        },
+    })
+
     const canCreateWorkflow =
         !!formData.name &&
         !useTemplateMutation.isPending &&
         hasAllEmailSelections &&
+        hasRequiredFormSelection &&
         !isTemplateDetailLoading &&
         hasTemplateDetail &&
         !isTemplateDetailError
@@ -423,6 +480,41 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                             <div className="flex items-center gap-2 text-sm text-red-500">
                                 <AlertCircleIcon className="size-4" />
                                 {templateDetailErrorMessage}
+                            </div>
+                        )}
+
+                        {templateRequiresPublishedForm && (
+                            <div className="space-y-2">
+                                <Label htmlFor="trigger-form-id">Published form</Label>
+                                {isLoadingForms ? (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Loader2Icon className="size-4 animate-spin" />
+                                        Loading published forms
+                                    </div>
+                                ) : publishedForms.length === 0 ? (
+                                    <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/40 p-3 text-sm text-muted-foreground">
+                                        <AlertCircleIcon className="size-4" />
+                                        Publish a form before using this workflow template.
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={effectiveTriggerFormId}
+                                        onValueChange={(value) => setSelectedTriggerFormId(value ?? "")}
+                                    >
+                                        <SelectTrigger id="trigger-form-id">
+                                            <SelectValue placeholder="Choose a published form">
+                                                {(value: string | null) => getPublishedFormLabel(value)}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {publishedForms.map((form) => (
+                                                <SelectItem key={form.id} value={form.id}>
+                                                    {form.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                             </div>
                         )}
 

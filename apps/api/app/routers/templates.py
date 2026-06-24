@@ -175,6 +175,7 @@ def use_template(
             is_enabled=data.is_enabled,
             action_overrides=getattr(data, "action_overrides", None),
             scope=data.scope,
+            trigger_form_id=data.trigger_form_id,
         )
 
         # Build response with creator name
