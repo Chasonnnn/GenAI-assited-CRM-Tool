@@ -238,7 +238,7 @@ export function SelectionPopover({
                     "hover:scale-105 hover:shadow-xl"
                 )}
             >
-                <MessageSquarePlusIcon className="size-3.5" />
+                <MessageSquarePlusIcon className="size-3.5" aria-hidden="true" />
                 <span className="text-xs font-medium">Add Comment</span>
             </Button>
             {/* Pointer arrow */}
