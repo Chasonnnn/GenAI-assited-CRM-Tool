@@ -1883,11 +1883,15 @@ def create_intake_lead_for_submission(
         metadata["campaign_name"] = link.campaign_name
     if link and link.event_name:
         metadata["event_name"] = link.event_name
-    lead_source = source or (
-        "form_embed"
-        if link and form.purpose == FormPurpose.LEAD_CAPTURE.value and link.embed_enabled
-        else "shared_intake"
+    normalized_action_source = source.strip().lower() if isinstance(source, str) else None
+    auto_promote_website_lead = (
+        normalized_action_source in {None, "form_embed", "website"}
+        and link is not None
+        and form.purpose == FormPurpose.LEAD_CAPTURE.value
+        and link.embed_enabled
     )
+    lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
+    metadata.setdefault("source", lead_source)
 
     lead = _create_intake_lead(
         db,
@@ -1902,7 +1906,11 @@ def create_intake_lead_for_submission(
     )
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-    submission.match_reason = "workflow_lead_creation"
+    submission.match_reason = (
+        "workflow_website_lead_creation"
+        if auto_promote_website_lead
+        else "workflow_lead_creation"
+    )
     submission.matched_at = None
     db.query(FormSubmissionMatchCandidate).filter(
         FormSubmissionMatchCandidate.submission_id == submission.id
@@ -1910,6 +1918,24 @@ def create_intake_lead_for_submission(
     db.commit()
     db.refresh(submission)
     db.refresh(lead)
+
+    if auto_promote_website_lead:
+        surrogate, _linked_submission_count = promote_intake_lead(
+            db=db,
+            lead=lead,
+            user_id=user_id,
+            source="website",
+            is_priority=False,
+            assign_to_user=False,
+        )
+        submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+        submission.match_reason = "workflow_website_lead_creation"
+        submission.matched_at = None
+        db.commit()
+        db.refresh(submission)
+        db.refresh(lead)
+        db.refresh(surrogate)
+
     meta_crm_dataset_service.link_website_lead_event_to_intake_lead(
         db,
         organization_id=submission.organization_id,

@@ -373,7 +373,7 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
         trigger_config={"form_id": form_id},
         conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
         condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead", "source": "form_embed"}],
+        actions=[{"action_type": "create_intake_lead"}],
         is_enabled=True,
         scope="org",
         owner_user_id=None,
@@ -426,13 +426,24 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     assert payload["intake_lead_id"] is not None
 
     submission_id = uuid.UUID(payload["id"])
-    lead_count = (
+    intake_lead = (
         db.query(IntakeLead)
         .filter(IntakeLead.organization_id == test_org.id)
         .filter(IntakeLead.form_submission_id == submission_id)
-        .count()
+        .one()
     )
-    assert lead_count == 1
+    assert intake_lead.source == "website"
+    assert intake_lead.source_metadata["source"] == "website"
+
+    visible_leads_res = await authed_client.get(
+        "/surrogates",
+        params={"source": "website", "q": "workflow-embed@example.com"},
+    )
+    assert visible_leads_res.status_code == 200
+    visible_leads = visible_leads_res.json()
+    assert visible_leads["total"] == 1
+    assert visible_leads["items"][0]["full_name"] == "Workflow Embed Lead"
+    assert visible_leads["items"][0]["source"] == "website"
 
     from app.services import workflow_triggers
 
@@ -454,6 +465,12 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
         .count()
         == 1
     )
+    visible_leads_after_retry = await authed_client.get(
+        "/surrogates",
+        params={"source": "website", "q": "workflow-embed@example.com"},
+    )
+    assert visible_leads_after_retry.status_code == 200
+    assert visible_leads_after_retry.json()["total"] == 1
     assert (
         db.query(WorkflowExecution)
         .filter(
