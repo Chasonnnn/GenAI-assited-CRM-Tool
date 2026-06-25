@@ -22,6 +22,7 @@ from app.services.import_transformers import (
     transform_int_flexible,
     transform_value,
 )
+from app.services import surrogate_input_normalization_service
 from app.utils.datetime_parsing import parse_datetime_with_timezone
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import normalize_phone, normalize_state
@@ -761,29 +762,11 @@ def _apply_transform(mapping: dict, value: str) -> object:
 
 
 def _validate_surrogate_row_lenient(row_data: dict) -> tuple[SurrogateCreate, list[str]]:
-    try:
-        return SurrogateCreate(**row_data), []
-    except ValidationError as exc:
-        invalid_fields: set[str] = set()
-        has_required_error = False
-        for err in exc.errors():
-            loc = err.get("loc") or []
-            field = loc[0] if loc else None
-            if not isinstance(field, str):
-                continue
-            if field in REQUIRED_CONVERSION_FIELDS:
-                has_required_error = True
-            elif field in row_data:
-                invalid_fields.add(field)
-
-        if has_required_error or not invalid_fields:
-            raise
-
-        sanitized = dict(row_data)
-        for field in invalid_fields:
-            sanitized.pop(field, None)
-
-        return SurrogateCreate(**sanitized), sorted(invalid_fields)
+    return surrogate_input_normalization_service.build_surrogate_create_from_payload(
+        row_data,
+        lenient=True,
+        required_fields=frozenset(REQUIRED_CONVERSION_FIELDS),
+    )
 
 
 def _normalize_key(value: str) -> str:

@@ -6,9 +6,7 @@ import re
 import uuid
 import zipfile
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
-from types import UnionType
-from typing import Any, Union, get_args, get_origin
+from typing import Any
 
 from fastapi import UploadFile
 from pydantic import EmailStr, TypeAdapter
@@ -40,9 +38,12 @@ from app.services.attachment_service import (
     strip_exif_data,
     store_file,
 )
-from app.services.import_transformers import transform_height_flexible, transform_int_flexible
+from app.services.import_transformers import transform_height_flexible
 from app.services import job_service
-from app.utils.journey_timing import normalize_journey_timing_preference
+from app.services.surrogate_input_normalization_service import (
+    SURROGATE_FIELD_TYPES,
+    coerce_surrogate_field_value,
+)
 from app.utils.normalization import normalize_phone
 
 
@@ -116,63 +117,6 @@ _CUSTOM_TEXT_LIKE_MIME_TYPES = {
 }
 
 
-def _unwrap_annotation(annotation: Any) -> Any:
-    origin = get_origin(annotation)
-    if origin is None:
-        return annotation
-    if origin in (UnionType, Union):
-        args = [arg for arg in get_args(annotation) if arg is not type(None)]
-        if len(args) == 1:
-            return _unwrap_annotation(args[0])
-        return annotation
-    origin_name = str(origin)
-    if "Annotated" in origin_name:
-        args = get_args(annotation)
-        if args:
-            return _unwrap_annotation(args[0])
-    return annotation
-
-
-def _surrogate_field_type_from_annotation(annotation: Any) -> str | None:
-    base = _unwrap_annotation(annotation)
-    if base is bool:
-        return "bool"
-    if base is int:
-        return "int"
-    if base is Decimal:
-        return "decimal"
-    if base is date:
-        return "date"
-    if base is EmailStr:
-        return "str"
-    if base is str:
-        return "str"
-    if isinstance(base, type):
-        if issubclass(base, bool):
-            return "bool"
-        if issubclass(base, int):
-            return "int"
-        if issubclass(base, Decimal):
-            return "decimal"
-        if issubclass(base, date):
-            return "date"
-        if issubclass(base, EmailStr):
-            return "str"
-        if issubclass(base, str):
-            return "str"
-    return None
-
-
-def _build_surrogate_field_types() -> dict[str, str]:
-    field_types: dict[str, str] = {}
-    for field_name, model_field in SurrogateUpdate.model_fields.items():
-        field_type = _surrogate_field_type_from_annotation(model_field.annotation)
-        if field_type:
-            field_types[field_name] = field_type
-    return field_types
-
-
-SURROGATE_FIELD_TYPES: dict[str, str] = _build_surrogate_field_types()
 REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
 CRITICAL_SURROGATE_FIELDS = frozenset(REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS)
 _SURROGATE_FIELD_LABEL_OVERRIDES: dict[str, str] = {
@@ -811,7 +755,7 @@ def update_submission_answers(
             surrogate_field = mapping_by_key[field_key]
             if surrogate_field in SURROGATE_FIELD_TYPES:
                 try:
-                    coerced = _coerce_surrogate_value(surrogate_field, value) if value else None
+                    coerced = coerce_surrogate_field_value(surrogate_field, value) if value else None
                     surrogate_updates[surrogate_field] = coerced
                     updated_surrogate_fields.append(surrogate_field)
                 except ValueError:
@@ -1461,7 +1405,7 @@ def _build_surrogate_updates(
         if value in (None, ""):
             continue
         try:
-            updates[surrogate_field] = _coerce_surrogate_value(surrogate_field, value)
+            updates[surrogate_field] = coerce_surrogate_field_value(surrogate_field, value)
         except ValueError:
             if strict:
                 raise
@@ -1570,52 +1514,4 @@ def _validate_file_field_limits(
 
 
 def _coerce_surrogate_value(surrogate_field: str, value: Any) -> Any:
-    field_type = SURROGATE_FIELD_TYPES.get(surrogate_field)
-    if surrogate_field == "journey_timing_preference":
-        normalized = normalize_journey_timing_preference(value)
-        if normalized is None:
-            raise ValueError(f"Invalid journey timing for {surrogate_field}")
-        return normalized
-    if field_type == "str":
-        return str(value)
-    if field_type == "bool":
-        return _parse_bool(value)
-    if field_type == "int":
-        transformed = transform_int_flexible(str(value))
-        if transformed.success and transformed.value is not None:
-            return transformed.value
-        raise ValueError(f"Invalid integer for {surrogate_field}")
-    if field_type == "decimal":
-        if surrogate_field == "height_ft":
-            transformed = transform_height_flexible(str(value))
-            if transformed.success and transformed.value is not None:
-                return transformed.value
-            raise ValueError(f"Invalid height for {surrogate_field}")
-        try:
-            return Decimal(str(value))
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid decimal for {surrogate_field}") from exc
-    if field_type == "date":
-        if isinstance(value, date):
-            return value
-        if isinstance(value, str):
-            try:
-                return date.fromisoformat(value)
-            except ValueError as exc:
-                raise ValueError(f"Invalid date for {surrogate_field}") from exc
-        raise ValueError(f"Invalid date for {surrogate_field}")
-    return value
-
-
-def _parse_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        cleaned = value.strip().lower()
-        if cleaned in {"true", "yes", "1", "y"}:
-            return True
-        if cleaned in {"false", "no", "0", "n"}:
-            return False
-    raise ValueError("Invalid boolean value")
+    return coerce_surrogate_field_value(surrogate_field, value)

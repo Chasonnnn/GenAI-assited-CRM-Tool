@@ -41,13 +41,13 @@ from app.db.models import (
     Surrogate,
     TrackingEventLog,
 )
-from app.schemas.surrogate import SurrogateCreate
 from app.services import (
     embed_policy_service,
     form_service,
     form_submission_service,
     meta_capi,
     meta_crm_dataset_service,
+    surrogate_input_normalization_service,
 )
 from app.utils.normalization import (
     normalize_email,
@@ -2479,7 +2479,12 @@ def promote_intake_lead(
             "assign_to_user": assign_to_user,
         }
     )
-    surrogate_payload = SurrogateCreate(**mapped_payload)
+    surrogate_payload, dropped_invalid_fields = (
+        surrogate_input_normalization_service.build_surrogate_create_from_payload(
+            mapped_payload,
+            lenient=True,
+        )
+    )
     from app.services import surrogate_service
 
     surrogate = surrogate_service.create_surrogate(
@@ -2488,6 +2493,11 @@ def promote_intake_lead(
         user_id=user_id,
         data=surrogate_payload,
     )
+    if dropped_invalid_fields:
+        surrogate.import_metadata = {
+            **(surrogate.import_metadata or {}),
+            "dropped_invalid_submission_fields": dropped_invalid_fields,
+        }
 
     lead.status = IntakeLeadStatus.PROMOTED.value
     lead.promoted_surrogate_id = surrogate.id
