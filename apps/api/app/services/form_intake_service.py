@@ -1323,6 +1323,9 @@ def create_shared_submission(
         if existing:
             return existing, _normalize_shared_outcome(existing.match_status)
 
+    schema = form_submission_service.parse_schema(form.published_schema_json)
+    form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
+
     mapping_lookup = _build_form_mapping_lookup(db, form.id)
     identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
     _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
@@ -2442,16 +2445,41 @@ def promote_intake_lead(
     if not lead.email:
         raise ValueError("Intake lead is missing email")
 
-    source_value = source or "manual"
-    surrogate_payload = SurrogateCreate(
-        full_name=lead.full_name,
-        email=lead.email,
-        phone=lead.phone,
-        date_of_birth=lead.date_of_birth,
-        source=source_value,
-        is_priority=is_priority,
-        assign_to_user=assign_to_user,
+    mapped_payload: dict[str, Any] = {}
+    linked_submissions = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == lead.organization_id,
+            or_(
+                FormSubmission.intake_lead_id == lead.id,
+                FormSubmission.id == lead.form_submission_id,
+            ),
+        )
+        .order_by(FormSubmission.submitted_at.asc())
+        .all()
     )
+    for submission in linked_submissions:
+        mapped_payload.update(
+            form_submission_service.build_surrogate_updates_for_submission(
+                db,
+                submission,
+                strict=False,
+            )
+        )
+
+    source_value = source or "manual"
+    mapped_payload.update(
+        {
+            "full_name": lead.full_name,
+            "email": lead.email,
+            "phone": lead.phone,
+            "date_of_birth": lead.date_of_birth,
+            "source": source_value,
+            "is_priority": is_priority,
+            "assign_to_user": assign_to_user,
+        }
+    )
+    surrogate_payload = SurrogateCreate(**mapped_payload)
     from app.services import surrogate_service
 
     surrogate = surrogate_service.create_surrogate(

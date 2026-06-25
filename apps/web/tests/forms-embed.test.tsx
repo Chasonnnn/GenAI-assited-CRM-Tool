@@ -162,6 +162,84 @@ describe("EmbedFormPageClient", () => {
         expect(await screen.findByRole("heading", { name: "Request received" })).toBeInTheDocument()
     })
 
+    it("blocks invalid public contact values before submitting the embedded form", async () => {
+        getEmbedPublicForm.mockResolvedValueOnce({
+            ...embedForm,
+            form_schema: {
+                ...embedForm.form_schema,
+                pages: [
+                    {
+                        title: "Contact",
+                        fields: [
+                            ...embedForm.form_schema.pages[0].fields,
+                            {
+                                key: "phone",
+                                label: "Phone",
+                                type: "phone",
+                                required: true,
+                                sensitivity: "contact",
+                            },
+                            {
+                                key: "state",
+                                label: "State",
+                                type: "text",
+                                required: true,
+                                sensitivity: "campaign_safe",
+                                validation: {
+                                    min_length: 2,
+                                    max_length: 2,
+                                    pattern: "^[A-Za-z]{2}$",
+                                },
+                            },
+                            {
+                                key: "weight_lb",
+                                label: "Weight (lb)",
+                                type: "number",
+                                required: true,
+                                sensitivity: "sensitive_health",
+                                validation: { min_value: 1, max_value: 1000 },
+                            },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(
+            new MessageEvent("message", {
+                origin: "https://www.ewisurrogacy.com",
+                data: { type: "sf:form:init", attribution: {} },
+            }),
+        )
+        await waitFor(() => {
+            expect(createEmbedFormSession).toHaveBeenCalled()
+        })
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: "Embed Lead" },
+        })
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: "embed@example.com" },
+        })
+        fireEvent.change(screen.getByLabelText(/phone/i), {
+            target: { value: "123" },
+        })
+        fireEvent.change(screen.getByLabelText(/state/i), {
+            target: { value: "CA" },
+        })
+        fireEvent.change(screen.getByLabelText(/weight/i), {
+            target: { value: "150" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+        expect(await screen.findByText(/phone must be a valid phone number/i)).toBeInTheDocument()
+        expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+    })
+
     it("does not create duplicate embed sessions when the parent sends init more than once", async () => {
         render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
 

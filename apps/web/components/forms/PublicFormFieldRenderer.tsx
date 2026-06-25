@@ -130,6 +130,79 @@ function getFieldPlaceholder(field: { key: string; label: string; type: string }
     return "Enter your answer"
 }
 
+function isStateCodeField(field: FormField): boolean {
+    const key = field.key.trim().toLowerCase()
+    const label = field.label.trim().toLowerCase()
+    const validation = field.validation
+    const pattern = validation?.pattern?.replace(/\s/g, "") ?? ""
+
+    return (
+        key === "state" ||
+        key.endsWith("_state") ||
+        (label === "state" &&
+            validation?.max_length === 2 &&
+            /A-Za-z/.test(pattern))
+    )
+}
+
+function normalizePublicTextInput(field: FormField, value: string): string {
+    if (isStateCodeField(field)) {
+        return value.replace(/[^a-z]/gi, "").slice(0, 2).toUpperCase()
+    }
+    if (field.type === "number") {
+        const numeric = value.replace(/[^\d.]/g, "")
+        const decimalIndex = numeric.indexOf(".")
+        if (decimalIndex === -1) return numeric
+        return `${numeric.slice(0, decimalIndex + 1)}${numeric.slice(decimalIndex + 1).replace(/\./g, "")}`
+    }
+    return value
+}
+
+function getInputAttributes(field: FormField): React.InputHTMLAttributes<HTMLInputElement> {
+    const validation = field.validation
+    const attributes: React.InputHTMLAttributes<HTMLInputElement> = {}
+
+    if (field.type === "email") {
+        attributes.autoComplete = "email"
+        attributes.inputMode = "email"
+    }
+    if (field.type === "phone") {
+        attributes.autoComplete = "tel"
+        attributes.inputMode = "tel"
+    }
+    if (field.type === "number") {
+        attributes.inputMode = "numeric"
+        if (validation?.min_value !== null && validation?.min_value !== undefined) {
+            attributes.min = validation.min_value
+        }
+        if (validation?.max_value !== null && validation?.max_value !== undefined) {
+            attributes.max = validation.max_value
+        }
+    }
+    if (
+        field.type === "text" ||
+        field.type === "textarea" ||
+        field.type === "email" ||
+        field.type === "phone" ||
+        field.type === "address"
+    ) {
+        if (validation?.max_length !== null && validation?.max_length !== undefined) {
+            attributes.maxLength = validation.max_length
+        }
+        if (validation?.pattern) {
+            attributes.pattern = validation.pattern
+        }
+    }
+    if (isStateCodeField(field)) {
+        attributes.autoCapitalize = "characters"
+        attributes.inputMode = "text"
+        attributes.maxLength = 2
+        attributes.pattern = "^[A-Za-z]{2}$"
+    }
+
+    return attributes
+}
+
 function isDobField(field: FormField): boolean {
     const key = field.key.trim().toLowerCase()
     const label = field.label.trim().toLowerCase()
@@ -687,8 +760,11 @@ export function PublicFormFieldRenderer({
             <Input
                 id={field.key}
                 type={inputType}
+                {...getInputAttributes(field)}
                 value={typeof value === "string" ? value : value ? String(value) : ""}
-                onChange={(event) => updateField(field.key, event.target.value)}
+                onChange={(event) =>
+                    updateField(field.key, normalizePublicTextInput(field, event.target.value))
+                }
                 placeholder={getFieldPlaceholder(field)}
                 className={densityStyles.controlClassName}
             />

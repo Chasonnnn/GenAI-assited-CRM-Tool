@@ -11,7 +11,7 @@ from types import UnionType
 from typing import Any, Union, get_args, get_origin
 
 from fastapi import UploadFile
-from pydantic import EmailStr
+from pydantic import EmailStr, TypeAdapter
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -43,6 +43,7 @@ from app.services.attachment_service import (
 from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 from app.services import job_service
 from app.utils.journey_timing import normalize_journey_timing_preference
+from app.utils.normalization import normalize_phone
 
 
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -189,6 +190,7 @@ _SURROGATE_FIELD_LABEL_OVERRIDES: dict[str, str] = {
 }
 
 logger = logging.getLogger(__name__)
+_EMAIL_VALIDATOR = TypeAdapter(EmailStr)
 
 
 def parse_schema(schema_json: dict[str, Any]) -> FormSchema:
@@ -876,6 +878,16 @@ def _validate_field_value(field: FormField, value: Any) -> None:
     if field_type in {"text", "textarea", "email", "phone", "address"}:
         if not isinstance(value, str):
             raise ValueError(f"Field '{field.label}' must be a string")
+        if field_type == "email":
+            try:
+                _EMAIL_VALIDATOR.validate_python(value.strip())
+            except Exception as exc:
+                raise ValueError(f"Field '{field.label}' must be a valid email address") from exc
+        if field_type == "phone":
+            try:
+                normalize_phone(value)
+            except ValueError as exc:
+                raise ValueError(f"Field '{field.label}' must be a valid phone number") from exc
         validation = field.validation
         if validation:
             if validation.min_length is not None and len(value) < validation.min_length:
@@ -1421,8 +1433,21 @@ def _store_submission_file(
     return record
 
 
+def build_surrogate_updates_for_submission(
+    db: Session,
+    submission: FormSubmission,
+    *,
+    strict: bool = True,
+) -> dict[str, Any]:
+    mappings = _get_submission_mappings(db, submission)
+    return _build_surrogate_updates(submission, mappings, strict=strict)
+
+
 def _build_surrogate_updates(
-    submission: FormSubmission, mappings: list[dict[str, str]]
+    submission: FormSubmission,
+    mappings: list[dict[str, str]],
+    *,
+    strict: bool = True,
 ) -> dict[str, Any]:
     updates: dict[str, Any] = {}
     for mapping in mappings:
@@ -1435,7 +1460,16 @@ def _build_surrogate_updates(
         value = submission.answers_json.get(field_key)
         if value in (None, ""):
             continue
-        updates[surrogate_field] = _coerce_surrogate_value(surrogate_field, value)
+        try:
+            updates[surrogate_field] = _coerce_surrogate_value(surrogate_field, value)
+        except ValueError:
+            if strict:
+                raise
+            logger.info(
+                "Skipping invalid mapped form field %s on submission %s during lead promotion",
+                surrogate_field,
+                submission.id,
+            )
     return updates
 
 

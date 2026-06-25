@@ -26,6 +26,7 @@ import { ApiError } from "@/lib/api"
 import type { JsonObject } from "@/lib/types/json"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
+import { getPublicFieldValidationError } from "@/lib/forms/public-field-validation"
 import {
     getSharedPublicForm,
     getSharedPublicFormDraft,
@@ -1044,63 +1045,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             return null
         }
 
-        const validation = field.validation
-        if (!validation) return null
-
-        if (
-            field.type === "text" ||
-            field.type === "textarea" ||
-            field.type === "email" ||
-            field.type === "phone" ||
-            field.type === "address"
-        ) {
-            if (typeof value !== "string") return `Please review: ${field.label}`
-            if (validation.min_length !== null && validation.min_length !== undefined) {
-                if (value.length < validation.min_length) {
-                    return `Please enter at least ${validation.min_length} characters for ${field.label}`
-                }
-            }
-            if (validation.max_length !== null && validation.max_length !== undefined) {
-                if (value.length > validation.max_length) {
-                    return `Please limit ${field.label} to ${validation.max_length} characters`
-                }
-            }
-            if (validation.pattern) {
-                try {
-                    const rawPattern = validation.pattern
-                    const anchored =
-                        rawPattern.startsWith("^") && rawPattern.endsWith("$")
-                            ? rawPattern
-                            : `^(?:${rawPattern})$`
-                    const regex = new RegExp(anchored)
-                    if (!regex.test(value)) {
-                        return `Please enter a valid ${field.label}`
-                    }
-                } catch {
-                    return `Validation rule invalid for ${field.label}`
-                }
-            }
-        }
-
-        if (field.type === "number") {
-            const numericValue =
-                typeof value === "number" ? value : Number(typeof value === "string" ? value : NaN)
-            if (Number.isNaN(numericValue)) {
-                return `Please enter a valid number for ${field.label}`
-            }
-            if (validation.min_value !== null && validation.min_value !== undefined) {
-                if (numericValue < validation.min_value) {
-                    return `Please enter ${field.label} of at least ${validation.min_value}`
-                }
-            }
-            if (validation.max_value !== null && validation.max_value !== undefined) {
-                if (numericValue > validation.max_value) {
-                    return `Please enter ${field.label} of at most ${validation.max_value}`
-                }
-            }
-        }
-
-        return null
+        return getPublicFieldValidationError(field, value)
     }
 
     React.useEffect(() => {

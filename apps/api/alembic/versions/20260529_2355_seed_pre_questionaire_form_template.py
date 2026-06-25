@@ -87,6 +87,12 @@ def _schema() -> dict:
                         "label": "State",
                         "type": "text",
                         "required": True,
+                        "help_text": "Use the 2-letter state code, e.g. CA.",
+                        "validation": {
+                            "min_length": 2,
+                            "max_length": 2,
+                            "pattern": "^[A-Za-z]{2}$",
+                        },
                         "sensitivity": "campaign_safe",
                     },
                     {
@@ -149,16 +155,17 @@ def _schema() -> dict:
                     },
                     {
                         "key": "height_ft",
-                        "label": "What is your Height (ft)?",
-                        "type": "number",
+                        "label": "Height",
+                        "type": "height",
                         "required": True,
                         "sensitivity": "sensitive_health",
                     },
                     {
                         "key": "weight_lb",
-                        "label": "What is your Weight (lb)?",
+                        "label": "Weight (lb)",
                         "type": "number",
                         "required": True,
+                        "validation": {"min_value": 1, "max_value": 1000},
                         "sensitivity": "sensitive_health",
                     },
                     {
@@ -166,6 +173,7 @@ def _schema() -> dict:
                         "label": "How many deliveries have you had?",
                         "type": "number",
                         "required": True,
+                        "validation": {"min_value": 1, "max_value": 20},
                         "sensitivity": "sensitive_reproductive",
                     },
                     {
@@ -173,6 +181,7 @@ def _schema() -> dict:
                         "label": "How many C-sections have you had?",
                         "type": "number",
                         "required": True,
+                        "validation": {"min_value": 0, "max_value": 20},
                         "sensitivity": "sensitive_reproductive",
                     },
                 ],

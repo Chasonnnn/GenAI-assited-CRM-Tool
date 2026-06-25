@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import pytest
 
@@ -16,6 +17,7 @@ from app.db.models import (
     Job,
     LeadAttribution,
     MetaCrmDatasetEvent,
+    Surrogate,
     TrackingEventLog,
     WorkflowExecution,
 )
@@ -73,13 +75,24 @@ def _lead_capture_schema(
 
 
 async def _create_published_lead_capture_form(authed_client) -> tuple[str, str, str]:
+    return await _create_published_lead_capture_form_with_schema(
+        authed_client,
+        form_schema=_lead_capture_schema(),
+    )
+
+
+async def _create_published_lead_capture_form_with_schema(
+    authed_client,
+    *,
+    form_schema: dict[str, object],
+) -> tuple[str, str, str]:
     create_res = await authed_client.post(
         "/forms",
         json={
             "name": "Lead Capture",
             "description": "Public lead form",
             "purpose": "lead_capture",
-            "form_schema": _lead_capture_schema(),
+            "form_schema": form_schema,
         },
     )
     assert create_res.status_code == 200
@@ -403,8 +416,44 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     test_org,
     test_user,
 ):
-    form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    form_id, link_id, slug = await _create_published_lead_capture_form_with_schema(
+        authed_client,
+        form_schema=_lead_capture_schema(
+            extra_fields=[
+                {
+                    "key": "height_ft",
+                    "label": "Height",
+                    "type": "height",
+                    "required": True,
+                    "sensitivity": "sensitive_health",
+                },
+                {
+                    "key": "weight_lb",
+                    "label": "Weight (lb)",
+                    "type": "number",
+                    "required": True,
+                    "sensitivity": "sensitive_health",
+                    "validation": {"min_value": 1, "max_value": 1000},
+                },
+            ]
+        ),
+    )
     allowed_origin = "https://www.ewisurrogacy.com"
+
+    mappings_res = await authed_client.put(
+        f"/forms/{form_id}/mappings",
+        json={
+            "mappings": [
+                {"field_key": "full_name", "surrogate_field": "full_name"},
+                {"field_key": "email", "surrogate_field": "email"},
+                {"field_key": "phone", "surrogate_field": "phone"},
+                {"field_key": "state", "surrogate_field": "state"},
+                {"field_key": "height_ft", "surrogate_field": "height_ft"},
+                {"field_key": "weight_lb", "surrogate_field": "weight_lb"},
+            ]
+        },
+    )
+    assert mappings_res.status_code == 200
 
     workflow = AutomationWorkflow(
         id=uuid.uuid4(),
@@ -455,7 +504,9 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
                 "full_name": "Workflow Embed Lead",
                 "email": "workflow-embed@example.com",
                 "phone": "+1 (555) 481-0902",
-                "state": "CA",
+                "state": "ca",
+                "height_ft": "5.58",
+                "weight_lb": "146",
             },
             "consent": {"accepted": True},
             "attribution": {},
@@ -485,6 +536,14 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     assert visible_leads["total"] == 1
     assert visible_leads["items"][0]["full_name"] == "Workflow Embed Lead"
     assert visible_leads["items"][0]["source"] == "website"
+    surrogate = (
+        db.query(Surrogate)
+        .filter(Surrogate.id == uuid.UUID(visible_leads["items"][0]["id"]))
+        .one()
+    )
+    assert surrogate.state == "CA"
+    assert surrogate.height_ft == Decimal("5.58")
+    assert surrogate.weight_lb == 146
 
     from app.services import workflow_triggers
 

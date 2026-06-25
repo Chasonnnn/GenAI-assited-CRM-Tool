@@ -74,9 +74,19 @@ def test_pre_questionaire_template_schema_matches_requested_short_form():
         "(cigarettes, cigars, vape devices, hookahs, marijuana, etc.)?"
     )
     assert by_key["nicotine_or_tobacco_use"]["sensitivity"] == "sensitive_health"
-    assert by_key["height_ft"]["type"] == "number"
+    assert by_key["state"]["validation"] == {
+        "min_length": 2,
+        "max_length": 2,
+        "pattern": "^[A-Za-z]{2}$",
+    }
+    assert by_key["height_ft"]["label"] == "Height"
+    assert by_key["height_ft"]["type"] == "height"
+    assert by_key["weight_lb"]["label"] == "Weight (lb)"
+    assert by_key["weight_lb"]["validation"] == {"min_value": 1, "max_value": 1000}
     assert by_key["num_deliveries"]["sensitivity"] == "sensitive_reproductive"
+    assert by_key["num_deliveries"]["validation"] == {"min_value": 1, "max_value": 20}
     assert by_key["num_csections"]["label"] == "How many C-sections have you had?"
+    assert by_key["num_csections"]["validation"] == {"min_value": 0, "max_value": 20}
     assert all(field.get("sensitivity") for field in fields)
 
 

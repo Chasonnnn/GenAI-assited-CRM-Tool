@@ -175,6 +175,61 @@ def _create_published_form_with_validation(db, org_id, user_id):
     return form
 
 
+def _create_published_form_with_public_quality_checks(db, org_id, user_id):
+    schema = _schema_with_identity(
+        "Quality Checks",
+        [
+            {
+                "key": "state",
+                "label": "State",
+                "type": "text",
+                "required": True,
+                "validation": {
+                    "min_length": 2,
+                    "max_length": 2,
+                    "pattern": "^[A-Za-z]{2}$",
+                },
+            },
+            {
+                "key": "weight_lb",
+                "label": "Weight (lb)",
+                "type": "number",
+                "required": True,
+                "validation": {"min_value": 1, "max_value": 1000},
+            },
+            {
+                "key": "num_deliveries",
+                "label": "How many deliveries have you had?",
+                "type": "number",
+                "required": True,
+                "validation": {"min_value": 1, "max_value": 20},
+            },
+            {
+                "key": "num_csections",
+                "label": "How many C-sections have you had?",
+                "type": "number",
+                "required": True,
+                "validation": {"min_value": 0, "max_value": 20},
+            },
+        ],
+    )
+    schema["pages"][0]["fields"][2]["type"] = "phone"
+
+    form = form_service.create_form(
+        db=db,
+        org_id=org_id,
+        user_id=user_id,
+        name="Quality Checks Form",
+        description="Public input quality checks",
+        schema=schema,
+        max_file_size_bytes=None,
+        max_file_count=None,
+        allowed_mime_types=None,
+    )
+    form_service.publish_form(db, form, user_id)
+    return form
+
+
 def _create_published_form_with_height_weight(db, org_id, user_id):
     schema = _schema_with_identity(
         "Vitals",
@@ -639,6 +694,36 @@ def test_submission_validates_field_constraints(db, test_org, test_user, default
         files=[],
     )
     assert submission.id is not None
+
+
+def test_submission_validates_public_contact_and_numeric_quality_checks(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_public_quality_checks(db, test_org.id, test_user.id)
+    valid_answers = _answers(
+        {"state": "CA", "weight_lb": "150", "num_deliveries": "1", "num_csections": "0"}
+    )
+
+    cases = [
+        ("email", "not-an-email", "valid email"),
+        ("phone", "123", "valid phone"),
+        ("state", "California", "at most 2 characters"),
+        ("weight_lb", "-5", "at least 1"),
+        ("num_deliveries", "0", "at least 1"),
+        ("num_csections", "-3", "at least 0"),
+    ]
+
+    for field_key, bad_value, expected_message in cases:
+        with pytest.raises(ValueError, match=expected_message):
+            _create_shared_submission(
+                db=db,
+                surrogate=surrogate,
+                user_id=test_user.id,
+                form=form,
+                answers={**valid_answers, field_key: bad_value},
+                files=[],
+            )
 
 
 def test_submission_skips_required_fields_when_condition_not_met(

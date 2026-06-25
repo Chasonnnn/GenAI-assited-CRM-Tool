@@ -5,6 +5,10 @@ import { AlertTriangleIcon, CheckCircle2Icon, Loader2Icon, SendIcon } from "luci
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { PublicFormFieldRenderer, type PublicFormAnswerValue } from "@/components/forms/PublicFormFieldRenderer"
+import {
+    getPublicFieldValidationError,
+    isEmptyPublicFieldValue,
+} from "@/lib/forms/public-field-validation"
 import { cn } from "@/lib/utils"
 import type { JsonObject } from "@/lib/types/json"
 import {
@@ -72,22 +76,15 @@ function sanitizeAttribution(payload: Record<string, unknown> | undefined): Reco
     return sanitized
 }
 
-function isEmptyValue(value: PublicFormAnswerValue | undefined): boolean {
-    if (value === null || value === undefined) return true
-    if (typeof value === "string") return value.trim() === ""
-    if (Array.isArray(value)) return value.length === 0
-    return false
-}
-
 function evaluateCondition(field: FormField, answers: Answers): boolean {
     const condition = field.show_if
     if (!condition) return true
     const value = answers[condition.field_key]
     switch (condition.operator) {
         case "is_empty":
-            return isEmptyValue(value)
+            return isEmptyPublicFieldValue(value)
         case "is_not_empty":
-            return !isEmptyValue(value)
+            return !isEmptyPublicFieldValue(value)
         case "equals":
             return String(value ?? "") === String(condition.value ?? "")
         case "not_equals":
@@ -106,14 +103,7 @@ function evaluateCondition(field: FormField, answers: Answers): boolean {
 }
 
 function getFieldError(field: FormField, value: PublicFormAnswerValue | undefined): string | null {
-    if (field.required && isEmptyValue(value)) {
-        return `${field.label} is required.`
-    }
-    if (field.type === "email" && typeof value === "string" && value.trim()) {
-        const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
-        if (!valid) return `${field.label} must be a valid email address.`
-    }
-    return null
+    return getPublicFieldValidationError(field, value)
 }
 
 function asJsonObject(answers: Answers): JsonObject {

@@ -79,7 +79,7 @@ def _create_surrogate(
     return surrogate
 
 
-async def _create_published_form_and_shared_link(authed_client):
+async def _create_published_form_and_shared_link(authed_client, *, phone_type: str = "text"):
     schema = {
         "pages": [
             {
@@ -87,7 +87,7 @@ async def _create_published_form_and_shared_link(authed_client):
                 "fields": [
                     {"key": "full_name", "label": "Full Name", "type": "text", "required": True},
                     {"key": "date_of_birth", "label": "DOB", "type": "date", "required": True},
-                    {"key": "phone", "label": "Phone", "type": "text", "required": True},
+                    {"key": "phone", "label": "Phone", "type": phone_type, "required": True},
                     {"key": "email", "label": "Email", "type": "email", "required": True},
                 ],
             }
@@ -119,6 +119,31 @@ async def _create_published_form_and_shared_link(authed_client):
     assert link_res.status_code == 200
     link_payload = link_res.json()
     return form_id, link_payload["id"], link_payload["slug"]
+
+
+@pytest.mark.asyncio
+async def test_shared_submit_rejects_invalid_phone_before_identity_extraction(authed_client):
+    _form_id, _link_id, slug = await _create_published_form_and_shared_link(
+        authed_client,
+        phone_type="phone",
+    )
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Invalid Phone",
+                    "date_of_birth": "1993-04-12",
+                    "phone": "123",
+                    "email": "invalid-phone@example.com",
+                }
+            )
+        },
+    )
+
+    assert submit_res.status_code == 400
+    assert submit_res.json()["detail"] == "Field 'Phone' must be a valid phone number"
 
 
 @pytest.mark.asyncio

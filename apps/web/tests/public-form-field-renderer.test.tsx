@@ -85,7 +85,7 @@ describe("PublicFormFieldRenderer", () => {
         const updateField = vi.fn()
         const setDatePickerOpen = vi.fn()
         const field: FormField = {
-            key: "height",
+            key: "height_ft",
             label: "Height",
             type: "height",
         }
@@ -109,7 +109,79 @@ describe("PublicFormFieldRenderer", () => {
 
         expect(screen.getByLabelText(/height feet/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/height inches/i)).toBeInTheDocument()
-        expect(updateField).toHaveBeenLastCalledWith("height", "5.58")
+        expect(updateField).toHaveBeenLastCalledWith("height_ft", "5.58")
+    })
+
+    it("constrains state-code text fields to two uppercase letters", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "state",
+            label: "State",
+            type: "text",
+            required: true,
+            validation: {
+                min_length: 2,
+                max_length: 2,
+                pattern: "^[A-Za-z]{2}$",
+            },
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={null}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+            />,
+        )
+
+        const stateInput = screen.getByLabelText(/state/i)
+        expect(stateInput).toHaveAttribute("maxlength", "2")
+
+        fireEvent.change(stateInput, {
+            target: { value: "ca9lifornia" },
+        })
+
+        expect(updateField).toHaveBeenLastCalledWith("state", "CA")
+    })
+
+    it("applies configured numeric limits to weight fields", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "weight_lb",
+            label: "Weight (lb)",
+            type: "number",
+            required: true,
+            validation: {
+                min_value: 1,
+                max_value: 1000,
+            },
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={null}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+            />,
+        )
+
+        const weightInput = screen.getByLabelText(/weight/i)
+        expect(weightInput).toHaveAttribute("type", "number")
+        expect(weightInput).toHaveAttribute("inputmode", "numeric")
+        expect(weightInput).toHaveAttribute("min", "1")
+        expect(weightInput).toHaveAttribute("max", "1000")
+
+        fireEvent.change(weightInput, {
+            target: { value: "1e2" },
+        })
+
+        expect(updateField).toHaveBeenLastCalledWith("weight_lb", "12")
     })
 
     it("normalizes height values that would otherwise round to 12 inches", () => {
