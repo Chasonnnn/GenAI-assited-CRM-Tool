@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.44](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.43...surrogacy-crm-platform-v0.91.44) (2026-06-25)
+
+
+### Bug Fixes
+
+* Apply reusable public form field defaults ([b8d0fb8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b8d0fb87f7d3d7af48f1f9afbbabff22122eadc8))
+* Harden public pre-questionnaire validation ([604b57e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/604b57eee9b6a206c211347177c512a7be24d0f1))
+* Preserve public form logo branding ([f623bee](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f623beece3d27ef4bbb08126f21e88e11c2d39b0))
+* restore stage change dialog layout ([7b3ec3c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7b3ec3c5b180b29d7c7dc2c38a53e52fdf38502f))
+
 ## [0.91.43](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.42...surrogacy-crm-platform-v0.91.43) (2026-06-24)
 
 
