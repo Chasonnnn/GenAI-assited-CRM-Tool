@@ -56,6 +56,92 @@ export type BuilderSchemaMetadata = {
 
 export const FALLBACK_FORM_PAGE: BuilderFormPage = { id: 1, name: "Page 1", fields: [] }
 
+type MappedFieldDefaults = {
+    type?: FieldType
+    helperText?: string
+    validation?: FormFieldValidation
+}
+
+const SURROGATE_FIELD_FORM_DEFAULTS: Record<string, MappedFieldDefaults> = {
+    state: {
+        helperText: "Use the 2-letter state code, e.g. CA.",
+        validation: {
+            min_length: 2,
+            max_length: 2,
+            pattern: "^[A-Za-z]{2}$",
+        },
+    },
+    height_ft: {
+        type: "height",
+    },
+    weight_lb: {
+        type: "number",
+        validation: {
+            min_value: 1,
+            max_value: 1000,
+        },
+    },
+    num_deliveries: {
+        type: "number",
+        validation: {
+            min_value: 1,
+            max_value: 20,
+        },
+    },
+    num_csections: {
+        type: "number",
+        validation: {
+            min_value: 0,
+            max_value: 20,
+        },
+    },
+}
+
+function coerceNumber(value: number | null | undefined): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function mergeValidationDefaults(
+    current: FormFieldValidation | null | undefined,
+    defaults: FormFieldValidation | undefined,
+): FormFieldValidation | null | undefined {
+    if (!defaults) return current
+
+    const next: FormFieldValidation = { ...(current ?? {}) }
+
+    if (defaults.min_length !== null && defaults.min_length !== undefined) {
+        next.min_length = defaults.min_length
+    }
+    if (defaults.max_length !== null && defaults.max_length !== undefined) {
+        next.max_length = defaults.max_length
+    }
+    if (defaults.pattern) {
+        next.pattern = defaults.pattern
+    }
+    if (defaults.min_value !== null && defaults.min_value !== undefined) {
+        const currentMin = coerceNumber(next.min_value)
+        next.min_value = currentMin === null ? defaults.min_value : Math.max(currentMin, defaults.min_value)
+    }
+    if (defaults.max_value !== null && defaults.max_value !== undefined) {
+        const currentMax = coerceNumber(next.max_value)
+        next.max_value = currentMax === null ? defaults.max_value : Math.min(currentMax, defaults.max_value)
+    }
+
+    return next
+}
+
+function applySurrogateFieldDefaults(field: BuilderFormField): BuilderFormField {
+    const defaults = SURROGATE_FIELD_FORM_DEFAULTS[field.surrogateFieldMapping || field.id]
+    if (!defaults) return field
+
+    return {
+        ...field,
+        type: defaults.type ?? field.type,
+        helperText: field.helperText || defaults.helperText || "",
+        validation: mergeValidationDefaults(field.validation, defaults.validation) ?? null,
+    }
+}
+
 export function getBuilderOptionLabel(option: BuilderOption) {
     return typeof option === "string" ? option : option.label
 }
@@ -132,36 +218,39 @@ export function buildFormSchema(pages: BuilderFormPage[], metadata: BuilderSchem
     return {
         pages: pages.map((page) => ({
             title: page.name || null,
-            fields: page.fields.map((field) => ({
-                key: field.id,
-                label: field.label,
-                type: field.type,
-                required: field.required,
-                options: toFieldOptions(field.options),
-                validation: field.validation ?? null,
-                help_text: field.helperText || null,
-                show_if: field.showIf
-                    ? {
-                        field_key: field.showIf.fieldKey,
-                        operator: field.showIf.operator,
-                        value: field.showIf.value ?? null,
-                    }
-                    : null,
-                columns: field.columns
-                    ? field.columns.map((column) => ({
-                        key: column.id,
-                        label: column.label,
-                        type: column.type,
-                        required: column.required,
-                        options: toFieldOptions(column.options),
-                        validation: column.validation ?? null,
-                    }))
-                    : null,
-                rows: toFieldRows(field.rows),
-                min_rows: field.minRows ?? null,
-                max_rows: field.maxRows ?? null,
-                sensitivity: inferFieldSensitivity(field),
-            })),
+            fields: page.fields.map((rawField) => {
+                const field = applySurrogateFieldDefaults(rawField)
+                return {
+                    key: field.id,
+                    label: field.label,
+                    type: field.type,
+                    required: field.required,
+                    options: toFieldOptions(field.options),
+                    validation: field.validation ?? null,
+                    help_text: field.helperText || null,
+                    show_if: field.showIf
+                        ? {
+                            field_key: field.showIf.fieldKey,
+                            operator: field.showIf.operator,
+                            value: field.showIf.value ?? null,
+                        }
+                        : null,
+                    columns: field.columns
+                        ? field.columns.map((column) => ({
+                            key: column.id,
+                            label: column.label,
+                            type: column.type,
+                            required: column.required,
+                            options: toFieldOptions(column.options),
+                            validation: column.validation ?? null,
+                        }))
+                        : null,
+                    rows: toFieldRows(field.rows),
+                    min_rows: field.minRows ?? null,
+                    max_rows: field.maxRows ?? null,
+                    sensitivity: inferFieldSensitivity(field),
+                }
+            }),
         })),
         public_eyebrow: publicEyebrow,
         public_title: publicTitle,
@@ -278,6 +367,7 @@ export function createBuilderField(template: BuilderPaletteField): BuilderFormFi
         helperText: template.helperText ?? "",
         required: template.required ?? false,
         surrogateFieldMapping: template.surrogateFieldMapping ?? "",
+        validation: template.validation ? { ...template.validation } : null,
     }
 
     if (template.options && template.options.length > 0) {

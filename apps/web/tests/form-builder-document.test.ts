@@ -118,6 +118,89 @@ describe("form builder field mappings", () => {
     })
 })
 
+describe("form builder mapped field defaults", () => {
+    it("applies canonical public validation when surrogate fields are reused with custom field keys", () => {
+        const schema = buildFormSchema(
+            [
+                {
+                    id: 1,
+                    name: "Applicant details",
+                    fields: [
+                        {
+                            id: "current_state",
+                            type: "text",
+                            label: "State",
+                            helperText: "",
+                            required: true,
+                            surrogateFieldMapping: "state",
+                        },
+                        {
+                            id: "current_height",
+                            type: "number",
+                            label: "Height",
+                            helperText: "",
+                            required: true,
+                            surrogateFieldMapping: "height_ft",
+                        },
+                        {
+                            id: "current_weight",
+                            type: "number",
+                            label: "Weight",
+                            helperText: "",
+                            required: true,
+                            surrogateFieldMapping: "weight_lb",
+                        },
+                        {
+                            id: "delivery_count",
+                            type: "number",
+                            label: "Deliveries",
+                            helperText: "",
+                            required: true,
+                            surrogateFieldMapping: "num_deliveries",
+                        },
+                        {
+                            id: "csection_count",
+                            type: "number",
+                            label: "C-sections",
+                            helperText: "",
+                            required: true,
+                            surrogateFieldMapping: "num_csections",
+                        },
+                    ],
+                },
+            ],
+            metadata,
+        )
+
+        const fields = schema.pages[0]?.fields ?? []
+
+        expect(fields.find((field) => field.key === "current_state")).toMatchObject({
+            type: "text",
+            help_text: "Use the 2-letter state code, e.g. CA.",
+            validation: {
+                min_length: 2,
+                max_length: 2,
+                pattern: "^[A-Za-z]{2}$",
+            },
+        })
+        expect(fields.find((field) => field.key === "current_height")).toMatchObject({
+            type: "height",
+        })
+        expect(fields.find((field) => field.key === "current_weight")).toMatchObject({
+            type: "number",
+            validation: { min_value: 1, max_value: 1000 },
+        })
+        expect(fields.find((field) => field.key === "delivery_count")).toMatchObject({
+            type: "number",
+            validation: { min_value: 1, max_value: 20 },
+        })
+        expect(fields.find((field) => field.key === "csection_count")).toMatchObject({
+            type: "number",
+            validation: { min_value: 0, max_value: 20 },
+        })
+    })
+})
+
 describe("form builder public header metadata", () => {
     it("preserves intentionally empty public header fields", () => {
         const schema = buildFormSchema(

@@ -81,6 +81,14 @@ def _shared_identity_schema(
     return {"pages": [{"title": title, "fields": fields}]}
 
 
+def _field_by_key(schema: dict, key: str) -> dict:
+    for page in schema.get("pages", []):
+        for field in page.get("fields", []):
+            if field.get("key") == key:
+                return field
+    raise AssertionError(f"Field {key} not found")
+
+
 async def _create_published_form_and_shared_link(*, authed_client, name: str, schema: dict):
     create_res = await authed_client.post(
         "/forms",
@@ -273,6 +281,159 @@ async def test_publish_form_auto_generates_default_shared_intake_link(authed_cli
     assert len(payload) == 1
     assert payload[0]["slug"] == links[0].slug
     assert payload[0]["intake_url"].endswith(f"/intake/{links[0].slug}")
+
+
+@pytest.mark.asyncio
+async def test_create_form_applies_public_surrogate_field_defaults_by_key(authed_client):
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Reusable Defaults By Key",
+            "purpose": "lead_capture",
+            "form_schema": {
+                "pages": [
+                    {
+                        "title": "Applicant details",
+                        "fields": [
+                            {
+                                "key": "full_name",
+                                "label": "Full Name",
+                                "type": "text",
+                                "required": True,
+                                "sensitivity": "identity",
+                            },
+                            {
+                                "key": "email",
+                                "label": "Email",
+                                "type": "email",
+                                "required": True,
+                                "sensitivity": "contact",
+                            },
+                            {
+                                "key": "state",
+                                "label": "State",
+                                "type": "text",
+                                "required": True,
+                                "sensitivity": "campaign_safe",
+                            },
+                            {
+                                "key": "height_ft",
+                                "label": "Height",
+                                "type": "number",
+                                "required": True,
+                                "sensitivity": "sensitive_health",
+                            },
+                            {
+                                "key": "weight_lb",
+                                "label": "Weight",
+                                "type": "number",
+                                "required": True,
+                                "sensitivity": "sensitive_health",
+                            },
+                            {
+                                "key": "num_deliveries",
+                                "label": "Deliveries",
+                                "type": "number",
+                                "required": True,
+                                "sensitivity": "sensitive_reproductive",
+                            },
+                            {
+                                "key": "num_csections",
+                                "label": "C-sections",
+                                "type": "number",
+                                "required": True,
+                                "sensitivity": "sensitive_reproductive",
+                            },
+                        ],
+                    }
+                ]
+            },
+        },
+    )
+    assert create_res.status_code == 200
+    schema = create_res.json()["form_schema"]
+
+    assert _field_by_key(schema, "state")["validation"] == {
+        "min_length": 2,
+        "max_length": 2,
+        "min_value": None,
+        "max_value": None,
+        "pattern": "^[A-Za-z]{2}$",
+    }
+    assert _field_by_key(schema, "state")["help_text"] == "Use the 2-letter state code, e.g. CA."
+    assert _field_by_key(schema, "height_ft")["type"] == "height"
+    assert _field_by_key(schema, "weight_lb")["validation"] == {
+        "min_length": None,
+        "max_length": None,
+        "min_value": 1.0,
+        "max_value": 1000.0,
+        "pattern": None,
+    }
+    assert _field_by_key(schema, "num_deliveries")["validation"] == {
+        "min_length": None,
+        "max_length": None,
+        "min_value": 1.0,
+        "max_value": 20.0,
+        "pattern": None,
+    }
+    assert _field_by_key(schema, "num_csections")["validation"] == {
+        "min_length": None,
+        "max_length": None,
+        "min_value": 0.0,
+        "max_value": 20.0,
+        "pattern": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_set_form_mappings_applies_public_surrogate_field_defaults(authed_client):
+    create_res = await authed_client.post(
+        "/forms",
+        json={
+            "name": "Reusable Defaults By Mapping",
+            "form_schema": {
+                "pages": [
+                    {
+                        "title": "Applicant details",
+                        "fields": [
+                            {"key": "current_state", "label": "State", "type": "text"},
+                            {"key": "current_height", "label": "Height", "type": "number"},
+                            {"key": "current_weight", "label": "Weight", "type": "number"},
+                            {"key": "deliveries", "label": "Deliveries", "type": "number"},
+                            {"key": "csections", "label": "C-sections", "type": "number"},
+                        ],
+                    }
+                ]
+            },
+        },
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+
+    mapping_res = await authed_client.put(
+        f"/forms/{form_id}/mappings",
+        json={
+            "mappings": [
+                {"field_key": "current_state", "surrogate_field": "state"},
+                {"field_key": "current_height", "surrogate_field": "height_ft"},
+                {"field_key": "current_weight", "surrogate_field": "weight_lb"},
+                {"field_key": "deliveries", "surrogate_field": "num_deliveries"},
+                {"field_key": "csections", "surrogate_field": "num_csections"},
+            ]
+        },
+    )
+    assert mapping_res.status_code == 200
+
+    get_res = await authed_client.get(f"/forms/{form_id}")
+    assert get_res.status_code == 200
+    schema = get_res.json()["form_schema"]
+
+    assert _field_by_key(schema, "current_state")["validation"]["pattern"] == "^[A-Za-z]{2}$"
+    assert _field_by_key(schema, "current_state")["help_text"] == "Use the 2-letter state code, e.g. CA."
+    assert _field_by_key(schema, "current_height")["type"] == "height"
+    assert _field_by_key(schema, "current_weight")["validation"]["max_value"] == 1000.0
+    assert _field_by_key(schema, "deliveries")["validation"]["min_value"] == 1.0
+    assert _field_by_key(schema, "csections")["validation"]["min_value"] == 0.0
 
 
 @pytest.mark.asyncio

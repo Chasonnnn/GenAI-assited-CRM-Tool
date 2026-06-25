@@ -1,4 +1,4 @@
-import type { FieldType } from "@/lib/api/forms"
+import type { FieldType, FormFieldValidation } from "@/lib/api/forms"
 import type { LucideIcon } from "lucide-react"
 import {
     CalendarIcon,
@@ -22,6 +22,7 @@ export type BuilderPaletteField = {
     required?: boolean
     surrogateFieldMapping?: string
     options?: BuilderOption[]
+    validation?: FormFieldValidation | null
 }
 
 export type BuilderOption = string | { label: string; value: string }
@@ -68,7 +69,13 @@ export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
                 label: "State",
                 type: "text",
                 icon: HomeIcon,
+                helperText: "Use the 2-letter state code, e.g. CA.",
                 surrogateFieldMapping: "state",
+                validation: {
+                    min_length: 2,
+                    max_length: 2,
+                    pattern: "^[A-Za-z]{2}$",
+                },
             },
         ],
     },
@@ -113,6 +120,7 @@ export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
                 icon: HashIcon,
                 helperText: "Pounds.",
                 surrogateFieldMapping: "weight_lb",
+                validation: { min_value: 1, max_value: 1000 },
             },
         ],
     },
@@ -178,6 +186,7 @@ export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
                 type: "number",
                 icon: HashIcon,
                 surrogateFieldMapping: "num_deliveries",
+                validation: { min_value: 1, max_value: 20 },
             },
             {
                 key: "num_csections",
@@ -185,6 +194,7 @@ export const PRESET_FIELD_GROUPS: BuilderPaletteGroup[] = [
                 type: "number",
                 icon: HashIcon,
                 surrogateFieldMapping: "num_csections",
+                validation: { min_value: 0, max_value: 20 },
             },
         ],
     },

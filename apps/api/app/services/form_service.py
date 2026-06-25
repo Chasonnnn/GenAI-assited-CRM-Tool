@@ -1,8 +1,10 @@
 """Form service for application builder and assets."""
 
+import copy
 import json
 import os
 import uuid
+from typing import Any
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -54,6 +56,130 @@ LEAD_CAPTURE_BLOCKED_PRIVACY_SAFE_SENSITIVITIES = {
     "free_text_unclassified",
     "file",
 }
+PUBLIC_SURROGATE_FIELD_DEFAULTS: dict[str, dict[str, Any]] = {
+    "state": {
+        "help_text": "Use the 2-letter state code, e.g. CA.",
+        "validation": {
+            "min_length": 2,
+            "max_length": 2,
+            "pattern": "^[A-Za-z]{2}$",
+        },
+    },
+    "height_ft": {
+        "type": "height",
+    },
+    "weight_lb": {
+        "type": "number",
+        "validation": {
+            "min_value": 1,
+            "max_value": 1000,
+        },
+    },
+    "num_deliveries": {
+        "type": "number",
+        "validation": {
+            "min_value": 1,
+            "max_value": 20,
+        },
+    },
+    "num_csections": {
+        "type": "number",
+        "validation": {
+            "min_value": 0,
+            "max_value": 20,
+        },
+    },
+}
+
+
+def _coerce_number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _merge_validation_defaults(
+    current: Any,
+    defaults: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not defaults:
+        return current if isinstance(current, dict) else None
+
+    merged = dict(current) if isinstance(current, dict) else {}
+
+    for key in ("min_length", "max_length", "pattern"):
+        if defaults.get(key) is not None:
+            merged[key] = defaults[key]
+
+    if defaults.get("min_value") is not None:
+        current_min = _coerce_number(merged.get("min_value"))
+        default_min = _coerce_number(defaults.get("min_value"))
+        if default_min is not None:
+            merged["min_value"] = default_min if current_min is None else max(current_min, default_min)
+
+    if defaults.get("max_value") is not None:
+        current_max = _coerce_number(merged.get("max_value"))
+        default_max = _coerce_number(defaults.get("max_value"))
+        if default_max is not None:
+            merged["max_value"] = default_max if current_max is None else min(current_max, default_max)
+
+    return merged or None
+
+
+def apply_public_surrogate_field_defaults(
+    schema: dict | None,
+    field_mappings_by_key: dict[str, str] | None = None,
+) -> dict | None:
+    """Apply canonical public-input defaults for known surrogate fields.
+
+    Defaults are keyed by either the field key itself or the saved surrogate-field mapping,
+    so custom reused fields get the same public validation as the preset library.
+    """
+    if not isinstance(schema, dict):
+        return schema
+
+    mappings = field_mappings_by_key or {}
+    patched = copy.deepcopy(schema)
+    for page in patched.get("pages") or []:
+        if not isinstance(page, dict):
+            continue
+        for field in page.get("fields") or []:
+            if not isinstance(field, dict):
+                continue
+            field_key = field.get("key")
+            if not isinstance(field_key, str):
+                continue
+            surrogate_field = mappings.get(field_key) or field_key
+            defaults = PUBLIC_SURROGATE_FIELD_DEFAULTS.get(surrogate_field)
+            if not defaults:
+                continue
+
+            default_type = defaults.get("type")
+            if isinstance(default_type, str):
+                field["type"] = default_type
+
+            default_help = defaults.get("help_text")
+            if isinstance(default_help, str) and not field.get("help_text"):
+                field["help_text"] = default_help
+
+            default_validation = defaults.get("validation")
+            if isinstance(default_validation, dict):
+                field["validation"] = _merge_validation_defaults(
+                    field.get("validation"),
+                    default_validation,
+                )
+
+    return patched
+
+
+def _field_mappings_by_key(db: Session, form_id: uuid.UUID) -> dict[str, str]:
+    return {
+        mapping.field_key: mapping.surrogate_field
+        for mapping in db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form_id).all()
+    }
 
 
 def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
@@ -83,6 +209,7 @@ def create_form(
         max_file_size_bytes if max_file_size_bytes is not None else DEFAULT_MAX_FILE_SIZE_BYTES
     )
     max_count = max_file_count if max_file_count is not None else DEFAULT_MAX_FILE_COUNT
+    schema = apply_public_surrogate_field_defaults(schema)
     form = Form(
         organization_id=org_id,
         name=name,
@@ -123,7 +250,10 @@ def update_form(
     if purpose is not None:
         form.purpose = purpose
     if schema is not None:
-        form.schema_json = schema
+        form.schema_json = apply_public_surrogate_field_defaults(
+            schema,
+            _field_mappings_by_key(db, form.id),
+        )
     if max_file_size_bytes is not None:
         form.max_file_size_bytes = max_file_size_bytes
     if max_file_count is not None:
@@ -364,6 +494,10 @@ def validate_shared_intake_identity_targets(db: Session, form: Form) -> None:
 def publish_form(db: Session, form: Form, user_id: uuid.UUID) -> Form:
     if not form.schema_json:
         raise ValueError("Form schema is required before publishing")
+    form.schema_json = apply_public_surrogate_field_defaults(
+        form.schema_json,
+        _field_mappings_by_key(db, form.id),
+    )
     if settings.FORMS_SHARED_INTAKE:
         validate_shared_intake_identity_targets(db, form)
 
@@ -485,6 +619,11 @@ def set_field_mappings(
             raise ValueError(f"Duplicate surrogate field: {surrogate_field}")
         field_key_set.add(field_key)
         surrogate_field_set.add(surrogate_field)
+
+    form.schema_json = apply_public_surrogate_field_defaults(
+        form.schema_json,
+        {mapping["field_key"]: mapping["surrogate_field"] for mapping in mappings},
+    )
 
     db.query(FormFieldMapping).filter(FormFieldMapping.form_id == form.id).delete()
     created: list[FormFieldMapping] = []
