@@ -47,7 +47,7 @@ const stages = [
 ]
 
 describe("ChangeStageModal", () => {
-    it("renders as a scrollable slide-over with actions outside the scroll body", () => {
+    it("renders as a centered dialog with viewport-aware scrolling", () => {
         render(
             <ChangeStageModal
                 open
@@ -59,7 +59,11 @@ describe("ChangeStageModal", () => {
             />
         )
 
-        expect(screen.getByTestId("change-stage-sheet")).toHaveClass("h-dvh", "overflow-hidden")
+        expect(screen.queryByTestId("change-stage-sheet")).not.toBeInTheDocument()
+        expect(screen.getByTestId("change-stage-dialog")).toHaveClass(
+            "max-h-[calc(100dvh-2rem)]",
+            "overflow-hidden"
+        )
         expect(screen.getByTestId("change-stage-scroll-body")).toHaveClass("min-h-0", "overflow-y-auto")
         expect(screen.getByTestId("change-stage-actions")).toHaveClass("shrink-0", "border-t")
     })

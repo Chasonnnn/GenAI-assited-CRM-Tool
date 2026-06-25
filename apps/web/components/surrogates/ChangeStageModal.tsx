@@ -13,12 +13,12 @@ import {
 
 import { Button } from "@/components/ui/button"
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -331,18 +331,17 @@ export function ChangeStageModal({
     )
 
     return (
-        <Sheet open={open} onOpenChange={handleClose}>
-            <SheetContent
-                side="right"
-                data-testid="change-stage-sheet"
-                className="h-dvh w-full max-w-none overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg data-[side=right]:md:max-w-xl"
+        <Dialog open={open} onOpenChange={handleClose}>
+            <DialogContent
+                data-testid="change-stage-dialog"
+                className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg md:max-w-xl"
             >
-                <SheetHeader className="shrink-0 border-b p-5 pr-14">
-                    <SheetTitle>Change {label}</SheetTitle>
-                    <SheetDescription>
+                <DialogHeader className="shrink-0 border-b p-5 pr-14">
+                    <DialogTitle>Change {label}</DialogTitle>
+                    <DialogDescription>
                         Current: {currentStageLabel}
-                    </SheetDescription>
-                </SheetHeader>
+                    </DialogDescription>
+                </DialogHeader>
 
                 <div
                     data-testid="change-stage-scroll-body"
@@ -731,7 +730,7 @@ export function ChangeStageModal({
                         </Button>
                     </div>
                 </div>
-            </SheetContent>
-        </Sheet>
+            </DialogContent>
+        </Dialog>
     )
 }
