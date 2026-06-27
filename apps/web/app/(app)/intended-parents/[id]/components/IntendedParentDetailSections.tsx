@@ -152,7 +152,7 @@ export function IntendedParentHeader({
                             aria-label={`Actions for ${intendedParent.full_name}`}
                             className="inline-flex items-center justify-center size-10 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
                         >
-                            <MoreVerticalIcon className="size-4" />
+                            <MoreVerticalIcon className="size-4" aria-hidden="true" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
