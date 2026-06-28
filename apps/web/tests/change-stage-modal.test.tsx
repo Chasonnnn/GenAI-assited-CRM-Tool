@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { addDays, format } from "date-fns"
+import { format } from "date-fns"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 
 const stages = [
@@ -246,7 +246,7 @@ describe("ChangeStageModal", () => {
         expect(screen.getByLabelText(/interview minute/i)).toHaveValue("")
         expect(screen.getByRole("button", { name: "Save Change" })).toBeDisabled()
 
-        const interviewDate = addDays(new Date(), 7)
+        const interviewDate = new Date()
         fireEvent.click(screen.getByRole("button", { name: /select date/i }))
         const dayButton = screen
             .getAllByText(format(interviewDate, "d"))
@@ -296,13 +296,13 @@ describe("ChangeStageModal", () => {
         expect(screen.getByRole("button", { name: /switch interview time to pm/i })).toHaveTextContent("AM")
         expect(screen.queryByRole("button", { name: "PM" })).not.toBeInTheDocument()
 
-        const interviewDate = addDays(new Date(), 7)
+        const interviewDate = new Date()
         fireEvent.click(screen.getByRole("button", { name: /select date/i }))
         const dayButton = screen
             .getAllByText(format(interviewDate, "d"))
             .map((element) => element.closest("button"))
             .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
-        expect(dayButton).toBeDefined()
+        if (!dayButton) console.log(document.body.innerHTML); expect(dayButton).toBeDefined()
         fireEvent.click(dayButton!)
 
         fireEvent.change(screen.getByLabelText(/interview hour/i), {
