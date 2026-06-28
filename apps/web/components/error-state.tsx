@@ -79,9 +79,10 @@ export function ErrorState({
                             size="sm"
                             className="mx-auto flex gap-1 text-muted-foreground"
                             onClick={() => setIsOpen(!isOpen)}
+                            aria-expanded={isOpen}
                         >
                             <span>Error details</span>
-                            {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                            {isOpen ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
                         </Button>
                         {isOpen && (
                             <div className="mt-2 rounded-lg border bg-muted/50 p-4 text-left font-mono text-xs">
