@@ -201,6 +201,141 @@ def test_process_occurrence_parse_marks_failed_without_raw_blob(db, test_org):
     assert occurrence.parse_error == "missing raw_blob_id"
 
 
+def test_process_occurrence_stitch_links_by_existing_gmail_thread(db, test_org, monkeypatch):
+    from app.db.enums import (
+        EmailDirection,
+        EmailOccurrenceState,
+        LinkConfidence,
+        TicketLinkStatus,
+        TicketPriority,
+        TicketStatus,
+    )
+    from app.db.models import (
+        EmailMessage,
+        EmailMessageContent,
+        EmailMessageOccurrence,
+        Ticket,
+        TicketMessage,
+    )
+
+    mailbox = _make_mailbox(db, org_id=test_org.id, email_address="thread@example.com")
+    gmail_thread_id = "gmail-thread-shared"
+
+    ticket = Ticket(
+        organization_id=test_org.id,
+        ticket_code="T-GMAIL-THREAD",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.NORMAL,
+        subject="Original thread",
+        subject_norm="Original thread",
+        requester_email="original@example.com",
+        surrogate_link_status=TicketLinkStatus.NEEDS_REVIEW,
+        stitch_reason="new_message",
+        stitch_confidence=LinkConfidence.LOW,
+    )
+    db.add(ticket)
+    db.flush()
+
+    prior_message = EmailMessage(
+        organization_id=test_org.id,
+        direction=EmailDirection.INBOUND,
+        rfc_message_id="<prior-thread@example.com>",
+        gmail_thread_id=gmail_thread_id,
+        subject_norm="Original thread",
+        fingerprint_sha256="a" * 64,
+        signature_sha256="b" * 64,
+    )
+    new_message = EmailMessage(
+        organization_id=test_org.id,
+        direction=EmailDirection.INBOUND,
+        rfc_message_id="<new-thread@example.com>",
+        gmail_thread_id=gmail_thread_id,
+        subject_norm="Original thread",
+        fingerprint_sha256="c" * 64,
+        signature_sha256="d" * 64,
+    )
+    db.add_all([prior_message, new_message])
+    db.flush()
+
+    db.add(
+        TicketMessage(
+            organization_id=test_org.id,
+            ticket_id=ticket.id,
+            message_id=prior_message.id,
+            stitch_reason="new_message",
+            stitch_confidence=LinkConfidence.LOW,
+        )
+    )
+    db.add(
+        EmailMessageOccurrence(
+            organization_id=test_org.id,
+            mailbox_id=mailbox.id,
+            gmail_message_id="gmail-prior-thread-message",
+            gmail_thread_id=gmail_thread_id,
+            message_id=prior_message.id,
+            ticket_id=ticket.id,
+            state=EmailOccurrenceState.STITCHED,
+        )
+    )
+    db.add(
+        EmailMessageContent(
+            organization_id=test_org.id,
+            message_id=new_message.id,
+            subject="Re: Original thread",
+            subject_norm="Original thread",
+            from_email="reply@example.com",
+            from_name="Reply Sender",
+            reply_to_emails=[],
+            to_emails=["thread@example.com"],
+            cc_emails=[],
+            headers_json={},
+            body_text="Following up on this thread.",
+        )
+    )
+    new_occurrence = EmailMessageOccurrence(
+        organization_id=test_org.id,
+        mailbox_id=mailbox.id,
+        gmail_message_id="gmail-new-thread-message",
+        gmail_thread_id=gmail_thread_id,
+        message_id=new_message.id,
+        state=EmailOccurrenceState.PARSED,
+    )
+    db.add(new_occurrence)
+    db.commit()
+
+    monkeypatch.setattr(ticketing_service, "_enqueue_mailbox_job", lambda *args, **kwargs: uuid4())
+
+    ticketing_service.process_occurrence_stitch(db, occurrence_id=new_occurrence.id)
+    db.refresh(new_occurrence)
+
+    assert new_occurrence.state == EmailOccurrenceState.STITCHED
+    assert new_occurrence.stitch_error is None
+    assert new_occurrence.ticket_id == ticket.id
+    assert new_occurrence.stitched_at is not None
+
+    linked = (
+        db.query(TicketMessage)
+        .filter(
+            TicketMessage.organization_id == test_org.id,
+            TicketMessage.message_id == new_message.id,
+        )
+        .one()
+    )
+    assert linked.ticket_id == ticket.id
+    assert linked.stitch_reason == "gmail_thread"
+    assert linked.stitch_confidence == LinkConfidence.MEDIUM
+
+    assert (
+        db.query(Ticket)
+        .filter(
+            Ticket.organization_id == test_org.id,
+            Ticket.subject_norm == "Original thread",
+        )
+        .count()
+        == 1
+    )
+
+
 def test_store_message_attachment_does_not_embed_inbound_filename_in_storage_key(
     db, test_org, monkeypatch
 ):

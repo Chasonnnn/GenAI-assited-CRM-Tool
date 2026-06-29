@@ -3982,7 +3982,7 @@ def parse_granted_scopes_from_tokens(tokens: dict | None) -> list[str] | None:
 # =============================================================================
 
 
-def _find_ticket_by_gmail_thread(
+def _find_ticket_for_legacy_gmail_thread(
     db: Session,
     *,
     org_id: UUID,
@@ -4040,7 +4040,7 @@ def record_surrogate_outbound_gmail_send(
     body_text = " ".join(body_text.split()) or "Message"
     now = _now_utc()
 
-    ticket = _find_ticket_by_gmail_thread(
+    ticket = _find_ticket_for_legacy_gmail_thread(
         db,
         org_id=org_id,
         gmail_thread_id=gmail_thread_id,
