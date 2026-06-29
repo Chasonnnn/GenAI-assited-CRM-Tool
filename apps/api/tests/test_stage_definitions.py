@@ -70,6 +70,20 @@ def test_stage_type_map_matches_default_surrogate_stage_defs() -> None:
 
 
 def test_new_surrogate_platform_stages_use_expected_default_semantics() -> None:
+    new_unread = default_stage_semantics("new_unread", "intake")
+    assert new_unread["capabilities"]["counts_as_contacted"] is False
+    assert new_unread["terminal_outcome"] == "none"
+    assert new_unread["integration_bucket"] == "none"
+    assert new_unread["analytics_bucket"] == "new_unread"
+    assert new_unread["suggestion_profile_key"] == "new_unread_followup"
+
+    contacted = default_stage_semantics("contacted", "intake")
+    assert contacted["capabilities"]["counts_as_contacted"] is True
+    assert contacted["terminal_outcome"] == "none"
+    assert contacted["integration_bucket"] == "intake"
+    assert contacted["analytics_bucket"] == "contacted"
+    assert contacted["suggestion_profile_key"] == "contacted_followup"
+
     pending_docusign = default_stage_semantics("pending_docusign", "intake")
     assert pending_docusign["capabilities"]["counts_as_contacted"] is True
     assert pending_docusign["capabilities"]["eligible_for_matching"] is False
@@ -78,6 +92,7 @@ def test_new_surrogate_platform_stages_use_expected_default_semantics() -> None:
     assert pending_docusign["capabilities"]["tracks_interview_outcome"] is False
     assert pending_docusign["terminal_outcome"] == "none"
     assert pending_docusign["integration_bucket"] == "qualified"
+    assert pending_docusign["suggestion_profile_key"] is None
 
     life_insurance = default_stage_semantics(
         "life_insurance_application_started",

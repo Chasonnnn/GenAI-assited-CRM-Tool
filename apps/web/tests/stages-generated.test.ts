@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+    DEFAULT_STAGE_SEMANTICS_BY_KEY,
     DEFAULT_STAGE_ORDER,
     STAGE_DEFS,
     STAGE_TYPE_MAP,
@@ -75,5 +76,51 @@ describe("stages.generated", () => {
         expect(STAGE_TYPE_MAP.life_insurance_application_started).toBe("post_approval")
         expect(STAGE_TYPE_MAP.pbo_process_started).toBe("post_approval")
         expect(STAGE_TYPE_MAP.cold_leads).toBe("terminal")
+    })
+
+    it("exports backend-owned default semantics for representative lifecycle stages", () => {
+        expect(DEFAULT_STAGE_SEMANTICS_BY_KEY.new_unread).toMatchObject({
+            integration_bucket: "none",
+            analytics_bucket: "new_unread",
+            suggestion_profile_key: "new_unread_followup",
+            capabilities: {
+                counts_as_contacted: false,
+            },
+        })
+
+        expect(DEFAULT_STAGE_SEMANTICS_BY_KEY.contacted).toMatchObject({
+            integration_bucket: "intake",
+            analytics_bucket: "contacted",
+            suggestion_profile_key: "contacted_followup",
+            capabilities: {
+                counts_as_contacted: true,
+            },
+        })
+
+        expect(DEFAULT_STAGE_SEMANTICS_BY_KEY.ready_to_match).toMatchObject({
+            integration_bucket: "converted",
+            analytics_bucket: "ready_to_match",
+            capabilities: {
+                eligible_for_matching: true,
+            },
+        })
+
+        expect(DEFAULT_STAGE_SEMANTICS_BY_KEY.on_hold).toMatchObject({
+            pause_behavior: "resume_previous_stage",
+            analytics_bucket: "on_hold",
+            requires_reason_on_enter: true,
+        })
+
+        expect(DEFAULT_STAGE_SEMANTICS_BY_KEY.lost).toMatchObject({
+            terminal_outcome: "lost",
+            integration_bucket: "lost",
+            suggestion_profile_key: null,
+        })
+
+        expect(DEFAULT_STAGE_SEMANTICS_BY_KEY.disqualified).toMatchObject({
+            terminal_outcome: "disqualified",
+            integration_bucket: "not_qualified",
+            suggestion_profile_key: null,
+        })
     })
 })

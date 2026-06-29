@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "gen:stages": "cd ../.. && python3 scripts/gen_stage_map.py",
+    "gen:stages": "if [ -x ../api/.venv/bin/python ]; then cd ../api && .venv/bin/python ../../scripts/gen_stage_map.py; else echo 'Skipping stage generation (apps/api/.venv missing)'; fi",
     "gen:surrogate-contracts": "if [ -x ../api/.venv/bin/python ]; then cd ../api && .venv/bin/python ../../scripts/gen_surrogate_contracts.py; else echo 'Skipping surrogate contract generation (apps/api/.venv missing)'; fi",
     "prebuild": "pnpm run gen:stages && pnpm run gen:surrogate-contracts",
     "build": "next build",

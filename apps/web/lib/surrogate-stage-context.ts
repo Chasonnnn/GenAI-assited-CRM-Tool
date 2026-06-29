@@ -5,6 +5,7 @@ import type {
     StageCapabilityKey,
     StageSemantics,
 } from "@/lib/api/pipelines"
+import { DEFAULT_STAGE_SEMANTICS_BY_KEY } from "@/lib/constants/stages.generated"
 import type { SurrogateRead } from "@/lib/types/surrogate"
 
 const LEGACY_STAGE_KEY_ALIASES: Record<string, string> = {
@@ -51,84 +52,31 @@ function defaultStageSemantics(
     stageType: string | null | undefined
 ): StageSemantics {
     const normalizedKey = normalizeStageKey(stageKey)
+    const generated = normalizedKey ? DEFAULT_STAGE_SEMANTICS_BY_KEY[normalizedKey] : undefined
+    if (generated) {
+        return {
+            ...generated,
+            capabilities: {
+                ...generated.capabilities,
+            },
+        }
+    }
+
     return {
         capabilities: {
-            counts_as_contacted: !!normalizedKey && [
-                "contacted",
-                "pre_qualified",
-                "interview_scheduled",
-                "application_submitted",
-                "pending_docusign",
-                "under_review",
-                "approved",
-            ].includes(normalizedKey),
-            eligible_for_matching: normalizedKey === "ready_to_match",
-            locks_match_state: !!normalizedKey && [
-                "matched",
-                "medical_clearance_passed",
-                "legal_clearance_passed",
-                "transfer_cycle",
-                "second_hcg_confirmed",
-                "heartbeat_confirmed",
-                "life_insurance_application_started",
-                "ob_care_established",
-                "pbo_process_started",
-                "anatomy_scanned",
-                "delivered",
-            ].includes(normalizedKey),
-            shows_pregnancy_tracking: !!normalizedKey && [
-                "heartbeat_confirmed",
-                "life_insurance_application_started",
-                "ob_care_established",
-                "pbo_process_started",
-                "anatomy_scanned",
-                "delivered",
-            ].includes(normalizedKey),
-            requires_delivery_details: normalizedKey === "delivered",
-            tracks_interview_outcome: !!normalizedKey && [
-                "interview_scheduled",
-                "under_review",
-                "approved",
-            ].includes(normalizedKey),
+            counts_as_contacted: false,
+            eligible_for_matching: false,
+            locks_match_state: false,
+            shows_pregnancy_tracking: false,
+            requires_delivery_details: false,
+            tracks_interview_outcome: false,
         },
-        pause_behavior: normalizedKey === "on_hold" ? "resume_previous_stage" : "none",
-        terminal_outcome:
-            normalizedKey === "lost" ? "lost" : normalizedKey === "disqualified" ? "disqualified" : "none",
-        integration_bucket:
-            normalizedKey === "lost"
-                ? "lost"
-                : normalizedKey === "disqualified"
-                    ? "not_qualified"
-                    : normalizedKey && [
-                        "ready_to_match",
-                        "matched",
-                        "medical_clearance_passed",
-                        "legal_clearance_passed",
-                        "transfer_cycle",
-                        "second_hcg_confirmed",
-                        "heartbeat_confirmed",
-                        "life_insurance_application_started",
-                        "ob_care_established",
-                        "pbo_process_started",
-                        "anatomy_scanned",
-                        "delivered",
-                    ].includes(normalizedKey)
-                    ? "converted"
-                    : normalizedKey && [
-                        "pre_qualified",
-                        "interview_scheduled",
-                        "application_submitted",
-                        "pending_docusign",
-                        "under_review",
-                        "approved",
-                    ].includes(normalizedKey)
-                        ? "qualified"
-                        : normalizedKey && ["new_unread", "contacted"].includes(normalizedKey)
-                            ? "intake"
-                            : "none",
+        pause_behavior: "none",
+        terminal_outcome: "none",
+        integration_bucket: "none",
         analytics_bucket: normalizedKey ?? (stageType === "paused" ? "on_hold" : null),
         suggestion_profile_key: null,
-        requires_reason_on_enter: normalizedKey === "on_hold",
+        requires_reason_on_enter: false,
     }
 }
 
