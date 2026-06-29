@@ -10,12 +10,13 @@ without turning production traffic into a broad refactor target.
 | --- | --- | --- |
 | Ticket Threading | Completed | Gmail-thread fallback stitching is covered by regression tests, and the helper collision has been removed without changing routes, jobs, ticket visibility, or threading precedence. |
 | Pipeline Semantics | Completed | Backend default semantics now generate frontend fallback constants, with tests for canonical backend values, generated-file freshness, frontend fallback behavior, server overrides, and custom-stage fallback. |
+| Public Intake Parity | Completed | Hosted and embedded intake now have parity coverage around submission success, duplicate/idempotency behavior, workflow outcomes, attribution/consent/tracking side effects, file-field policy, parent-message privacy, and hosted multipart upload alignment. |
 
 ## Recommended Sequence
 
 | Rank | Topic | Production risk | Recommendation |
 | --- | --- | --- | --- |
-| 1 | Public Intake | High | Deepen only behind existing adapters after parity tests protect public outcomes. |
+| 1 | Public Intake | High | Use the parity suite to fix concrete defects first; deepen only behind existing adapters after public outcomes stay protected. |
 | 2 | Form Builder Lifecycle | Medium | Extract common lifecycle logic after autosave and publish contract tests exist. |
 | 3 | Query Resource Modules | Low immediate risk, medium migration risk | Defer broad migration unless latency or cache correctness becomes measurable pain. |
 | 4 | Ticket Threading Extraction | Medium-high refactor risk | Revisit only after shared-inbox activation needs a deeper module interface. |
@@ -72,9 +73,22 @@ The production risk is high because this path handles public traffic, PII,
 consent, duplicate protection, and tracking policy.
 
 Recommendation: do not big-bang this work. Preserve existing route interfaces
-and create adapter-preserving parity tests before moving behavior behind a
-deeper module. Treat privacy-safe tracking and canonical lead events as explicit
-acceptance criteria.
+and keep the adapter-preserving parity tests green before moving behavior behind
+a deeper module. Treat privacy-safe tracking and canonical lead events as
+explicit acceptance criteria.
+
+Completed first milestone: hosted intake and iframe embed flows now have
+coverage for success paths, unresolved duplicate conflicts, idempotent replay,
+workflow-pending outcomes, workflow-created lead metadata, consent and
+attribution persistence, privacy-safe tracking and CRM dataset side effects,
+embed readiness, file-field policy, parent-message privacy, and hosted multipart
+file-key alignment.
+
+Known follow-up: embedded intake remains intentionally fileless. If product
+needs iframe uploads later, that should be a separate design with storage,
+privacy, CSP, and UX acceptance tests. Plain workflow-pending hosted submissions
+also should not gain request-level UTM storage through incidental refactoring;
+that is a separate schema decision.
 
 ### Form Builder Lifecycle
 
@@ -108,14 +122,15 @@ post-mutation freshness before expanding the pattern.
 
 ## Immediate Milestone
 
-Start the Public Intake parity layer before deeper refactors:
+Use the Public Intake parity layer before deeper refactors:
 
-1. Add route/service tests for hosted intake and embed submission success paths.
-2. Cover duplicate applicant behavior, idempotency replay, attribution storage,
-   consent storage, workflow-pending responses, and CRM/Meta dataset job
-   creation without leaking sensitive answers.
-3. Add file-field behavior tests before changing upload handling.
-4. Preserve public route shapes while adding coverage.
+1. Keep the hosted and embed parity suite green while fixing concrete defects.
+2. Preserve hosted multipart uploads and embedded JSON/session-based fileless
+   submissions as separate policies unless product explicitly changes that
+   contract.
+3. Treat any deeper Public Intake module as an adapter-preserving extraction,
+   not a public route redesign.
+4. Keep privacy-safe tracking and canonical lead events as acceptance criteria.
 
 ## Guardrails
 

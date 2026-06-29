@@ -18,6 +18,13 @@ since been fixed. Treat this file as the current implementation-oriented plan.
   generated into `apps/web/lib/constants/stages.generated.ts`, and tests now
   guard backend canonical values, generated-file freshness, frontend fallback
   behavior, server override behavior, and custom-stage fallback behavior.
+- **Public Intake parity coverage:** hosted intake and embedded intake now have
+  regression coverage for the production-sensitive split between multipart
+  hosted submissions and JSON/session-based, fileless iframe submissions.
+  Coverage includes duplicate/idempotency behavior, workflow-pending outcomes,
+  workflow-created lead metadata, consent/attribution persistence, privacy-safe
+  tracking side effects, embed readiness, file-field policy, parent-message
+  privacy, and hosted multipart file-key alignment.
 - **Demo artifact cleanup:** deleted demo assets are no longer referenced as
   runnable artifacts in this plan.
 
@@ -28,6 +35,8 @@ since been fixed. Treat this file as the current implementation-oriented plan.
 - The Pipeline Semantics split-runtime drift is no longer listed as pending
   groundwork. The remaining pipeline work should be normal feature evolution,
   not a semantics-parity cleanup.
+- The initial Public Intake parity-test gap is no longer listed as unstarted.
+  Deeper Public Intake module extraction remains a separate high-risk project.
 - Static `demos/` links and mockup-only routing are removed. Future UX proposals
   should link to tracked specs, screenshots, or implementation PRs instead.
 
@@ -35,8 +44,8 @@ since been fixed. Treat this file as the current implementation-oriented plan.
 
 | Rank | Topic | Production risk | Recommended next move |
 | --- | --- | --- | --- |
-| 1 | Public Intake | High | Add parity tests around public submission, duplicate handling, attribution, consent, file fields, and workflow side effects before refactoring. |
-| 2 | Embedded Lead Forms | High | Fix file-field submit behavior and sandbox popup handling, with public-route tests that prove applicants can submit supported forms. |
+| 1 | Public Intake | High | Use the new parity layer to fix concrete defects first; only extract a deeper module behind the existing route adapters after parity tests stay green. |
+| 2 | Embedded Lead Forms | High | File-field blocking is now covered for iframe embeds; validate sandbox popup behavior and any remaining applicant-loss paths with public-route tests. |
 | 3 | Contextual AI Assistant | Medium | Preserve task and intended-parent context end to end, and hide approval controls from users lacking approval permission. |
 | 4 | Automation Reliability | Medium-high | Make scheduled workflow sweeps tolerant, surface workflow trigger failures, and stop silent success paths. |
 | 5 | Tasks And Appointments | Medium | Fix silent recurring-task cap behavior and make appointment completion/no-show lifecycle real. |
@@ -52,13 +61,24 @@ published-version routing, duplicate protection, file handling, and workflow
 side effects. It should be improved before broad internal UX activation because
 it is the highest-risk public surface.
 
-First milestone:
-- Add tests for hosted intake and embed submission success paths.
-- Cover duplicate applicant behavior, idempotency replay, attribution storage,
-  consent storage, workflow-pending responses, and Meta/CRM dataset job creation
-  without leaking sensitive health-history answers.
-- Add explicit file-field behavior tests before changing upload handling.
-- Keep route shapes stable while tests are added.
+Completed first milestone:
+- Added tests for hosted intake and embed submission success paths.
+- Covered duplicate applicant behavior, idempotency replay, attribution storage,
+  consent storage, workflow-pending responses, workflow-created lead metadata,
+  and Meta/CRM dataset job creation without leaking sensitive health-history
+  answers.
+- Added explicit file-field behavior tests for the intended split: hosted intake
+  accepts multipart uploads, while embedded intake remains iframe-only and
+  fileless.
+- Kept route shapes stable while adding coverage.
+
+Known follow-up:
+- Workflow-created hosted leads preserve link campaign/event metadata. Plain
+  workflow-pending hosted submissions still should not grow ad-hoc request-level
+  attribution storage without a separate schema decision.
+- Public Intake module extraction is still high-risk. The next production move
+  should be driven by concrete defects found through the parity suite, not by a
+  broad reshuffle of unauthenticated submission code.
 
 Do not start with a broad extraction. If implementation needs a deeper module,
 create it behind the existing route/service adapter after parity coverage exists.
@@ -71,8 +91,8 @@ staff member sees a record.
 
 First milestone:
 - Reproduce current file-field embed behavior with a test.
-- Fix the client/server path so supported file fields submit successfully, or
-  block publish/embed with a clear health warning for unsupported fields.
+- Preserve the intended fileless embed policy by blocking client submission and
+  treating privacy-safe embed settings with file fields as not ready.
 - Add `allow-popups` only where needed for public policy links and verify the
   sandbox remains conservative.
 
