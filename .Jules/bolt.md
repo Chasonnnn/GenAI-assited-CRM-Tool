@@ -1,0 +1,3 @@
+## 2026-06-29 - Safe SQLAlchemy Pagination Counting
+**Learning:** Replacing `query.count()` with `query.with_entities(func.count()).scalar()` to avoid subquery generation breaks pagination queries containing `GROUP BY` or `DISTINCT`. SQLAlchemy requires the subquery to accurately count the total groups, rather than the items in the first group.
+**Action:** When optimizing arbitrary/generic count queries in SQLAlchemy, use `query.order_by(None).count()`. This safely drops the unnecessary, slow sorting step while allowing SQLAlchemy to naturally generate correct subqueries for complex groupings and distinct criteria.

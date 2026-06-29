@@ -26,6 +26,16 @@ class MockQuery:
         self.count_calls += 1
         return len(self._items)
 
+    def with_entities(self, *entities) -> "MockQuery":
+        return self
+
+    def order_by(self, *entities) -> "MockQuery":
+        return self
+
+    def scalar(self) -> int:
+        self.count_calls += 1
+        return len(self._items)
+
 
 def test_paginate_query_skips_count_for_short_first_page() -> None:
     query = MockQuery([1, 2, 3])

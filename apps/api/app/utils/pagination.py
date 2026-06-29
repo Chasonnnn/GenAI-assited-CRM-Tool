@@ -87,7 +87,7 @@ def _resolve_total(
             return len(items)
         if items:
             return offset + len(items)
-    return count_query.count()
+    return count_query.order_by(None).count()
 
 
 def paginate_query(
