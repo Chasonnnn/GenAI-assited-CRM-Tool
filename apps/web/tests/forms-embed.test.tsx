@@ -240,6 +240,121 @@ describe("EmbedFormPageClient", () => {
         expect(submitEmbedPublicForm).not.toHaveBeenCalled()
     })
 
+    it("blocks embedded file fields before submitting", async () => {
+        getEmbedPublicForm.mockResolvedValueOnce({
+            ...embedForm,
+            form_schema: {
+                ...embedForm.form_schema,
+                pages: [
+                    {
+                        title: "Contact",
+                        fields: [
+                            ...embedForm.form_schema.pages[0].fields,
+                            {
+                                key: "supporting_docs",
+                                label: "Supporting Documents",
+                                type: "file",
+                                required: true,
+                                sensitivity: "sensitive_health",
+                            },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(
+            new MessageEvent("message", {
+                origin: "https://www.ewisurrogacy.com",
+                data: { type: "sf:form:init", attribution: {} },
+            }),
+        )
+        await waitFor(() => {
+            expect(createEmbedFormSession).toHaveBeenCalled()
+        })
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: "Embed Lead" },
+        })
+        fireEvent.change(screen.getByLabelText(/email/i), {
+            target: { value: "embed@example.com" },
+        })
+        expect(screen.queryByLabelText(/supporting documents/i)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+        expect(await screen.findByText(/cannot collect file uploads/i)).toBeInTheDocument()
+        expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+    })
+
+    it("posts only non-PII lifecycle messages to the parent frame", async () => {
+        const originalParent = Object.getOwnPropertyDescriptor(window, "parent")
+        const postMessage = vi.fn()
+        Object.defineProperty(window, "parent", {
+            configurable: true,
+            value: { postMessage },
+        })
+
+        try {
+            render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
+
+            expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+            await waitForEmbedMessageListener()
+            window.dispatchEvent(
+                new MessageEvent("message", {
+                    origin: "https://www.ewisurrogacy.com",
+                    data: {
+                        type: "sf:form:init",
+                        attribution: {
+                            utm_source: "meta",
+                            free_text_medical_notes: "private health text",
+                        },
+                    },
+                }),
+            )
+            await waitFor(() => {
+                expect(createEmbedFormSession).toHaveBeenCalledWith(
+                    "lead-form",
+                    "https://www.ewisurrogacy.com",
+                    { utm_source: "meta" },
+                )
+            })
+
+            fireEvent.change(screen.getByLabelText(/full name/i), {
+                target: { value: "Embed Lead" },
+            })
+            fireEvent.change(screen.getByLabelText(/email/i), {
+                target: { value: "embed@example.com" },
+            })
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            expect(await screen.findByRole("heading", { name: "Request received" })).toBeInTheDocument()
+            const messages = postMessage.mock.calls.map(([message]) => message)
+            expect(messages).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ type: "sf:form:ready" }),
+                    expect.objectContaining({ type: "sf:form:started" }),
+                    expect.objectContaining({
+                        type: "sf:form:submitted",
+                        submissionRef: "submission-1",
+                    }),
+                ]),
+            )
+            const serializedMessages = JSON.stringify(messages)
+            expect(serializedMessages).not.toContain("Embed Lead")
+            expect(serializedMessages).not.toContain("embed@example.com")
+            expect(serializedMessages).not.toContain("private health text")
+            expect(serializedMessages).not.toContain("utm_source")
+        } finally {
+            if (originalParent) {
+                Object.defineProperty(window, "parent", originalParent)
+            }
+        }
+    })
+
     it("does not create duplicate embed sessions when the parent sends init more than once", async () => {
         render(<EmbedFormPageClient slug="lead-form" initialParentOrigin="https://www.ewisurrogacy.com" />)
 

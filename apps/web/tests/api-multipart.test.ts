@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
 import { previewImport } from '@/lib/api/import'
+import { submitSharedPublicForm } from '@/lib/api/forms'
 
 function makeResponse(body: unknown) {
     return {
@@ -65,5 +66,37 @@ describe('multipart requests', () => {
         expect(getContentType(requestInit?.headers)).toBeUndefined()
     })
 
-    // Additional FormData endpoints can be added here as needed.
+    it('submitSharedPublicForm aligns files with file_field_keys in FormData', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            makeResponse({
+                id: 'submission-1',
+                status: 'pending_review',
+                outcome: 'workflow_pending',
+                surrogate_id: null,
+                intake_lead_id: null,
+            })
+        )
+        global.fetch = fetchMock as unknown as typeof fetch
+
+        const identityFile = new File(['identity'], 'identity.txt', { type: 'text/plain' })
+        const insuranceFile = new File(['insurance'], 'insurance.txt', { type: 'text/plain' })
+
+        await submitSharedPublicForm(
+            'shared-slug',
+            { full_name: 'Hosted Applicant' },
+            [identityFile, insuranceFile],
+            ['identity_upload', 'insurance_upload'],
+        )
+
+        const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+        expect(getContentType(requestInit?.headers)).toBeUndefined()
+        expect(requestInit.body).toBeInstanceOf(FormData)
+
+        const formData = requestInit.body as FormData
+        expect(formData.get('answers')).toBe(JSON.stringify({ full_name: 'Hosted Applicant' }))
+        expect(formData.getAll('files')).toEqual([identityFile, insuranceFile])
+        expect(formData.get('file_field_keys')).toBe(
+            JSON.stringify(['identity_upload', 'insurance_upload']),
+        )
+    })
 })

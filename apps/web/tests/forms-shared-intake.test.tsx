@@ -276,6 +276,61 @@ describe('Shared Intake Public Page', () => {
         ).toBeInTheDocument()
     })
 
+    it('submits visible upload fields with aligned files and field keys', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Uploads',
+                        fields: [
+                            {
+                                key: 'identity_upload',
+                                label: 'Identity Document',
+                                type: 'file',
+                                required: false,
+                            },
+                            {
+                                key: 'insurance_upload',
+                                label: 'Insurance Document',
+                                type: 'file',
+                                required: false,
+                            },
+                        ],
+                    },
+                ],
+            },
+        })
+        const identityFile = new File(['identity'], 'identity.txt', { type: 'text/plain' })
+        const insuranceFile = new File(['insurance'], 'insurance.txt', { type: 'text/plain' })
+
+        const { container } = render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        const fileInputs = Array.from(container.querySelectorAll('input[type="file"]'))
+        expect(fileInputs).toHaveLength(2)
+        fireEvent.change(fileInputs[0] as HTMLInputElement, {
+            target: { files: [identityFile] },
+        })
+        fireEvent.change(fileInputs[1] as HTMLInputElement, {
+            target: { files: [insuranceFile] },
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        await waitFor(() => {
+            expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                'event-abc',
+                {},
+                [identityFile, insuranceFile],
+                ['identity_upload', 'insurance_upload'],
+            )
+        })
+    })
+
     it('clears the local draft session after successful submit', async () => {
         window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
 

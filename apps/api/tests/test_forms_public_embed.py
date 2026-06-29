@@ -12,6 +12,7 @@ from app.db.models import (
     AutomationWorkflow,
     ConsentRecord,
     EmbedSession,
+    FormIntakeLink,
     FormSubmission,
     IntakeLead,
     Job,
@@ -942,3 +943,40 @@ async def test_embed_health_reports_blockers_and_ready_state(authed_client):
     assert ready_checks["allowed_origins"]["status"] == "pass"
     assert ready_checks["tracking_policy"]["status"] == "pass"
     assert ready_checks["snippet"]["message"].endswith("is current")
+
+
+@pytest.mark.asyncio
+async def test_embed_health_blocks_privacy_safe_file_fields(authed_client, db):
+    form_id, link_id, _slug = await _create_published_lead_capture_form(authed_client)
+    file_schema = _lead_capture_schema(
+        extra_fields=[
+            {
+                "key": "supporting_docs",
+                "label": "Supporting Documents",
+                "type": "file",
+                "required": False,
+                "sensitivity": "sensitive_health",
+            }
+        ]
+    )
+    update_form_res = await authed_client.patch(
+        f"/forms/{form_id}",
+        json={"form_schema": file_schema},
+    )
+    assert update_form_res.status_code == 200
+
+    link = db.query(FormIntakeLink).filter(FormIntakeLink.id == uuid.UUID(link_id)).one()
+    link.embed_enabled = True
+    link.allowed_embed_origins = ["https://www.ewisurrogacy.com"]
+    link.tracking_mode = "privacy_safe_lead"
+    link.consent_text = "I agree to be contacted about my inquiry."
+    db.commit()
+
+    health_res = await authed_client.get(f"/forms/intake-links/{link_id}/embed-health")
+    assert health_res.status_code == 200
+    payload = health_res.json()
+    assert payload["status"] == "blocked"
+    checks = {check["key"]: check for check in payload["checks"]}
+    assert checks["tracking_policy"]["status"] == "block"
+    assert "supporting documents" in checks["tracking_policy"]["message"].lower()
+    assert "file" in checks["tracking_policy"]["message"].lower()

@@ -661,8 +661,9 @@ async def test_shared_submit_no_match_defaults_to_workflow_pending_without_workf
 @pytest.mark.asyncio
 async def test_shared_submit_duplicate_applicant_conflicts_but_same_idempotency_returns_original(
     authed_client,
+    db,
 ):
-    _form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    _form_id, link_id, slug = await _create_published_form_and_shared_link(authed_client)
 
     payload = {
         "full_name": "Hosted Duplicate",
@@ -689,6 +690,17 @@ async def test_shared_submit_duplicate_applicant_conflicts_but_same_idempotency_
     )
     assert same_request_res.status_code == 200
     assert same_request_res.json()["id"] == first_body["id"]
+    link = db.query(FormIntakeLink).filter(FormIntakeLink.id == uuid.UUID(link_id)).one()
+    assert link.submissions_count == 1
+    assert (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.intake_link_id == uuid.UUID(link_id),
+            FormSubmission.idempotency_key == "hosted-duplicate-idem",
+        )
+        .count()
+        == 1
+    )
 
     duplicate_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -702,6 +714,67 @@ async def test_shared_submit_duplicate_applicant_conflicts_but_same_idempotency_
     assert "already pending review" in detail.lower()
     assert "hosted-duplicate@example.com" not in detail
     assert "Hosted Duplicate" not in detail
+
+
+@pytest.mark.asyncio
+async def test_shared_submit_workflow_lead_preserves_link_source_metadata(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+
+    workflow = AutomationWorkflow(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        name=f"Create shared lead {uuid.uuid4().hex[:6]}",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": form_id},
+        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
+        condition_logic="AND",
+        actions=[{"action_type": "create_intake_lead"}],
+        is_enabled=True,
+        scope="org",
+        owner_user_id=None,
+        created_by_user_id=test_user.id,
+    )
+    db.add(workflow)
+    db.commit()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit?utm_source=qa&utm_campaign=route-test",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Metadata Lead",
+                    "date_of_birth": "1993-04-12",
+                    "phone": "+1 (555) 100-1002",
+                    "email": "metadata-lead@example.com",
+                }
+            )
+        },
+        headers={"user-agent": "hosted-intake-parity"},
+    )
+    assert submit_res.status_code == 200
+    body = submit_res.json()
+    assert body["outcome"] == "lead_created"
+    assert body["intake_lead_id"] is not None
+
+    lead = (
+        db.query(IntakeLead)
+        .filter(
+            IntakeLead.organization_id == test_org.id,
+            IntakeLead.id == uuid.UUID(body["intake_lead_id"]),
+        )
+        .one()
+    )
+    assert lead.source == "shared_intake"
+    assert lead.source_metadata["source"] == "shared_intake"
+    assert lead.source_metadata["campaign_name"] == "Spring Event"
+    assert lead.source_metadata["event_name"] == "Austin Expo"
+    assert lead.source_metadata["submission_id"] == body["id"]
+    assert "metadata-lead@example.com" not in str(lead.source_metadata)
 
 
 @pytest.mark.asyncio
