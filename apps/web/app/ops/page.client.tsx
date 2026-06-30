@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ElementType } from 'react';
 import Link from "@/components/app-link";
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,7 @@ function StatCard({
 }: {
     title: string;
     value: number;
-    icon: React.ElementType;
+    icon: ElementType;
     trend?: number;
     trendLabel?: string;
     subtitle?: string;
@@ -86,19 +86,25 @@ export default function OpsDashboard() {
         async function fetchDashboard() {
             setIsLoading(true);
             setHasError(false);
-            try {
-                const [statsData, alertsData] = await Promise.all([
-                    getPlatformStats(),
-                    listAlerts({ limit: 5, status: 'open' }),
-                ]);
-                setStats(statsData);
-                setRecentAlerts(alertsData.items);
-            } catch {
+            const result = await Promise.all([
+                getPlatformStats(),
+                listAlerts({ limit: 5, status: 'open' }),
+            ]).then(([statsData, alertsData]) => ({
+                status: 'success' as const,
+                stats: statsData,
+                alerts: alertsData.items,
+            })).catch(() => ({
+                status: 'error' as const,
+            }));
+
+            if (result.status === 'success') {
+                setStats(result.stats);
+                setRecentAlerts(result.alerts);
+            } else {
                 setHasError(true);
                 toast.error('Failed to load ops dashboard');
-            } finally {
-                setIsLoading(false);
             }
+            setIsLoading(false);
         }
         void fetchDashboard();
     }, []);

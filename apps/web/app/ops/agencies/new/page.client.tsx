@@ -29,6 +29,15 @@ const TIMEZONES = [
     { value: 'UTC', label: 'UTC' },
 ];
 
+function generateSlug(name: string) {
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .substring(0, 50);
+}
+
 export default function NewAgencyPage() {
     const { push } = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,15 +48,6 @@ export default function NewAgencyPage() {
         admin_email: '',
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
-
-    const generateSlug = (name: string) => {
-        return name
-            .toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .substring(0, 50);
-    };
 
     const handleNameChange = (value: string) => {
         setForm((prev) => ({
@@ -88,21 +88,27 @@ export default function NewAgencyPage() {
         if (!validate()) return;
 
         setIsSubmitting(true);
-        try {
-            const org = await createOrganization({
-                name: form.name.trim(),
-                slug: form.slug.trim(),
-                timezone: form.timezone,
-                admin_email: form.admin_email.trim().toLowerCase(),
-            });
+        const result = await createOrganization({
+            name: form.name.trim(),
+            slug: form.slug.trim(),
+            timezone: form.timezone,
+            admin_email: form.admin_email.trim().toLowerCase(),
+        }).then((org) => ({
+            status: 'success' as const,
+            org,
+        })).catch((error: unknown) => ({
+            status: 'error' as const,
+            error,
+        }));
+
+        if (result.status === 'success') {
             toast.success('Agency created successfully');
-            push(`/ops/agencies/${org.id}`);
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Failed to create agency';
+            push(`/ops/agencies/${result.org.id}`);
+        } else {
+            const message = result.error instanceof Error ? result.error.message : 'Failed to create agency';
             toast.error(message);
-        } finally {
-            setIsSubmitting(false);
         }
+        setIsSubmitting(false);
     };
 
     return (

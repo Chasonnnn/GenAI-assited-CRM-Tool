@@ -1653,6 +1653,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps smaller ops pages compiler-compatible", () => {
+        const opsDashboardSource = readSource("app/ops/page.client.tsx")
+        const newAgencySource = readSource("app/ops/agencies/new/page.client.tsx")
+
+        expect(opsDashboardSource).not.toContain("finally")
+        expect(newAgencySource).toContain("function generateSlug(name: string)")
+        expect(newAgencySource).not.toContain("const generateSlug =")
+        expect(newAgencySource).not.toContain("finally")
+    })
+
     it("destructures navigation methods in smaller operational pages", () => {
         const appLinkSource = readSource("components/app-link.tsx")
         const opsLayoutSource = readSource("app/ops/layout.tsx")
@@ -1677,7 +1687,7 @@ describe("React regression guards (source)", () => {
         expect(opsLayoutSource).not.toContain("const [isLoading, setIsLoading] = useState")
         expect(opsLayoutSource).not.toContain("const [openAlertCount, setOpenAlertCount] = useState")
         expect(newAgencySource).toContain("const { push } = useRouter()")
-        expect(newAgencySource).toContain("push(`/ops/agencies/${org.id}`)")
+        expect(newAgencySource).toContain("push(`/ops/agencies/${result.org.id}`)")
         expect(newAgencySource).toContain("push('/ops/agencies')")
         expect(welcomeSource).toContain("const { push, replace } = useRouter()")
         expect(welcomeSource).toContain('push("/dashboard")')

@@ -695,3 +695,22 @@ Full command after Batch 33: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1085`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 27 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 770 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-08c82089-5bb1-4bb6-a696-806ad3490683`
+
+## Batch 34
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/ops/page.client.tsx`, `app/ops/agencies/new/page.client.tsx` | Valid: the ops dashboard load effect and new-agency submit handler used `try/finally` only to clear loading/submitting state, which blocks the current React Compiler path. | High | Replace both finalizers with explicit promise-result branches and clear loading state after success or failure handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor reported no issues after also addressing touched-file helper placement. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/ops/agencies/new/page.client.tsx` | Valid: `generateSlug` is pure and does not read component state, so rebuilding it on every render is unnecessary. | High | Move `generateSlug` to module scope and extend the source guard to require the helper outside the component. | Focused tests passed; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 34: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 34: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1082`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 25 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 769 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bbb927ed-b5ce-40e4-85e9-2f95ca4bb331`
