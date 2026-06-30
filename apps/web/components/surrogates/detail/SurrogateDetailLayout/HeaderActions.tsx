@@ -106,18 +106,23 @@ export function HeaderActions() {
 
     const handleExport = async () => {
         setIsExporting(true)
-        try {
-            const result = await exportSurrogatePacketPdf(surrogate.id)
-            if (result.includesApplication) {
+        const result = await exportSurrogatePacketPdf(surrogate.id).then((data) => ({
+            status: "success" as const,
+            data,
+        })).catch(() => ({
+            status: "error" as const,
+        }))
+
+        if (result.status === "success") {
+            if (result.data.includesApplication) {
                 toast.success("Exported case details + application")
             } else {
                 toast.success("Exported case details (no submitted application yet)")
             }
-        } catch {
+        } else {
             toast.error("Failed to export")
-        } finally {
-            setIsExporting(false)
         }
+        setIsExporting(false)
     }
 
     return (

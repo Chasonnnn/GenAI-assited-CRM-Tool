@@ -816,3 +816,21 @@ Full command after Batch 39: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1064`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 17 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 760 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-475793fe-2fb2-453f-8b38-876fddd42a62`
+
+## Batch 40
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/surrogates/detail/SurrogateDetailLayout/HeaderActions.tsx` | Valid: the export action used a `try/finally` finalizer only to clear exporting state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch, preserve success/failure toasts, and clear `isExporting` after success or error handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/header-actions.test.tsx`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 40: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 40: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1063`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 16 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 760 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-acf1eb78-f412-402b-9291-da663cec8a77`

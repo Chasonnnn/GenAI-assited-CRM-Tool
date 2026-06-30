@@ -1346,6 +1346,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps surrogate header export compiler-compatible", () => {
+        const source = readSource("components/surrogates/detail/SurrogateDetailLayout/HeaderActions.tsx")
+
+        expect(source).not.toContain("finally")
+    })
+
     it("uses single-pass filtered display lists for dashboard and campaign details", () => {
         const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
         const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
