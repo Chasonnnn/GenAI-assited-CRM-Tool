@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "sonner"
@@ -84,7 +84,7 @@ export default function UnassignedSurrogatesPage({
     const pageStart = (page - 1) * DEFAULT_PER_PAGE + (items.length > 0 ? 1 : 0)
     const pageEnd = (page - 1) * DEFAULT_PER_PAGE + items.length
 
-    const setPageAndUrl = useCallback((nextPage: number) => {
+    const setPageAndUrl = (nextPage: number) => {
         const params = new URLSearchParams(initialSearchParams)
         if (nextPage > 1) {
             params.set("page", String(nextPage))
@@ -93,21 +93,25 @@ export default function UnassignedSurrogatesPage({
         }
         const qs = params.toString()
         replace(qs ? `/surrogates/unassigned?${qs}` : "/surrogates/unassigned", { scroll: false })
-    }, [initialSearchParams, replace])
+    }
 
-    const handleClaim = useCallback(async (surrogateId: string) => {
+    const handleClaim = async (surrogateId: string) => {
         setClaimingId(surrogateId)
-        try {
-            await claimMutation.mutateAsync(surrogateId)
+        const result = await claimMutation.mutateAsync(surrogateId).then(() => ({
+            status: "success" as const,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            message: error instanceof Error ? error.message : "Failed to claim surrogate",
+        }))
+
+        if (result.status === "success") {
             toast.success("Surrogate claimed")
             push(`/surrogates/${surrogateId}`)
-        } catch (e) {
-            const message = e instanceof Error ? e.message : "Failed to claim surrogate"
-            toast.error(message)
-        } finally {
-            setClaimingId(null)
+        } else {
+            toast.error(result.message)
         }
-    }, [claimMutation, push])
+        setClaimingId(null)
+    }
 
     if (authLoaded && !canViewUnassignedQueue) return null
 

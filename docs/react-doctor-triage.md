@@ -797,3 +797,22 @@ Full command after Batch 38: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1067`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 18 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 762 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a68560ac-8bbb-47de-86cd-056bcdacffdc`
+
+## Batch 39
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/surrogates/unassigned/page.client.tsx` | Valid: the claim handler used a `try/finally` finalizer only to clear row-level claiming state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch and clear `claimingId` after success or error handling while preserving success/error toasts. Extended the source regression guard so it failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor reported no issues. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/surrogates/unassigned/page.client.tsx` | Valid: React Compiler is enabled, so the local `useCallback` wrappers around pagination and claim handlers are redundant in this touched page. | High | Use plain local functions for `setPageAndUrl` and `handleClaim`. Extended the source guard to fail on reintroduced `useCallback`. | Focused source guard passed; full React Doctor shows redundant memoization dropped by 2. |
+
+Changed-scope command after Batch 39: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 39: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1064`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 17 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 760 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-475793fe-2fb2-453f-8b38-876fddd42a62`

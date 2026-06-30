@@ -1716,6 +1716,8 @@ describe("React regression guards (source)", () => {
         expect(unassignedSource).toContain("initialSearchParams")
         expect(unassignedSource).toContain('replace("/surrogates")')
         expect(unassignedSource).toContain("push(`/surrogates/${surrogateId}`)")
+        expect(unassignedSource).not.toContain("finally")
+        expect(unassignedSource).not.toContain("useCallback")
         expect(welcomeSource).not.toContain("const router = useRouter()")
         expect(welcomeSource).not.toContain("router.push(")
         expect(welcomeSource).not.toContain("router.replace(")
