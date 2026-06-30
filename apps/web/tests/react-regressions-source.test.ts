@@ -1084,6 +1084,7 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setDateRangeState")
         expect(source).not.toContain("setCustomRangeState")
         expect(source).not.toContain("setAssigneeIdState")
+        expect(source).not.toContain("useCallback")
     })
 
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {

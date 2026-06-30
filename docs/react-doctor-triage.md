@@ -1167,3 +1167,22 @@ Full command after Batch 56: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `917`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 656 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ac527b0c-93a4-4dc2-8a52-4b42c51f264b`
+
+## Batch 57
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/dashboard/context/dashboard-filters.tsx` | Valid: the dashboard filter provider wrapped URL sync handlers and the date-parameter getter in `useCallback`; React Compiler can cache these values without manual wrappers. | High | Remove the `useCallback` import and derive the handlers/getter as plain functions while preserving reducer state updates and URL writes. Extended the existing dashboard filter source guard so it failed on the old wrapper import/calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/dashboard.test.tsx tests/accessibility-hardening.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `523` to `517`. |
+
+Changed-scope command after Batch 57: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 57: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `911`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 650 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7ae5e07e-f4bc-4e8c-a99d-ad05b31e9acd`

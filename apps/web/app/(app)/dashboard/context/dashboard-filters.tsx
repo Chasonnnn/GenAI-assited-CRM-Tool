@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, use, useCallback, useEffect, useReducer, type ReactNode } from "react"
+import { createContext, use, useEffect, useReducer, type ReactNode } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { DateRangePreset } from "@/components/ui/date-range-picker"
@@ -166,7 +166,7 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
     const { dateRange, customRange, assigneeId } = filters
 
     // Sync state changes back to URL
-    const updateUrlParams = useCallback((
+    const updateUrlParams = (
         range: DateRangePreset,
         rangeDates: DateRange,
         assignee?: string
@@ -200,10 +200,10 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         const currentUrl = currentQuery ? `/dashboard?${currentQuery}` : "/dashboard"
         if (newUrl === currentUrl) return
         push(newUrl as Route, { scroll: false })
-    }, [push, searchParams])
+    }
 
     // Set date range
-    const setDateRange = useCallback((preset: DateRangePreset) => {
+    const setDateRange = (preset: DateRangePreset) => {
         const nextCustomRange = preset === "custom" ? customRange : emptyDateRange()
         dispatchFilters({ type: "setDateRange", preset })
         updateUrlParams(
@@ -211,26 +211,26 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
             nextCustomRange,
             assigneeId
         )
-    }, [customRange, assigneeId, updateUrlParams])
+    }
 
     // Set custom date range
-    const setCustomRange = useCallback((range: DateRange) => {
+    const setCustomRange = (range: DateRange) => {
         dispatchFilters({ type: "setCustomRange", range })
         updateUrlParams("custom", range, assigneeId)
-    }, [assigneeId, updateUrlParams])
+    }
 
     // Set assignee filter
-    const setAssigneeId = useCallback((id: string | undefined) => {
+    const setAssigneeId = (id: string | undefined) => {
         const nextId = normalizeAssigneeForUser(id, user?.user_id, user?.role)
         dispatchFilters({ type: "setAssigneeId", assigneeId: nextId })
         updateUrlParams(dateRange, customRange, nextId)
-    }, [customRange, dateRange, updateUrlParams, user?.role, user?.user_id])
+    }
 
     // Reset all filters
-    const resetFilters = useCallback(() => {
+    const resetFilters = () => {
         dispatchFilters({ type: "reset" })
         replace("/dashboard", { scroll: false })
-    }, [replace])
+    }
 
     // Sync URL changes back to state (e.g., browser back/forward)
     useEffect(() => {
@@ -241,7 +241,7 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
     }, [currentQuery, searchParams, user?.role, user?.user_id])
 
     // Compute date params for API calls
-    const getDateParams = useCallback((): { from_date?: string; to_date?: string } => {
+    const getDateParams = (): { from_date?: string; to_date?: string } => {
         if (dateRange === "all") {
             return { from_date: formatLocalDate(ALL_TIME_START) }
         }
@@ -275,7 +275,7 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
         if (from) params.from_date = formatLocalDate(from)
         if (to) params.to_date = formatLocalDate(to)
         return params
-    }, [dateRange, customRange])
+    }
 
     // Check if any filters are active
     const hasActiveFilters = dateRange !== "all" || !!assigneeId
