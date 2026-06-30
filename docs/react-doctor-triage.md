@@ -115,3 +115,24 @@ Full command after Batch 5: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1403`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 130 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 840 warnings`
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-baa4c0f5-8649-4d9a-b82d-daaab21d0a9f`
+
+## Batch 6
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/automation/campaigns/page.tsx` | Valid: campaign delete, cancel, and send-now dialog handlers used `try` statements with `finally` cleanup. | High | Replace `finally` cleanup with explicit success/error cleanup helpers. | `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run tests/react-regressions-source.test.ts tests/campaign-detail-page.test.tsx`; changed-scope React Doctor no longer reports errors. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/(app)/automation/campaigns/page.tsx` | Valid: `isRecipientType` and `isScheduleFor` do not use component state. | High | Move both type guards to module scope. | Changed-scope React Doctor no longer reports these helper warnings. |
+
+Changed-scope command after Batch 6: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Remaining changed-file warnings: `no-giant-component`, `prefer-useReducer` for `CampaignsPage`; both are larger refactors deferred to a separate batch.
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4d167d41-1be9-4d5d-8e02-cb2843b13a22`
+
+Full command after Batch 6: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `2 / 100 Critical`
+- Total diagnostics: `1398`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 127 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 838 warnings`
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5e8ccba6-72e2-47a5-a1e6-e2640702d3af`

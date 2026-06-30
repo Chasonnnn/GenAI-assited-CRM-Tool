@@ -141,6 +141,12 @@ function getStageIdsByPredicate(
     return stageIds
 }
 
+const isRecipientType = (value: string | null): value is "case" | "intended_parent" =>
+    value === "case" || value === "intended_parent"
+
+const isScheduleFor = (value: unknown): value is "now" | "later" =>
+    value === "now" || value === "later"
+
 export default function CampaignsPage() {
     const { push } = useRouter()
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
@@ -153,10 +159,6 @@ export default function CampaignsPage() {
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
-    const isRecipientType = (value: string | null): value is "case" | "intended_parent" =>
-        value === "case" || value === "intended_parent"
-    const isScheduleFor = (value: unknown): value is "now" | "later" =>
-        value === "now" || value === "later"
 
     const [recipientType, setRecipientType] = useState<"case" | "intended_parent">("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
@@ -411,13 +413,14 @@ export default function CampaignsPage() {
     const handleDeleteCampaign = async () => {
         if (!deleteDialogId) return
 
+        const closeDeleteDialog = () => setDeleteDialogId(null)
         try {
             await deleteCampaign.mutateAsync(deleteDialogId)
             toast.success("Campaign deleted")
+            closeDeleteDialog()
         } catch {
             toast.error("Failed to delete campaign. Only drafts can be deleted.")
-        } finally {
-            setDeleteDialogId(null)
+            closeDeleteDialog()
         }
     }
 
@@ -433,26 +436,28 @@ export default function CampaignsPage() {
     const handleCancelCampaign = async () => {
         if (!cancelDialogId) return
 
+        const closeCancelDialog = () => setCancelDialogId(null)
         try {
             await cancelCampaign.mutateAsync(cancelDialogId)
             toast.success("Campaign stopped")
+            closeCancelDialog()
         } catch {
             toast.error("Failed to stop campaign")
-        } finally {
-            setCancelDialogId(null)
+            closeCancelDialog()
         }
     }
 
     const handleSendNowCampaign = async () => {
         if (!sendNowDialogId) return
 
+        const closeSendNowDialog = () => setSendNowDialogId(null)
         try {
             await sendCampaign.mutateAsync({ id: sendNowDialogId, sendNow: true })
             toast.success("Campaign queued for sending")
+            closeSendNowDialog()
         } catch {
             toast.error("Failed to send campaign")
-        } finally {
-            setSendNowDialogId(null)
+            closeSendNowDialog()
         }
     }
 
