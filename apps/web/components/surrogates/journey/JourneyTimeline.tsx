@@ -37,22 +37,36 @@ export function JourneyTimeline({
     const totalMilestones = allMilestones.length
 
     // Build phases with milestone metadata (including alternation)
-    let globalIndex = 0
-    const phasesWithMeta: PhaseWithMilestones[] = journey.phases.map((phase) => ({
-        slug: phase.slug,
-        label: phase.label,
-        milestones: phase.milestones.map((milestone) => {
-            const meta: MilestoneWithMeta = {
-                milestone,
-                globalIndex,
-                isFirst: globalIndex === 0,
-                isLast: globalIndex === totalMilestones - 1,
-                side: globalIndex % 2 === 0 ? "left" : "right",
+    const phasesWithMeta: PhaseWithMilestones[] = journey.phases.reduce<{
+        phases: PhaseWithMilestones[]
+        nextIndex: number
+    }>(
+        (acc, phase) => {
+            const milestones = phase.milestones.map((milestone, milestoneIndex) => {
+                const globalIndex = acc.nextIndex + milestoneIndex
+                return {
+                    milestone,
+                    globalIndex,
+                    isFirst: globalIndex === 0,
+                    isLast: globalIndex === totalMilestones - 1,
+                    side: globalIndex % 2 === 0 ? "left" : "right",
+                } satisfies MilestoneWithMeta
+            })
+
+            return {
+                phases: [
+                    ...acc.phases,
+                    {
+                        slug: phase.slug,
+                        label: phase.label,
+                        milestones,
+                    },
+                ],
+                nextIndex: acc.nextIndex + phase.milestones.length,
             }
-            globalIndex++
-            return meta
-        }),
-    }))
+        },
+        { phases: [], nextIndex: 0 },
+    ).phases
 
     return (
         <div className="space-y-12 print:space-y-8">

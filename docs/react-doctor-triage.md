@@ -547,3 +547,21 @@ Full command after Batch 25: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1109`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 211 warnings`, `Performance 37 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-465a774f-bd78-4a29-a2ad-2cad01c756d5`
+
+## Batch 26
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/surrogates/journey/JourneyTimeline.tsx` | Valid: journey milestone metadata used a mutable `globalIndex++` counter inside nested `map` calls, which React Compiler cannot lower cleanly. | High | Replace the mutable counter with a reducer that carries `nextIndex` across phases, matching the existing print-view pattern. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 26: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 26: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1108`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 211 warnings`, `Performance 36 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8739e2f8-25c6-4cfb-a216-90c485027fdb`

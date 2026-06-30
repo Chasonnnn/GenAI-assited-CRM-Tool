@@ -277,6 +277,14 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("builds journey timeline milestone metadata without mutating a global counter", () => {
+        const source = readSource("components/surrogates/journey/JourneyTimeline.tsx")
+
+        expect(source).toContain("nextIndex")
+        expect(source).not.toContain("let globalIndex")
+        expect(source).not.toContain("globalIndex++")
+    })
+
     it("keeps surrogate application form-link defaults compiler-friendly", () => {
         const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
 
