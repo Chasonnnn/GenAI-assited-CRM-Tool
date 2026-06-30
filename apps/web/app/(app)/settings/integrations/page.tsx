@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useEffect, useMemo } from "react"
+import { startTransition, useState, useEffect } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -403,6 +403,18 @@ function formatZapierReason(reason: string | null | undefined): string {
     return reason.replace(/_/g, " ")
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message
+    return fallback
+}
+
+function copyToClipboard(text: string) {
+    navigator.clipboard
+        .writeText(text)
+        .then(() => toast.success("Copied to clipboard"))
+        .catch(() => toast.error("Failed to copy"))
+}
+
 // AI provider options
 const AI_PROVIDERS = [
     {
@@ -473,6 +485,150 @@ type MetaCrmDatasetFormState = {
     selectedStage: string
     outboundTestLeadId: string
     outboundTestFbc: string
+}
+
+type ZapierInboundWebhookDraftSource = {
+    webhook_id: string
+    label?: string | null
+}
+
+type ZapierWebhookDraftState = {
+    webhookKey: string
+    labelDrafts: Record<string, string>
+    webhookSecrets: Record<string, string>
+}
+
+type ZapierOutboundFormState = {
+    outboundUrl: string
+    outboundEnabled: boolean
+    sendHashedPii: boolean
+    eventMapping: ZapierEventMappingItem[]
+    selectedOutboundStage: string
+}
+
+type ZapierOutboundDraftState = {
+    outboundKey: string
+    form: ZapierOutboundFormState
+}
+
+function createZapierWebhookDraftKey(
+    webhooks: ZapierInboundWebhookDraftSource[] | null | undefined,
+) {
+    return (webhooks ?? [])
+        .map((webhook) => `${webhook.webhook_id}:${webhook.label ?? ""}`)
+        .join("\u0000")
+}
+
+function createZapierWebhookDraftState(
+    webhookKey: string,
+    webhooks: ZapierInboundWebhookDraftSource[] | null | undefined,
+    currentSecrets: Record<string, string> = {},
+): ZapierWebhookDraftState {
+    const labelDrafts: Record<string, string> = {}
+    const webhookSecrets: Record<string, string> = {}
+
+    for (const webhook of webhooks ?? []) {
+        labelDrafts[webhook.webhook_id] = webhook.label || ""
+        const existingSecret = currentSecrets[webhook.webhook_id]
+        if (existingSecret) {
+            webhookSecrets[webhook.webhook_id] = existingSecret
+        }
+    }
+
+    return {
+        webhookKey,
+        labelDrafts,
+        webhookSecrets,
+    }
+}
+
+function getActiveFieldPasteWebhookId(
+    requestedWebhookId: string,
+    webhooks: ZapierInboundWebhookDraftSource[] | null | undefined,
+) {
+    const inbound = webhooks ?? []
+    if (!inbound.length) return ""
+    if (inbound.some((webhook) => webhook.webhook_id === requestedWebhookId)) {
+        return requestedWebhookId
+    }
+    return inbound[0]?.webhook_id ?? ""
+}
+
+function getSingleZapierFormId(
+    forms: Array<{
+        is_active?: boolean
+        page_id?: string | null
+        form_external_id?: string | null
+    }>,
+) {
+    const activeZapierForms = forms.filter(
+        (form) =>
+            form.is_active &&
+            (form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-"))
+    )
+    if (activeZapierForms.length !== 1) return ""
+    return activeZapierForms[0]?.form_external_id?.trim() ?? ""
+}
+
+function createZapierOutboundDraftKey(
+    settings:
+        | {
+            outbound_webhook_url?: string | null
+            outbound_enabled?: boolean | null
+            send_hashed_pii?: boolean | null
+            event_mapping?: ZapierEventMappingItem[] | null
+        }
+        | null
+        | undefined,
+    pipelines: Pipeline[] | null | undefined,
+) {
+    const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default) ?? pipelines?.[0]
+    const stageKey = (defaultPipeline?.stages ?? [])
+        .map((stage) => `${stage.stage_key ?? ""}:${stage.slug ?? ""}:${stage.is_active === false ? "0" : "1"}`)
+        .join("|")
+
+    return [
+        settings?.outbound_webhook_url ?? "",
+        settings?.outbound_enabled ? "1" : "0",
+        settings?.send_hashed_pii ? "1" : "0",
+        JSON.stringify(settings?.event_mapping ?? []),
+        stageKey,
+    ].join("\u0000")
+}
+
+function createZapierOutboundDraftState(
+    outboundKey: string,
+    settings:
+        | {
+            outbound_webhook_url?: string | null
+            outbound_enabled?: boolean | null
+            send_hashed_pii?: boolean | null
+            event_mapping?: ZapierEventMappingItem[] | null
+        }
+        | null
+        | undefined,
+    pipelines: Pipeline[] | null | undefined,
+    currentStage: string = "",
+): ZapierOutboundDraftState {
+    const eventMapping = mergeEventMappingWithPipelineStages(
+        settings?.event_mapping || [],
+        pipelines,
+    )
+    const selectedOutboundStage =
+        currentStage && eventMapping.some((item) => item.stage_key === currentStage)
+            ? currentStage
+            : eventMapping[0]?.stage_key || ""
+
+    return {
+        outboundKey,
+        form: {
+            outboundUrl: settings?.outbound_webhook_url || "",
+            outboundEnabled: Boolean(settings?.outbound_enabled),
+            sendHashedPii: Boolean(settings?.send_hashed_pii),
+            eventMapping,
+            selectedOutboundStage,
+        },
+    }
 }
 
 function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
@@ -1060,11 +1216,6 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
         })
     }, [settings, emailUi.hasUserEdited])
 
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
-
     const updateEmailForm = <K extends keyof EmailConfigurationFormState>(
         field: K,
         value: EmailConfigurationFormState[K],
@@ -1180,13 +1331,6 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
         } catch (error) {
             toast.error(getErrorMessage(error, "Failed to rotate webhook URL"))
         }
-    }
-
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard
-            .writeText(text)
-            .then(() => toast.success("Copied to clipboard"))
-            .catch(() => toast.error("Failed to copy"))
     }
 
     const hasResendKey = Boolean(emailForm.apiKey.trim() || settings?.api_key_masked)
@@ -1716,8 +1860,6 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const parseFieldPaste = useZapierFieldPaste()
     const deleteInboundWebhook = useDeleteZapierInboundWebhook()
     const updateOutbound = useUpdateZapierOutboundSettings()
-    const [webhookSecrets, setWebhookSecrets] = useState<Record<string, string>>({})
-    const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({})
     const [rotatingWebhookId, setRotatingWebhookId] = useState<string | null>(null)
     const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
     const [testFormId, setTestFormId] = useState('')
@@ -1726,95 +1868,79 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     const [fieldPasteResult, setFieldPasteResult] = useState<ZapierFieldPasteResponse | null>(null)
     const sendTestLead = useZapierTestLead()
     const sendOutboundTest = useZapierOutboundTest()
-    const [outboundUrl, setOutboundUrl] = useState('')
     const [outboundSecret, setOutboundSecret] = useState('')
-    const [outboundEnabled, setOutboundEnabled] = useState(false)
-    const [sendHashedPii, setSendHashedPii] = useState(false)
-    const [eventMapping, setEventMapping] = useState<ZapierEventMappingItem[]>([])
-    const [selectedOutboundStage, setSelectedOutboundStage] = useState<string>('')
     const [outboundTestLeadId, setOutboundTestLeadId] = useState('')
-
-    useEffect(() => {
-        if (!settings?.inbound_webhooks) return
-        const drafts: Record<string, string> = {}
-        settings.inbound_webhooks.forEach((webhook) => {
-            drafts[webhook.webhook_id] = webhook.label || ""
-        })
-        setLabelDrafts(drafts)
-        setWebhookSecrets((prev) => {
-            const next: Record<string, string> = {}
-            settings.inbound_webhooks.forEach((webhook) => {
-                const existing = prev[webhook.webhook_id]
-                if (existing) {
-                    next[webhook.webhook_id] = existing
-                }
-            })
-            return next
-        })
-    }, [settings?.inbound_webhooks])
-
-    useEffect(() => {
-        const inbound = settings?.inbound_webhooks ?? []
-        if (!inbound.length) {
-            if (fieldPasteWebhookId) {
-                setFieldPasteWebhookId('')
-            }
-            return
-        }
-        const ids = inbound.map((webhook) => webhook.webhook_id)
-        if (!fieldPasteWebhookId || !ids.includes(fieldPasteWebhookId)) {
-            const [firstId] = ids
-            if (firstId) {
-                setFieldPasteWebhookId(firstId)
-            }
-        }
-    }, [settings?.inbound_webhooks, fieldPasteWebhookId])
-
-    useEffect(() => {
-        if (!settings) return
-        const mergedEventMapping = mergeEventMappingWithPipelineStages(
-            settings.event_mapping || [],
+    const inboundWebhooks = settings?.inbound_webhooks ?? []
+    const activeWebhookKey = createZapierWebhookDraftKey(inboundWebhooks)
+    const [webhookDraft, setWebhookDraft] = useState<ZapierWebhookDraftState>(() =>
+        createZapierWebhookDraftState(activeWebhookKey, inboundWebhooks)
+    )
+    const activeWebhookDraft = webhookDraft.webhookKey === activeWebhookKey
+        ? webhookDraft
+        : createZapierWebhookDraftState(activeWebhookKey, inboundWebhooks, webhookDraft.webhookSecrets)
+    const { labelDrafts, webhookSecrets } = activeWebhookDraft
+    const activeFieldPasteWebhookId = getActiveFieldPasteWebhookId(fieldPasteWebhookId, inboundWebhooks)
+    const singleZapierFormId = getSingleZapierFormId(metaForms)
+    const activeTestFormId = testFormId.trim() || singleZapierFormId
+    const activeOutboundKey = createZapierOutboundDraftKey(settings, pipelines)
+    const [outboundDraft, setOutboundDraft] = useState<ZapierOutboundDraftState>(() =>
+        createZapierOutboundDraftState(activeOutboundKey, settings, pipelines)
+    )
+    const activeOutboundDraft = outboundDraft.outboundKey === activeOutboundKey
+        ? outboundDraft
+        : createZapierOutboundDraftState(
+            activeOutboundKey,
+            settings,
             pipelines,
+            outboundDraft.form.selectedOutboundStage,
         )
-        setOutboundUrl(settings.outbound_webhook_url || '')
-        setOutboundEnabled(Boolean(settings.outbound_enabled))
-        setSendHashedPii(Boolean(settings.send_hashed_pii))
-        setEventMapping(mergedEventMapping)
-        setSelectedOutboundStage((current) =>
-            current && mergedEventMapping.some((item) => item.stage_key === current)
+    const outboundForm = activeOutboundDraft.form
+
+    const updateWebhookDraft = (
+        updater: (draft: ZapierWebhookDraftState) => ZapierWebhookDraftState,
+    ) => {
+        setWebhookDraft((current) => {
+            const activeDraft = current.webhookKey === activeWebhookKey
                 ? current
-                : mergedEventMapping[0]?.stage_key || ''
-        )
-    }, [settings, pipelines])
+                : createZapierWebhookDraftState(activeWebhookKey, inboundWebhooks, current.webhookSecrets)
+            return updater(activeDraft)
+        })
+    }
 
-    useEffect(() => {
-        const activeZapierForms = metaForms.filter(
-            (form) =>
-                form.is_active &&
-                (form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-"))
-        )
-        if (activeZapierForms.length !== 1) {
-            return
-        }
-        const [onlyForm] = activeZapierForms
-        const nextFormId = onlyForm?.form_external_id?.trim()
-        if (!nextFormId || testFormId.trim() === nextFormId) {
-            return
-        }
-        setTestFormId(nextFormId)
-    }, [metaForms, testFormId])
+    const updateOutboundForm = <K extends keyof ZapierOutboundFormState>(
+        field: K,
+        value: ZapierOutboundFormState[K],
+    ) => {
+        setOutboundDraft((current) => {
+            const activeDraft = current.outboundKey === activeOutboundKey
+                ? current
+                : createZapierOutboundDraftState(
+                    activeOutboundKey,
+                    settings,
+                    pipelines,
+                    current.form.selectedOutboundStage,
+                )
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard
-            .writeText(text)
-            .then(() => toast.success("Copied to clipboard"))
-            .catch(() => toast.error("Failed to copy"))
+            return {
+                outboundKey: activeOutboundKey,
+                form: {
+                    ...activeDraft.form,
+                    [field]: value,
+                },
+            }
+        })
     }
 
     const handleCreateInbound = async () => {
         try {
             const result = await createInboundWebhook.mutateAsync({ label: null })
-            setWebhookSecrets((prev) => ({ ...prev, [result.webhook_id]: result.webhook_secret }))
+            updateWebhookDraft((current) => ({
+                ...current,
+                webhookSecrets: {
+                    ...current.webhookSecrets,
+                    [result.webhook_id]: result.webhook_secret,
+                },
+            }))
             toast.success("Webhook created")
         } catch {
             toast.error("Failed to create webhook")
@@ -1826,36 +1952,41 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
             setRotatingWebhookId(webhookId)
             const result = await rotateInboundWebhook.mutateAsync({ webhookId })
             const secretId = result.webhook_id ?? webhookId
-            setWebhookSecrets((prev) => ({ ...prev, [secretId]: result.webhook_secret }))
+            updateWebhookDraft((current) => ({
+                ...current,
+                webhookSecrets: {
+                    ...current.webhookSecrets,
+                    [secretId]: result.webhook_secret,
+                },
+            }))
             toast.success("Webhook secret rotated")
         } catch {
             toast.error("Failed to rotate webhook secret")
-        } finally {
-            setRotatingWebhookId(null)
         }
+        setRotatingWebhookId(null)
     }
 
     const handleDeleteInbound = async (webhookId: string) => {
         try {
             setDeletingWebhookId(webhookId)
             await deleteInboundWebhook.mutateAsync({ webhookId })
-            setWebhookSecrets((prev) => {
-                const next = { ...prev }
-                delete next[webhookId]
-                return next
-            })
-            setLabelDrafts((prev) => {
-                const next = { ...prev }
-                delete next[webhookId]
-                return next
+            updateWebhookDraft((current) => {
+                const webhookSecrets = { ...current.webhookSecrets }
+                const labelDrafts = { ...current.labelDrafts }
+                delete webhookSecrets[webhookId]
+                delete labelDrafts[webhookId]
+                return {
+                    ...current,
+                    labelDrafts,
+                    webhookSecrets,
+                }
             })
             toast.success("Webhook deleted")
         } catch (error) {
             const message = error instanceof Error ? error.message : null
             toast.error(message || "Failed to delete webhook")
-        } finally {
-            setDeletingWebhookId(null)
         }
+        setDeletingWebhookId(null)
     }
 
     const handleLabelBlur = async (webhookId: string) => {
@@ -1889,7 +2020,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
 
     const handleTestLead = async () => {
         try {
-            const formId = testFormId.trim()
+            const formId = activeTestFormId.trim()
             const payload = formId ? { form_id: formId } : {}
             const result = await sendTestLead.mutateAsync(payload)
             if (result.status === "converted") {
@@ -1913,8 +2044,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         }
         try {
             const payload: { paste: string; webhook_id?: string } = { paste }
-            if (fieldPasteWebhookId) {
-                payload.webhook_id = fieldPasteWebhookId
+            if (activeFieldPasteWebhookId) {
+                payload.webhook_id = activeFieldPasteWebhookId
             }
             const result = await parseFieldPaste.mutateAsync(payload)
             setFieldPasteResult(result)
@@ -1941,10 +2072,10 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                 send_hashed_pii: boolean
                 event_mapping: ZapierEventMappingItem[]
             } = {
-                outbound_webhook_url: outboundUrl.trim() || null,
-                outbound_enabled: outboundEnabled,
-                send_hashed_pii: sendHashedPii,
-                event_mapping: eventMapping,
+                outbound_webhook_url: outboundForm.outboundUrl.trim() || null,
+                outbound_enabled: outboundForm.outboundEnabled,
+                send_hashed_pii: outboundForm.sendHashedPii,
+                event_mapping: outboundForm.eventMapping,
             }
             const secret = outboundSecret.trim()
             if (secret) {
@@ -1962,8 +2093,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         try {
             const leadId = outboundTestLeadId.trim()
             const payload: { stage_key?: string; lead_id?: string } = {}
-            if (selectedOutboundStage) {
-                payload.stage_key = selectedOutboundStage
+            if (outboundForm.selectedOutboundStage) {
+                payload.stage_key = outboundForm.selectedOutboundStage
             }
             if (leadId) {
                 payload.lead_id = leadId
@@ -1976,8 +2107,9 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     }
 
     const applyRecommendedBucketMapping = () => {
-        setEventMapping((current) =>
-            current.map((item) => {
+        updateOutboundForm(
+            "eventMapping",
+            outboundForm.eventMapping.map((item) => {
                 const recommendedBucket = recommendedBucketByStage[item.stage_key]
                 if (!recommendedBucket) {
                     return item
@@ -1988,7 +2120,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                     event_name: ZAPIER_BUCKET_EVENT_NAME[recommendedBucket],
                     enabled: true,
                 }
-            })
+            }),
         )
         toast.success("Applied recommended Meta conversion stage mapping")
     }
@@ -2110,9 +2242,12 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                 <Input
                                                     value={labelValue}
                                                     onChange={(event) =>
-                                                        setLabelDrafts((prev) => ({
-                                                            ...prev,
-                                                            [webhook.webhook_id]: event.target.value,
+                                                        updateWebhookDraft((current) => ({
+                                                            ...current,
+                                                            labelDrafts: {
+                                                                ...current.labelDrafts,
+                                                                [webhook.webhook_id]: event.target.value,
+                                                            },
                                                         }))
                                                     }
                                                     onBlur={() => handleLabelBlur(webhook.webhook_id)}
@@ -2142,8 +2277,6 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                             <div className="flex min-w-0 gap-2">
                                                 <div
                                                     className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-xs dark:bg-input/30"
-                                                    role="textbox"
-                                                    aria-readonly="true"
                                                     title={webhook.webhook_url}
                                                 >
                                                     <span className="min-w-0 flex-1 truncate">
@@ -2278,7 +2411,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         {settings?.inbound_webhooks?.length ? (
                             <div className="space-y-2">
                                 <Label>Webhook</Label>
-                                <Select value={fieldPasteWebhookId} onValueChange={(value) => setFieldPasteWebhookId(value ?? "")}>
+                                <Select value={activeFieldPasteWebhookId} onValueChange={(value) => setFieldPasteWebhookId(value ?? "")}>
                                     <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-72"} aria-label="Select webhook">
                                         <SelectValue placeholder="Select webhook">
                                             {(value: string | null) => getWebhookSelectLabel(settings?.inbound_webhooks, value)}
@@ -2347,7 +2480,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                             <Label>Test Lead</Label>
                             <Input
                                 placeholder="Zapier Form ID (optional if only one active Zapier form exists)"
-                                value={testFormId}
+                                value={activeTestFormId}
                                 onChange={(event) => setTestFormId(event.target.value)}
                                 name="zapier-test-form-id"
                                 autoComplete="off"
@@ -2395,8 +2528,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 </p>
                             </div>
                             <Switch
-                                checked={outboundEnabled}
-                                onCheckedChange={setOutboundEnabled}
+                                checked={outboundForm.outboundEnabled}
+                                onCheckedChange={(checked) => updateOutboundForm("outboundEnabled", checked)}
                                 aria-label="Enable outbound stage events"
                             />
                         </div>
@@ -2404,8 +2537,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                         <div className="space-y-2">
                             <Label>Outbound Webhook URL</Label>
                             <Input
-                                value={outboundUrl}
-                                onChange={(event) => setOutboundUrl(event.target.value)}
+                                value={outboundForm.outboundUrl}
+                                onChange={(event) => updateOutboundForm("outboundUrl", event.target.value)}
                                 placeholder="https://hooks.zapier.com/hooks/catch/…"
                                 name="zapier-outbound-url"
                                 autoComplete="off"
@@ -2435,8 +2568,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 </p>
                             </div>
                             <Switch
-                                checked={sendHashedPii}
-                                onCheckedChange={setSendHashedPii}
+                                checked={outboundForm.sendHashedPii}
+                                onCheckedChange={(checked) => updateOutboundForm("sendHashedPii", checked)}
                                 aria-label="Include hashed PII"
                             />
                         </div>
@@ -2457,7 +2590,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 Set each stage bucket for Meta conversion status mapping. Dedupe runs once per lead per bucket.
                             </p>
                             <div className="space-y-2">
-                                {eventMapping.map((item, index) => (
+                                {outboundForm.eventMapping.map((item, index) => (
                                     <div
                                         key={item.stage_key}
                                         className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
@@ -2468,7 +2601,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 <Select
                                             value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
                                             onValueChange={(value) => {
-                                                const next = [...eventMapping]
+                                                const next = [...outboundForm.eventMapping]
                                                 const existing = next[index]
                                                 if (!existing) return
                                                 if (value === UNTRACKED_BUCKET_VALUE) {
@@ -2487,7 +2620,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                                         enabled: true,
                                                     }
                                                 }
-                                                setEventMapping(next)
+                                                updateOutboundForm("eventMapping", next)
                                             }}
                                         >
                                             <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
@@ -2508,11 +2641,11 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                             <Input
                                                 value={item.event_name}
                                                 onChange={(event) => {
-                                                    const next = [...eventMapping]
+                                                    const next = [...outboundForm.eventMapping]
                                                     const existing = next[index]
                                                     if (!existing) return
                                                     next[index] = { ...existing, event_name: event.target.value }
-                                                    setEventMapping(next)
+                                                    updateOutboundForm("eventMapping", next)
                                                 }}
                                                 placeholder="Event name"
                                                 name={`zapier-event-${item.stage_key}`}
@@ -2523,11 +2656,11 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                             <Switch
                                                 checked={item.enabled}
                                                 onCheckedChange={(checked) => {
-                                                    const next = [...eventMapping]
+                                                    const next = [...outboundForm.eventMapping]
                                                     const existing = next[index]
                                                     if (!existing) return
                                                     next[index] = { ...existing, enabled: checked }
-                                                    setEventMapping(next)
+                                                    updateOutboundForm("eventMapping", next)
                                                 }}
                                                 aria-label={`Enable ${item.stage_key} event`}
                                             />
@@ -2566,8 +2699,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 </div>
                                 <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
                                 <Select
-                                    value={selectedOutboundStage}
-                                    onValueChange={(value) => setSelectedOutboundStage(value ?? '')}
+                                    value={outboundForm.selectedOutboundStage}
+                                    onValueChange={(value) => updateOutboundForm("selectedOutboundStage", value ?? '')}
                                 >
                                     <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select stage">
                                         <SelectValue placeholder="Select stage">
@@ -2575,7 +2708,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                         </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {eventMapping.map((item) => (
+                                        {outboundForm.eventMapping.map((item) => (
                                             <SelectItem key={item.stage_key} value={item.stage_key}>
                                                 {getStageKeyLabel(item.stage_key)}
                                             </SelectItem>
@@ -2585,7 +2718,7 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                                 <Button
                                     variant="outline"
                                     onClick={handleOutboundTest}
-                                    disabled={sendOutboundTest.isPending || !outboundEnabled}
+                                    disabled={sendOutboundTest.isPending || !outboundForm.outboundEnabled}
                                     className={isDialog ? "w-full" : undefined}
                                 >
                                     {sendOutboundTest.isPending ? (
@@ -3734,10 +3867,7 @@ export default function IntegrationsPage() {
     const zapierConfigured = inboundWebhooks.some((hook) => hook.secret_configured) || Boolean(zapierSettings?.secret_configured)
     const zapierActive = inboundWebhooks.some((hook) => hook.is_active) || Boolean(zapierSettings?.is_active)
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
-    const mergedZapierEventMapping = useMemo(
-        () => mergeEventMappingWithPipelineStages(zapierSettings?.event_mapping, pipelines),
-        [zapierSettings?.event_mapping, pipelines],
-    )
+    const mergedZapierEventMapping = mergeEventMappingWithPipelineStages(zapierSettings?.event_mapping, pipelines)
     const zapierMappingHealth = getZapierMappingHealth(
         mergedZapierEventMapping,
         recommendedBucketByStage,

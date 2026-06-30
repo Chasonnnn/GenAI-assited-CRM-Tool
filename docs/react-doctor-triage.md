@@ -387,3 +387,25 @@ Full command after Batch 17: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1183`
 - Summary: `Security 2 warnings`, `Bugs 9 errors + 231 warnings`, `Performance 57 errors + 34 warnings`, `Accessibility 46 warnings`, `Maintainability 804 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-46cddc3e-cbdc-4176-b3f9-c00b63f174cc`
+
+## Batch 18
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `app/(app)/settings/integrations/page.tsx` | Valid: the Zapier section copied inbound labels/secrets, field-paste webhook selection, outbound settings, stage mapping, and default test form id into local state through effects. | High | Replace effect-driven resets with keyed inbound/outbound draft state and derive active webhook/form defaults during render. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/integrations-page.test.tsx`; full `pnpm test --run` passed; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `app/(app)/settings/integrations/page.tsx` | Valid: inbound webhook rotate/delete handlers used `finally`, which blocks React Compiler optimization. | High | Replace finalizers with explicit success/error cleanup for rotating/deleting ids. | Focused tests and changed-scope React Doctor no longer report compiler errors. |
+| `react-doctor/role-supports-aria-props` / `react-doctor/prefer-tag-over-role` / `react-doctor/prefer-module-scope-pure-function` / `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/integrations/page.tsx` | Valid: the webhook URL display used textbox ARIA on a non-input, copy/error helpers were rebuilt inside components, and a Zapier mapping value was manually memoized. | High | Remove unsupported textbox role/ARIA, move helper functions to module scope, and derive merged Zapier mapping directly. | Focused tests and changed-scope React Doctor no longer report these warnings. |
+
+Changed-scope command after Batch 18: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `8`
+- Remaining changed-file warnings: `no-giant-component` for several integrations sections and `prefer-useReducer` for `ZapierWebhookSection`; valid but larger structural refactors than this error-cleanup batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-13fb630a-7549-4643-81f7-e82eb49047c6`
+
+Full command after Batch 18: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `54 / 100 Critical`
+- Total diagnostics: `1166`
+- Summary: `Security 2 warnings`, `Bugs 9 errors + 226 warnings`, `Performance 51 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 800 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8373784c-a1e6-4128-85b2-1663d9c74922`

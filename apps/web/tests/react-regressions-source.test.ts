@@ -1289,6 +1289,27 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("New Webhook Secret (copy now — shown once):")
     })
 
+    it("keeps Zapier integration drafts compiler-friendly", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+
+        expect(source).toContain("type ZapierWebhookDraftState")
+        expect(source).toContain("function createZapierWebhookDraftState")
+        expect(source).toContain("type ZapierOutboundDraftState")
+        expect(source).toContain("function createZapierOutboundDraftState")
+        expect(source).toContain("function getErrorMessage")
+        expect(source).toContain("function copyToClipboard")
+        expect(source).toContain("const activeFieldPasteWebhookId =")
+        expect(source).toContain("const activeTestFormId =")
+        expect(source).not.toContain("setLabelDrafts(drafts)")
+        expect(source).not.toContain("setWebhookSecrets((prev) => {\n            const next: Record<string, string> = {}")
+        expect(source).not.toContain("setFieldPasteWebhookId('')")
+        expect(source).not.toContain("setOutboundUrl(settings.outbound_webhook_url || '')")
+        expect(source).not.toContain("setTestFormId(nextFormId)")
+        expect(source).not.toContain('role="textbox"')
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("finally")
+    })
+
     it("uses gap spacing for report summary card headers", () => {
         const source = readSource("app/(app)/reports/page.tsx")
 
