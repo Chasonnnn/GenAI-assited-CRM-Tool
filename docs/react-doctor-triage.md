@@ -959,3 +959,24 @@ Full command after Batch 46: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1010`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 193 warnings`, `Performance 6 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 726 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ee46da21-c078-4d88-bae2-c1777ee2a8d0`
+
+## Batch 47
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/ops/templates/workflows/[id]/page.client.tsx` | Valid: workflow save and publish used `try/finally` finalizers only to clear saving/publishing state, which blocks the current React Compiler path. | High | Replace both finalizers with typed result branches, preserve validation short-circuits, success toasts, failure toasts, publish dialog close behavior, and published-state updates. Added a source guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; full React Doctor finalizer errors dropped from `2` to `0`. |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/prefer-module-scope-pure-function`, `react-doctor/no-many-boolean-props` | `app/ops/templates/workflows/[id]/page.client.tsx` | Valid but deferred: the workflow editor still has memoized trigger helpers/options, a render-local validation helper, and a boolean-heavy header API. | Medium | Logged for a later workflow-editor cleanup because those changes touch hook dependency behavior and component API shape beyond the save/publish finalizer fix. | Changed-scope React Doctor reports only these workflow-editor warnings after the finalizer fix. |
+
+Changed-scope command after Batch 47: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `13`
+- Summary: `Maintainability 13 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9dd9770b-62de-42d7-9c3c-555e96b48fe0`
+
+Full command after Batch 47: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `58 / 100 Critical`
+- Total diagnostics: `1008`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 193 warnings`, `Performance 4 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 726 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f3ac4b77-1493-42f3-9d03-e0dd6a574e98`

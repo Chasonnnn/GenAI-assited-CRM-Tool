@@ -97,6 +97,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/actions\.map\(\(action, index\) => \(\s*<Card key=\{`action-\$\{index\}`\}>/m)
     })
 
+    it("keeps platform workflow save and publish compiler-compatible", () => {
+        const source = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+
+        expect(source).not.toContain("finally")
+        expect(source).toContain('toast.success("Template saved")')
+        expect(source).toContain('toast.success("Template published")')
+    })
+
     it("does not suppress exhaustive deps in MassEditStageModal and handles late stage load", () => {
         const source = readSource("components/surrogates/MassEditStageModal.tsx")
 

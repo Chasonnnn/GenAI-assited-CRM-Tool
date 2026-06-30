@@ -2374,15 +2374,22 @@ function useWorkflowTemplatePageState() {
             return
         }
         setIsSaving(true)
-        try {
-            const saved = await persistTemplate()
+        const result = await persistTemplate().then((saved) => ({
+            status: "success" as const,
+            saved,
+        })).catch((err: unknown) => ({
+            status: "error" as const,
+            message: err instanceof Error ? err.message : "Failed to save template",
+        }))
+
+        if (result.status === "success") {
+            const saved = result.saved
             setIsPublished((saved.published_version ?? 0) > 0)
             toast.success("Template saved")
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to save template")
-        } finally {
-            setIsSaving(false)
+        } else {
+            toast.error(result.message)
         }
+        setIsSaving(false)
     }
 
     const handlePublish = () => {
@@ -2396,23 +2403,29 @@ function useWorkflowTemplatePageState() {
 
     const confirmPublish = async (publishAll: boolean, orgIds: string[]) => {
         setIsPublishing(true)
-        try {
-            const saved = await persistTemplate()
-            await publishTemplate.mutateAsync({
+        const result = await persistTemplate().then((saved) =>
+            publishTemplate.mutateAsync({
                 id: saved.id,
                 payload: {
                     publish_all: publishAll,
                     org_ids: publishAll ? null : orgIds,
                 },
-            })
+            }).then(() => ({
+                status: "success" as const,
+            }))
+        ).catch((err: unknown) => ({
+            status: "error" as const,
+            message: err instanceof Error ? err.message : "Failed to publish template",
+        }))
+
+        if (result.status === "success") {
             setIsPublished(true)
             setShowPublishDialog(false)
             toast.success("Template published")
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to publish template")
-        } finally {
-            setIsPublishing(false)
+        } else {
+            toast.error(result.message)
         }
+        setIsPublishing(false)
     }
 
     const handleDelete = async () => {
