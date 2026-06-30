@@ -279,3 +279,24 @@ Full command after Batch 12: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1246`
 - Summary: `Security 2 warnings`, `Bugs 22 errors + 254 warnings`, `Performance 82 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8574ec44-b8a2-41ef-bb4c-055b80d22701`
+
+## Batch 13
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `app/embed/forms/[slug]/page.client.tsx` | Valid: the embedded form copied the initial parent origin into state through an effect, then cleared session state through another effect when slug/origin changed. | High | Initialize origin/loading/error as one bootstrap state object and key the active embed session by `slug + origin`, so stale tokens are ignored without effect-driven resets. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/forms-embed.test.tsx tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `app/embed/forms/[slug]/page.client.tsx` | Valid: session creation, form loading, and submit handlers used `finally`, which blocks React Compiler optimization. | High | Replace finalizers with explicit cleanup after success/error handling while preserving duplicate-session guards and submit re-enable behavior. | Focused tests passed; changed-scope React Doctor no longer reports compiler errors for this file. |
+
+Changed-scope command after Batch 13: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `5`
+- Remaining changed-file warnings: `react-doctor/react-compiler-no-manual-memoization` and `react-doctor/prefer-useReducer` for `EmbedFormPageClient`; both are valid but larger cleanup than this 8-error batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-be34c1b5-456c-4b15-a882-dbe68339ee0f`
+
+Full command after Batch 13: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `35 / 100 Critical`
+- Total diagnostics: `1234`
+- Summary: `Security 2 warnings`, `Bugs 19 errors + 250 warnings`, `Performance 77 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-741f62a4-3228-4c53-ad58-a41c66cebf69`

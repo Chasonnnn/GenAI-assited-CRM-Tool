@@ -27,6 +27,15 @@ type Props = {
 type Answers = Record<string, PublicFormAnswerValue>
 type ParentMessage =
     | { type: string; attribution?: Record<string, unknown> }
+type EmbedBootstrapState = {
+    parentOrigin: string | null
+    isLoading: boolean
+    error: string | null
+}
+type EmbedSessionState = {
+    key: string
+    token: string
+}
 
 const pageClassName = "public-form-light min-h-screen bg-transparent text-stone-900"
 const ALLOWED_ATTRIBUTION_KEYS = new Set([
@@ -57,6 +66,19 @@ function getInitialParentOrigin(): string | null {
         }
     }
     return null
+}
+
+function createEmbedBootstrapState(initialParentOrigin: string | null | undefined): EmbedBootstrapState {
+    const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
+    return {
+        parentOrigin,
+        isLoading: Boolean(parentOrigin),
+        error: parentOrigin ? null : "This form is not available for this website.",
+    }
+}
+
+function getEmbedSessionKey(slug: string, origin: string): string {
+    return `${slug}\u0000${origin}`
 }
 
 function buildIdempotencyKey(): string {
@@ -112,19 +134,22 @@ function asJsonObject(answers: Answers): JsonObject {
 
 export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props) {
     const containerRef = React.useRef<HTMLDivElement | null>(null)
-    const sessionTokenRef = React.useRef<string | null>(null)
-    const sessionRequestRef = React.useRef<Promise<void> | null>(null)
-    const [parentOrigin, setParentOrigin] = React.useState<string | null>(
-        () => initialParentOrigin ?? getInitialParentOrigin(),
+    const sessionStateRef = React.useRef<EmbedSessionState | null>(null)
+    const sessionRequestKeyRef = React.useRef<string | null>(null)
+    const [bootstrapState] = React.useState<EmbedBootstrapState>(() =>
+        createEmbedBootstrapState(initialParentOrigin),
     )
+    const parentOrigin = bootstrapState.parentOrigin
     const [formConfig, setFormConfig] = React.useState<FormEmbedPublicRead | null>(null)
-    const [sessionToken, setSessionToken] = React.useState<string | null>(null)
+    const [sessionState, setSessionState] = React.useState<EmbedSessionState | null>(null)
     const [answers, setAnswers] = React.useState<Answers>({})
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
-    const [isLoading, setIsLoading] = React.useState(true)
+    const [isLoading, setIsLoading] = React.useState(bootstrapState.isLoading)
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const [isSubmitted, setIsSubmitted] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
+    const [error, setError] = React.useState<string | null>(bootstrapState.error)
+    const activeSessionKey = parentOrigin ? getEmbedSessionKey(slug, parentOrigin) : null
+    const sessionToken = sessionState?.key === activeSessionKey ? sessionState.token : null
 
     const postToParent = React.useCallback(
         (message: Record<string, unknown>) => {
@@ -134,36 +159,27 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
         [parentOrigin],
     )
 
-    React.useEffect(() => {
-        const initialOrigin = initialParentOrigin ?? getInitialParentOrigin()
-        setParentOrigin(initialOrigin)
-        if (!initialOrigin) {
-            setError("This form is not available for this website.")
-            setIsLoading(false)
-        }
-    }, [initialParentOrigin])
-
-    React.useEffect(() => {
-        sessionTokenRef.current = null
-        sessionRequestRef.current = null
-        setSessionToken(null)
-    }, [parentOrigin, slug])
-
     const ensureSession = React.useCallback(
         (origin: string, attribution: Record<string, unknown>) => {
-            if (sessionTokenRef.current || sessionRequestRef.current) return
-            const request = (async () => {
+            const sessionKey = getEmbedSessionKey(slug, origin)
+            if (sessionStateRef.current?.key === sessionKey || sessionRequestKeyRef.current === sessionKey) return
+            sessionRequestKeyRef.current = sessionKey
+            void (async () => {
                 try {
                     const session = await createEmbedFormSession(slug, origin, attribution)
-                    sessionTokenRef.current = session.session_token
-                    setSessionToken(session.session_token)
+                    const nextSession = {
+                        key: sessionKey,
+                        token: session.session_token,
+                    }
+                    sessionStateRef.current = nextSession
+                    setSessionState(nextSession)
                 } catch {
                     setError("This form is not available for this website.")
-                } finally {
-                    sessionRequestRef.current = null
+                }
+                if (sessionRequestKeyRef.current === sessionKey) {
+                    sessionRequestKeyRef.current = null
                 }
             })()
-            sessionRequestRef.current = request
         },
         [slug],
     )
@@ -177,9 +193,8 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                 setError(null)
             } catch {
                 setError("This form is not available for this website.")
-            } finally {
-                setIsLoading(false)
             }
+            setIsLoading(false)
         }
         void loadForm()
     }, [parentOrigin, slug])
@@ -284,9 +299,8 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
         } catch {
             setError("Unable to submit the form. Please try again.")
             postToParent({ type: "sf:form:error", reason: "submit" })
-        } finally {
-            setIsSubmitting(false)
         }
+        setIsSubmitting(false)
     }
 
     return (

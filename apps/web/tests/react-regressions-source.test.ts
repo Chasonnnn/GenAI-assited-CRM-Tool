@@ -899,6 +899,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/visibleFields\s*\.filter\(\(field\) => field\.type !== "file"\)\s*\.map/)
     })
 
+    it("keeps public embed origin and session state compiler-friendly", () => {
+        const source = readSource("app/embed/forms/[slug]/page.client.tsx")
+
+        expect(source).toContain("type EmbedBootstrapState")
+        expect(source).toContain("type EmbedSessionState")
+        expect(source).not.toContain("setParentOrigin")
+        expect(source).not.toContain("setSessionToken")
+        expect(source).not.toContain("sessionTokenRef")
+        expect(source).not.toContain("finally")
+    })
+
     it("batches independent profile hidden-field saves", () => {
         const source = readSource("components/surrogates/profile/ProfileCard/context.tsx")
 
