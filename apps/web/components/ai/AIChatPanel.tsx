@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -56,6 +56,64 @@ interface PanelMessage {
     status?: "thinking" | "streaming" | "done" | "error"
 }
 
+type PanelContext = {
+    entityId: string | null
+    entityType: "surrogate" | "task" | null
+}
+
+type ConversationMessage = Omit<PanelMessage, "status"> & {
+    status?: PanelMessage["status"]
+}
+
+type PanelMessageState = {
+    conversationKey: string
+    conversationMessages: readonly ConversationMessage[] | undefined
+    messages: PanelMessage[]
+}
+
+type MutableRef<T> = {
+    current: T
+}
+
+function createConversationKey(
+    context: PanelContext,
+    conversationId: string | undefined,
+    conversationMessages: readonly ConversationMessage[] | undefined
+) {
+    const scope = `${context.entityType ?? "global"}:${context.entityId ?? "global"}`
+    const messagesFingerprint = conversationMessages?.map((msg) => {
+        const approvals = msg.action_approvals?.map((approval) => `${approval.action_index}:${approval.status}`).join(",") ?? ""
+        return `${msg.id}:${msg.role}:${msg.content.length}:${msg.proposed_actions?.length ?? 0}:${approvals}`
+    }).join("|") ?? "empty"
+
+    return `${scope}:${conversationId ?? "pending"}:${messagesFingerprint}`
+}
+
+function createPanelMessageState(
+    conversationKey: string,
+    conversationMessages: readonly ConversationMessage[] | undefined
+): PanelMessageState {
+    return {
+        conversationKey,
+        conversationMessages,
+        messages: conversationMessages?.map((msg) => ({
+            ...msg,
+            status: "done" as const,
+        })) ?? [],
+    }
+}
+
+function abortActiveStream(streamAbortRef: MutableRef<AbortController | null>) {
+    streamAbortRef.current?.abort()
+}
+
+function cancelAutoScrollFrame(autoScrollFrameRef: MutableRef<number | null>) {
+    if (typeof window === "undefined") return
+    if (autoScrollFrameRef.current === null) return
+    window.cancelAnimationFrame(autoScrollFrameRef.current)
+    autoScrollFrameRef.current = null
+}
+
 // Action type icons
 const ACTION_ICONS: Record<string, React.ReactNode> = {
     send_email: <MailIcon className="size-4" />,
@@ -80,7 +138,6 @@ export function AIChatPanel({
     onClose,
 }: AIChatPanelProps) {
     const [message, setMessage] = useState("")
-    const [messages, setMessages] = useState<PanelMessage[]>([])
     const [isStreaming, setIsStreaming] = useState(false)
     const [scheduleParserOpen, setScheduleParserOpen] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
@@ -90,32 +147,60 @@ export function AIChatPanel({
     const stopRequestedRef = useRef(false)
     const autoScrollFrameRef = useRef<number | null>(null)
     const shouldStickToBottomRef = useRef(true)
-    const prevContextRef = useRef<{ entityId: string | null; entityType: "surrogate" | "task" | null }>({
+    const currentContext = {
         entityId: entityId ?? null,
         entityType: entityType ?? null,
-    })
+    }
+    const [trackedContext, setTrackedContext] = useState<PanelContext>(() => currentContext)
 
     // Hooks
     const { data: conversation, isLoading: loadingConversation } = useConversation(entityType, entityId)
     const streamMessage = useStreamChatMessage()
     const approveAction = useApproveAction()
     const rejectAction = useRejectAction()
+    const conversationMessages = conversation?.messages
+    const conversationKey = createConversationKey(currentContext, conversation?.conversation_id, conversationMessages)
+    const [messageState, setMessageState] = useState<PanelMessageState>(() =>
+        createPanelMessageState(conversationKey, conversationMessages)
+    )
+    const contextChanged =
+        trackedContext.entityId !== currentContext.entityId || trackedContext.entityType !== currentContext.entityType
+
+    if (contextChanged) {
+        setTrackedContext(currentContext)
+        if (isStreaming) {
+            setIsStreaming(false)
+        }
+    }
+
+    const streamVisible = isStreaming && !contextChanged
+    const hasCurrentMessageState =
+        messageState.conversationKey === conversationKey && messageState.conversationMessages === conversationMessages
+    const derivedMessageState = hasCurrentMessageState
+        ? messageState
+        : createPanelMessageState(conversationKey, conversationMessages)
+
+    if (!streamVisible && !hasCurrentMessageState) {
+        setMessageState(derivedMessageState)
+    }
+
+    const messages = streamVisible || hasCurrentMessageState ? messageState.messages : derivedMessageState.messages
+
+    const updateMessages = (updater: (currentMessages: PanelMessage[]) => PanelMessage[]) => {
+        setMessageState((currentState) => {
+            const baseState = currentState.conversationKey === conversationKey
+                ? currentState
+                : createPanelMessageState(conversationKey, conversationMessages)
+
+            return {
+                ...baseState,
+                messages: updater(baseState.messages),
+            }
+        })
+    }
 
     useEffect(() => {
-        if (isStreaming) return
-        if (!conversation?.messages) {
-            setMessages([])
-            return
-        }
-        setMessages(
-            conversation.messages.map((msg) => ({
-                ...msg,
-                status: "done" as const,
-            }))
-        )
-    }, [conversation?.messages, isStreaming])
-
-    const scheduleScrollToBottom = useCallback(() => {
+        if (!shouldStickToBottomRef.current) return
         if (typeof window === "undefined") return
         if (autoScrollFrameRef.current !== null) {
             window.cancelAnimationFrame(autoScrollFrameRef.current)
@@ -126,12 +211,15 @@ export function AIChatPanel({
             if (!container) return
             container.scrollTop = container.scrollHeight
         })
-    }, [])
+    }, [messages])
 
     useEffect(() => {
-        if (!shouldStickToBottomRef.current) return
-        scheduleScrollToBottom()
-    }, [messages, scheduleScrollToBottom])
+        shouldStickToBottomRef.current = true
+        abortActiveStream(streamAbortRef)
+        streamAbortRef.current = null
+        streamingMessageIdRef.current = null
+        stopRequestedRef.current = false
+    }, [currentContext.entityId, currentContext.entityType])
 
     // Focus input on mount
     useEffect(() => {
@@ -140,50 +228,32 @@ export function AIChatPanel({
 
     useEffect(() => {
         return () => {
-            streamAbortRef.current?.abort()
-            if (autoScrollFrameRef.current !== null) {
-                window.cancelAnimationFrame(autoScrollFrameRef.current)
-            }
+            abortActiveStream(streamAbortRef)
+            cancelAutoScrollFrame(autoScrollFrameRef)
         }
-    }, [])
+    }, [autoScrollFrameRef, streamAbortRef])
 
-    useEffect(() => {
-        const prev = prevContextRef.current
-        const currentEntityId = entityId ?? null
-        const currentEntityType = entityType ?? null
-        const contextChanged = prev.entityId !== currentEntityId || prev.entityType !== currentEntityType
-        prevContextRef.current = { entityId: currentEntityId, entityType: currentEntityType }
-        if (contextChanged) {
-            shouldStickToBottomRef.current = true
-        }
-        if (!contextChanged || !isStreaming) return
-        streamAbortRef.current?.abort()
-        setIsStreaming(false)
-        streamingMessageIdRef.current = null
-        stopRequestedRef.current = false
-    }, [entityId, entityType, isStreaming])
+    const updateMessageById = (id: string, updater: (msg: PanelMessage) => PanelMessage) => {
+        updateMessages((currentMessages) => currentMessages.map((msg) => (msg.id === id ? updater(msg) : msg)))
+    }
 
-    const updateMessageById = useCallback((id: string, updater: (msg: PanelMessage) => PanelMessage) => {
-        setMessages((prev) => prev.map((msg) => (msg.id === id ? updater(msg) : msg)))
-    }, [])
-
-    const setAssistantError = useCallback((assistantId: string, errorText: string) => {
+    const setAssistantError = (assistantId: string, errorText: string) => {
         updateMessageById(assistantId, (msg) => ({
             ...msg,
             content: errorText,
             status: "error",
         }))
-    }, [updateMessageById])
+    }
 
-    const handleScroll = useCallback(() => {
+    const handleScroll = () => {
         const container = scrollRef.current
         if (!container) return
         shouldStickToBottomRef.current = isNearBottom(container)
-    }, [])
+    }
 
     const handleSend = async () => {
         const trimmedMessage = message.trim()
-        if (!trimmedMessage || isStreaming) return
+        if (!trimmedMessage || streamVisible) return
 
         const userMessage: PanelMessage = {
             id: `user-${Date.now()}`,
@@ -200,10 +270,10 @@ export function AIChatPanel({
         }
 
         shouldStickToBottomRef.current = true
-        setMessages((prev) => [...prev, userMessage, assistantMessage])
+        updateMessages((currentMessages) => [...currentMessages, userMessage, assistantMessage])
         setMessage("")
 
-        streamAbortRef.current?.abort()
+        abortActiveStream(streamAbortRef)
         stopRequestedRef.current = false
         const controller = new AbortController()
         streamAbortRef.current = controller
@@ -260,24 +330,25 @@ export function AIChatPanel({
                     }))
                 }
                 stopRequestedRef.current = false
-                return
+            } else {
+                setAssistantError(
+                    assistantId,
+                    `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+                )
             }
-            setAssistantError(
-                assistantId,
-                `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
-            )
-        } finally {
-            setIsStreaming(false)
-            streamingMessageIdRef.current = null
         }
+
+        setIsStreaming(false)
+        streamingMessageIdRef.current = null
+        streamAbortRef.current = null
     }
 
-    const handleStop = useCallback(() => {
-        if (!isStreaming) return
+    const handleStop = () => {
+        if (!streamVisible) return
         stopRequestedRef.current = true
-        streamAbortRef.current?.abort()
+        abortActiveStream(streamAbortRef)
         setIsStreaming(false)
-    }, [isStreaming])
+    }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -408,26 +479,26 @@ export function AIChatPanel({
                 <div className="flex flex-wrap gap-2">
                     <QuickActionButton
                         onClick={() => setMessage("Summarize this surrogate")}
-                        disabled={isStreaming}
+                        disabled={streamVisible}
                     >
                         Summarize
                     </QuickActionButton>
                     <QuickActionButton
                         onClick={() => setMessage("What should I do next?")}
-                        disabled={isStreaming}
+                        disabled={streamVisible}
                     >
                         Next Steps
                     </QuickActionButton>
                     <QuickActionButton
                         onClick={() => setMessage("Draft a follow-up email")}
-                        disabled={isStreaming}
+                        disabled={streamVisible}
                     >
                         Draft Email
                     </QuickActionButton>
                     {entityType === "surrogate" && entityId && (
                         <QuickActionButton
                             onClick={() => setScheduleParserOpen(true)}
-                            disabled={isStreaming}
+                            disabled={streamVisible}
                         >
                             <CalendarPlusIcon className="mr-1 size-3" />
                             Parse Schedule
@@ -445,10 +516,10 @@ export function AIChatPanel({
                         onChange={(e) => setMessage(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="Ask anything"
-                        disabled={isStreaming}
+                        disabled={streamVisible}
                         className="flex-1"
                     />
-                    {isStreaming ? (
+                    {streamVisible ? (
                         <Button
                             onClick={handleStop}
                             size="icon"

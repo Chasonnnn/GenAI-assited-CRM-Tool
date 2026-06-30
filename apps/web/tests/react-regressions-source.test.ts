@@ -1310,6 +1310,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps AI chat message state compiler-friendly", () => {
+        const source = readSource("components/ai/AIChatPanel.tsx")
+
+        expect(source).toContain("type PanelMessageState")
+        expect(source).toContain("function createConversationKey")
+        expect(source).toContain("function createPanelMessageState")
+        expect(source).toContain("const currentContext =")
+        expect(source).not.toContain("const [messages, setMessages]")
+        expect(source).not.toContain("setMessages(")
+        expect(source).not.toContain("useEffect(() => {\n        if (isStreaming) return")
+        expect(source).not.toContain("prevContextRef")
+        expect(source).not.toContain("useEffect(() => {\n        const prev =")
+        expect(source).not.toContain("finally")
+    })
+
     it("uses gap spacing for report summary card headers", () => {
         const source = readSource("app/(app)/reports/page.tsx")
 
