@@ -714,3 +714,22 @@ Full command after Batch 34: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1082`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 25 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 769 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bbb927ed-b5ce-40e4-85e9-2f95ca4bb331`
+
+## Batch 35
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/intended-parents/TrustInfoCard.tsx` | Valid: the trust address and trust notes save handlers used `try/finally` only to clear saving state, which blocks the current React Compiler path. | High | Replace both finalizers with explicit promise-result branches and clear `isSaving` after success or failure handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/intended-parent-detail.test.tsx`; changed-scope React Doctor reported no issues after also addressing touched-file button semantics. |
+| `react-doctor/prefer-tag-over-role` | `components/intended-parents/TrustInfoCard.tsx` | Valid: the trust address and notes edit affordances were clickable `div` elements with `role="button"`, but native buttons provide the intended interaction semantics. | High | Convert both affordances to `button type="button"` and remove custom keyboard handling. Extended the source guard to fail on reintroduced `role="button"`. | Focused tests passed; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 35: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 35: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1078`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 23 errors + 34 warnings`, `Accessibility 42 warnings`, `Maintainability 769 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-33d06a75-09d8-464b-9a4f-8aabd2a08324`

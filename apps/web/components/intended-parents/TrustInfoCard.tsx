@@ -144,31 +144,29 @@ function TrustAddressField({
         }
 
         setIsSaving(true)
-        try {
-            await onUpdate(payload)
+        const result = await onUpdate(payload).then(() => ({
+            status: "success" as const,
+        })).catch((err: unknown) => ({
+            status: "error" as const,
+            error: err instanceof Error ? err.message : "Failed to save address",
+        }))
+
+        if (result.status === "success") {
             setError(null)
             setIsEditing(false)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save address")
-        } finally {
-            setIsSaving(false)
+        } else {
+            setError(result.error)
         }
+        setIsSaving(false)
     }
 
     if (!isEditing) {
         return (
-            <div
-                className="group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            <button
+                type="button"
+                className="group flex items-center gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={openAddressEditor}
-                role="button"
-                tabIndex={0}
                 aria-label="Edit Trust address"
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-                        event.preventDefault()
-                        openAddressEditor()
-                    }
-                }}
             >
                 <span className={`text-sm ${addressSummary ? "font-medium" : "text-muted-foreground"}`}>
                     {addressSummary || "Not provided"}
@@ -177,7 +175,7 @@ function TrustAddressField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 
@@ -314,31 +312,29 @@ function TrustNotesField({
         }
 
         setIsSaving(true)
-        try {
-            await onSave(nextValue)
+        const result = await onSave(nextValue).then(() => ({
+            status: "success" as const,
+        })).catch((err: unknown) => ({
+            status: "error" as const,
+            error: err instanceof Error ? err.message : "Failed to save notes",
+        }))
+
+        if (result.status === "success") {
             setError(null)
             setIsEditing(false)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save notes")
-        } finally {
-            setIsSaving(false)
+        } else {
+            setError(result.error)
         }
+        setIsSaving(false)
     }
 
     if (!isEditing) {
         return (
-            <div
-                className="group flex items-start gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            <button
+                type="button"
+                className="group flex items-start gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={openNotesEditor}
-                role="button"
-                tabIndex={0}
                 aria-label="Edit Trust notes"
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-                        event.preventDefault()
-                        openNotesEditor()
-                    }
-                }}
             >
                 <span className={`text-sm whitespace-pre-wrap ${value ? "font-medium" : "text-muted-foreground"}`}>
                     {value || "Not provided"}
@@ -347,7 +343,7 @@ function TrustNotesField({
                     className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 

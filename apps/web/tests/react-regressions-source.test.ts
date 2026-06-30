@@ -1536,6 +1536,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const openNotesEditor = () => {")
         expect(source).not.toContain("React.useEffect(() => {\n        setDraft(buildAddressDraft(intendedParent))")
         expect(source).not.toContain("React.useEffect(() => {\n        setDraft(value ?? \"\")")
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("finally")
     })
 
     it("resets surrogate edit select state by remounting dialog content", () => {
