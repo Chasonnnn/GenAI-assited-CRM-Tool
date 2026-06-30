@@ -471,3 +471,23 @@ Full command after Batch 21: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1124`
 - Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 43 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 775 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b251672-af4f-4d35-9a01-1e9241a83852`
+
+## Batch 22
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/ui/calendar.tsx` | Valid: the RTL class names used `String.raw` tagged templates to preserve escaped Tailwind arbitrary selector underscores. React Compiler cannot lower that tagged template shape even though the value is static. | High | Replace the tagged templates with regular escaped string literals and add a source regression guard so the compiler-hostile form does not return. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports compiler errors for the file. |
+
+Changed-scope command after Batch 22: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining changed-file warning: `no-event-handler` for `components/ui/calendar.tsx`; valid but separate from the compiler syntax fix.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ec31bfd3-7e3b-4251-9f8e-206607433e60`
+
+Full command after Batch 22: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1122`
+- Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 41 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 775 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8941d365-9539-4666-88df-643512547bd0`

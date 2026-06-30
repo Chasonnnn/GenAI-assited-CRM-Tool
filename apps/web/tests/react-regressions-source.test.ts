@@ -135,6 +135,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("defaultMonth={draftDate || new Date()}")
     })
 
+    it("keeps calendar RTL class names compiler-friendly", () => {
+        const source = readSource("components/ui/calendar.tsx")
+
+        expect(source).toContain('"rtl:**:[.rdp-button\\\\_next>svg]:rotate-180"')
+        expect(source).toContain('"rtl:**:[.rdp-button\\\\_previous>svg]:rotate-180"')
+        expect(source).not.toContain("String.raw`rtl:**:[.rdp-button\\_")
+    })
+
     it("keeps ThemeToggle out of document-driven view transitions", () => {
         const source = readSource("components/theme-toggle.tsx")
 
