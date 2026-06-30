@@ -66,25 +66,27 @@ export default function WelcomePage() {
 
     const onSubmit = async (data: WelcomeFormData) => {
         setIsSubmitting(true)
-        try {
-            await api.patch("/auth/me", {
-                display_name: data.display_name,
-                title: data.title,
-                phone: data.phone || null,
-            })
-
-            // Refetch user data to update profile_complete
+        const result = await api.patch("/auth/me", {
+            display_name: data.display_name,
+            title: data.title,
+            phone: data.phone || null,
+        }).then(async () => {
             await refetch()
+            return { status: "success" as const }
+        }).catch((error: unknown) => ({
+            status: "error" as const,
+            error,
+        }))
 
+        if (result.status === "success") {
             toast.success("Profile completed successfully!")
             push("/dashboard")
-        } catch (error) {
+        } else {
             toast.error(
-                error instanceof Error ? error.message : "Failed to update profile"
+                result.error instanceof Error ? result.error.message : "Failed to update profile"
             )
-        } finally {
-            setIsSubmitting(false)
         }
+        setIsSubmitting(false)
     }
 
     useEffect(() => {

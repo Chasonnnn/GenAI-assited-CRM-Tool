@@ -1636,6 +1636,7 @@ describe("React regression guards (source)", () => {
         expect(ticketDetailSource).toContain("'Sending…'")
         expect(tasksListSource).toContain("Completing…")
         expect(publishDialogSource).toContain("Loading organizations…")
+        expect(welcomeSource).not.toContain("finally")
         expect(welcomeSource).not.toContain("Saving...")
         expect(ticketDetailSource).not.toContain("Loading ticket...")
         expect(ticketDetailSource).not.toContain("'Saving...'")

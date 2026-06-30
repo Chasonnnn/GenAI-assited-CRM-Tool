@@ -658,3 +658,21 @@ Full command after Batch 31: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1089`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 30 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 771 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e7e5d44d-f415-4ea5-9fc3-3087def7efbd`
+
+## Batch 32
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/welcome/page.tsx` | Valid: the profile completion submit handler used a `try/finally` finalizer only to clear submitting state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch and clear `isSubmitting` after success or failure handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/welcome-page.test.tsx`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 32: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 32: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1088`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 29 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 771 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e52fa172-20a9-4867-87ce-fcb04f959aa8`
