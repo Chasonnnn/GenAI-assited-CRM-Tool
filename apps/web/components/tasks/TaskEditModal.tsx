@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, type FormEvent } from "react"
 import {
     Dialog,
     DialogContent,
@@ -56,6 +56,15 @@ interface TaskEditModalProps {
     isDeleting?: boolean
 }
 
+type TaskEditDraft = {
+    taskId: string | null
+    title: string
+    description: string
+    taskType: string
+    dueDate: Date | undefined
+    dueTime: string
+}
+
 const TASK_TYPES = [
     { value: "meeting", label: "Meeting" },
     { value: "follow_up", label: "Follow Up" },
@@ -67,6 +76,27 @@ const TASK_TYPES = [
     { value: "other", label: "Other" },
 ]
 
+function createTaskEditDraft(task: Task | null): TaskEditDraft {
+    if (!task) {
+        return {
+            taskId: null,
+            title: "",
+            description: "",
+            taskType: "other",
+            dueDate: undefined,
+            dueTime: "",
+        }
+    }
+    return {
+        taskId: task.id,
+        title: task.title,
+        description: task.description || "",
+        taskType: task.task_type,
+        dueDate: task.due_date ? parseISO(task.due_date) : undefined,
+        dueTime: task.due_time?.slice(0, 5) || "",
+    }
+}
+
 export function TaskEditModal({
     task,
     open,
@@ -75,51 +105,39 @@ export function TaskEditModal({
     onDelete,
     isDeleting = false,
 }: TaskEditModalProps) {
-    const [title, setTitle] = useState("")
-    const [description, setDescription] = useState("")
-    const [taskType, setTaskType] = useState("other")
-    const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
-    const [dueTime, setDueTime] = useState("")
+    const activeTaskId = task?.id ?? null
+    const [draft, setDraft] = useState<TaskEditDraft>(() => createTaskEditDraft(task))
     const [isSaving, setIsSaving] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
-    // Populate form when task changes
-    useEffect(() => {
-        if (task) {
-            setTitle(task.title)
-            setDescription(task.description || "")
-            setTaskType(task.task_type)
-            setDueDate(task.due_date ? parseISO(task.due_date) : undefined)
-            setDueTime(task.due_time?.slice(0, 5) || "") // HH:MM format
-        } else {
-            // Reset form
-            setTitle("")
-            setDescription("")
-            setTaskType("other")
-            setDueDate(undefined)
-            setDueTime("")
-        }
-    }, [task])
+    if (draft.taskId !== activeTaskId) {
+        setDraft(createTaskEditDraft(task))
+    }
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const updateDraft = (updates: Partial<Omit<TaskEditDraft, "taskId">>) => {
+        setDraft((current) => ({ ...current, ...updates }))
+    }
+
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault()
         if (!task) return
 
         setIsSaving(true)
         try {
             await onSave(task.id, {
-                title,
-                description: description || null,
-                task_type: taskType,
-                due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
-                due_time: dueTime ? `${dueTime}:00` : null, // Add seconds
+                title: draft.title,
+                description: draft.description || null,
+                task_type: draft.taskType,
+                due_date: draft.dueDate ? format(draft.dueDate, "yyyy-MM-dd") : null,
+                due_time: draft.dueTime ? `${draft.dueTime}:00` : null,
             })
-            onClose()
         } catch (error) {
             console.error("Failed to save task:", error)
-        } finally {
             setIsSaving(false)
+            return
         }
+        setIsSaving(false)
+        onClose()
     }
 
     const handleDelete = () => {
@@ -152,8 +170,8 @@ export function TaskEditModal({
                             <Input
                                 id="title"
                                 name="title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
+                                value={draft.title}
+                                onChange={(e) => updateDraft({ title: e.target.value })}
                                 placeholder="Task title"
                                 required
                                 autoComplete="off"
@@ -165,8 +183,8 @@ export function TaskEditModal({
                             <Label htmlFor="description">Description</Label>
                             <Textarea
                                 id="description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
+                                value={draft.description}
+                                onChange={(e) => updateDraft({ description: e.target.value })}
                                 placeholder="Optional description"
                                 rows={3}
                             />
@@ -175,7 +193,7 @@ export function TaskEditModal({
                         {/* Task Type */}
                         <div className="space-y-2">
                             <Label htmlFor="task-type">Type</Label>
-                            <Select value={taskType} onValueChange={(v) => v && setTaskType(v)}>
+                            <Select value={draft.taskType} onValueChange={(v) => v && updateDraft({ taskType: v })}>
                                 <SelectTrigger id="task-type">
                                     <SelectValue>
                                         {(value: string | null) => {
@@ -205,18 +223,18 @@ export function TaskEditModal({
                                             variant="outline"
                                             className={cn(
                                                 "w-full justify-start text-left font-normal",
-                                                !dueDate && "text-muted-foreground"
+                                                !draft.dueDate && "text-muted-foreground"
                                             )}
                                         >
                                             <CalendarIcon className="mr-2 size-4" />
-                                            {dueDate ? format(dueDate, "PPP") : "Select date"}
+                                            {draft.dueDate ? format(draft.dueDate, "PPP") : "Select date"}
                                         </Button>
                                     } />
                                     <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
-                                            selected={dueDate}
-                                            onSelect={setDueDate}
+                                            selected={draft.dueDate}
+                                            onSelect={(nextDate) => updateDraft({ dueDate: nextDate })}
                                         />
                                     </PopoverContent>
                                 </Popover>
@@ -227,8 +245,8 @@ export function TaskEditModal({
                                 <Input
                                     id="due-time"
                                     type="time"
-                                    value={dueTime}
-                                    onChange={(e) => setDueTime(e.target.value)}
+                                    value={draft.dueTime}
+                                    onChange={(e) => updateDraft({ dueTime: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -249,7 +267,7 @@ export function TaskEditModal({
                         <Button type="button" variant="outline" onClick={onClose} disabled={isSaving || isDeleting}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isSaving || isDeleting || !title.trim()}>
+                        <Button type="submit" disabled={isSaving || isDeleting || !draft.title.trim()}>
                             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
                             Save Changes
                         </Button>

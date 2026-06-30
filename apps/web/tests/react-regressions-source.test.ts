@@ -1607,6 +1607,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setPendingFocus(")
     })
 
+    it("keeps task edit modal draft state compiler-friendly", () => {
+        const source = readSource("components/tasks/TaskEditModal.tsx")
+
+        expect(source).toContain("type TaskEditDraft")
+        expect(source).toContain("function createTaskEditDraft")
+        expect(source).toContain("if (draft.taskId !== activeTaskId)")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("setTitle")
+        expect(source).not.toContain("setDescription")
+        expect(source).not.toContain("setTaskType")
+        expect(source).not.toContain("setDueDate")
+        expect(source).not.toContain("setDueTime")
+    })
+
     it("keeps automation and AI derived lists single pass", () => {
         const emailTemplatesSource = readSource("app/(app)/automation/email-templates/page.tsx")
         const aiBuilderSource = readSource("app/(app)/automation/ai-builder/page.client.tsx")

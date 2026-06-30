@@ -321,3 +321,22 @@ Full command after Batch 14: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1224`
 - Summary: `Security 2 warnings`, `Bugs 19 errors + 248 warnings`, `Performance 69 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9f5722fc-3c76-4013-8570-f967791b54ec`
+
+## Batch 15
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `components/tasks/TaskEditModal.tsx` | Valid: the modal copied task fields into five local draft states from an effect, and callers pass freshly-created task objects that can reset user edits on parent re-render. | High | Replace separate field states with one keyed draft object initialized from `task.id`, then reset inline only when the active task id changes. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/tasks-page.test.tsx tests/react-regressions-source.test.ts`; changed-scope React Doctor reported no issues. |
+| `react-hooks-js/todo` | `components/tasks/TaskEditModal.tsx` | Valid: the save handler used `finally`, which blocks React Compiler optimization. | High | Replace the finalizer with explicit success/error cleanup, keeping failed saves in the dialog and closing only after successful save. | Focused tests passed; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 15: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 15: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `43 / 100 Critical`
+- Total diagnostics: `1210`
+- Summary: `Security 2 warnings`, `Bugs 14 errors + 241 warnings`, `Performance 67 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-145efa15-c8ae-4717-a463-ec38fd06e325`
