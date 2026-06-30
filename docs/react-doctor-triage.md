@@ -1108,3 +1108,23 @@ Full command after Batch 53: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `976`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 714 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a736f813-211f-4705-a43b-5ffc306d4801`
+
+## Batch 54
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/forms/use-form-builder-document.ts` | Valid: React Compiler is enabled and the hook wrapped derived values and local handlers in `useMemo`/`useCallback` even though they resolve to React APIs. | High | Remove the memoization wrappers and use plain values/functions. Added a source guard that failed on the old `useMemo`/`useCallback` imports and calls. Stable reset handlers use lazy `useState` function initialization; a ref-backed identity workaround was rejected because full React Doctor flagged render-time ref access. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/form-builder-page.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `581` to `543`. |
+| `react-doctor/prefer-module-scope-pure-function` | `lib/forms/use-form-builder-document.ts` | Valid: after unwrapping, pure helpers that did not use hook state were rebuilt inside the hook. | High | Move `handleDragOver`, `moveFieldToIndex`, and `insertFieldAtIndex` to module scope. | Full React Doctor no longer reports pure-function rebuilds for `use-form-builder-document.ts`. |
+
+Changed-scope command after Batch 54: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 54: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `938`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 676 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-40a01f68-4dfc-4a43-b287-056f19393bfb`

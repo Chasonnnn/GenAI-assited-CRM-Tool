@@ -1377,6 +1377,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("<SelectValue />")
     })
 
+    it("keeps form builder document hook compiler-derived", () => {
+        const source = readSource("lib/forms/use-form-builder-document.ts")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
+    })
+
     it("keeps surrogate card, task calendar, and CSV derived lists single pass", () => {
         const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
         const taskCalendarSource = readSource("components/surrogates/SurrogateTasksCalendar.tsx")

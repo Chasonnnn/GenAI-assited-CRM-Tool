@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 
 import type { BuilderPaletteField } from "@/lib/forms/form-builder-library"
@@ -52,6 +52,30 @@ const cloneFieldForDuplicate = (field: BuilderFormField): BuilderFormField => ({
 
 const clonePageFields = (fields: BuilderFormField[]) => fields.map(cloneFieldForDuplicate)
 
+const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+}
+
+const moveFieldToIndex = (fields: BuilderFormField[], fieldId: string, targetIndex: number) => {
+    const fromIndex = fields.findIndex((field) => field.id === fieldId)
+    if (fromIndex === -1 || fromIndex === targetIndex) return fields
+
+    const nextFields = [...fields]
+    const [moved] = nextFields.splice(fromIndex, 1)
+    if (!moved) return fields
+    const adjustedIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
+    const clampedIndex = Math.max(0, Math.min(adjustedIndex, nextFields.length))
+    nextFields.splice(clampedIndex, 0, moved)
+    return nextFields
+}
+
+const insertFieldAtIndex = (fields: BuilderFormField[], field: BuilderFormField, targetIndex: number) => {
+    const nextFields = [...fields]
+    const clampedIndex = Math.max(0, Math.min(targetIndex, nextFields.length))
+    nextFields.splice(clampedIndex, 0, field)
+    return nextFields
+}
+
 export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBACK_FORM_PAGE]) {
     const [pages, setPages] = useState<BuilderFormPage[]>(initialPages)
     const [activePage, setActivePage] = useState(initialPages[0]?.id ?? FALLBACK_FORM_PAGE.id)
@@ -61,35 +85,31 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
     const [dropIndicatorId, setDropIndicatorId] = useState<string | "end" | null>(null)
     const optionKeyMapRef = useRef<Record<string, string[]>>({})
 
-    const currentPage = useMemo(
-        () => pages.find((page) => page.id === activePage) ?? pages[0] ?? FALLBACK_FORM_PAGE,
-        [pages, activePage],
-    )
-    const selectedFieldData = useMemo(
-        () => (selectedField ? currentPage.fields.find((field) => field.id === selectedField) ?? null : null),
-        [currentPage.fields, selectedField],
-    )
+    const currentPage = pages.find((page) => page.id === activePage) ?? pages[0] ?? FALLBACK_FORM_PAGE
+    const selectedFieldData = selectedField
+        ? currentPage.fields.find((field) => field.id === selectedField) ?? null
+        : null
     const isDragging = Boolean(draggedField || draggedFieldId)
 
-    const selectField = useCallback((fieldId: string | null) => {
+    const selectField = (fieldId: string | null) => {
         setSelectedField(fieldId)
-    }, [])
+    }
 
-    const resetDragState = useCallback(() => {
+    const [resetDragState] = useState<() => void>(() => () => {
         setDraggedField(null)
         setDraggedFieldId(null)
         setDropIndicatorId(null)
-    }, [])
+    })
 
-    const resetDocument = useCallback((nextPages: BuilderFormPage[] = [FALLBACK_FORM_PAGE]) => {
+    const [resetDocument] = useState<(nextPages?: BuilderFormPage[]) => void>(() => (nextPages = [FALLBACK_FORM_PAGE]) => {
         setPages(nextPages.length > 0 ? nextPages : [FALLBACK_FORM_PAGE])
         setActivePage(nextPages[0]?.id ?? FALLBACK_FORM_PAGE.id)
         setSelectedField(null)
         optionKeyMapRef.current = {}
         resetDragState()
-    }, [resetDragState])
+    })
 
-    const syncOptionKeys = useCallback((fieldId: string, optionCount: number) => {
+    const syncOptionKeys = (fieldId: string, optionCount: number) => {
         const existing = optionKeyMapRef.current[fieldId] ?? []
         if (existing.length === optionCount) {
             return existing
@@ -105,73 +125,49 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         }
         optionKeyMapRef.current[fieldId] = next
         return next
-    }, [])
+    }
 
-    const appendOptionKey = useCallback((fieldId: string) => {
+    const appendOptionKey = (fieldId: string) => {
         const existing = optionKeyMapRef.current[fieldId] ?? []
         optionKeyMapRef.current[fieldId] = [...existing, buildOptionKey()]
-    }, [])
+    }
 
-    const removeOptionKey = useCallback((fieldId: string, optionIndex: number) => {
+    const removeOptionKey = (fieldId: string, optionIndex: number) => {
         const existing = optionKeyMapRef.current[fieldId] ?? []
         optionKeyMapRef.current[fieldId] = existing.filter((_, index) => index !== optionIndex)
-    }, [])
+    }
 
-    const handleDragStart = useCallback((field: BuilderPaletteField) => {
+    const handleDragStart = (field: BuilderPaletteField) => {
         setDraggedField(field)
         setDraggedFieldId(null)
-    }, [])
+    }
 
-    const handleFieldDragStart = useCallback((fieldId: string) => {
+    const handleFieldDragStart = (fieldId: string) => {
         setDraggedFieldId(fieldId)
         setDraggedField(null)
-    }, [])
+    }
 
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault()
-    }, [])
-
-    const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
+    const handleCanvasDragOver = (e: React.DragEvent) => {
         e.preventDefault()
         if (!draggedField && !draggedFieldId) return
         if (currentPage.fields.length > 0) {
             setDropIndicatorId("end")
         }
-    }, [currentPage.fields.length, draggedField, draggedFieldId])
+    }
 
-    const handleFieldDragOver = useCallback((e: React.DragEvent, fieldId: string) => {
+    const handleFieldDragOver = (e: React.DragEvent, fieldId: string) => {
         e.preventDefault()
         e.stopPropagation()
         if (!draggedField && !draggedFieldId) return
         setDropIndicatorId(fieldId)
-    }, [draggedField, draggedFieldId])
+    }
 
-    const moveFieldToIndex = useCallback((fields: BuilderFormField[], fieldId: string, targetIndex: number) => {
-        const fromIndex = fields.findIndex((field) => field.id === fieldId)
-        if (fromIndex === -1 || fromIndex === targetIndex) return fields
-
-        const nextFields = [...fields]
-        const [moved] = nextFields.splice(fromIndex, 1)
-        if (!moved) return fields
-        const adjustedIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
-        const clampedIndex = Math.max(0, Math.min(adjustedIndex, nextFields.length))
-        nextFields.splice(clampedIndex, 0, moved)
-        return nextFields
-    }, [])
-
-    const insertFieldAtIndex = useCallback((fields: BuilderFormField[], field: BuilderFormField, targetIndex: number) => {
-        const nextFields = [...fields]
-        const clampedIndex = Math.max(0, Math.min(targetIndex, nextFields.length))
-        nextFields.splice(clampedIndex, 0, field)
-        return nextFields
-    }, [])
-
-    const buildNewField = useCallback(() => {
+    const buildNewField = () => {
         if (!draggedField) return null
         return createBuilderField(draggedField)
-    }, [draggedField])
+    }
 
-    const handleInsertField = useCallback((field: BuilderPaletteField) => {
+    const handleInsertField = (field: BuilderPaletteField) => {
         const newField = createBuilderField(field)
         setPages((prev) =>
             prev.map((page) =>
@@ -180,9 +176,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         )
         resetDragState()
         selectField(newField.id)
-    }, [activePage, resetDragState, selectField])
+    }
 
-    const handleDrop = useCallback((e: React.DragEvent) => {
+    const handleDrop = (e: React.DragEvent) => {
         e.preventDefault()
         const newField = buildNewField()
         const nextSelectedField = newField?.id || draggedFieldId
@@ -203,9 +199,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         if (nextSelectedField) {
             selectField(nextSelectedField)
         }
-    }, [activePage, buildNewField, draggedFieldId, moveFieldToIndex, resetDragState, selectField])
+    }
 
-    const handleDropOnField = useCallback((e: React.DragEvent, targetFieldId: string) => {
+    const handleDropOnField = (e: React.DragEvent, targetFieldId: string) => {
         e.preventDefault()
         e.stopPropagation()
         const newField = buildNewField()
@@ -230,9 +226,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         if (nextSelectedField) {
             selectField(nextSelectedField)
         }
-    }, [activePage, buildNewField, draggedFieldId, insertFieldAtIndex, moveFieldToIndex, resetDragState, selectField])
+    }
 
-    const handleDeleteField = useCallback((fieldId: string) => {
+    const handleDeleteField = (fieldId: string) => {
         delete optionKeyMapRef.current[fieldId]
         setPages((prev) =>
             prev.map((page) =>
@@ -242,9 +238,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         if (selectedField === fieldId) {
             selectField(null)
         }
-    }, [activePage, selectedField, selectField])
+    }
 
-    const handleDuplicateField = useCallback((fieldId: string) => {
+    const handleDuplicateField = (fieldId: string) => {
         let nextId = buildFieldId()
         setPages((prev) =>
             prev.map((page) => {
@@ -265,9 +261,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             }),
         )
         selectField(nextId)
-    }, [activePage, selectField])
+    }
 
-    const handleUpdateField = useCallback((fieldId: string, updates: Partial<BuilderFormField>) => {
+    const handleUpdateField = (fieldId: string, updates: Partial<BuilderFormField>) => {
         setPages((prev) =>
             prev.map((page) =>
                 page.id === activePage
@@ -278,14 +274,14 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
                     : page,
             ),
         )
-    }, [activePage])
+    }
 
-    const handleValidationChange = useCallback((fieldId: string, updates: Partial<FormFieldValidation>) => {
+    const handleValidationChange = (fieldId: string, updates: Partial<FormFieldValidation>) => {
         const nextValidation = normalizeValidation(selectedFieldData?.validation, updates)
         handleUpdateField(fieldId, { validation: nextValidation })
-    }, [handleUpdateField, selectedFieldData?.validation])
+    }
 
-    const handleAddColumn = useCallback((fieldId: string) => {
+    const handleAddColumn = (fieldId: string) => {
         const existing = selectedFieldData?.columns ?? []
         const nextColumns = [
             ...existing,
@@ -297,9 +293,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             },
         ]
         handleUpdateField(fieldId, { columns: nextColumns })
-    }, [handleUpdateField, selectedFieldData?.columns])
+    }
 
-    const handleUpdateColumn = useCallback((
+    const handleUpdateColumn = (
         fieldId: string,
         columnId: string,
         updates: Partial<NonNullable<BuilderFormField["columns"]>[number]>,
@@ -309,15 +305,15 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             column.id === columnId ? { ...column, ...updates } : column,
         )
         handleUpdateField(fieldId, { columns: nextColumns })
-    }, [handleUpdateField, selectedFieldData?.columns])
+    }
 
-    const handleRemoveColumn = useCallback((fieldId: string, columnId: string) => {
+    const handleRemoveColumn = (fieldId: string, columnId: string) => {
         const existing = selectedFieldData?.columns ?? []
         const nextColumns = existing.filter((column) => column.id !== columnId)
         handleUpdateField(fieldId, { columns: nextColumns })
-    }, [handleUpdateField, selectedFieldData?.columns])
+    }
 
-    const handleAddRow = useCallback((fieldId: string) => {
+    const handleAddRow = (fieldId: string) => {
         const existing = selectedFieldData?.rows ?? []
         const nextRows = [
             ...existing,
@@ -328,9 +324,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             },
         ]
         handleUpdateField(fieldId, { rows: nextRows })
-    }, [handleUpdateField, selectedFieldData?.rows])
+    }
 
-    const handleUpdateRow = useCallback((
+    const handleUpdateRow = (
         fieldId: string,
         rowId: string,
         updates: Partial<NonNullable<BuilderFormField["rows"]>[number]>,
@@ -338,15 +334,15 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
         const existing = selectedFieldData?.rows ?? []
         const nextRows = existing.map((row) => (row.id === rowId ? { ...row, ...updates } : row))
         handleUpdateField(fieldId, { rows: nextRows })
-    }, [handleUpdateField, selectedFieldData?.rows])
+    }
 
-    const handleRemoveRow = useCallback((fieldId: string, rowId: string) => {
+    const handleRemoveRow = (fieldId: string, rowId: string) => {
         const existing = selectedFieldData?.rows ?? []
         const nextRows = existing.filter((row) => row.id !== rowId)
         handleUpdateField(fieldId, { rows: nextRows })
-    }, [handleUpdateField, selectedFieldData?.rows])
+    }
 
-    const handleShowIfChange = useCallback((
+    const handleShowIfChange = (
         fieldId: string,
         updates: Partial<NonNullable<BuilderFormField["showIf"]>>,
     ) => {
@@ -365,9 +361,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             return
         }
         handleUpdateField(fieldId, { showIf: next })
-    }, [handleUpdateField, selectedFieldData?.showIf])
+    }
 
-    const handleMappingChange = useCallback((fieldId: string, value: string | null) => {
+    const handleMappingChange = (fieldId: string, value: string | null) => {
         const nextValue = value && value !== "none" ? value : ""
         if (nextValue) {
             const hasConflict = pages.some((page) =>
@@ -381,9 +377,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             }
         }
         handleUpdateField(fieldId, { surrogateFieldMapping: nextValue })
-    }, [handleUpdateField, pages])
+    }
 
-    const handleAddPage = useCallback(() => {
+    const handleAddPage = () => {
         setPages((prev) => {
             const nextPageId = Math.max(0, ...prev.map((page) => page.id)) + 1
             const newPage: BuilderFormPage = {
@@ -394,9 +390,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             setActivePage(newPage.id)
             return [...prev, newPage]
         })
-    }, [])
+    }
 
-    const handleDuplicatePage = useCallback((pageId: number) => {
+    const handleDuplicatePage = (pageId: number) => {
         setPages((prev) => {
             const nextPageId = Math.max(0, ...prev.map((page) => page.id)) + 1
             const sourcePage = prev.find((page) => page.id === pageId)
@@ -413,9 +409,9 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             selectField(duplicatedFields[0]?.id ?? null)
             return [...prev, nextPage]
         })
-    }, [selectField])
+    }
 
-    const deletePage = useCallback((pageId: number) => {
+    const deletePage = (pageId: number) => {
         setPages((prev) => {
             const nextPages = prev.filter((page) => page.id !== pageId)
             if (nextPages.length === 0) {
@@ -429,15 +425,15 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             }
             return nextPages
         })
-    }, [activePage, selectField])
+    }
 
-    const handleRenamePage = useCallback((pageId: number, name: string) => {
+    const handleRenamePage = (pageId: number, name: string) => {
         setPages((prev) =>
             prev.map((page) => (page.id === pageId ? { ...page, name } : page)),
         )
-    }, [])
+    }
 
-    const handleMovePage = useCallback((pageId: number, direction: "up" | "down") => {
+    const handleMovePage = (pageId: number, direction: "up" | "down") => {
         setPages((prev) => {
             const currentIndex = prev.findIndex((page) => page.id === pageId)
             if (currentIndex === -1) return prev
@@ -451,23 +447,23 @@ export function useFormBuilderDocument(initialPages: BuilderFormPage[] = [FALLBA
             nextPages.splice(targetIndex, 0, movedPage)
             return nextPages
         })
-    }, [])
+    }
 
-    const addOption = useCallback((fieldId: string) => {
+    const addOption = (fieldId: string) => {
         appendOptionKey(fieldId)
         const existing = selectedFieldData?.options ?? []
         handleUpdateField(fieldId, {
             options: [...existing, `Option ${existing.length + 1}`],
         })
-    }, [appendOptionKey, handleUpdateField, selectedFieldData?.options])
+    }
 
-    const removeOption = useCallback((fieldId: string, optionIndex: number) => {
+    const removeOption = (fieldId: string, optionIndex: number) => {
         removeOptionKey(fieldId, optionIndex)
         const existing = selectedFieldData?.options ?? []
         handleUpdateField(fieldId, {
             options: existing.filter((_, index) => index !== optionIndex),
         })
-    }, [handleUpdateField, removeOptionKey, selectedFieldData?.options])
+    }
 
     return {
         pages,
