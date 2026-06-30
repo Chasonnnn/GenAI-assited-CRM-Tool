@@ -754,3 +754,24 @@ Full command after Batch 36: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1075`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 21 errors + 36 warnings`, `Accessibility 42 warnings`, `Maintainability 766 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c172d2ed-f46d-40ed-81b9-078698845329`
+
+## Batch 37
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/surrogates/PregnancyTrackerCard.tsx` | Valid: the embryo-stage save handler used a `try/finally` finalizer only to clear saving state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch and clear `isSavingEmbryoStage` after success or failure handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/surrogate-detail.test.tsx`; isolated changed-scope React Doctor reported no issues. |
+| `react-doctor/prefer-tag-over-role` | `components/surrogates/PregnancyTrackerCard.tsx` | Valid: the embryo-stage display was a clickable `div` with `role="button"`, but a native button fits the interaction and removes custom keyboard handling. | High | Convert the display affordance to `button type="button"` and remove the manual key handler. Extended the source guard to fail on reintroduced `role="button"`. | Focused tests passed; isolated changed-scope React Doctor reported no issues. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/PregnancyTrackerCard.tsx` | Valid: React Compiler is enabled, so the local `useMemo` around pregnancy tracking derivation is redundant in this touched component. | High | Derive pregnancy tracking values directly inside the hook and remove the `useMemo` import. Extended the source guard to fail on reintroduced `useMemo`. | Focused tests passed; full React Doctor shows redundant memoization dropped by 1. |
+| `react-doctor/control-has-associated-label` | `components/surrogates/PregnancyTrackerCard.tsx` | Valid: the icon-only due-date edit control rendered through the badge had no accessible name. | High | Add `aria-label="Edit due date"` to the rendered button and assert it in the source guard. | Focused tests passed; isolated changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 37: `cd /private/tmp/react-doctor-pregnancy-codex-84352/apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 37: `cd /private/tmp/react-doctor-pregnancy-codex-84352/apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1071`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 20 errors + 36 warnings`, `Accessibility 40 warnings`, `Maintainability 765 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4ec3cb42-c84f-42f2-b5ce-c83308903860`

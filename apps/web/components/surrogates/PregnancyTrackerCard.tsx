@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, type KeyboardEvent } from "react"
+import { useState } from "react"
 import { HeartPulseIcon, Loader2Icon, PencilIcon, XIcon } from "lucide-react"
 import { parseISO, differenceInDays, addDays, format, isValid } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,59 +43,57 @@ function usePregnancyTracker(
     dueDateOverride: string | null | undefined,
     embryoStage: EmbryoStage | null | undefined
 ): PregnancyData | null {
-    return useMemo(() => {
-        if (!startDate) return null
+    if (!startDate) return null
 
-        const start = parseISO(startDate)
-        if (!isValid(start)) return null
+    const start = parseISO(startDate)
+    if (!isValid(start)) return null
 
-        const today = new Date()
-        const embryoAgeDays = getEmbryoAgeDays(embryoStage)
-        const daysSinceTransfer = differenceInDays(today, start)
-        const gestationalDaysAtTransfer = embryoAgeDays == null ? 0 : 14 + embryoAgeDays
-        const calculatedDueDateOffset = embryoAgeDays == null ? 280 : 266 - embryoAgeDays
+    const today = new Date()
+    const embryoAgeDays = getEmbryoAgeDays(embryoStage)
+    const daysSinceTransfer = differenceInDays(today, start)
+    const gestationalDaysAtTransfer = embryoAgeDays == null ? 0 : 14 + embryoAgeDays
+    const calculatedDueDateOffset = embryoAgeDays == null ? 280 : 266 - embryoAgeDays
 
-        // For known IVF embryo stages, transfer date already includes embryo age.
-        // Unknown preserves legacy LMP-style tracking until the clinic provides the stage.
-        const gestationalDays = daysSinceTransfer + gestationalDaysAtTransfer
+    // For known IVF embryo stages, transfer date already includes embryo age.
+    // Unknown preserves legacy LMP-style tracking until the clinic provides the stage.
+    const gestationalDays = daysSinceTransfer + gestationalDaysAtTransfer
 
-        // Clamp weeks to 0 minimum (don't show negative weeks)
-        const gestationalWeeks = Math.max(0, Math.floor(gestationalDays / 7))
+    // Clamp weeks to 0 minimum (don't show negative weeks)
+    const gestationalWeeks = Math.max(0, Math.floor(gestationalDays / 7))
 
-        // Always calculate what due date would be (for "Reset to calculated")
-        const calculatedDueDate = addDays(start, calculatedDueDateOffset)
+    // Always calculate what due date would be (for "Reset to calculated")
+    const calculatedDueDate = addDays(start, calculatedDueDateOffset)
 
-        // Due date: use override if provided and valid, else use calculated
-        let dueDate = calculatedDueDate
-        if (dueDateOverride) {
-            const parsed = parseISO(dueDateOverride)
-            if (isValid(parsed)) {
-                dueDate = parsed
-            }
+    // Due date: use override if provided and valid, else use calculated
+    let dueDate = calculatedDueDate
+    if (dueDateOverride) {
+        const parsed = parseISO(dueDateOverride)
+        if (isValid(parsed)) {
+            dueDate = parsed
         }
+    }
 
-        // Trimester calculation (only meaningful for non-negative days)
-        let trimester: 'First' | 'Second' | 'Third'
-        if (gestationalWeeks < 13) trimester = 'First'
-        else if (gestationalWeeks < 27) trimester = 'Second'
-        else trimester = 'Third'
+    // Trimester calculation (only meaningful for non-negative days)
+    let trimester: 'First' | 'Second' | 'Third'
+    if (gestationalWeeks < 13) trimester = 'First'
+    else if (gestationalWeeks < 27) trimester = 'Second'
+    else trimester = 'Third'
 
-        const daysRemaining = Math.max(0, differenceInDays(dueDate, today))
+    const daysRemaining = Math.max(0, differenceInDays(dueDate, today))
 
-        // Clamp progress to 0-100 (prevent negative progress bar)
-        const progress = Math.max(0, Math.min(100, (gestationalDays / 280) * 100))
+    // Clamp progress to 0-100 (prevent negative progress bar)
+    const progress = Math.max(0, Math.min(100, (gestationalDays / 280) * 100))
 
-        return {
-            daysSinceTransfer,
-            gestationalDays,
-            gestationalWeeks,
-            dueDate,
-            calculatedDueDate,
-            trimester,
-            daysRemaining,
-            progress,
-        }
-    }, [startDate, dueDateOverride, embryoStage])
+    return {
+        daysSinceTransfer,
+        gestationalDays,
+        gestationalWeeks,
+        dueDate,
+        calculatedDueDate,
+        trimester,
+        daysRemaining,
+        progress,
+    }
 }
 
 interface PregnancyTrackerCardProps {
@@ -128,13 +126,6 @@ export function PregnancyTrackerCard({
         setIsEditingEmbryoStage(true)
     }
 
-    const handleEmbryoStageDisplayKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
-            e.preventDefault()
-            handleEditEmbryoStage()
-        }
-    }
-
     const handleEmbryoStageChange = async (value: string | null) => {
         const nextValue = (value || "unknown") as EmbryoStage
         if (nextValue === (surrogateData.embryo_stage ?? "unknown")) {
@@ -144,14 +135,19 @@ export function PregnancyTrackerCard({
 
         setIsSavingEmbryoStage(true)
         setEmbryoStageError(null)
-        try {
-            await onUpdate({ embryo_stage: nextValue })
+        const result = await onUpdate({ embryo_stage: nextValue }).then(() => ({
+            status: "success" as const,
+        })).catch((err: unknown) => ({
+            status: "error" as const,
+            error: err instanceof Error ? err.message : "Failed to save embryo stage",
+        }))
+
+        if (result.status === "success") {
             setIsEditingEmbryoStage(false)
-        } catch (err) {
-            setEmbryoStageError(err instanceof Error ? err.message : "Failed to save embryo stage")
-        } finally {
-            setIsSavingEmbryoStage(false)
+        } else {
+            setEmbryoStageError(result.error)
         }
+        setIsSavingEmbryoStage(false)
     }
 
     const embryoStageLabel = formatEmbryoStage(surrogateData.embryo_stage)
@@ -260,12 +256,10 @@ export function PregnancyTrackerCard({
                                 )}
                             </div>
                         ) : (
-                            <div
-                                className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            <button
+                                type="button"
+                                className="group -mx-1 flex w-fit cursor-pointer appearance-none items-center gap-1 rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 onClick={handleEditEmbryoStage}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={handleEmbryoStageDisplayKeyDown}
                                 aria-label="Edit Embryo Stage"
                             >
                                 <span className={embryoStageIsPlaceholder ? "text-sm text-muted-foreground" : "text-sm font-medium"}>
@@ -275,7 +269,7 @@ export function PregnancyTrackerCard({
                                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                                     aria-hidden="true"
                                 />
-                            </div>
+                            </button>
                         )}
                     </div>
 
@@ -319,6 +313,7 @@ export function PregnancyTrackerCard({
                                         render={
                                             <button
                                                 type="button"
+                                                aria-label="Edit due date"
                                                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                             />
                                         }
