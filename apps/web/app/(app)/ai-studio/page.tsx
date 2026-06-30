@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { type ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type ClipboardEvent, useRef, useState } from "react"
 import {
     AlertCircleIcon,
     CheckIcon,
@@ -71,6 +71,7 @@ import type {
     AIStudioImageSize,
     AIStudioPlatform,
     AIStudioReferenceImageInput,
+    AIStudioSettings,
     AIStudioSettingsUpdate,
     AIStudioTone,
 } from "@/lib/api/ai-studio"
@@ -154,8 +155,24 @@ type ReferenceImageDraft = AIStudioReferenceImageInput & {
     size_bytes: number
 }
 
+type SettingsFormState = {
+    apiKey: string
+    agentsMd: string
+    skillsMd: string
+    saved: boolean
+}
+
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong."
+}
+
+function buildSettingsFormState(settings: AIStudioSettings | undefined): SettingsFormState {
+    return {
+        apiKey: "",
+        agentsMd: settings?.agents_md ?? "",
+        skillsMd: settings?.skills_md ?? "",
+        saved: false,
+    }
 }
 
 const draftDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -549,23 +566,21 @@ export default function AIStudioPage() {
     const [skillsMd, setSkillsMd] = useState("")
     const [settingsSaved, setSettingsSaved] = useState(false)
 
-    const permissionSet = useMemo(
-        () => new Set(permissionsQuery.data?.permissions ?? []),
-        [permissionsQuery.data?.permissions]
-    )
+    const permissionSet = new Set(permissionsQuery.data?.permissions ?? [])
     const isDeveloper = user?.role === "developer"
     const canUseAI = isDeveloper || permissionSet.has("use_ai_assistant")
     const canManageSettings = isDeveloper || permissionSet.has("manage_ai_settings")
     const aiAvailable = Boolean(user?.ai_enabled && canUseAI)
     const settings = settingsQuery.data
 
-    useEffect(() => {
-        if (!settingsOpen || !settings) return
-        setSettingsApiKey("")
-        setAgentsMd(settings.agents_md)
-        setSkillsMd(settings.skills_md)
-        setSettingsSaved(false)
-    }, [settingsOpen, settings])
+    const openSettingsDialog = () => {
+        const nextSettingsForm = buildSettingsFormState(settings)
+        setSettingsApiKey(nextSettingsForm.apiKey)
+        setAgentsMd(nextSettingsForm.agentsMd)
+        setSkillsMd(nextSettingsForm.skillsMd)
+        setSettingsSaved(nextSettingsForm.saved)
+        setSettingsOpen(true)
+    }
 
     const canGenerate = Boolean(
         aiAvailable &&
@@ -606,18 +621,24 @@ export default function AIStudioPage() {
             setReferenceImageError(`AI Studio supports up to ${maxReferenceImages} samples.`)
         }
         setIsAddingReferenceImage(true)
-        try {
-            const nextImages = await Promise.all(selectedFiles.map(fileToReferenceImage))
+        const result = await Promise.all(selectedFiles.map(fileToReferenceImage)).then((nextImages) => ({
+            status: "success" as const,
+            nextImages,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            message: getErrorMessage(error),
+        }))
+
+        if (result.status === "success") {
             setReferenceImages((current) => {
                 const seen = new Set(current.map((image) => image.id))
-                const unique = nextImages.filter((image) => !seen.has(image.id))
+                const unique = result.nextImages.filter((image) => !seen.has(image.id))
                 return [...current, ...unique].slice(0, maxReferenceImages)
             })
-        } catch (error) {
-            setReferenceImageError(getErrorMessage(error))
-        } finally {
-            setIsAddingReferenceImage(false)
+        } else {
+            setReferenceImageError(result.message)
         }
+        setIsAddingReferenceImage(false)
     }
 
     const handleRemoveReferenceImage = (id: string) => {
@@ -690,7 +711,7 @@ export default function AIStudioPage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setSettingsOpen(true)}
+                                onClick={openSettingsDialog}
                             >
                                 <Settings2Icon data-icon="inline-start" />
                                 Studio settings
@@ -1051,7 +1072,16 @@ export default function AIStudioPage() {
                 )}
             </div>
 
-            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+            <Dialog
+                open={settingsOpen}
+                onOpenChange={(open) => {
+                    if (open) {
+                        openSettingsDialog()
+                        return
+                    }
+                    setSettingsOpen(false)
+                }}
+            >
                 <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Studio settings</DialogTitle>

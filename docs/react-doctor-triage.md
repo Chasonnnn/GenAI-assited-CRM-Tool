@@ -936,3 +936,26 @@ Full command after Batch 45: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1018`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 198 warnings`, `Performance 8 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 727 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e65463b5-17ec-43a9-947e-55d614e906a1`
+
+## Batch 46
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/ai-studio/page.tsx` | Valid: reference image import used a `try/finally` finalizer only to clear the adding-image flag, which blocks the current React Compiler path. | High | Replace the finalizer with a typed `Promise.all` result branch, preserve duplicate filtering and validation errors, and clear adding-image state after success or error handling. Added a source guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/ai-studio-page.test.tsx`; full React Doctor finalizer errors dropped from `3` to `2`. |
+| `react-hooks/set-state-in-effect` | `app/(app)/ai-studio/page.tsx` | Valid: the settings dialog effect synchronously copied fetched settings into local form state after render. | High | Move settings form construction into `buildSettingsFormState` and initialize it in `openSettingsDialog`, preserving the settings dialog behavior without the effect. | Focused AI Studio tests passed; `pnpm lint` no longer reports the `ai-studio/page.tsx:564` warning. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/ai-studio/page.tsx` | Valid: React Compiler is enabled, so the permission `useMemo` wrapper is redundant in this touched page. | High | Build the permission `Set` directly during render and extend the source guard so it fails on reintroduced `useMemo`. | Focused tests and TypeScript passed; full React Doctor redundant memoization count dropped from `594` to `593`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/ai-studio/page.tsx` | Valid but deferred: `AIStudioPage` remains a large component with nineteen local state hooks. Fixing it requires a page/component split and state-shape decision beyond the compiler-blocker cleanup. | High | Logged for a later AI Studio structural batch instead of mixing a broader page refactor into this commit. | Changed-scope React Doctor reports only these two remaining warnings for AI Studio. |
+
+Changed-scope command after Batch 46: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-950a1d61-5004-43c7-ab42-bb7498698dc1`
+
+Full command after Batch 46: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `58 / 100 Critical`
+- Total diagnostics: `1010`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 193 warnings`, `Performance 6 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 726 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ee46da21-c078-4d88-bae2-c1777ee2a8d0`

@@ -293,6 +293,16 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps AI Studio settings and reference images compiler-friendly", () => {
+        const source = readSource("app/(app)/ai-studio/page.tsx")
+
+        expect(source).toContain("function buildSettingsFormState")
+        expect(source).toContain("const openSettingsDialog =")
+        expect(source).not.toContain("useEffect(() =>")
+        expect(source).not.toContain("useMemo(")
+        expect(source).not.toContain("finally")
+    })
+
     it("builds journey timeline milestone metadata without mutating a global counter", () => {
         const source = readSource("components/surrogates/journey/JourneyTimeline.tsx")
 
