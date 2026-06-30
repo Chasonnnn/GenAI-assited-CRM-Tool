@@ -760,14 +760,15 @@ function useEmailTemplateController({
             return
         }
         dispatch({ type: "setBusy", flag: "isSaving", value: true })
+        const finishSaving = () => dispatch({ type: "setBusy", flag: "isSaving", value: false })
         try {
             const saved = await persistTemplate()
             dispatch({ type: "setPublished", isPublished: (saved.published_version ?? 0) > 0 })
             toast.success("Template saved")
+            finishSaving()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to save template")
-        } finally {
-            dispatch({ type: "setBusy", flag: "isSaving", value: false })
+            finishSaving()
         }
     }, [fromEmailError, persistTemplate, state.name, state.subject])
 
@@ -790,6 +791,7 @@ function useEmailTemplateController({
     const confirmPublish = useCallback(
         async (publishAll: boolean, orgIds: string[]) => {
             dispatch({ type: "setBusy", flag: "isPublishing", value: true })
+            const finishPublishing = () => dispatch({ type: "setBusy", flag: "isPublishing", value: false })
             try {
                 const saved = await persistTemplate()
                 await publishTemplate.mutateAsync({
@@ -802,10 +804,10 @@ function useEmailTemplateController({
                 dispatch({ type: "setPublished", isPublished: true })
                 dispatch({ type: "setDialog", dialog: "publish", open: false })
                 toast.success("Template published")
+                finishPublishing()
             } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Failed to publish template")
-            } finally {
-                dispatch({ type: "setBusy", flag: "isPublishing", value: false })
+                finishPublishing()
             }
         },
         [persistTemplate, publishTemplate]
@@ -832,6 +834,7 @@ function useEmailTemplateController({
         }
 
         dispatch({ type: "setBusy", flag: "isSendingTest", value: true })
+        const finishSendingTest = () => dispatch({ type: "setBusy", flag: "isSendingTest", value: false })
         try {
             const saved = await persistTemplate()
             const result = await sendTest.mutateAsync({
@@ -850,10 +853,10 @@ function useEmailTemplateController({
                       ? "Gmail"
                       : "provider"
             toast.success(`Test email sent via ${providerLabel}`)
+            finishSendingTest()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
-        } finally {
-            dispatch({ type: "setBusy", flag: "isSendingTest", value: false })
+            finishSendingTest()
         }
     }, [
         isNew,

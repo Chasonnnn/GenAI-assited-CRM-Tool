@@ -136,3 +136,23 @@ Full command after Batch 6: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1398`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 127 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 838 warnings`
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5e8ccba6-72e2-47a5-a1e6-e2640702d3af`
+
+## Batch 7
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/ops/templates/email/[id]/page.client.tsx` | Valid: the email-template save, publish, and send-test handlers used `try` statements with `finally` cleanup, which blocks React Compiler optimization. | High | Replace `finally` cleanup with explicit success/error cleanup helpers. | `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run tests/platform-email-template-page.test.tsx tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports errors. |
+
+Changed-scope command after Batch 7: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `91 / 100 Great`
+- Total diagnostics in changed files: `28`
+- Remaining changed-file warnings: `react-doctor/react-compiler-no-manual-memoization` for `app/ops/templates/email/[id]/page.client.tsx`; valid but broad same-file cleanup deferred to a separate batch.
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6dbf1f16-4831-4da6-8359-0193bda14d20`
+
+Full command after Batch 7: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `4 / 100 Critical`
+- Total diagnostics: `1395`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 124 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 838 warnings`
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-07780cca-db38-431b-8b21-5ed2f3e45689`
