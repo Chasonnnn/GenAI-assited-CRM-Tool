@@ -138,7 +138,7 @@ export function TrendChart() {
 
     const dateParams = useMemo(() => {
         const today = startOfLocalDay()
-        let fromDate = today
+        let fromDate: Date
         switch (period) {
             case "week":
                 fromDate = subWeeks(today, MAX_TREND_POINTS - 1)

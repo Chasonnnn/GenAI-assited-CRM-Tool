@@ -763,7 +763,7 @@ describe('SurrogatesPage', () => {
         render(<SurrogatesPage />)
 
         fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
-        fireEvent.click(screen.getByLabelText('Priority only'))
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Priority only' }))
 
         expect(mockRouterReplace).toHaveBeenCalledWith('/surrogates?priority=only', { scroll: false })
     })

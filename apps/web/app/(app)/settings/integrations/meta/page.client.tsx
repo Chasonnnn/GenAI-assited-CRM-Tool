@@ -40,8 +40,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
     AlertTriangleIcon,
     CheckCircleIcon,
-    FacebookIcon,
     Loader2Icon,
+    MegaphoneIcon,
     PencilIcon,
     SearchIcon,
     TrashIcon,
@@ -497,7 +497,7 @@ export default function MetaIntegrationPage() {
                             {connectUrlMutation.isPending ? (
                                 <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
+                                <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
                             )}
                             Connect with Facebook
                         </Button>
@@ -585,7 +585,7 @@ export default function MetaIntegrationPage() {
                                     {connectUrlMutation.isPending ? (
                                         <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                     ) : (
-                                        <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
+                                        <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
                                     )}
                                     Reconnect
                                 </Button>

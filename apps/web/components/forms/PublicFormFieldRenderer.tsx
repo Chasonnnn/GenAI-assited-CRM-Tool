@@ -614,7 +614,6 @@ export function PublicFormFieldRenderer({
                                 updateField(field.key, date ? formatLocalDate(date) : null)
                                 setDatePickerOpen((prev) => ({ ...prev, [field.key]: false }))
                             }}
-                            initialFocus
                         />
                     </PopoverContent>
                 </Popover>

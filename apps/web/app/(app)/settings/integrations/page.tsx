@@ -31,7 +31,7 @@ import {
     Loader2Icon,
     RefreshCwIcon,
     KeyIcon,
-    FacebookIcon,
+    MegaphoneIcon,
     ServerIcon,
     ZapIcon,
     VideoIcon,
@@ -129,9 +129,9 @@ const configStatusLabels: Record<string, { label: string; variant: "default" | "
     expired_token: { label: "Token Expired", variant: "destructive" },
 }
 
-const integrationTypeConfig: Record<string, { icon: typeof FacebookIcon; label: string; description: string }> = {
+const integrationTypeConfig: Record<string, { icon: typeof MegaphoneIcon; label: string; description: string }> = {
     meta_leads: {
-        icon: FacebookIcon,
+        icon: MegaphoneIcon,
         label: "Meta Lead Ads",
         description: "Automatic lead capture from Facebook/Instagram ads"
     },
@@ -3420,7 +3420,7 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                                     {connectUrlMutation.isPending ? (
                                         <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                                     ) : (
-                                        <FacebookIcon className="mr-2 size-4" aria-hidden="true" />
+                                        <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
                                     )}
                                     Connect with Facebook
                                 </Button>
@@ -4164,7 +4164,7 @@ export default function IntegrationsPage() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                        <FacebookIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                                        <MegaphoneIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-base">Meta Lead Ads</CardTitle>

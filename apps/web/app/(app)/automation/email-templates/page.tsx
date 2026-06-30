@@ -47,8 +47,7 @@ import {
     Loader2Icon,
     CodeIcon,
     XIcon,
-    LinkedinIcon,
-    InstagramIcon,
+    LinkIcon,
     ImageIcon,
     CopyIcon,
     ShareIcon,
@@ -1581,7 +1580,7 @@ export default function EmailTemplatesPage() {
                                             <div className="space-y-2">
                                                 <div className="space-y-1">
                                                     <Label htmlFor="sig-linkedin" className="text-xs flex items-center gap-1.5">
-                                                        <LinkedinIcon className="size-3.5 text-muted-foreground" />
+                                                        <LinkIcon className="size-3.5 text-muted-foreground" />
                                                         LinkedIn
                                                     </Label>
                                                     <Input
@@ -1611,7 +1610,7 @@ export default function EmailTemplatesPage() {
 
                                                 <div className="space-y-1">
                                                     <Label htmlFor="sig-instagram" className="text-xs flex items-center gap-1.5">
-                                                        <InstagramIcon className="size-3.5 text-muted-foreground" />
+                                                        <CameraIcon className="size-3.5 text-muted-foreground" />
                                                         Instagram
                                                     </Label>
                                                     <Input

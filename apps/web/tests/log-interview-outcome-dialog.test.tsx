@@ -96,7 +96,7 @@ describe("LogInterviewOutcomeDialog", () => {
         fireEvent.change(screen.getByTestId("outcome-select"), {
             target: { value: "no_show" },
         })
-        fireEvent.click(screen.getByLabelText(/log for a different date\/time/i))
+        fireEvent.click(screen.getByRole("checkbox", { name: /log for a different date\/time/i }))
         fireEvent.change(screen.getByLabelText(/occurred at/i), {
             target: { value: "2026-02-20T10:30" },
         })

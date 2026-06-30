@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { TrendingUpIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, FacebookIcon, DollarSignIcon } from "lucide-react"
+import { TrendingUpIcon, SparklesIcon, UsersIcon, CheckCircle2Icon, Loader2Icon, AlertCircleIcon, MegaphoneIcon, DollarSignIcon } from "lucide-react"
 import { useAnalyticsSummary, useSurrogatesByStatus, useSurrogatesByAssignee, useSurrogatesTrend, useMetaPerformance, useFunnelCompare, useSurrogatesByStateCompare, useCampaigns, useSpendTotals, usePerformanceByUser } from "@/lib/hooks/use-analytics"
 import { TeamPerformanceTable } from "@/components/reports/TeamPerformanceTable"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -475,7 +475,7 @@ export default function ReportsPage() {
                     <Card className="animate-in fade-in-50 duration-500 delay-300">
                         <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
-                            <FacebookIcon className="size-4 text-muted-foreground" />
+                            <MegaphoneIcon className="size-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
                             {metaLoading ? (

@@ -217,7 +217,6 @@ export function TaskEditModal({
                                             mode="single"
                                             selected={dueDate}
                                             onSelect={setDueDate}
-                                            initialFocus
                                         />
                                     </PopoverContent>
                                 </Popover>

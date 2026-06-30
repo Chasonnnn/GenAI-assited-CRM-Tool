@@ -237,12 +237,11 @@ describe("EmailTemplatesPage", () => {
 
         fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
 
-        const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
-        expect(triggers.length).toBeGreaterThan(0)
-        fireEvent.click(triggers[0] as HTMLElement)
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
 
-        expect(await screen.findByText("Send test email")).toBeInTheDocument()
-        fireEvent.click(screen.getByText("Send test email"))
+        const sendTestAction = await screen.findByRole("menuitem", { name: "Send test email" })
+        expect(sendTestAction).toBeInTheDocument()
+        fireEvent.click(sendTestAction)
 
         expect(await screen.findByLabelText("To email")).toBeInTheDocument()
     })
@@ -327,11 +326,9 @@ describe("EmailTemplatesPage", () => {
     it("uses personal signature in preview for personal templates", async () => {
         render(<EmailTemplatesPage />)
 
-        const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
-        expect(triggers.length).toBeGreaterThan(0)
-        fireEvent.click(triggers[0] as HTMLElement)
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
 
-        fireEvent.click(await screen.findByText("Edit"))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
         fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
 
         expect(await screen.findByText("Email Preview")).toBeInTheDocument()
@@ -344,11 +341,9 @@ describe("EmailTemplatesPage", () => {
 
         fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
 
-        const triggers = document.querySelectorAll('[data-slot="dropdown-menu-trigger"]')
-        expect(triggers.length).toBeGreaterThan(0)
-        fireEvent.click(triggers[0] as HTMLElement)
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
 
-        fireEvent.click(await screen.findByText("Edit"))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
         fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
 
         expect(await screen.findByText("Email Preview")).toBeInTheDocument()

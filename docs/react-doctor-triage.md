@@ -156,3 +156,12 @@ Full command after Batch 7: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1395`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 124 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 838 warnings`
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-07780cca-db38-431b-8b21-5ed2f3e45689`
+
+## Dependency Refresh
+
+- Action: Moved the frontend package manager to `pnpm@11.9.0`, migrated pnpm policy settings from `package.json` to `pnpm-workspace.yaml`, refreshed direct dependencies to current registry versions, and removed the unused `tailwindcss-animate` dependency.
+- Follow-up fixes: Updated code for current `lucide-react` and `react-day-picker` APIs, TypeScript 6 indexed access checks, ESLint 10 `no-useless-assignment`, and Base UI test DOM changes.
+- Dependency verification: `corepack pnpm outdated --long` reported no outdated direct dependencies; `corepack pnpm peers check` reported no peer issues.
+- Code verification: `corepack pnpm tsc --noEmit`; `corepack pnpm lint`; `corepack pnpm test --run`.
+- Full React Doctor after refresh: `4 / 100 Critical`, `1394` diagnostics, `158` errors.
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-19dfef0f-3f86-4a74-8fc3-73bf5dd26876`

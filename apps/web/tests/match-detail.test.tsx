@@ -288,7 +288,7 @@ describe('MatchDetailPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
         fireEvent.click(screen.getByRole('button', { name: /add task/i }))
 
-        expect(screen.getByLabelText(/match \(both sides\)/i)).toBeChecked()
+        expect(screen.getByRole('radio', { name: /match \(both sides\)/i })).toBeChecked()
     })
 
     it('creates a match-scoped task from the overview tasks tab', async () => {

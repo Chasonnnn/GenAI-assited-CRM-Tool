@@ -148,7 +148,9 @@ const StageDistributionChart = dynamic<StageDistributionChartProps>(
                                 cursor={{ fill: "var(--muted)", opacity: 0.3 }}
                                 content={({ active, payload }) => {
                                     if (!active || !payload?.length) return null
-                                    const data = payload[0].payload
+                                    const entry = payload[0]
+                                    if (!entry) return null
+                                    const data = entry.payload
                                     return (
                                         <div className="rounded-lg border bg-background p-2 shadow-md">
                                             <p className="font-medium">

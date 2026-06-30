@@ -105,7 +105,7 @@ function AppointmentItem({
     appointment: AppointmentListItem
     compact?: boolean
 }) {
-    let time = ""
+    let time: string
     try {
         time = format(parseISO(appointment.scheduled_start), "h:mm a")
     } catch {

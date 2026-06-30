@@ -1,0 +1,72 @@
+packages:
+  - "."
+
+overrides:
+  "@types/react": 19.2.17
+  "@types/react-dom": 19.2.3
+  ajv: 6.14.0
+  brace-expansion: 5.0.7
+  d3-color: ">=3.1.0"
+  esbuild: 0.28.1
+  flatted: 3.4.2
+  markdown-it: 14.2.0
+  minimatch: 10.2.5
+  picomatch: 4.0.4
+  postcss: 8.5.16
+  rollup: 4.62.2
+  vite: 8.1.0
+  ws: 8.21.0
+  js-yaml: 4.2.0
+  "@babel/core": 7.29.6
+
+packageExtensions:
+  react-simple-maps@*:
+    peerDependencies:
+      react: "^16.8.0 || 17.x || 18.x || 19.x"
+      react-dom: "^16.8.0 || 17.x || 18.x || 19.x"
+
+peerDependencyRules:
+  allowedVersions:
+    react: 19.x
+    react-dom: 19.x
+
+onlyBuiltDependencies:
+  - esbuild
+  - lightningcss
+  - msw
+  - sharp
+
+allowBuilds:
+  esbuild: true
+  lightningcss: true
+  msw: true
+  sharp: true
+
+minimumReleaseAgeExclude:
+  - '@tailwindcss/node@4.3.2'
+  - '@tailwindcss/oxide-android-arm64@4.3.2'
+  - '@tailwindcss/oxide-darwin-arm64@4.3.2'
+  - '@tailwindcss/oxide-darwin-x64@4.3.2'
+  - '@tailwindcss/oxide-freebsd-x64@4.3.2'
+  - '@tailwindcss/oxide-linux-arm-gnueabihf@4.3.2'
+  - '@tailwindcss/oxide-linux-arm64-gnu@4.3.2'
+  - '@tailwindcss/oxide-linux-arm64-musl@4.3.2'
+  - '@tailwindcss/oxide-linux-x64-gnu@4.3.2'
+  - '@tailwindcss/oxide-linux-x64-musl@4.3.2'
+  - '@tailwindcss/oxide-wasm32-wasi@4.3.2'
+  - '@tailwindcss/oxide-win32-arm64-msvc@4.3.2'
+  - '@tailwindcss/oxide-win32-x64-msvc@4.3.2'
+  - '@tailwindcss/oxide@4.3.2'
+  - '@tailwindcss/postcss@4.3.2'
+  - '@typescript-eslint/eslint-plugin@8.62.1'
+  - '@typescript-eslint/parser@8.62.1'
+  - '@typescript-eslint/project-service@8.62.1'
+  - '@typescript-eslint/scope-manager@8.62.1'
+  - '@typescript-eslint/tsconfig-utils@8.62.1'
+  - '@typescript-eslint/type-utils@8.62.1'
+  - '@typescript-eslint/types@8.62.1'
+  - '@typescript-eslint/typescript-estree@8.62.1'
+  - '@typescript-eslint/utils@8.62.1'
+  - '@typescript-eslint/visitor-keys@8.62.1'
+  - tailwindcss@4.3.2
+  - typescript-eslint@8.62.1

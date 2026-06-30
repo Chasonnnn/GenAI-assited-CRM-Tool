@@ -150,7 +150,9 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                 <ChartTooltip
                                     content={({ payload }) => {
                                         if (!payload?.length) return null
-                                        const d = payload[0].payload as BreakdownChartDatum
+                                        const entry = payload[0]
+                                        if (!entry) return null
+                                        const d = entry.payload as BreakdownChartDatum
                                         return (
                                             <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
                                                 <p className="font-medium">{d.name}</p>
@@ -187,7 +189,9 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                 <ChartTooltip
                                     content={({ payload }) => {
                                         if (!payload?.length) return null
-                                        const d = payload[0].payload as SpendTrendChartDatum
+                                        const entry = payload[0]
+                                        if (!entry) return null
+                                        const d = entry.payload as SpendTrendChartDatum
                                         return (
                                             <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
                                                 <p className="font-medium">{d.date}</p>
@@ -220,7 +224,9 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                 <ChartTooltip
                                     content={({ payload }) => {
                                         if (!payload?.length) return null
-                                        const d = payload[0].payload as PlatformChartDatum
+                                        const entry = payload[0]
+                                        if (!entry) return null
+                                        const d = entry.payload as PlatformChartDatum
                                         return (
                                             <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
                                                 <p className="font-medium">{d.platform}</p>
@@ -255,7 +261,9 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                             <ChartTooltip
                                 content={({ payload }) => {
                                     if (!payload?.length) return null
-                                    const d = payload[0].payload as AdChartDatum
+                                    const entry = payload[0]
+                                    if (!entry) return null
+                                    const d = entry.payload as AdChartDatum
                                     return (
                                         <div className="rounded-lg border bg-background/95 backdrop-blur p-2 shadow-lg text-xs">
                                             <p className="font-medium truncate max-w-[220px]">{d.ad}</p>

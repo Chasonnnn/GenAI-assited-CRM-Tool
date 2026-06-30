@@ -4,8 +4,8 @@ import dynamic from "next/dynamic"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     AlertCircleIcon,
-    FacebookIcon,
     Loader2Icon,
+    MegaphoneIcon,
     SparklesIcon,
     TrendingDownIcon,
     TrendingUpIcon,
@@ -390,7 +390,7 @@ export function ReportsChartsGrid({
             <Card className="animate-in fade-in-50 duration-500 delay-700">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <FacebookIcon className="size-5 text-blue-600" />
+                        <MegaphoneIcon className="size-5 text-blue-600" />
                         Meta Lead Ads Performance
                     </CardTitle>
                 </CardHeader>
