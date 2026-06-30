@@ -39,14 +39,20 @@ export default function InviteAcceptPageClient() {
     // Fetch invite details
     useEffect(() => {
         async function fetchInvite() {
-            try {
-                const data = await api.get<InviteDetails>(`/settings/invites/accept/${inviteId}`)
-                setInvite(data)
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Invite not found")
-            } finally {
-                setIsLoading(false)
+            const result = await api.get<InviteDetails>(`/settings/invites/accept/${inviteId}`).then((data) => ({
+                status: "success" as const,
+                data,
+            })).catch((err: unknown) => ({
+                status: "error" as const,
+                message: err instanceof Error ? err.message : "Invite not found",
+            }))
+
+            if (result.status === "success") {
+                setInvite(result.data)
+            } else {
+                setError(result.message)
             }
+            setIsLoading(false)
         }
 
         if (inviteId) {

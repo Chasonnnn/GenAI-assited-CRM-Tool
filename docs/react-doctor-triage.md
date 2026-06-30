@@ -872,3 +872,21 @@ Full command after Batch 42: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1057`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 201 warnings`, `Performance 13 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 758 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-08071977-253f-4c22-a91c-34f33a7972ac`
+
+## Batch 43
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/invite/[id]/page.client.tsx` | Valid: the invite acceptance loader used a `try/finally` finalizer only to clear loading state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch and clear loading after success or error handling while preserving success and missing-invite behavior. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/invite-page.test.tsx`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 43: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 43: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `57 / 100 Critical`
+- Total diagnostics: `1056`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 201 warnings`, `Performance 12 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 758 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1a6ce04e-e219-40d2-a970-c4d918f461c8`
