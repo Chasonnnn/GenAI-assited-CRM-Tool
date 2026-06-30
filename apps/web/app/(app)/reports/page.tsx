@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -63,6 +63,146 @@ const chartColors = [
     "#06b6d4",
     "#ef4444",
 ]
+
+type PerformanceMode = "cohort" | "activity"
+type ReportCustomRange = { from: Date | undefined; to: Date | undefined }
+type ReportDateRange = { fromDate: string | undefined; toDate: string | undefined }
+type CountPoint = { count: number }
+type TrendPoint = { date: string; count: number }
+type StatusChartPoint = { status: string; count: number }
+type CampaignOption = { ad_id: string; ad_name: string; lead_count: number }
+
+function formatTokens(num: number) {
+    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
+    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`
+    return num.toString()
+}
+
+function isPerformanceMode(value: string | null): value is PerformanceMode {
+    return value === "cohort" || value === "activity"
+}
+
+function getReportDateRange(dateRange: DateRangePreset, customRange: ReportCustomRange): ReportDateRange {
+    const now = new Date()
+
+    switch (dateRange) {
+        case 'all':
+            return { fromDate: undefined, toDate: undefined }
+        case 'today':
+            return {
+                fromDate: formatLocalDate(now),
+                toDate: formatLocalDate(now),
+            }
+        case 'week':
+            return {
+                fromDate: formatLocalDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
+                toDate: formatLocalDate(now),
+            }
+        case 'custom':
+            if (customRange.from && customRange.to) {
+                return {
+                    fromDate: formatLocalDate(customRange.from),
+                    toDate: formatLocalDate(customRange.to),
+                }
+            }
+            return { fromDate: undefined, toDate: undefined }
+        case 'month':
+        default:
+            return {
+                fromDate: formatLocalDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
+                toDate: formatLocalDate(now),
+            }
+    }
+}
+
+function getTotalCount(items: CountPoint[]) {
+    return items.reduce((sum, item) => sum + item.count, 0)
+}
+
+function getTrendPercentage(trend: CountPoint[] | undefined) {
+    if (!trend || trend.length < 2) return null
+    const midpoint = Math.floor(trend.length / 2)
+    const firstHalf = trend.slice(0, midpoint).reduce((sum, d) => sum + d.count, 0)
+    const secondHalf = trend.slice(midpoint).reduce((sum, d) => sum + d.count, 0)
+    if (firstHalf === 0) return secondHalf > 0 ? 100 : 0
+    return Math.round(((secondHalf - firstHalf) / firstHalf) * 100)
+}
+
+function getTopCountItem<T extends CountPoint>(items: T[]) {
+    const [first] = items
+    if (!first) return null
+    return items.reduce((max, item) => item.count > max.count ? item : max, first)
+}
+
+function formatShortDate(value: string) {
+    if (!value) return ""
+    const parsed = new Date(`${value}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return value
+    return parsed.toLocaleDateString()
+}
+
+function buildInsightSummary(
+    computeTrendPercentage: number | null,
+    trendChartData: TrendPoint[],
+    topStatus: StatusChartPoint | null,
+    totalStatusCount: number
+) {
+    const trendText =
+        computeTrendPercentage === null
+            ? "Trend: not enough data yet."
+            : computeTrendPercentage >= 0
+                ? `Trend: up ${computeTrendPercentage}% vs prior period.`
+                : `Trend: down ${Math.abs(computeTrendPercentage)}% vs prior period.`
+
+    let anomalyText = "Anomalies: not enough daily data."
+    if (trendChartData.length >= 4) {
+        const counts = trendChartData.map((point) => point.count)
+        const average = counts.reduce((sum, value) => sum + value, 0) / counts.length
+        if (average > 0) {
+            const [firstPoint] = trendChartData
+            if (!firstPoint) {
+                anomalyText = "Anomalies: no volume yet."
+            } else {
+                const maxPoint = trendChartData.reduce((max, point) =>
+                    point.count > max.count ? point : max, firstPoint)
+                const minPoint = trendChartData.reduce((min, point) =>
+                    point.count < min.count ? point : min, firstPoint)
+                const spikeDelta = (maxPoint.count - average) / average
+                const dipDelta = (average - minPoint.count) / average
+
+                if (spikeDelta >= 0.6) {
+                    anomalyText = `Anomaly: spike on ${formatShortDate(maxPoint.date)} (${maxPoint.count} surrogates, +${Math.round(spikeDelta * 100)}% vs avg).`
+                } else if (dipDelta >= 0.6) {
+                    anomalyText = `Anomaly: dip on ${formatShortDate(minPoint.date)} (${minPoint.count} surrogates, -${Math.round(dipDelta * 100)}% vs avg).`
+                } else {
+                    anomalyText = "Anomalies: no major spikes or dips."
+                }
+            }
+        } else {
+            anomalyText = "Anomalies: no volume yet."
+        }
+    }
+
+    const bottleneckText =
+        topStatus && totalStatusCount > 0
+            ? `Bottleneck: ${topStatus.status} holds ${Math.round((topStatus.count / totalStatusCount) * 100)}% of active surrogates.`
+            : "Bottleneck: no dominant stage yet."
+
+    return {
+        trend: trendText,
+        anomaly: anomalyText,
+        bottleneck: bottleneckText,
+    }
+}
+
+function buildCampaignLabelById(campaigns: CampaignOption[] | undefined) {
+    const map = new Map<string, string>()
+    campaigns?.forEach((campaign) => {
+        map.set(campaign.ad_id, `${campaign.ad_name} (${campaign.lead_count})`)
+    })
+    return map
+}
+
 // AI Usage Stats sub-component
 function AIUsageStats() {
     const { data: usage, isLoading, isError } = useAIUsageSummary(30)
@@ -77,12 +217,6 @@ function AIUsageStats() {
 
     if (!usage || usage.total_requests === 0) {
         return <p className="text-xs text-muted-foreground">No AI usage yet</p>
-    }
-
-    const formatTokens = (num: number) => {
-        if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
-        if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`
-        return num.toString()
     }
 
     return (
@@ -112,48 +246,13 @@ export default function ReportsPage() {
     })
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
-    type PerformanceMode = "cohort" | "activity"
-    const isPerformanceMode = (value: string | null): value is PerformanceMode =>
-        value === "cohort" || value === "activity"
-
     const [performanceMode, setPerformanceMode] = useState<PerformanceMode>("cohort")
 
     // Clear AI context for reports pages (use global mode)
     useSetAIContext(null)
 
     // Compute date range based on selected option
-    const { fromDate, toDate } = useMemo(() => {
-        const now = new Date()
-
-        switch (dateRange) {
-            case 'all':
-                return { fromDate: undefined, toDate: undefined }
-            case 'today':
-                return {
-                    fromDate: formatLocalDate(now),
-                    toDate: formatLocalDate(now),
-                }
-            case 'week':
-                return {
-                    fromDate: formatLocalDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
-                    toDate: formatLocalDate(now),
-                }
-            case 'custom':
-                if (customRange.from && customRange.to) {
-                    return {
-                        fromDate: formatLocalDate(customRange.from),
-                        toDate: formatLocalDate(customRange.to),
-                    }
-                }
-                return { fromDate: undefined, toDate: undefined }
-            case 'month':
-            default:
-                return {
-                    fromDate: formatLocalDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
-                    toDate: formatLocalDate(now),
-                }
-        }
-    }, [dateRange, customRange])
+    const { fromDate, toDate } = getReportDateRange(dateRange, customRange)
 
     // Fetch data
     const dateParams = {
@@ -205,103 +304,29 @@ export default function ReportsPage() {
         count: item.count,
     }))
 
-    const totalStatusCount = useMemo(() => {
-        return statusChartData.reduce((sum, item) => sum + item.count, 0)
-    }, [statusChartData])
+    const totalStatusCount = getTotalCount(statusChartData)
 
     // Compute trend statistics from real data
-    const computeTrendPercentage = useMemo(() => {
-        if (!trend || trend.length < 2) return null
-        const midpoint = Math.floor(trend.length / 2)
-        const firstHalf = trend.slice(0, midpoint).reduce((sum, d) => sum + d.count, 0)
-        const secondHalf = trend.slice(midpoint).reduce((sum, d) => sum + d.count, 0)
-        if (firstHalf === 0) return secondHalf > 0 ? 100 : 0
-        return Math.round(((secondHalf - firstHalf) / firstHalf) * 100)
-    }, [trend])
+    const computeTrendPercentage = getTrendPercentage(trend)
 
-    const topStatus = useMemo(() => {
-        const [first] = statusChartData
-        if (!first) return null
-        return statusChartData.reduce((max, item) => item.count > max.count ? item : max, first)
-    }, [statusChartData])
+    const topStatus = getTopCountItem(statusChartData)
 
-    const topPerformer = useMemo(() => {
-        const [first] = assigneeChartData
-        if (!first) return null
-        return assigneeChartData.reduce((max, item) => item.count > max.count ? item : max, first)
-    }, [assigneeChartData])
+    const topPerformer = getTopCountItem(assigneeChartData)
 
-    const totalSurrogatesInPeriod = useMemo(() => {
-        return trendChartData.reduce((sum, d) => sum + d.count, 0)
-    }, [trendChartData])
+    const totalSurrogatesInPeriod = getTotalCount(trendChartData)
 
-    const formatShortDate = (value: string) => {
-        if (!value) return ""
-        const parsed = new Date(`${value}T00:00:00`)
-        if (Number.isNaN(parsed.getTime())) return value
-        return parsed.toLocaleDateString()
-    }
+    const insightSummary = buildInsightSummary(
+        computeTrendPercentage,
+        trendChartData,
+        topStatus,
+        totalStatusCount
+    )
 
-    const insightSummary = useMemo(() => {
-        const trendText =
-            computeTrendPercentage === null
-                ? "Trend: not enough data yet."
-                : computeTrendPercentage >= 0
-                    ? `Trend: up ${computeTrendPercentage}% vs prior period.`
-                    : `Trend: down ${Math.abs(computeTrendPercentage)}% vs prior period.`
-
-        let anomalyText = "Anomalies: not enough daily data."
-        if (trendChartData.length >= 4) {
-            const counts = trendChartData.map((point) => point.count)
-            const average = counts.reduce((sum, value) => sum + value, 0) / counts.length
-            if (average > 0) {
-                const [firstPoint] = trendChartData
-                if (!firstPoint) {
-                    anomalyText = "Anomalies: no volume yet."
-                } else {
-                    const maxPoint = trendChartData.reduce((max, point) =>
-                        point.count > max.count ? point : max, firstPoint)
-                    const minPoint = trendChartData.reduce((min, point) =>
-                        point.count < min.count ? point : min, firstPoint)
-                const spikeDelta = (maxPoint.count - average) / average
-                const dipDelta = (average - minPoint.count) / average
-
-                if (spikeDelta >= 0.6) {
-                    anomalyText = `Anomaly: spike on ${formatShortDate(maxPoint.date)} (${maxPoint.count} surrogates, +${Math.round(spikeDelta * 100)}% vs avg).`
-                } else if (dipDelta >= 0.6) {
-                    anomalyText = `Anomaly: dip on ${formatShortDate(minPoint.date)} (${minPoint.count} surrogates, -${Math.round(dipDelta * 100)}% vs avg).`
-                } else {
-                    anomalyText = "Anomalies: no major spikes or dips."
-                }
-                }
-            } else {
-                anomalyText = "Anomalies: no volume yet."
-            }
-        }
-
-        const bottleneckText =
-            topStatus && totalStatusCount > 0
-                ? `Bottleneck: ${topStatus.status} holds ${Math.round((topStatus.count / totalStatusCount) * 100)}% of active surrogates.`
-                : "Bottleneck: no dominant stage yet."
-
-        return {
-            trend: trendText,
-            anomaly: anomalyText,
-            bottleneck: bottleneckText,
-        }
-    }, [computeTrendPercentage, trendChartData, topStatus, totalStatusCount])
-
-    const campaignLabelById = useMemo(() => {
-        const map = new Map<string, string>()
-        campaigns?.forEach((campaign) => {
-            map.set(campaign.ad_id, `${campaign.ad_name} (${campaign.lead_count})`)
-        })
-        return map
-    }, [campaigns])
+    const campaignLabelById = buildCampaignLabelById(campaigns)
 
     const handleExportPDF = async () => {
         setIsExporting(true)
-        try {
+        const result = await (async (): Promise<{ status: "success" } | { status: "error"; message: string; error?: unknown }> => {
             // Call backend API which generates PDF with native charts
             const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
             const params = new URLSearchParams()
@@ -316,7 +341,7 @@ export default function ReportsPage() {
             })
 
             if (!response.ok) {
-                throw new Error(`Export failed (${response.status})`)
+                return { status: "error", message: `Export failed (${response.status})` }
             }
 
             // Get filename from Content-Disposition or generate default
@@ -334,14 +359,20 @@ export default function ReportsPage() {
             link.click()
             link.remove()
             URL.revokeObjectURL(blobUrl)
-        } catch (error) {
-            console.error("Failed to export PDF:", error)
+            return { status: "success" }
+        })().catch((error: unknown) => ({
+            status: "error" as const,
+            message: error instanceof Error ? error.message : "Unable to export report.",
+            error,
+        }))
+
+        if (result.status === "error") {
+            console.error("Failed to export PDF:", result.error ?? result.message)
             toast.error("Export failed", {
-                description: error instanceof Error ? error.message : "Unable to export report.",
+                description: result.message,
             })
-        } finally {
-            setIsExporting(false)
         }
+        setIsExporting(false)
     }
 
     return (

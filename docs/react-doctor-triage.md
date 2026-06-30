@@ -890,3 +890,26 @@ Full command after Batch 43: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1056`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 201 warnings`, `Performance 12 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 758 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1a6ce04e-e219-40d2-a970-c4d918f461c8`
+
+## Batch 44
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/reports/page.tsx` | Valid: the reports PDF export handler used a `try/finally` finalizer only to clear exporting state, which blocks the current React Compiler path and surfaced twice in the same handler. | High | Replace the finalizer and thrown HTTP failure with a typed promise-result branch, preserve success download behavior, preserve failure toast copy, and clear exporting after success or error handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/reports-page.test.tsx`; full React Doctor errors dropped from `17` to `15`. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/reports/page.tsx` | Valid: React Compiler is enabled, so the local `useMemo` wrappers around report date, counts, top items, insights, and campaign labels are redundant in this touched page. | High | Replace those wrappers with plain derived values and module-scope helpers. Extended the source guard so it failed on reintroduced `useMemo`. | Focused tests and TypeScript passed; changed-scope React Doctor no longer reports redundant memoization for the reports page. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/(app)/reports/page.tsx` | Valid: `formatTokens`, `isPerformanceMode`, and `formatShortDate` used no render-local state and were rebuilt during render. | High | Move the helpers to module scope and reuse them from render. Extended the source guard so it failed on render-local helper declarations. | Focused tests and TypeScript passed; full React Doctor pure-function count dropped from `36` to `33`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/reports/page.tsx` | Valid but deferred: `ReportsPage` remains a large component with five state hooks. Fixing it requires a component split and state-shape decision beyond the export/compiler cleanup. | High | Logged for a later structural reports-page batch instead of mixing a broader refactor into this commit. | Changed-scope React Doctor reports only these two remaining warnings for the reports page. |
+
+Changed-scope command after Batch 44: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e7e0446a-a495-4605-81d9-f2465ad49ed6`
+
+Full command after Batch 44: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `57 / 100 Critical`
+- Total diagnostics: `1043`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 201 warnings`, `Performance 10 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 747 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7ad751bb-d8d1-4e32-aa10-d5f8e1a8d5ab`

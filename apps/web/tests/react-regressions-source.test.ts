@@ -1461,6 +1461,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("Exporting...")
     })
 
+    it("keeps reports PDF export compiler-compatible", () => {
+        const source = readSource("app/(app)/reports/page.tsx")
+
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("const formatTokens =")
+        expect(source).not.toContain("const isPerformanceMode =")
+        expect(source).not.toContain("const formatShortDate =")
+    })
+
     it("uses gap spacing for alert summary card headers", () => {
         const source = readSource("app/(app)/settings/alerts/page.tsx")
 
