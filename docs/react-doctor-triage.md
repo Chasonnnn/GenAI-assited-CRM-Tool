@@ -1205,3 +1205,22 @@ Full command after Batch 58: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `896`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 635 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9936e2a8-1f68-4501-a247-50da47d3d1bc`
+
+## Batch 59
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/forms/use-automation-form-builder-page.ts` | Valid: the automation form-builder controller wrapped draft payloads, autosave labels, builder document props, and local UI/submission handlers in manual `useMemo`/`useCallback`. | High | Remove the wrappers, derive the controller values directly, and replace object-identity autosave debounce with a deterministic draft fingerprint plus an explicit timeout. Hoisted pure QR/submission helpers to module scope so unwrapping did not introduce new pure-function rebuild warnings. Added a source guard that failed on the old `useMemo`/`useCallback` imports and calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/form-builder-page.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `502` to `457`. |
+
+Changed-scope command after Batch 59: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 59: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `851`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 590 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a9ea583a-5c62-4b4e-a4e5-60efbd080f56`

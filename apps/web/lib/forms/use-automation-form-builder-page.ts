@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useEffect, useRef } from "react"
 import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -24,8 +24,8 @@ import {
     type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
+import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
-import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { useFormMappingOptions } from "@/lib/hooks/use-form-mapping-options"
 import {
@@ -48,6 +48,24 @@ import {
     useUploadFormLogo,
 } from "@/lib/hooks/use-forms"
 import { useOrgSignature } from "@/lib/hooks/use-signature"
+
+type BuilderPages = ReturnType<typeof useFormBuilderDocument>["pages"]
+type AutomationRouter = ReturnType<typeof useRouter>
+type AutomationDraftValues = Pick<
+    AutomationBuilderState,
+    | "allowedMimeTypesText"
+    | "defaultTemplateId"
+    | "formDescription"
+    | "formName"
+    | "formPurpose"
+    | "logoUrl"
+    | "maxFileCount"
+    | "maxFileSizeMb"
+    | "privacyNotice"
+    | "publicEyebrow"
+    | "publicSubtitle"
+    | "publicTitle"
+>
 
 function collectCriticalFieldValues(options: FormSurrogateFieldOption[]): string[] {
     const values: string[] = []
@@ -106,6 +124,193 @@ function getMissingLeadCaptureMappings(
             fallbackByValue.get(value) ??
             ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
     )
+}
+
+function buildAutomationDraftPayload(pages: BuilderPages, state: AutomationDraftValues): FormCreatePayload {
+    const allowedMimeTypes: string[] = []
+    for (const entry of state.allowedMimeTypesText.split(",")) {
+        const trimmedEntry = entry.trim()
+        if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
+    }
+    return {
+        name: state.formName.trim(),
+        description: state.formDescription.trim() || null,
+        purpose: state.formPurpose,
+        form_schema: buildFormSchema(pages, {
+            publicEyebrow: state.publicEyebrow,
+            publicTitle: state.publicTitle,
+            publicSubtitle: state.publicSubtitle,
+            logoUrl: state.logoUrl,
+            privacyNotice: state.privacyNotice,
+        }),
+        max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),
+        max_file_count: Math.max(0, Math.round(state.maxFileCount)),
+        allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
+        default_application_email_template_id: state.defaultTemplateId || null,
+    }
+}
+
+async function persistAutomationFormPayload({
+    payload,
+    isNewForm,
+    id,
+    pages,
+    createFormMutation,
+    updateFormMutation,
+    setMappingsMutation,
+    router,
+    patchState,
+}: {
+    payload: FormCreatePayload
+    isNewForm: boolean
+    id: string
+    pages: BuilderPages
+    createFormMutation: ReturnType<typeof useCreateForm>
+    updateFormMutation: ReturnType<typeof useUpdateForm>
+    setMappingsMutation: ReturnType<typeof useSetFormMappings>
+    router: AutomationRouter
+    patchState: (payload: Partial<AutomationBuilderState>) => void
+}): Promise<FormRead> {
+    let savedForm: FormRead
+    if (isNewForm) {
+        savedForm = await createFormMutation.mutateAsync(payload)
+        router.replace(`/automation/forms/${savedForm.id}`)
+    } else {
+        savedForm = await updateFormMutation.mutateAsync({
+            formId: id,
+            payload,
+        })
+    }
+
+    const mappings = buildMappings(pages)
+    await setMappingsMutation.mutateAsync({
+        formId: savedForm.id,
+        mappings,
+    })
+
+    patchState({ isPublished: savedForm.status === "published" })
+    return savedForm
+}
+
+function buildSavedState(fingerprint: string, savedForm?: FormRead): Partial<AutomationBuilderState> {
+    return {
+        autoSaveStatus: "saved",
+        lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
+        lastSavedFingerprint: fingerprint,
+    }
+}
+
+function getAutoSaveLabel(state: AutomationBuilderState, isDirty: boolean) {
+    if (!state.hasHydrated) return null
+    if (state.isSaving || state.autoSaveStatus === "saving") return "Saving..."
+    if (state.autoSaveStatus === "error") return "Autosave failed"
+    if (isDirty) return "Unsaved changes"
+    if (state.autoSaveStatus === "saved") {
+        if (state.lastSavedAt) {
+            return `Saved ${state.lastSavedAt.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+            })}`
+        }
+        return "Saved"
+    }
+    return "Autosave on"
+}
+
+function getQrSvgMarkup() {
+    const svg = document.querySelector("#shared-intake-qr svg")
+    if (!(svg instanceof SVGSVGElement)) {
+        toast.error("QR code not ready yet")
+        return null
+    }
+
+    let markup = new XMLSerializer().serializeToString(svg)
+    if (!markup.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
+        markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
+    }
+    return markup
+}
+
+function buildQrFilename(link: FormIntakeLinkRead | null, extension: "svg" | "png") {
+    const baseRaw = link?.campaign_name || link?.event_name || link?.slug || "intake-link"
+    const base = baseRaw
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    return `${base || "intake-link"}-qr.${extension}`
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+    const downloadUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = downloadUrl
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(downloadUrl)
+}
+
+async function handleCopySharedLink(link: FormIntakeLinkRead) {
+    const url = link.intake_url?.trim()
+    if (!url) {
+        toast.error("No intake URL available")
+        return
+    }
+    try {
+        await navigator.clipboard.writeText(url)
+        toast.success("Shared link copied")
+    } catch {
+        toast.error("Failed to copy link")
+    }
+}
+
+function readAnswerValue(submission: FormSubmissionRead, keys: string[]) {
+    for (const key of keys) {
+        const rawValue = submission.answers?.[key]
+        if (typeof rawValue === "string" && rawValue.trim()) {
+            return rawValue.trim()
+        }
+    }
+    return "—"
+}
+
+function formatSubmissionDateTime(isoString: string) {
+    const value = new Date(isoString)
+    if (Number.isNaN(value.getTime())) return "—"
+    return value.toLocaleString()
+}
+
+function submissionOutcomeLabel(submission: FormSubmissionRead) {
+    if (submission.match_status === "linked") return "Matched"
+    if (submission.match_status === "lead_created") return "Lead Created"
+    return "Pending Match"
+}
+
+function submissionOutcomeBadgeClass(submission: FormSubmissionRead) {
+    if (submission.match_status === "linked") {
+        return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    }
+    if (submission.match_status === "lead_created") {
+        return "border-blue-200 bg-blue-50 text-blue-700"
+    }
+    return "border-amber-200 bg-amber-50 text-amber-700"
+}
+
+function submissionReviewLabel(submission: FormSubmissionRead) {
+    if (submission.status === "approved") return "Approved"
+    if (submission.status === "rejected") return "Rejected"
+    return "Pending Review"
+}
+
+function submissionReviewBadgeClass(submission: FormSubmissionRead) {
+    if (submission.status === "approved") {
+        return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    }
+    if (submission.status === "rejected") {
+        return "border-red-200 bg-red-50 text-red-700"
+    }
+    return "border-stone-200 bg-stone-100 text-stone-700"
 }
 
 export function useAutomationFormBuilderPage() {
@@ -218,21 +423,10 @@ export function useAutomationFormBuilderPage() {
     const isDefaultSurrogateApplication = Boolean(formData?.is_default_surrogate_application)
     const resolvedLogoUrl =
         state.logoUrl && state.logoUrl.startsWith("/") && apiBaseUrl ? `${apiBaseUrl}${state.logoUrl}` : state.logoUrl
-    const surrogateFieldMappings = useMemo(
-        () =>
-            mappingOptionsData && mappingOptionsData.length > 0
-                ? mappingOptionsData
-                : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS,
-        [mappingOptionsData],
-    )
-
-    const syncAutosaveMeta = useCallback((status: "idle" | "saved", savedAt: Date | null, fingerprint: string) => {
-        patchState({
-            autoSaveStatus: status,
-            lastSavedAt: savedAt,
-            lastSavedFingerprint: fingerprint,
-        })
-    }, [patchState])
+    const surrogateFieldMappings =
+        mappingOptionsData && mappingOptionsData.length > 0
+            ? mappingOptionsData
+            : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
 
     useEffect(() => {
         resetForForm(isNewForm)
@@ -273,50 +467,9 @@ export function useAutomationFormBuilderPage() {
         orgLogoInitRef.current = true
     }, [orgLogoPath, patchState, state.customLogoUrl, state.hasHydrated, state.logoUrl])
 
-    const draftPayload = useMemo<FormCreatePayload>(() => {
-        const allowedMimeTypes: string[] = []
-        for (const entry of state.allowedMimeTypesText.split(",")) {
-            const trimmedEntry = entry.trim()
-            if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
-        }
-        return {
-            name: state.formName.trim(),
-            description: state.formDescription.trim() || null,
-            purpose: state.formPurpose,
-            form_schema: buildFormSchema(pages, {
-                publicEyebrow: state.publicEyebrow,
-                publicTitle: state.publicTitle,
-                publicSubtitle: state.publicSubtitle,
-                logoUrl: state.logoUrl,
-                privacyNotice: state.privacyNotice,
-            }),
-            max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),
-            max_file_count: Math.max(0, Math.round(state.maxFileCount)),
-            allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
-            default_application_email_template_id: state.defaultTemplateId || null,
-        }
-    }, [
-        pages,
-        state.allowedMimeTypesText,
-        state.defaultTemplateId,
-        state.formDescription,
-        state.formName,
-        state.formPurpose,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicEyebrow,
-        state.publicSubtitle,
-        state.publicTitle,
-    ])
-    const debouncedPayload = useDebouncedValue(draftPayload, 1200)
-    const debouncedFingerprint = useMemo(
-        () => JSON.stringify(debouncedPayload),
-        [debouncedPayload],
-    )
-    const draftIsDebounced = draftPayload === debouncedPayload
-    const isDirty = !draftIsDebounced || debouncedFingerprint !== state.lastSavedFingerprint
+    const draftPayload = buildAutomationDraftPayload(pages, state)
+    const draftFingerprint = JSON.stringify(draftPayload)
+    const isDirty = draftFingerprint !== state.lastSavedFingerprint
 
     useEffect(() => {
         if (!state.hasHydrated) return
@@ -324,20 +477,28 @@ export function useAutomationFormBuilderPage() {
         if (hydratedFormRef.current === identity) return
         hydratedFormRef.current = identity
         if (!isNewForm && formData?.updated_at) {
-            syncAutosaveMeta("saved", new Date(formData.updated_at), debouncedFingerprint)
+            patchState({
+                autoSaveStatus: "saved",
+                lastSavedAt: new Date(formData.updated_at),
+                lastSavedFingerprint: draftFingerprint,
+            })
             return
         }
-        syncAutosaveMeta("idle", null, debouncedFingerprint)
-    }, [debouncedFingerprint, formData?.updated_at, formId, isNewForm, state.hasHydrated, syncAutosaveMeta])
+        patchState({
+            autoSaveStatus: "idle",
+            lastSavedAt: null,
+            lastSavedFingerprint: draftFingerprint,
+        })
+    }, [draftFingerprint, formData?.updated_at, formId, isNewForm, patchState, state.hasHydrated])
 
-    const requestDeletePage = useCallback((pageId: number) => {
+    const requestDeletePage = (pageId: number) => {
         patchState({
             pageToDelete: pageId,
             showDeletePageDialog: true,
         })
-    }, [patchState])
+    }
 
-    const confirmDeletePage = useCallback(() => {
+    const confirmDeletePage = () => {
         if (state.pageToDelete === null) {
             patchState({ showDeletePageDialog: false })
             return
@@ -347,54 +508,9 @@ export function useAutomationFormBuilderPage() {
             showDeletePageDialog: false,
             pageToDelete: null,
         })
-    }, [deletePage, patchState, state.pageToDelete])
+    }
 
-    const markSaved = useCallback((fingerprint: string, savedForm?: FormRead) => {
-        patchState({
-            autoSaveStatus: "saved",
-            lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
-            lastSavedFingerprint: fingerprint,
-        })
-    }, [patchState])
-
-    const persistForm = useCallback(
-        async (payloadOverride?: FormCreatePayload): Promise<FormRead> => {
-            const payload = payloadOverride ?? draftPayload
-
-            let savedForm: FormRead
-            if (isNewForm) {
-                savedForm = await createFormMutation.mutateAsync(payload)
-                router.replace(`/automation/forms/${savedForm.id}`)
-            } else {
-                savedForm = await updateFormMutation.mutateAsync({
-                    formId: id,
-                    payload,
-                })
-            }
-
-            const mappings = buildMappings(pages)
-            await setMappingsMutation.mutateAsync({
-                formId: savedForm.id,
-                mappings,
-            })
-
-            patchState({ isPublished: savedForm.status === "published" })
-            return savedForm
-        },
-        [
-            createFormMutation,
-            draftPayload,
-            id,
-            isNewForm,
-            pages,
-            patchState,
-            router,
-            setMappingsMutation,
-            updateFormMutation,
-        ],
-    )
-
-    const handleSave = useCallback(async () => {
+    const handleSave = async () => {
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
@@ -402,8 +518,18 @@ export function useAutomationFormBuilderPage() {
         patchState({ isSaving: true })
         const finishSaving = () => patchState({ isSaving: false })
         try {
-            const savedForm = await persistForm(draftPayload)
-            markSaved(JSON.stringify(draftPayload), savedForm)
+            const savedForm = await persistAutomationFormPayload({
+                payload: draftPayload,
+                isNewForm,
+                id,
+                pages,
+                createFormMutation,
+                updateFormMutation,
+                setMappingsMutation,
+                router,
+                patchState,
+            })
+            patchState(buildSavedState(draftFingerprint, savedForm))
             toast.success("Form saved")
             finishSaving()
         } catch {
@@ -411,13 +537,12 @@ export function useAutomationFormBuilderPage() {
             toast.error("Failed to save form")
             finishSaving()
         }
-    }, [draftPayload, markSaved, patchState, persistForm, state.formName])
+    }
 
     useEffect(() => {
         if (!state.hasHydrated) return
         if (!state.formName.trim()) return
-        if (draftPayload !== debouncedPayload) return
-        if (debouncedFingerprint === state.lastSavedFingerprint) return
+        if (draftFingerprint === state.lastSavedFingerprint) return
         if (state.isSaving || state.isPublishing) return
         if (
             createFormMutation.isPending ||
@@ -428,43 +553,85 @@ export function useAutomationFormBuilderPage() {
         }
 
         let cancelled = false
-        patchState({ autoSaveStatus: "saving" })
+        const timeout = setTimeout(() => {
+            if (cancelled) return
+            patchState({ autoSaveStatus: "saving" })
+            const payload = buildAutomationDraftPayload(pages, {
+                allowedMimeTypesText: state.allowedMimeTypesText,
+                defaultTemplateId: state.defaultTemplateId,
+                formDescription: state.formDescription,
+                formName: state.formName,
+                formPurpose: state.formPurpose,
+                logoUrl: state.logoUrl,
+                maxFileCount: state.maxFileCount,
+                maxFileSizeMb: state.maxFileSizeMb,
+                privacyNotice: state.privacyNotice,
+                publicEyebrow: state.publicEyebrow,
+                publicSubtitle: state.publicSubtitle,
+                publicTitle: state.publicTitle,
+            })
 
-        persistForm(debouncedPayload)
-            .then((savedForm) => {
-                if (cancelled) return
-                markSaved(debouncedFingerprint, savedForm)
+            persistAutomationFormPayload({
+                payload,
+                isNewForm,
+                id,
+                pages,
+                createFormMutation,
+                updateFormMutation,
+                setMappingsMutation,
+                router,
+                patchState,
             })
-            .catch(() => {
-                if (cancelled) return
-                patchState({ autoSaveStatus: "error" })
-            })
+                .then((savedForm) => {
+                    if (cancelled) return
+                    patchState(buildSavedState(draftFingerprint, savedForm))
+                })
+                .catch(() => {
+                    if (cancelled) return
+                    patchState({ autoSaveStatus: "error" })
+                })
+        }, 1200)
 
         return () => {
             cancelled = true
+            clearTimeout(timeout)
         }
     }, [
         createFormMutation.isPending,
-        debouncedFingerprint,
-        debouncedPayload,
-        draftPayload,
-        markSaved,
+        createFormMutation,
+        draftFingerprint,
+        id,
+        isNewForm,
+        pages,
         patchState,
-        persistForm,
+        router,
+        setMappingsMutation,
         setMappingsMutation.isPending,
+        state.allowedMimeTypesText,
+        state.defaultTemplateId,
+        state.formDescription,
         state.formName,
+        state.formPurpose,
         state.hasHydrated,
         state.isPublishing,
         state.isSaving,
         state.lastSavedFingerprint,
+        state.logoUrl,
+        state.maxFileCount,
+        state.maxFileSizeMb,
+        state.privacyNotice,
+        state.publicEyebrow,
+        state.publicSubtitle,
+        state.publicTitle,
+        updateFormMutation,
         updateFormMutation.isPending,
     ])
 
-    const handleLogoUploadClick = useCallback(() => {
+    const handleLogoUploadClick = () => {
         logoInputRef.current?.click()
-    }, [])
+    }
 
-    const handleLogoFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const handleLogoFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0]
         event.target.value = ""
         if (!file) return
@@ -480,16 +647,16 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to upload logo")
         }
-    }, [patchState, uploadLogoMutation])
+    }
 
-    const handleLogoUrlChange = useCallback((value: string) => {
+    const handleLogoUrlChange = (value: string) => {
         patchState({
             logoUrl: value,
             ...(state.useOrgLogo ? {} : { customLogoUrl: value }),
         })
-    }, [patchState, state.useOrgLogo])
+    }
 
-    const handleUseOrgLogoChange = useCallback((checked: boolean) => {
+    const handleUseOrgLogoChange = (checked: boolean) => {
         if (checked) {
             if (!orgLogoAvailable || !orgLogoPath) {
                 toast.error("Add an organization logo in Settings to use this option.")
@@ -507,9 +674,9 @@ export function useAutomationFormBuilderPage() {
             useOrgLogo: false,
             logoUrl: state.customLogoUrl,
         })
-    }, [orgLogoAvailable, orgLogoPath, patchState, state.customLogoUrl, state.logoUrl])
+    }
 
-    const handleDefaultTemplateSelection = useCallback(async (nextTemplateId: string | null) => {
+    const handleDefaultTemplateSelection = async (nextTemplateId: string | null) => {
         const normalizedTemplateId = nextTemplateId ?? ""
         patchState({ defaultTemplateId: normalizedTemplateId })
         if (!formId) return
@@ -523,9 +690,9 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to update delivery template")
         }
-    }, [formId, patchState, updateDeliverySettingsMutation])
+    }
 
-    const handleSetDefaultSurrogateApplication = useCallback(async () => {
+    const handleSetDefaultSurrogateApplication = async () => {
         if (!formId) {
             toast.error("Save the form first")
             return
@@ -544,9 +711,9 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to set default form")
         }
-    }, [formId, setDefaultSurrogateApplicationMutation, state.formPurpose, state.isPublished])
+    }
 
-    const hasMissingCriticalMappings = useCallback(() => {
+    const hasMissingCriticalMappings = () => {
         const missingCriticalMappings =
             state.formPurpose === "lead_capture"
                 ? getMissingLeadCaptureMappings(pages, surrogateFieldMappings)
@@ -558,9 +725,9 @@ export function useAutomationFormBuilderPage() {
         const missingLabels = missingCriticalMappings.map((mapping) => mapping.label).join(", ")
         toast.error(`Add or map required identity fields before publishing: ${missingLabels}.`)
         return true
-    }, [pages, state.formPurpose, surrogateFieldMappings])
+    }
 
-    const handlePublish = useCallback(() => {
+    const handlePublish = () => {
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
@@ -573,20 +740,17 @@ export function useAutomationFormBuilderPage() {
             return
         }
         patchState({ showPublishDialog: true })
-    }, [hasMissingCriticalMappings, pages, patchState, state.formName])
+    }
 
-    const handlePreview = useCallback(() => {
+    const handlePreview = () => {
         if (pages.every((page) => page.fields.length === 0)) {
             toast.error("Add at least one field before previewing")
             return
         }
         patchState({ workspaceTab: "preview" })
-    }, [
-        pages,
-        patchState,
-    ])
+    }
 
-    const confirmPublish = useCallback(async () => {
+    const confirmPublish = async () => {
         if (hasMissingCriticalMappings()) {
             return
         }
@@ -594,8 +758,18 @@ export function useAutomationFormBuilderPage() {
         patchState({ isPublishing: true })
         const finishPublishing = () => patchState({ isPublishing: false })
         try {
-            const savedForm = await persistForm(draftPayload)
-            markSaved(JSON.stringify(draftPayload), savedForm)
+            const savedForm = await persistAutomationFormPayload({
+                payload: draftPayload,
+                isNewForm,
+                id,
+                pages,
+                createFormMutation,
+                updateFormMutation,
+                setMappingsMutation,
+                router,
+                patchState,
+            })
+            patchState(buildSavedState(draftFingerprint, savedForm))
             await publishFormMutation.mutateAsync(savedForm.id)
             patchState({
                 isPublished: true,
@@ -613,17 +787,13 @@ export function useAutomationFormBuilderPage() {
             toast.error("Failed to publish form")
             finishPublishing()
         }
-    }, [draftPayload, hasMissingCriticalMappings, markSaved, patchState, persistForm, publishFormMutation, refetchIntakeLinks])
+    }
 
-    const sortedIntakeLinks = useMemo(
-        () =>
-            intakeLinks.toSorted((a, b) => {
-                const left = new Date(a.created_at).getTime()
-                const right = new Date(b.created_at).getTime()
-                return right - left
-            }),
-        [intakeLinks],
-    )
+    const sortedIntakeLinks = intakeLinks.toSorted((a, b) => {
+        const left = new Date(a.created_at).getTime()
+        const right = new Date(b.created_at).getTime()
+        return right - left
+    })
     const selectedQrLink = sortedIntakeLinks.find((link) => link.is_active) || sortedIntakeLinks[0] || null
     const {
         data: selectedEmbedHealth,
@@ -631,32 +801,20 @@ export function useAutomationFormBuilderPage() {
         refetch: refetchEmbedHealth,
     } = useFormEmbedHealth(selectedQrLink?.id ?? null)
 
-    const processedSubmissionHistory = useMemo(
-        () =>
-            submissionHistory.filter(
-                (submission) =>
-                    submission.match_status === "linked" || submission.match_status === "lead_created",
-            ),
-        [submissionHistory],
+    const processedSubmissionHistory = submissionHistory.filter(
+        (submission) =>
+            submission.match_status === "linked" || submission.match_status === "lead_created",
     )
-    const pendingSubmissionHistory = useMemo(
-        () =>
-            submissionHistory.filter(
-                (submission) =>
-                    submission.match_status !== "linked" && submission.match_status !== "lead_created",
-            ),
-        [submissionHistory],
+    const pendingSubmissionHistory = submissionHistory.filter(
+        (submission) =>
+            submission.match_status !== "linked" && submission.match_status !== "lead_created",
     )
-    const visibleSubmissionHistory = useMemo(() => {
-        if (state.submissionHistoryFilter === "pending") return pendingSubmissionHistory
-        if (state.submissionHistoryFilter === "processed") return processedSubmissionHistory
-        return submissionHistory
-    }, [
-        pendingSubmissionHistory,
-        processedSubmissionHistory,
-        state.submissionHistoryFilter,
-        submissionHistory,
-    ])
+    const visibleSubmissionHistory =
+        state.submissionHistoryFilter === "pending"
+            ? pendingSubmissionHistory
+            : state.submissionHistoryFilter === "processed"
+                ? processedSubmissionHistory
+                : submissionHistory
 
     useEffect(() => {
         if (!state.pendingSharePrompt) return
@@ -665,23 +823,9 @@ export function useAutomationFormBuilderPage() {
             showSharePrompt: true,
             pendingSharePrompt: false,
         })
-    }, [patchState, sortedIntakeLinks, state.pendingSharePrompt])
+    }, [patchState, sortedIntakeLinks.length, state.pendingSharePrompt])
 
-    const handleCopySharedLink = useCallback(async (link: FormIntakeLinkRead) => {
-        const url = link.intake_url?.trim()
-        if (!url) {
-            toast.error("No intake URL available")
-            return
-        }
-        try {
-            await navigator.clipboard.writeText(url)
-            toast.success("Shared link copied")
-        } catch {
-            toast.error("Failed to copy link")
-        }
-    }, [])
-
-    const handleUpdateEmbedSettings = useCallback(async ({
+    const handleUpdateEmbedSettings = async ({
         link,
         embedEnabled,
         allowedOrigins,
@@ -715,51 +859,17 @@ export function useAutomationFormBuilderPage() {
             const message = error instanceof Error ? error.message : "Failed to update embed settings"
             toast.error(message)
         }
-    }, [formId, refetchIntakeLinks, updateIntakeLinkMutation])
+    }
 
-    const getQrSvgMarkup = useCallback(() => {
-        const svg = document.querySelector("#shared-intake-qr svg")
-        if (!(svg instanceof SVGSVGElement)) {
-            toast.error("QR code not ready yet")
-            return null
-        }
-
-        let markup = new XMLSerializer().serializeToString(svg)
-        if (!markup.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
-            markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
-        }
-        return markup
-    }, [])
-
-    const buildQrFilename = useCallback((extension: "svg" | "png") => {
-        const baseRaw = selectedQrLink?.campaign_name || selectedQrLink?.event_name || selectedQrLink?.slug || "intake-link"
-        const base = baseRaw
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "")
-        return `${base || "intake-link"}-qr.${extension}`
-    }, [selectedQrLink])
-
-    const downloadBlob = useCallback((blob: Blob, filename: string) => {
-        const downloadUrl = URL.createObjectURL(blob)
-        const anchor = document.createElement("a")
-        anchor.href = downloadUrl
-        anchor.download = filename
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        URL.revokeObjectURL(downloadUrl)
-    }, [])
-
-    const handleDownloadQrSvg = useCallback(() => {
+    const handleDownloadQrSvg = () => {
         const markup = getQrSvgMarkup()
         if (!markup) return
 
         const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
-        downloadBlob(blob, buildQrFilename("svg"))
-    }, [buildQrFilename, downloadBlob, getQrSvgMarkup])
+        downloadBlob(blob, buildQrFilename(selectedQrLink, "svg"))
+    }
 
-    const handleDownloadQrPng = useCallback(async () => {
+    const handleDownloadQrPng = async () => {
         const markup = getQrSvgMarkup()
         if (!markup) return
 
@@ -795,79 +905,31 @@ export function useAutomationFormBuilderPage() {
                 revokeSvgUrl()
                 return
             }
-            downloadBlob(blob, buildQrFilename("png"))
+            downloadBlob(blob, buildQrFilename(selectedQrLink, "png"))
             revokeSvgUrl()
         } catch {
             revokeSvgUrl()
             toast.error("Failed to download PNG")
         }
-    }, [buildQrFilename, downloadBlob, getQrSvgMarkup])
+    }
 
-    const readAnswerValue = useCallback((submission: FormSubmissionRead, keys: string[]) => {
-        for (const key of keys) {
-            const rawValue = submission.answers?.[key]
-            if (typeof rawValue === "string" && rawValue.trim()) {
-                return rawValue.trim()
-            }
-        }
-        return "—"
-    }, [])
-
-    const formatSubmissionDateTime = useCallback((isoString: string) => {
-        const value = new Date(isoString)
-        if (Number.isNaN(value.getTime())) return "—"
-        return value.toLocaleString()
-    }, [])
-
-    const submissionOutcomeLabel = useCallback((submission: FormSubmissionRead) => {
-        if (submission.match_status === "linked") return "Matched"
-        if (submission.match_status === "lead_created") return "Lead Created"
-        return "Pending Match"
-    }, [])
-
-    const submissionOutcomeBadgeClass = useCallback((submission: FormSubmissionRead) => {
-        if (submission.match_status === "linked") {
-            return "border-emerald-200 bg-emerald-50 text-emerald-700"
-        }
-        if (submission.match_status === "lead_created") {
-            return "border-blue-200 bg-blue-50 text-blue-700"
-        }
-        return "border-amber-200 bg-amber-50 text-amber-700"
-    }, [])
-
-    const submissionReviewLabel = useCallback((submission: FormSubmissionRead) => {
-        if (submission.status === "approved") return "Approved"
-        if (submission.status === "rejected") return "Rejected"
-        return "Pending Review"
-    }, [])
-
-    const submissionReviewBadgeClass = useCallback((submission: FormSubmissionRead) => {
-        if (submission.status === "approved") {
-            return "border-emerald-200 bg-emerald-50 text-emerald-700"
-        }
-        if (submission.status === "rejected") {
-            return "border-red-200 bg-red-50 text-red-700"
-        }
-        return "border-stone-200 bg-stone-100 text-stone-700"
-    }, [])
-
-    const refreshSubmissionQueues = useCallback(async () => {
+    const refreshSubmissionQueues = async () => {
         await Promise.all([
             refetchAmbiguousSubmissions(),
             refetchLeadQueueSubmissions(),
             refetchSubmissionHistory(),
         ])
-    }, [refetchAmbiguousSubmissions, refetchLeadQueueSubmissions, refetchSubmissionHistory])
+    }
 
-    const clearSubmissionSelection = useCallback(() => {
+    const clearSubmissionSelection = () => {
         patchState({
             selectedQueueSubmissionId: null,
             manualSurrogateId: "",
             resolveReviewNotes: "",
         })
-    }, [patchState])
+    }
 
-    const handleResolveSubmissionToSurrogate = useCallback(async (submissionId: string, surrogateId: string) => {
+    const handleResolveSubmissionToSurrogate = async (submissionId: string, surrogateId: string) => {
         try {
             await resolveSubmissionMatchMutation.mutateAsync({
                 submissionId,
@@ -883,9 +945,9 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to link submission")
         }
-    }, [clearSubmissionSelection, refreshSubmissionQueues, resolveSubmissionMatchMutation, state.resolveReviewNotes])
+    }
 
-    const handleResolveSubmissionToLead = useCallback(async (submissionId: string) => {
+    const handleResolveSubmissionToLead = async (submissionId: string) => {
         try {
             await resolveSubmissionMatchMutation.mutateAsync({
                 submissionId,
@@ -900,9 +962,9 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to move submission to intake lead")
         }
-    }, [clearSubmissionSelection, refreshSubmissionQueues, resolveSubmissionMatchMutation, state.resolveReviewNotes])
+    }
 
-    const handlePromoteLeadFromSubmission = useCallback(async (submission: FormSubmissionRead) => {
+    const handlePromoteLeadFromSubmission = async (submission: FormSubmissionRead) => {
         if (!submission.intake_lead_id) {
             toast.error("No intake lead linked to this submission")
             return
@@ -917,9 +979,9 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to promote intake lead")
         }
-    }, [promoteIntakeLeadMutation, refreshSubmissionQueues])
+    }
 
-    const handleRetrySubmissionMatch = useCallback(async (
+    const handleRetrySubmissionMatch = async (
         submission: FormSubmissionRead,
         options: {
             unlinkSurrogate?: boolean
@@ -949,9 +1011,9 @@ export function useAutomationFormBuilderPage() {
         } catch {
             toast.error("Failed to reprocess submission")
         }
-    }, [patchState, refreshSubmissionQueues, retrySubmissionMatchMutation, state.resolveReviewNotes])
+    }
 
-    const handleLinkByManualSurrogateId = useCallback(async () => {
+    const handleLinkByManualSurrogateId = async () => {
         const submissionId = state.selectedQueueSubmissionId
         const surrogateId = state.manualSurrogateId.trim()
         if (!submissionId) return
@@ -961,107 +1023,50 @@ export function useAutomationFormBuilderPage() {
         }
         await handleResolveSubmissionToSurrogate(submissionId, surrogateId)
         patchState({ manualSurrogateId: "" })
-    }, [handleResolveSubmissionToSurrogate, patchState, state.manualSurrogateId, state.selectedQueueSubmissionId])
+    }
 
-    const autoSaveLabel = useMemo(() => {
-        if (!state.hasHydrated) return null
-        if (state.isSaving || state.autoSaveStatus === "saving") return "Saving..."
-        if (state.autoSaveStatus === "error") return "Autosave failed"
-        if (isDirty) return "Unsaved changes"
-        if (state.autoSaveStatus === "saved") {
-            if (state.lastSavedAt) {
-                return `Saved ${state.lastSavedAt.toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                })}`
-            }
-            return "Saved"
-        }
-        return "Autosave on"
-    }, [isDirty, state.autoSaveStatus, state.hasHydrated, state.isSaving, state.lastSavedAt])
+    const autoSaveLabel = getAutoSaveLabel(state, isDirty)
 
-    const workspaceDocument = useMemo(
-        () => ({
-            pages,
-            activePage,
-            currentPage,
-            selectedField,
-            selectedFieldData,
-            dropIndicatorId,
-            isDragging,
-            setActivePage,
-            selectField,
-            requestDeletePage,
-            handleAddPage,
-            handleDuplicatePage,
-            handleDragStart,
-            handleFieldDragStart,
-            handleDragOver,
-            handleCanvasDragOver,
-            handleFieldDragOver,
-            handleDrop,
-            handleDropOnField,
-            handleDragEnd,
-            handleInsertField,
-            handleUpdateField,
-            handleDuplicateField,
-            handleDeleteField,
-            handleValidationChange,
-            handleAddColumn,
-            handleUpdateColumn,
-            handleRemoveColumn,
-            handleAddRow,
-            handleUpdateRow,
-            handleRemoveRow,
-            handleShowIfChange,
-            handleMappingChange,
-            syncOptionKeys,
-            addOption,
-            removeOption,
-            handleRenamePage,
-            handleMovePage,
-        }),
-        [
-            activePage,
-            addOption,
-            currentPage,
-            dropIndicatorId,
-            handleAddColumn,
-            handleAddRow,
-            handleAddPage,
-            handleCanvasDragOver,
-            handleDeleteField,
-            handleDragEnd,
-            handleDragOver,
-            handleDragStart,
-            handleDrop,
-            handleDropOnField,
-            handleDuplicateField,
-            handleDuplicatePage,
-            handleFieldDragOver,
-            handleFieldDragStart,
-            handleInsertField,
-            handleMappingChange,
-            handleMovePage,
-            handleRemoveColumn,
-            handleRemoveRow,
-            handleRenamePage,
-            handleShowIfChange,
-            handleUpdateColumn,
-            handleUpdateField,
-            handleUpdateRow,
-            handleValidationChange,
-            isDragging,
-            pages,
-            removeOption,
-            requestDeletePage,
-            selectField,
-            selectedField,
-            selectedFieldData,
-            setActivePage,
-            syncOptionKeys,
-        ],
-    )
+    const workspaceDocument = {
+        pages,
+        activePage,
+        currentPage,
+        selectedField,
+        selectedFieldData,
+        dropIndicatorId,
+        isDragging,
+        setActivePage,
+        selectField,
+        requestDeletePage,
+        handleAddPage,
+        handleDuplicatePage,
+        handleDragStart,
+        handleFieldDragStart,
+        handleDragOver,
+        handleCanvasDragOver,
+        handleFieldDragOver,
+        handleDrop,
+        handleDropOnField,
+        handleDragEnd,
+        handleInsertField,
+        handleUpdateField,
+        handleDuplicateField,
+        handleDeleteField,
+        handleValidationChange,
+        handleAddColumn,
+        handleUpdateColumn,
+        handleRemoveColumn,
+        handleAddRow,
+        handleUpdateRow,
+        handleRemoveRow,
+        handleShowIfChange,
+        handleMappingChange,
+        syncOptionKeys,
+        addOption,
+        removeOption,
+        handleRenamePage,
+        handleMovePage,
+    }
 
     return {
         formId,

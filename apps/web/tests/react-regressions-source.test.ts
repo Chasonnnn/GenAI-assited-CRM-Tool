@@ -1407,6 +1407,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useRef<Promise<void>>(Promise.resolve())")
     })
 
+    it("keeps automation form builder hook compiler-derived", () => {
+        const source = readSource("lib/forms/use-automation-form-builder-page.ts")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useDebouncedValue")
+    })
+
     it("keeps form builder state hooks compiler-derived", () => {
         const templateSource = readSource("lib/forms/use-template-form-builder-state.ts")
         const automationSource = readSource("lib/forms/use-automation-form-builder-state.ts")
