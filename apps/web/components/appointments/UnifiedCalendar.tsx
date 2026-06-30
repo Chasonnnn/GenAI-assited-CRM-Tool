@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { memo, useState, useMemo, useCallback, useEffect, type KeyboardEvent } from "react"
+import { memo, useState, useMemo, useCallback, type KeyboardEvent } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -331,8 +331,8 @@ function AppointmentDetailDialog({
     onOpenChange: (open: boolean) => void
 }) {
     const [showLinkSection, setShowLinkSection] = useState(false)
-    const [selectedSurrogateId, setSelectedSurrogateId] = useState<string | null>(null)
-    const [selectedIpId, setSelectedIpId] = useState<string | null>(null)
+    const [selectedSurrogateId, setSelectedSurrogateId] = useState(() => appointment?.surrogate_id ?? null)
+    const [selectedIpId, setSelectedIpId] = useState(() => appointment?.intended_parent_id ?? null)
     const [logOutcomeOpen, setLogOutcomeOpen] = useState(false)
 
     const updateLinkMutation = useUpdateAppointmentLink()
@@ -352,16 +352,6 @@ function AppointmentDetailDialog({
 
     const surrogates = surrogatesData?.items || []
     const ips = ipsData?.items || []
-
-    // Reset selected values when dialog opens with new appointment
-    useEffect(() => {
-        if (appointment && open) {
-            setSelectedSurrogateId(appointment.surrogate_id)
-            setSelectedIpId(appointment.intended_parent_id)
-            setShowLinkSection(false)
-            setLogOutcomeOpen(false)
-        }
-    }, [appointment, open])
 
     const userTimezone = useMemo(
         () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
@@ -1422,6 +1412,13 @@ export function UnifiedCalendar({
     const handleTodayClick = useCallback(() => {
         setCurrentDate(new Date())
     }, [])
+    const appointmentDetailDialogKey = dialogOpen && selectedAppointment
+        ? [
+            selectedAppointment.id,
+            selectedAppointment.surrogate_id ?? "no-surrogate",
+            selectedAppointment.intended_parent_id ?? "no-intended-parent",
+        ].join(":")
+        : "closed"
 
     return (
         <Card className="gap-3 overflow-hidden border-border/70">
@@ -1564,6 +1561,7 @@ export function UnifiedCalendar({
 
             {includeAppointments && (
                 <AppointmentDetailDialog
+                    key={appointmentDetailDialogKey}
                     appointment={selectedAppointment}
                     open={dialogOpen}
                     onOpenChange={setDialogOpen}

@@ -491,3 +491,23 @@ Full command after Batch 22: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1122`
 - Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 41 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 775 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8941d365-9539-4666-88df-643512547bd0`
+
+## Batch 23
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `components/appointments/UnifiedCalendar.tsx` | Valid: the appointment detail dialog copied appointment link fields into local draft state through an effect after open/appointment changes, so a newly opened dialog could briefly render stale link-edit state. | High | Initialize the link draft state from the appointment when the dialog mounts and key the dialog by open appointment/link identity so each appointment opens with a fresh synchronous draft. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports errors for the file. |
+
+Changed-scope command after Batch 23: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `89 / 100 Great`
+- Total diagnostics in changed files: `37`
+- Remaining changed-file diagnostics: warnings only, led by `react-compiler-no-manual-memoization`, `prefer-tag-over-role`, `rerender-state-only-in-handlers`, `no-giant-component`, and `prefer-useReducer` in `UnifiedCalendar`; valid but larger refactor work than this state-sync error batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-70e0272c-5d37-46f4-ae11-d0cf70197ae0`
+
+Full command after Batch 23: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1115`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 214 warnings`, `Performance 40 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4e1ccb8a-4ad5-49ac-8435-5de23df7f6f5`

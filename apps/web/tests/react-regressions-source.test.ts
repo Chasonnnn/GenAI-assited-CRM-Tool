@@ -1196,6 +1196,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain(".sort((a, b) => {")
     })
 
+    it("resets unified calendar appointment detail draft state by keying the dialog", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+
+        expect(source).toContain("appointmentDetailDialogKey")
+        expect(source).toContain("useState(() => appointment?.surrogate_id ?? null)")
+        expect(source).toContain("useState(() => appointment?.intended_parent_id ?? null)")
+        expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setSelectedSurrogateId\(appointment\.surrogate_id\)[\s\S]*\}, \[appointment, open\]\)/)
+        expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setSelectedIpId\(appointment\.intended_parent_id\)[\s\S]*\}, \[appointment, open\]\)/)
+        expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setShowLinkSection\(false\)[\s\S]*\}, \[appointment, open\]\)/)
+        expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setLogOutcomeOpen\(false\)[\s\S]*\}, \[appointment, open\]\)/)
+    })
+
     it("uses immutable sorting for stage and intake link ordering", () => {
         const intendedParentStageSource = readSource("lib/intended-parent-stage-utils.ts")
         const formBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")
