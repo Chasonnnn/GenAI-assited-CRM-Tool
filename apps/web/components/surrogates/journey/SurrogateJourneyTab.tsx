@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState } from "react"
 import { ChevronDownIcon, DownloadIcon, Loader2Icon, SparklesIcon } from "lucide-react"
 import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
@@ -45,44 +45,20 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     const [exportingVariant, setExportingVariant] = useState<JourneyExportVariant | null>(null)
     const isExporting = exportingVariant !== null
 
-    const milestoneBySlug = useMemo(() => {
-        const milestones = new Map<string, { label: string; featured_image_id: string | null }>()
-        for (const phase of journey?.phases ?? []) {
-            for (const milestone of phase.milestones) {
-                milestones.set(milestone.slug, {
-                    label: milestone.label,
-                    featured_image_id: milestone.featured_image_id,
-                })
-            }
-        }
-        return milestones
-    }, [journey?.phases])
-
-    const handleExport = useCallback(async (variant: JourneyExportVariant) => {
+    const handleExport = async (variant: JourneyExportVariant) => {
         setExportingVariant(variant)
-        try {
-            await exportJourneyPdf(surrogateId, variant)
+        const result = await exportJourneyPdf(surrogateId, variant).then(
+            () => ({ status: "success" as const }),
+            (error: unknown) => ({ status: "error" as const, error })
+        )
+        if (result.status === "success") {
             toast.success("Journey exported as PDF")
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to export journey"
+        } else {
+            const message = result.error instanceof Error ? result.error.message : "Failed to export journey"
             toast.error(message)
-        } finally {
-            setExportingVariant(null)
         }
-    }, [surrogateId])
-
-    // Handle opening the image selector
-    const handleEditImage = useCallback((milestoneSlug: string) => {
-        const milestone = milestoneBySlug.get(milestoneSlug)
-        if (!milestone) return
-
-        setSelectedMilestone({
-            slug: milestoneSlug,
-            label: milestone.label,
-            currentAttachmentId: milestone.featured_image_id,
-        })
-        setSelectorOpen(true)
-    }, [milestoneBySlug])
+        setExportingVariant(null)
+    }
 
     if (isLoading) {
         return (
@@ -121,6 +97,27 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     }
 
     const generatedDate = format(new Date(), "MMMM yyyy")
+    const milestoneBySlug = new Map<string, { label: string; featured_image_id: string | null }>()
+    for (const phase of journey.phases) {
+        for (const milestone of phase.milestones) {
+            milestoneBySlug.set(milestone.slug, {
+                label: milestone.label,
+                featured_image_id: milestone.featured_image_id,
+            })
+        }
+    }
+
+    const handleEditImage = (milestoneSlug: string) => {
+        const milestone = milestoneBySlug.get(milestoneSlug)
+        if (!milestone) return
+
+        setSelectedMilestone({
+            slug: milestoneSlug,
+            label: milestone.label,
+            currentAttachmentId: milestone.featured_image_id,
+        })
+        setSelectorOpen(true)
+    }
 
     return (
         <Card className="relative overflow-hidden bg-gradient-to-br from-stone-50 via-stone-50/80 to-white dark:from-stone-900 dark:via-stone-900/90 dark:to-stone-950 print:border-0 print:bg-white print:shadow-none">

@@ -289,6 +289,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("globalIndex++")
     })
 
+    it("keeps surrogate journey tab compiler-friendly", () => {
+        const source = readSource("components/surrogates/journey/SurrogateJourneyTab.tsx")
+
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("finally")
+    })
+
     it("keeps milestone image selection draft state compiler-friendly", () => {
         const source = readSource("components/surrogates/journey/MilestoneImageSelector.tsx")
 
