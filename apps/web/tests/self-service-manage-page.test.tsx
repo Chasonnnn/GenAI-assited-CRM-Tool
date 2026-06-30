@@ -102,6 +102,7 @@ describe("Self-service manage appointment page", () => {
 
         expect(await screen.findByText("Manage Appointment")).toBeInTheDocument()
         expect(await screen.findByText("June 2026")).toBeInTheDocument()
+        expect(screen.getByText("Eastern Time (US)")).toBeInTheDocument()
 
         const dateButton = screen
             .getAllByRole("button")
@@ -111,7 +112,13 @@ describe("Self-service manage appointment page", () => {
         fireEvent.click(dateButton as HTMLElement)
 
         await waitFor(() => {
-            expect(getRescheduleSlotsByTokenMock).toHaveBeenCalled()
+            expect(getRescheduleSlotsByTokenMock).toHaveBeenCalledWith(
+                "org-1",
+                "token-1",
+                expect.any(String),
+                expect.any(String),
+                "America/New_York"
+            )
         })
 
         const slotButton = await screen.findByRole("button", { name: /\d{1,2}:\d{2}/ })

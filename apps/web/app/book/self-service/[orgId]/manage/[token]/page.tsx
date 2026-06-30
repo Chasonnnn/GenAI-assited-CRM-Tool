@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import { use, useEffect, useState, useSyncExternalStore } from "react"
 import {
     addMonths,
     eachDayOfInterval,
@@ -73,6 +73,14 @@ const TIMEZONE_OPTIONS = [
     { value: "UTC", label: "UTC" },
 ]
 
+const DEFAULT_TIMEZONE = "America/Los_Angeles"
+const INVALID_MANAGE_LINK_MESSAGE = "Invalid appointment management link"
+
+function getTimezoneLabel(value: string | null | undefined, options = TIMEZONE_OPTIONS) {
+    if (!value) return "Select timezone"
+    return options.find((option) => option.value === value)?.label ?? value
+}
+
 type ManageAction = "reschedule" | "cancel"
 
 type SearchParams = {
@@ -92,6 +100,22 @@ function getTodaySnapshot() {
 
 function getServerTodaySnapshot() {
     return null
+}
+
+function subscribeTimezoneSnapshot() {
+    return () => {}
+}
+
+function getTimezoneSnapshot() {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+    } catch {
+        return DEFAULT_TIMEZONE
+    }
+}
+
+function getServerTimezoneSnapshot() {
+    return DEFAULT_TIMEZONE
 }
 
 interface PageProps {
@@ -124,8 +148,14 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     })
 
     const [action, setAction] = useState<ManageAction>(() => initialAction)
-    const [timezone, setTimezone] = useState("America/Los_Angeles")
-    const [viewMonth, setViewMonth] = useState<Date | null>(null)
+    const hasManageLink = Boolean(orgId && token)
+    const detectedTimezone = useSyncExternalStore(
+        subscribeTimezoneSnapshot,
+        getTimezoneSnapshot,
+        getServerTimezoneSnapshot
+    )
+    const [timezoneOverride, setTimezoneOverride] = useState<string | null>(null)
+    const [viewMonthOverride, setViewMonthOverride] = useState<Date | null>(null)
     const today = useSyncExternalStore(subscribeTodaySnapshot, getTodaySnapshot, getServerTodaySnapshot)
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
@@ -135,29 +165,14 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     const [reason, setReason] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [successState, setSuccessState] = useState<"rescheduled" | "cancelled" | null>(null)
-    const { appointment, isLoading, error } = loadState
-    const applyLoadState = useCallback((nextState: typeof loadState) => {
-        setLoadState(nextState)
-    }, [])
-
-    useEffect(() => {
-        try {
-            const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
-            if (detected) {
-                setTimezone(detected)
-            }
-        } catch {
-            // keep default
-        }
-    }, [])
+    const appointment = hasManageLink ? loadState.appointment : null
+    const isLoading = hasManageLink ? loadState.isLoading : false
+    const error = hasManageLink ? loadState.error : INVALID_MANAGE_LINK_MESSAGE
+    const appointmentTimezone = appointment?.client_timezone ?? null
+    const timezone = timezoneOverride ?? appointmentTimezone ?? detectedTimezone
 
     useEffect(() => {
         if (!orgId || !token) {
-            applyLoadState({
-                appointment: null,
-                isLoading: false,
-                error: "Invalid appointment management link",
-            })
             return
         }
 
@@ -167,13 +182,13 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         async function load() {
             try {
                 const data = await getAppointmentForManage(orgIdForCall, tokenForCall)
-                applyLoadState({
+                setLoadState({
                     appointment: data,
                     isLoading: false,
                     error: null,
                 })
             } catch (err: unknown) {
-                applyLoadState({
+                setLoadState({
                     appointment: null,
                     isLoading: false,
                     error: err instanceof Error ? err.message : "Appointment not found",
@@ -182,34 +197,23 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         }
 
         void load()
-    }, [orgId, token, applyLoadState])
+    }, [orgId, token])
 
-    useEffect(() => {
-        if (appointment?.client_timezone) {
-            setTimezone(appointment.client_timezone)
-        }
-    }, [appointment?.client_timezone])
+    const timezoneOptions = TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)
+        ? TIMEZONE_OPTIONS
+        : [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
 
-    useEffect(() => {
-        if (!appointment?.scheduled_start || viewMonth) return
-        setViewMonth(startOfMonth(parseISO(appointment.scheduled_start)))
-    }, [appointment?.scheduled_start, viewMonth])
+    const appointmentMonth = appointment?.scheduled_start
+        ? startOfMonth(parseISO(appointment.scheduled_start))
+        : null
+    const viewMonth = viewMonthOverride ?? appointmentMonth
 
-    const timezoneOptions = useMemo(() => {
-        if (TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)) {
-            return TIMEZONE_OPTIONS
-        }
-        return [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
-    }, [timezone])
-
-    const calendarDays = useMemo(() => {
-        if (!viewMonth || !today) return []
-
-        const days: Array<{ key: string; date: Date | null; isToday: boolean; isAvailable: boolean }> = []
+    const calendarDays: Array<{ key: string; date: Date | null; isToday: boolean; isAvailable: boolean }> = []
+    if (viewMonth && today) {
         const monthStart = startOfMonth(viewMonth)
         const startDay = getDay(monthStart)
         for (let i = 0; i < startDay; i++) {
-            days.push({
+            calendarDays.push({
                 key: `empty-${format(monthStart, "yyyy-MM")}-${i + 1}`,
                 date: null,
                 isToday: false,
@@ -220,16 +224,14 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         for (const date of eachDayOfInterval({ start: monthStart, end: endOfMonth(viewMonth) })) {
             const weekday = getDay(date)
             const isWeekday = weekday >= 1 && weekday <= 5
-            days.push({
+            calendarDays.push({
                 key: `date-${format(date, "yyyy-MM-dd")}`,
                 date,
                 isToday: isSameDay(date, today),
                 isAvailable: isWeekday && !isBefore(date, today),
             })
         }
-
-        return days
-    }, [today, viewMonth])
+    }
 
     const loadSlotsForDate = async (date: Date) => {
         setSelectedDate(date)
@@ -423,11 +425,13 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                                     <Select
                                         value={timezone}
                                         onValueChange={(value) => {
-                                            if (value) setTimezone(value)
+                                            if (value) setTimezoneOverride(value)
                                         }}
                                     >
                                         <SelectTrigger className="w-auto h-8 text-sm">
-                                            <SelectValue />
+                                            <SelectValue>
+                                                {(value: string | null) => getTimezoneLabel(value, timezoneOptions)}
+                                            </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                             {timezoneOptions.map((option) => (
@@ -449,7 +453,9 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                                                     variant="ghost"
                                                     size="sm"
                                                     disabled={!viewMonth}
-                                                    onClick={() => setViewMonth((month) => month ? addMonths(month, -1) : month)}
+                                                    onClick={() => {
+                                                        if (viewMonth) setViewMonthOverride(addMonths(viewMonth, -1))
+                                                    }}
                                                 >
                                                     <ChevronLeftIcon className="size-4" />
                                                 </Button>
@@ -461,7 +467,9 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                                                     variant="ghost"
                                                     size="sm"
                                                     disabled={!viewMonth}
-                                                    onClick={() => setViewMonth((month) => month ? addMonths(month, 1) : month)}
+                                                    onClick={() => {
+                                                        if (viewMonth) setViewMonthOverride(addMonths(viewMonth, 1))
+                                                    }}
                                                 >
                                                     <ChevronRightIcon className="size-4" />
                                                 </Button>

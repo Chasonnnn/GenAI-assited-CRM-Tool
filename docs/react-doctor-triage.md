@@ -1085,3 +1085,26 @@ Full command after Batch 52: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `985`
 - Summary: `Security 2 warnings`, `Bugs 1 error + 187 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 717 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-15f8a7db-fcf4-4f87-8e86-f691030a97e1`
+
+## Batch 53
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-adjust-state-on-prop-change`, `react-doctor/no-derived-state`, `react-doctor/no-initialize-state` | `app/book/self-service/[orgId]/manage/[token]/page.tsx` | Valid: the manage page copied appointment timezone and appointment month into local state after data arrived, set invalid-link load state from route params in an effect, and initialized browser timezone through a mount effect. | High | Derive invalid-link render state from route params, derive timezone from user override → appointment timezone → browser/default snapshot, derive view month from user navigation override → appointment month, and read browser timezone through `useSyncExternalStore`. Added a source guard and behavior assertion for appointment-timezone slot lookup. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/self-service-manage-page.test.tsx`; full React Doctor errors dropped from `1` to `0`. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/book/self-service/[orgId]/manage/[token]/page.tsx` | Valid: the file still had manual `useCallback`/`useMemo` wrappers around load-state assignment and directly derived option/calendar values. | High | Remove those wrappers while keeping the same rendered data and API calls. Extended the source guard so the wrappers cannot be reintroduced in this page. | Changed-scope React Doctor no longer reports manual memoization for this page. |
+| Dropdown label rule | `app/book/self-service/[orgId]/manage/[token]/page.tsx` | Valid: the timezone select stored IANA ids and used a self-closing `SelectValue`, which can leak raw stored values in this project’s shared select. | High | Add `getTimezoneLabel` and render the selected timezone through the same friendly label helper used by the dropdown options. | `pnpm test --run tests/self-service-manage-page.test.tsx` asserts `Eastern Time (US)` is visible for the appointment default. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/book/self-service/[orgId]/manage/[token]/page.tsx` | Valid but deferred: splitting the 488-line page and consolidating the remaining 11 state fields are broader structural work. | Medium | Logged for a later self-service page refactor instead of mixing a page extraction/reducer redesign into this state-derivation error fix. | Changed-scope React Doctor reports only these two warnings after the derivation cleanup. |
+
+Changed-scope command after Batch 53: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c00ace4e-0035-44fe-88db-a608edc252ba`
+
+Full command after Batch 53: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `976`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 714 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a736f813-211f-4705-a43b-5ffc306d4801`

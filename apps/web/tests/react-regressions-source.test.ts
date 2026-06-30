@@ -1359,6 +1359,24 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain('setActiveTab("general")')
     })
 
+    it("keeps self-service manage appointment timezone defaults render-derived", () => {
+        const source = readSource("app/book/self-service/[orgId]/manage/[token]/page.tsx")
+
+        expect(source).toContain("const hasManageLink = Boolean(orgId && token)")
+        expect(source).toContain("subscribeTimezoneSnapshot")
+        expect(source).toContain("timezoneOverride")
+        expect(source).toContain("viewMonthOverride")
+        expect(source).toContain("getTimezoneLabel")
+        expect(source).not.toContain("setDetectedTimezone")
+        expect(source).not.toContain("setViewMonth(startOfMonth")
+        expect(source).not.toContain('error: "Invalid appointment management link"')
+        expect(source).not.toContain("setTimezone(appointment.client_timezone)")
+        expect(source).not.toContain("[appointment?.client_timezone]")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("<SelectValue />")
+    })
+
     it("keeps surrogate card, task calendar, and CSV derived lists single pass", () => {
         const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
         const taskCalendarSource = readSource("components/surrogates/SurrogateTasksCalendar.tsx")
