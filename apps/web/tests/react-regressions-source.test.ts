@@ -253,7 +253,12 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/dashboard/components/kpi-card.tsx")
 
         expect(source).toContain('import dynamic from "next/dynamic"')
+        expect(source).toContain('width="100%"')
+        expect(source).toContain('height="100%"')
         expect(source).not.toContain('from "recharts"')
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("useRef")
+        expect(source).not.toContain("useState")
         expect(source).not.toContain("KPICardSkeleton")
     })
 

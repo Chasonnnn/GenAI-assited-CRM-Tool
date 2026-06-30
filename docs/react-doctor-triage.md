@@ -1066,3 +1066,22 @@ Full command after Batch 51: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `987`
 - Summary: `Security 2 warnings`, `Bugs 3 errors + 187 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 717 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9434f942-1a63-49c5-99cf-d8b9d39ab347`
+
+## Batch 52
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-adjust-state-on-prop-change` | `app/(app)/dashboard/components/kpi-card.tsx` | Valid: the sparkline effect synchronously measured and stored container size when the prop-derived `hasData` value changed, creating duplicated dimension state before rendering the chart. | High | Remove the measurement state/effect and let `ResponsiveContainer` fill the existing fixed-height sparkline wrapper. Extended the KPI source guard so it failed on the old effect and required the responsive container sizing. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor reports no issues; full React Doctor errors dropped from `3` to `1`. |
+
+Changed-scope command after Batch 52: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 52: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `64 / 100 Needs work`
+- Total diagnostics: `985`
+- Summary: `Security 2 warnings`, `Bugs 1 error + 187 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 717 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-15f8a7db-fcf4-4f87-8e86-f691030a97e1`

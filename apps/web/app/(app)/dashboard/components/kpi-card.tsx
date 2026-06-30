@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import dynamic from "next/dynamic"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,7 +37,7 @@ interface KPICardProps {
     isError?: boolean | undefined
     onRetry?: (() => void) | undefined
     className?: string | undefined
-    icon?: React.ReactNode | undefined
+    icon?: ReactNode | undefined
 }
 
 type SparklineChartDataPoint = {
@@ -45,14 +45,8 @@ type SparklineChartDataPoint = {
     value: number
 }
 
-type SparklineChartSize = {
-    width: number
-    height: number
-}
-
 type SparklineChartProps = {
     chartData: SparklineChartDataPoint[]
-    size: SparklineChartSize
     hasVariance: boolean
     minValue: number
 }
@@ -62,12 +56,11 @@ const SparklineChart = dynamic<SparklineChartProps>(
         import("recharts").then(({ Area, AreaChart, ResponsiveContainer }) => {
             function SparklineChartComponent({
                 chartData,
-                size,
                 hasVariance,
                 minValue,
             }: SparklineChartProps) {
                 return (
-                    <ResponsiveContainer width={size.width} height={size.height} minWidth={1} minHeight={1}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                         <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
                             <defs>
                                 <linearGradient id="sparklineGradient" x1="0" y1="0" x2="0" y2="1">
@@ -101,7 +94,7 @@ const SparklineChart = dynamic<SparklineChartProps>(
 // Helpers
 // =============================================================================
 
-function formatChange(change: ChangeIndicator): { text: string; color: string; icon: React.ReactNode } | null {
+function formatChange(change: ChangeIndicator): { text: string; color: string; icon: ReactNode } | null {
     const { currentValue, previousValue, percentChange, period } = change
 
     // Handle no prior data
@@ -160,43 +153,7 @@ function formatChange(change: ChangeIndicator): { text: string; color: string; i
 // =============================================================================
 
 function Sparkline({ data }: { data: number[] }) {
-    const containerRef = useRef<HTMLDivElement | null>(null)
-    const [size, setSize] = useState<{ width: number; height: number } | null>(null)
     const hasData = data.length >= 2
-
-    useEffect(() => {
-        if (!hasData) return
-        const element = containerRef.current
-        if (!element) return
-
-        const updateSize = () => {
-            const rect = element.getBoundingClientRect()
-            const width = Math.round(rect.width)
-            const height = Math.round(rect.height)
-            if (width > 0 && height > 0) {
-                setSize((prev) =>
-                    prev && prev.width === width && prev.height === height ? prev : { width, height }
-                )
-            } else {
-                setSize(null)
-            }
-        }
-
-        updateSize()
-
-        if (typeof ResizeObserver === "undefined") {
-            if (typeof window.requestAnimationFrame === "function") {
-                const frame = window.requestAnimationFrame(updateSize)
-                return () => window.cancelAnimationFrame(frame)
-            }
-            updateSize()
-            return
-        }
-
-        const observer = new ResizeObserver(updateSize)
-        observer.observe(element)
-        return () => observer.disconnect()
-    }, [hasData])
 
     if (!hasData) return null
 
@@ -206,15 +163,8 @@ function Sparkline({ data }: { data: number[] }) {
     const hasVariance = maxValue !== minValue
 
     return (
-        <div ref={containerRef} className="h-8 w-full">
-            {size ? (
-                <SparklineChart
-                    chartData={chartData}
-                    size={size}
-                    hasVariance={hasVariance}
-                    minValue={minValue}
-                />
-            ) : null}
+        <div className="h-8 w-full">
+            <SparklineChart chartData={chartData} hasVariance={hasVariance} minValue={minValue} />
         </div>
     )
 }
