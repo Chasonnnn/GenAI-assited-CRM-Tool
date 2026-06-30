@@ -932,7 +932,7 @@ def delete_signature_photo(
 
 
 @router.post("/logout", dependencies=[Depends(require_csrf_header)])
-@limiter.limit(f"{settings.RATE_LIMIT_AUTH}/minute")
+@limiter.exempt
 def logout(
     request: Request,
     response: Response,
