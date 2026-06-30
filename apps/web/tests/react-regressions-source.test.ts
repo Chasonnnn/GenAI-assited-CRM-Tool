@@ -77,6 +77,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/actions\.map\(\(action, index\) => \(\s*<Card key=\{index\}>/m)
     })
 
+    it("keeps automation page option derivations compiler-friendly", () => {
+        const source = readSource("app/(app)/automation/page.client.tsx")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).toContain("function parseServerErrors")
+        expect(source).toContain("function getActionValidationError")
+        expect(source).not.toContain("const parseServerErrors =")
+        expect(source).not.toContain("const getActionValidationError =")
+    })
+
     it("keeps automation route search param parsing in the server wrapper", () => {
         const source = readSource("app/(app)/automation/page.tsx")
 

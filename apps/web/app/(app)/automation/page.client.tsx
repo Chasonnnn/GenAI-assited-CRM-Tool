@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useReducer, useRef, useState } from "react"
+import { startTransition, useEffect, useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -620,6 +620,63 @@ function testWorkflowReducer(state: TestWorkflowState, action: TestWorkflowActio
     }
 }
 
+function parseServerErrors(error: unknown): string[] {
+    if (error instanceof ApiError) {
+        if (error.message) {
+            const messages: string[] = []
+            for (const rawMessage of error.message.split(";")) {
+                const message = rawMessage.trim()
+                if (message) messages.push(message)
+            }
+            return messages
+        }
+        return ["An unexpected error occurred."]
+    }
+    if (error instanceof Error) {
+        return [error.message]
+    }
+    return ["An unexpected error occurred."]
+}
+
+function getActionValidationError(action: ActionConfig): string | null {
+    const title = typeof action.title === "string" ? action.title : ""
+    const content = typeof action.content === "string" ? action.content : ""
+    if (!action.action_type) return "Select an action type for each action."
+    if (action.action_type === "send_email" && !action.template_id) {
+        return "Select an email template for all email actions."
+    }
+    if (
+        action.action_type === "send_email" &&
+        Array.isArray(action.recipients) &&
+        action.recipients.length === 0
+    ) {
+        return "Select at least one email recipient."
+    }
+    if (action.action_type === "create_task" && !title.trim()) {
+        return "Task actions need a title."
+    }
+    if (action.action_type === "send_notification" && !title.trim()) {
+        return "Notification actions need a title."
+    }
+    if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
+        return "Select at least one recipient."
+    }
+    if (action.action_type === "assign_surrogate") {
+        if (!action.owner_type) return "Assign actions need an owner type."
+        if (!action.owner_id) return "Assign actions need a target owner."
+    }
+    if (action.action_type === "update_field") {
+        if (!action.field) return "Select a field to update."
+        if (action.value === undefined || action.value === null || action.value === "") {
+            return "Update actions need a value."
+        }
+    }
+    if (action.action_type === "add_note" && !content.trim()) {
+        return "Note actions need content."
+    }
+    return null
+}
+
 export default function AutomationPageClient({
     initialTab,
     initialWorkflowScopeTab,
@@ -749,48 +806,32 @@ export default function AutomationPageClient({
     const filteredActionTypes = actionTypeValuesForTrigger
         ? actionTypeOptions.filter((action) => actionTypeValuesForTrigger.has(action.value))
         : actionTypeOptions
-    const userOptions = useMemo(() => options?.users ?? [], [options?.users])
-    const queueOptions = useMemo(() => options?.queues ?? [], [options?.queues])
-    const formOptions = useMemo<SelectOption[]>(
-        () => (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name })),
-        [options?.forms],
-    )
+    const userOptions = options?.users ?? []
+    const queueOptions = options?.queues ?? []
+    const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
     const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
 
-    const stageIdOptions = useMemo<SelectOption[]>(
-        () =>
-            statusOptions.map((status) => ({
-                value: status.id ?? status.value,
-                label: status.label,
-            })),
-        [statusOptions]
-    )
+    const stageIdOptions: SelectOption[] = statusOptions.map((status) => ({
+        value: status.id ?? status.value,
+        label: status.label,
+    }))
 
-    const stageLabelOptions = useMemo<SelectOption[]>(
-        () => statusOptions.map((status) => ({ value: status.label, label: status.label })),
-        [statusOptions]
-    )
+    const stageLabelOptions: SelectOption[] = statusOptions.map((status) => ({
+        value: status.label,
+        label: status.label,
+    }))
 
-    const ownerOptions = useMemo<SelectOption[]>(
-        () => [
-            ...userOptions.map((user) => ({ value: user.id, label: user.display_name })),
-            ...queueOptions.map((queue) => ({ value: queue.id, label: `Queue: ${queue.name}` })),
-        ],
-        [userOptions, queueOptions]
-    )
+    const ownerOptions: SelectOption[] = [
+        ...userOptions.map((user) => ({ value: user.id, label: user.display_name })),
+        ...queueOptions.map((queue) => ({ value: queue.id, label: `Queue: ${queue.name}` })),
+    ]
 
-    const stateOptions = useMemo<SelectOption[]>(
-        () => US_STATES.map((state) => ({ value: state.value, label: state.label })),
-        []
-    )
+    const stateOptions: SelectOption[] = US_STATES.map((state) => ({ value: state.value, label: state.label }))
 
     const triggerEntityTypes = options?.trigger_entity_types ?? {}
-    const selectedTestWorkflow = useMemo(
-        () => workflows?.find((workflow) => workflow.id === testWorkflowId),
-        [testWorkflowId, workflows]
-    )
+    const selectedTestWorkflow = workflows?.find((workflow) => workflow.id === testWorkflowId)
     const testTriggerType = selectedTestWorkflow?.trigger_type
     const testEntityType = testTriggerType ? triggerEntityTypes[testTriggerType] ?? "surrogate" : "surrogate"
 
@@ -812,24 +853,6 @@ export default function AutomationPageClient({
     const deleteWorkflow = useDeleteWorkflow()
     const testWorkflowMutation = useTestWorkflow()
 
-    const parseServerErrors = (error: unknown): string[] => {
-        if (error instanceof ApiError) {
-            if (error.message) {
-                const messages: string[] = []
-                for (const rawMessage of error.message.split(";")) {
-                    const message = rawMessage.trim()
-                    if (message) messages.push(message)
-                }
-                return messages
-            }
-            return ["An unexpected error occurred."]
-        }
-        if (error instanceof Error) {
-            return [error.message]
-        }
-        return ["An unexpected error occurred."]
-    }
-
     useEffect(() => {
         dispatchWorkflowBuilder({ type: "clearServerErrors" })
     }, [workflowName, workflowDescription, triggerType, triggerConfig, conditions, actions])
@@ -843,45 +866,6 @@ export default function AutomationPageClient({
         ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
         : []
     const availableConditionFields = options?.condition_fields ?? []
-
-    const getActionValidationError = (action: ActionConfig): string | null => {
-        const title = typeof action.title === "string" ? action.title : ""
-        const content = typeof action.content === "string" ? action.content : ""
-        if (!action.action_type) return "Select an action type for each action."
-        if (action.action_type === "send_email" && !action.template_id) {
-            return "Select an email template for all email actions."
-        }
-        if (
-            action.action_type === "send_email" &&
-            Array.isArray(action.recipients) &&
-            action.recipients.length === 0
-        ) {
-            return "Select at least one email recipient."
-        }
-        if (action.action_type === "create_task" && !title.trim()) {
-            return "Task actions need a title."
-        }
-        if (action.action_type === "send_notification" && !title.trim()) {
-            return "Notification actions need a title."
-        }
-        if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
-            return "Select at least one recipient."
-        }
-        if (action.action_type === "assign_surrogate") {
-            if (!action.owner_type) return "Assign actions need an owner type."
-            if (!action.owner_id) return "Assign actions need a target owner."
-        }
-        if (action.action_type === "update_field") {
-            if (!action.field) return "Select a field to update."
-            if (action.value === undefined || action.value === null || action.value === "") {
-                return "Update actions need a value."
-            }
-        }
-        if (action.action_type === "add_note" && !content.trim()) {
-            return "Note actions need content."
-        }
-        return null
-    }
 
     const getActionsValidationError = (): string | null => {
         if (actions.length === 0) return "Add at least one action."

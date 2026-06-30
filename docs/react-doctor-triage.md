@@ -1224,3 +1224,24 @@ Full command after Batch 59: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `851`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 590 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a9ea583a-5c62-4b4e-a4e5-60efbd080f56`
+
+## Batch 60
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/prefer-module-scope-pure-function` | `app/(app)/automation/page.client.tsx` | Valid: the automation page manually memoized option arrays and selected workflow lookup, and rebuilt pure server-error/action-validation helpers inside the component. | High | Remove `useMemo`, derive options directly, and hoist the pure helpers to module scope. Added a source guard that failed on the old `useMemo` import/calls and local helper declarations. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/automation-page.test.tsx`; full React Doctor manual memoization count dropped from `457` to `449`; pure-function rebuild count dropped from `33` to `31`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/automation/page.client.tsx` | Valid but out of scope: the page remains a 2k-line orchestration surface and still owns several related local UI states. | Medium | Deferred to a separate behavior/refactor batch because splitting the workflow page and grouping the remaining local state changes the component structure more broadly than this memoization cleanup. | Changed-scope React Doctor reports these two remaining warnings with score `92 / 100`; no suppression added. |
+
+Changed-scope command after Batch 60: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Deferred: `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` in `app/(app)/automation/page.client.tsx`
+
+Full command after Batch 60: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `841`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 580 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a9f0f47f-fe48-44b0-92c8-623747649fd4`
