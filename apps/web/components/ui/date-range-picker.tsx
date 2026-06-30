@@ -55,13 +55,6 @@ export function DateRangePicker({
         from: customRange?.from,
         to: customRange?.to,
     })
-    const [calendarDefaultMonth, setCalendarDefaultMonth] = React.useState<Date | undefined>(
-        customRange?.from
-    )
-
-    React.useEffect(() => {
-        setCalendarDefaultMonth(customRange?.from ?? new Date())
-    }, [customRange?.from])
 
     // Reset local range when opening calendar
     const handleShowCalendar = () => {
@@ -69,10 +62,7 @@ export function DateRangePicker({
         setShowCalendar(true)
     }
 
-    const availableDateSet = React.useMemo(() => {
-        if (!availableDateKeys?.length) return null
-        return new Set(availableDateKeys)
-    }, [availableDateKeys])
+    const availableDateSet = availableDateKeys?.length ? new Set(availableDateKeys) : null
 
     const handlePresetSelect = (newPreset: DateRangePreset) => {
         if (newPreset === 'custom') {
@@ -125,7 +115,7 @@ export function DateRangePicker({
         return presetLabels[preset]
     }
 
-    const resolvedCalendarDefaultMonth = localRange.from ?? calendarDefaultMonth
+    const resolvedCalendarDefaultMonth = localRange.from ?? customRange?.from
 
     return (
         <Popover open={open} onOpenChange={(newOpen, eventDetails) => {

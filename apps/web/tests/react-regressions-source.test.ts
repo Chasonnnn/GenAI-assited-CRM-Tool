@@ -2013,6 +2013,8 @@ describe("React regression guards (source)", () => {
         expect(ticketDetailSource).not.toContain("new Date(note.created_at).toLocaleString()")
         expect(ticketDetailSource).not.toContain("new Date(message.date_header).toLocaleString()")
         expect(dateRangePickerSource).not.toContain("defaultMonth={localRange.from || new Date()}")
+        expect(dateRangePickerSource).not.toContain("setCalendarDefaultMonth")
+        expect(dateRangePickerSource).not.toContain("React.useMemo(")
         expect(integrationsSource).not.toContain("new Date(googleLastSyncAt).toLocaleString()")
         expect(commentCardSource).not.toContain("formatDistanceToNow(new Date(")
         expect(unifiedCalendarSource).not.toContain("format(new Date(2000, 0, 1, hour),")
