@@ -1330,6 +1330,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const visibleSections: SectionConfig[] = []")
         expect(source).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*\)\.map\(\(section\) => section\.key\)/)
         expect(source).not.toMatch(/SECTION_CONFIGS\.filter\(\(section\) => visibleKeys\.has\(section\.key\)\)\.filter/)
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("useMemo")
     })
 
     it("uses single-pass filtered display lists for dashboard and campaign details", () => {

@@ -733,3 +733,24 @@ Full command after Batch 35: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1078`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 23 errors + 34 warnings`, `Accessibility 42 warnings`, `Maintainability 769 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-33d06a75-09d8-464b-9a4f-8aabd2a08324`
+
+## Batch 36
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/intended-parents/IntendedParentClinicCard.tsx` | Valid: the select save and delete-section handlers used `try/finally` only to clear saving/deleting state, which blocks the current React Compiler path. | High | Replace both finalizers with explicit promise-result branches; preserve prior error propagation by clearing loading state before rethrowing failed saves/deletes. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/intended-parent-detail.test.tsx`; changed-scope React Doctor no longer reports the compiler blocker. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/intended-parents/IntendedParentClinicCard.tsx` | Valid: React Compiler is enabled, so the touched file's `useMemo` wrappers around small section derivations are redundant. | High | Replace the three memoized derivations with plain render-time derivation while keeping the existing single-pass section logic. Extended the source guard to fail on reintroduced `useMemo`. | Focused tests passed; full React Doctor shows redundant memoization dropped by 3. |
+| `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx` | Invalid: `manuallyAddedSections` and `optimisticallyHiddenSections` are read during render to compute `visibleSections`, which controls whether clinic/embryo sections render. They are not handler-only refs. | High | Leave as state. No suppression added; logged as an invalid touched-file finding. | Existing intended-parent detail tests cover adding/hiding clinic sections. |
+
+Changed-scope command after Batch 36: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Invalid diagnostics: `react-doctor/rerender-state-only-in-handlers` for `manuallyAddedSections` and `optimisticallyHiddenSections`
+
+Full command after Batch 36: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1075`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 21 errors + 36 warnings`, `Accessibility 42 warnings`, `Maintainability 766 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c172d2ed-f46d-40ed-81b9-078698845329`

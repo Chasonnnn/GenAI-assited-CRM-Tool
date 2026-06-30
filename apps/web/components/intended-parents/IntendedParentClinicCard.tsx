@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
     BuildingIcon,
     ChevronDownIcon,
@@ -153,10 +153,15 @@ function SelectField({
             onValueChange={async (nextValue) => {
                 const nextStoredValue = nextValue === "__none__" ? null : nextValue
                 setIsSaving(true)
-                try {
-                    await onSave(nextStoredValue)
-                } finally {
-                    setIsSaving(false)
+                const result = await onSave(nextStoredValue).then(() => ({
+                    status: "success" as const,
+                })).catch((error: unknown) => ({
+                    status: "error" as const,
+                    error,
+                }))
+                setIsSaving(false)
+                if (result.status === "error") {
+                    throw result.error
                 }
             }}
             disabled={isSaving}
@@ -277,46 +282,36 @@ export function IntendedParentClinicCard({
 
     const dataRecord = intendedParent as unknown as Record<string, string | number | boolean | null | undefined>
 
-    const sectionsWithData = useMemo(() => {
-        const sectionsWithData: MedicalSectionKey[] = []
+    const sectionsWithData: MedicalSectionKey[] = []
 
-        for (const section of SECTION_CONFIGS) {
-            const hasData = section.fields.some((field) => {
-                const value = dataRecord[field]
-                return value !== null && value !== undefined && value !== ""
-            })
+    for (const section of SECTION_CONFIGS) {
+        const hasData = section.fields.some((field) => {
+            const value = dataRecord[field]
+            return value !== null && value !== undefined && value !== ""
+        })
 
-            if (hasData) {
-                sectionsWithData.push(section.key)
-            }
+        if (hasData) {
+            sectionsWithData.push(section.key)
         }
+    }
 
-        return sectionsWithData
-    }, [dataRecord])
-
-    const visibleSections = useMemo(() => {
-        const visibleKeys = new Set([...sectionsWithData, ...manuallyAddedSections])
-        const sectionsWithDataSet = new Set(sectionsWithData)
-        const hiddenKeys = new Set<MedicalSectionKey>()
-        for (const sectionKey of optimisticallyHiddenSections) {
-            if (sectionsWithDataSet.has(sectionKey)) {
-                hiddenKeys.add(sectionKey)
-            }
+    const visibleKeys = new Set([...sectionsWithData, ...manuallyAddedSections])
+    const sectionsWithDataSet = new Set(sectionsWithData)
+    const hiddenKeys = new Set<MedicalSectionKey>()
+    for (const sectionKey of optimisticallyHiddenSections) {
+        if (sectionsWithDataSet.has(sectionKey)) {
+            hiddenKeys.add(sectionKey)
         }
+    }
 
-        const visibleSections: SectionConfig[] = []
-        for (const section of SECTION_CONFIGS) {
-            if (!visibleKeys.has(section.key) || hiddenKeys.has(section.key)) continue
-            visibleSections.push(section)
-        }
+    const visibleSections: SectionConfig[] = []
+    for (const section of SECTION_CONFIGS) {
+        if (!visibleKeys.has(section.key) || hiddenKeys.has(section.key)) continue
+        visibleSections.push(section)
+    }
 
-        return visibleSections
-    }, [manuallyAddedSections, optimisticallyHiddenSections, sectionsWithData])
-
-    const availableSections = useMemo(() => {
-        const visibleKeys = new Set(visibleSections.map((section) => section.key))
-        return SECTION_CONFIGS.filter((section) => !visibleKeys.has(section.key))
-    }, [visibleSections])
+    const availableSectionKeys = new Set(visibleSections.map((section) => section.key))
+    const availableSections = SECTION_CONFIGS.filter((section) => !availableSectionKeys.has(section.key))
 
     const canEditSections = availableSections.length > 0 || visibleSections.length > 0
 
@@ -335,11 +330,17 @@ export function IntendedParentClinicCard({
         if (!targetSection) return
 
         setIsDeletingSection(true)
-        try {
-            const clearedFields = Object.fromEntries(
-                targetSection.fields.map((field) => [field, null])
-            ) as IntendedParentUpdate
-            await onUpdate(clearedFields)
+        const clearedFields = Object.fromEntries(
+            targetSection.fields.map((field) => [field, null])
+        ) as IntendedParentUpdate
+        const result = await onUpdate(clearedFields).then(() => ({
+            status: "success" as const,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            error,
+        }))
+
+        if (result.status === "success") {
             setManuallyAddedSections((previous) =>
                 previous.filter((sectionKey) => sectionKey !== targetSection.key)
             )
@@ -349,8 +350,10 @@ export function IntendedParentClinicCard({
                     : [...previous, targetSection.key]
             )
             setDeleteTarget(null)
-        } finally {
-            setIsDeletingSection(false)
+        }
+        setIsDeletingSection(false)
+        if (result.status === "error") {
+            throw result.error
         }
     }
 
