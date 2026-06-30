@@ -82,6 +82,65 @@ function formatRelativeTime(dateString: string): string {
     return `Updated ${diffDays}d ago`
 }
 
+const statusVariant = (status: string) => {
+    switch (status) {
+        case "published":
+            return "default"
+        case "draft":
+            return "secondary"
+        case "archived":
+            return "outline"
+        default:
+            return "secondary"
+    }
+}
+
+const statusLabel = (status: string) => {
+    switch (status) {
+        case "published":
+            return "Published"
+        case "draft":
+            return "Draft"
+        case "archived":
+            return "Archived"
+        default:
+            return status
+    }
+}
+
+const pickShareLink = (links: FormIntakeLinkRead[]): FormIntakeLinkRead | null => {
+    return (
+        links.find((link) => link.is_active && Boolean(link.intake_url)) ||
+        links.find((link) => Boolean(link.intake_url)) ||
+        null
+    )
+}
+
+const getShareQrSvgMarkup = () => {
+    const svg = document.querySelector("#forms-share-qr svg")
+    if (!(svg instanceof SVGSVGElement)) {
+        toast.error("QR code is not ready yet")
+        return null
+    }
+
+    let markup = new XMLSerializer().serializeToString(svg)
+    if (!markup.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
+        markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
+    }
+    return markup
+}
+
+const downloadBlob = (blob: Blob, filename: string) => {
+    const downloadUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = downloadUrl
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(downloadUrl)
+}
+
 export default function FormsListPage() {
     const { push } = useRouter()
     const { data: forms, isLoading } = useForms()
@@ -123,16 +182,17 @@ export default function FormsListPage() {
     const handleUseTemplate = async (templateId: string, templateName: string) => {
         if (useTemplateMutation.isPending) return
         setApplyingTemplateId(templateId)
+        const finishTemplateApply = () => setApplyingTemplateId(null)
         try {
             const newForm = await useTemplateMutation.mutateAsync({
                 templateId,
                 payload: { name: templateName },
             })
             push(`/automation/forms/${newForm.id}`)
+            finishTemplateApply()
         } catch {
             // Error handling is done by React Query
-        } finally {
-            setApplyingTemplateId(null)
+            finishTemplateApply()
         }
     }
 
@@ -164,40 +224,6 @@ export default function FormsListPage() {
         }
     }
 
-    const statusVariant = (status: string) => {
-        switch (status) {
-            case "published":
-                return "default"
-            case "draft":
-                return "secondary"
-            case "archived":
-                return "outline"
-            default:
-                return "secondary"
-        }
-    }
-
-    const statusLabel = (status: string) => {
-        switch (status) {
-            case "published":
-                return "Published"
-            case "draft":
-                return "Draft"
-            case "archived":
-                return "Archived"
-            default:
-                return status
-        }
-    }
-
-    const pickShareLink = (links: FormIntakeLinkRead[]): FormIntakeLinkRead | null => {
-        return (
-            links.find((link) => link.is_active && Boolean(link.intake_url)) ||
-            links.find((link) => Boolean(link.intake_url)) ||
-            null
-        )
-    }
-
     const resetSharePrompt = () => {
         setShareTargetForm(null)
         setShareLink(null)
@@ -214,52 +240,41 @@ export default function FormsListPage() {
         setShareTargetForm({ id: form.id, name: form.name })
         setShareLink(null)
         setIsPreparingShare(true)
+        const finishSharePreparation = () => setIsPreparingShare(false)
 
         try {
             const links = await listFormIntakeLinks(form.id, true)
             const selected = pickShareLink(links)
             if (!selected?.intake_url) {
                 toast.error("No shared link is available yet for this form.")
+                finishSharePreparation()
                 return
             }
             setShareLink(selected)
+            finishSharePreparation()
         } catch (error) {
             const message =
                 error instanceof ApiError
                     ? error.message
                     : "Failed to prepare share link. Please try again."
             toast.error(message)
-        } finally {
-            setIsPreparingShare(false)
+            finishSharePreparation()
         }
     }
 
     const handleCopyShareLink = async () => {
         if (!shareLink?.intake_url) return
         setIsShareActionPending(true)
+        const finishShareAction = () => setIsShareActionPending(false)
         try {
             await navigator.clipboard.writeText(shareLink.intake_url)
             toast.success("Application link copied")
             resetSharePrompt()
+            finishShareAction()
         } catch {
             toast.error("Failed to copy link")
-        } finally {
-            setIsShareActionPending(false)
+            finishShareAction()
         }
-    }
-
-    const getShareQrSvgMarkup = () => {
-        const svg = document.querySelector("#forms-share-qr svg")
-        if (!(svg instanceof SVGSVGElement)) {
-            toast.error("QR code is not ready yet")
-            return null
-        }
-
-        let markup = new XMLSerializer().serializeToString(svg)
-        if (!markup.includes("xmlns=\"http://www.w3.org/2000/svg\"")) {
-            markup = markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
-        }
-        return markup
     }
 
     const buildShareQrFilename = () => {
@@ -272,17 +287,6 @@ export default function FormsListPage() {
         return `${base || "application-link"}-qr.png`
     }
 
-    const downloadBlob = (blob: Blob, filename: string) => {
-        const downloadUrl = URL.createObjectURL(blob)
-        const anchor = document.createElement("a")
-        anchor.href = downloadUrl
-        anchor.download = filename
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        URL.revokeObjectURL(downloadUrl)
-    }
-
     const handleDownloadQrCode = async () => {
         const markup = getShareQrSvgMarkup()
         if (!markup) return
@@ -290,6 +294,10 @@ export default function FormsListPage() {
         setIsShareActionPending(true)
         const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
         const svgUrl = URL.createObjectURL(svgBlob)
+        const finishShareAction = () => {
+            URL.revokeObjectURL(svgUrl)
+            setIsShareActionPending(false)
+        }
         try {
             const image = new Image()
             image.crossOrigin = "anonymous"
@@ -306,6 +314,7 @@ export default function FormsListPage() {
             const context = canvas.getContext("2d")
             if (!context) {
                 toast.error("Could not prepare QR download")
+                finishShareAction()
                 return
             }
             context.drawImage(image, 0, 0)
@@ -315,17 +324,17 @@ export default function FormsListPage() {
             )
             if (!blob) {
                 toast.error("Could not generate QR code")
+                finishShareAction()
                 return
             }
 
             downloadBlob(blob, buildShareQrFilename())
             toast.success("QR code downloaded")
             resetSharePrompt()
+            finishShareAction()
         } catch {
             toast.error("Failed to download QR code")
-        } finally {
-            URL.revokeObjectURL(svgUrl)
-            setIsShareActionPending(false)
+            finishShareAction()
         }
     }
 

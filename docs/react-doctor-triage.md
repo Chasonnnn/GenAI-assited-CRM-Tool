@@ -94,3 +94,24 @@ Full command after Batch 4: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1412`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 134 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 845 warnings`
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4ede4ff8-d0be-4f21-95f6-29d325ec8a9d`
+
+## Batch 5
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/automation/forms/page.tsx` | Valid: form-template apply, share-link preparation, copy, and QR download handlers used `try` statements with `finally` cleanup. | High | Replace `finally` cleanup with explicit success/catch cleanup helpers, including early-return cleanup in QR rendering paths. | `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reports errors. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/(app)/automation/forms/page.tsx` | Valid: status label/variant, share-link selection, QR SVG lookup, and blob download helpers do not use component state. | High | Move pure helpers to module scope. | Changed-scope React Doctor no longer reports these helper warnings. |
+
+Changed-scope command after Batch 5: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Remaining changed-file warnings: `no-giant-component`, `prefer-useReducer` for `FormsListPage`; both are larger refactors deferred to a separate batch.
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b745aab7-dc7f-4cb3-9a91-5824fc3c0b26`
+
+Full command after Batch 5: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `1 / 100 Critical`
+- Total diagnostics: `1403`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 130 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 840 warnings`
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-baa4c0f5-8649-4d9a-b82d-daaab21d0a9f`
