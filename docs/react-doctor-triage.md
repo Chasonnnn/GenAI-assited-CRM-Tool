@@ -340,3 +340,24 @@ Full command after Batch 15: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1210`
 - Summary: `Security 2 warnings`, `Bugs 14 errors + 241 warnings`, `Performance 67 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-145efa15-c8ae-4717-a463-ec38fd06e325`
+
+## Batch 16
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `components/surrogates/profile/ProfileCard/context.tsx` | Valid: profile overrides, hidden fields, staged changes, reveal state, mode, and section-open state were reset from effects when profile/schema data changed. | High | Collapse profile-local edit state into one `ProfileEditableState` keyed by a profile data fingerprint, and initialize section-open state from the same pure constructor. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/surrogate-profile-card-accessibility.test.tsx tests/surrogate-detail.test.tsx`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `components/surrogates/profile/ProfileCard/context.tsx` | Valid: profile PDF export used `finally`, which blocks React Compiler optimization. | High | Replace the finalizer with explicit success/error cleanup for `isExporting`. | Focused tests passed; changed-scope React Doctor no longer reports compiler errors for this file. |
+
+Changed-scope command after Batch 16: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `31`
+- Remaining changed-file warnings: manual memoization, provider size, and non-component exports in `ProfileCard/context.tsx`; valid but broader structural cleanup than this 8-error batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5c76f200-bc85-4a5d-901c-608f757b865f`
+
+Full command after Batch 16: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `47 / 100 Critical`
+- Total diagnostics: `1202`
+- Summary: `Security 2 warnings`, `Bugs 9 errors + 234 warnings`, `Performance 64 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 808 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cd6c5c73-ec18-4498-8fc4-5fb0cbfd7031`

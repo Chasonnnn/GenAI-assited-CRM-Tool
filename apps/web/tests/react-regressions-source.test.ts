@@ -917,6 +917,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/for \(const fieldKey of hiddenDiff\)[\s\S]*await toggleHiddenMutation\.mutateAsync/)
     })
 
+    it("keeps profile card provider state compiler-friendly", () => {
+        const source = readSource("components/surrogates/profile/ProfileCard/context.tsx")
+
+        expect(source).toContain("type ProfileEditableState")
+        expect(source).toContain("function createProfileEditableState")
+        expect(source).toContain("if (profileState.profileKey !== activeProfileKey)")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("setBaselineOverrides")
+        expect(source).not.toContain("setBaselineHidden")
+        expect(source).not.toContain("setSectionOpen(initialState)")
+    })
+
     it("keeps hosted intake field visibility filtering single pass", () => {
         const source = readSource("app/intake/[slug]/page.client.tsx")
 
