@@ -231,12 +231,6 @@ function InlineSelectField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    React.useEffect(() => {
-        if (!isEditing) {
-            setEditValue(value ?? "")
-        }
-    }, [isEditing, value])
-
     const displayValue = formatSelectValue(value, options, placeholder)
     const isPlaceholder = !value
 
@@ -260,30 +254,24 @@ function InlineSelectField({
         }
 
         setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
         try {
             await onSave(normalizedValue)
             setIsEditing(false)
             setError(null)
+            finishSaving()
         } catch (err) {
             setError(err instanceof Error ? err.message : `Failed to save ${label}`)
-        } finally {
-            setIsSaving(false)
+            finishSaving()
         }
     }
 
     if (!isEditing) {
         return (
-            <div
+            <button
+                type="button"
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-                        event.preventDefault()
-                        handleStartEdit()
-                    }
-                }}
                 aria-label={`Edit ${label}`}
             >
                 <span className={isPlaceholder ? "text-muted-foreground" : undefined}>
@@ -293,7 +281,7 @@ function InlineSelectField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 
@@ -409,12 +397,6 @@ function InlineHeightField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    React.useEffect(() => {
-        const selection = splitHeightFt(value)
-        setFeet(selection.feet)
-        setInches(selection.inches)
-    }, [value])
-
     const displayValue = value != null ? formatHeight(value) : "-"
 
     const handleStartEdit = () => {
@@ -441,30 +423,24 @@ function InlineHeightField({
         }
 
         setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
         try {
             await onSave(nextValue)
             setIsEditing(false)
             setError(null)
+            finishSaving()
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save")
-        } finally {
-            setIsSaving(false)
+            finishSaving()
         }
     }
 
     if (!isEditing) {
         return (
-            <div
+            <button
+                type="button"
                 className="group -mx-1 flex cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-                        event.preventDefault()
-                        handleStartEdit()
-                    }
-                }}
                 aria-label="Edit Height"
             >
                 <span className={value == null ? "text-muted-foreground" : undefined}>
@@ -474,7 +450,7 @@ function InlineHeightField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 
@@ -555,12 +531,6 @@ function InlineRaceField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    React.useEffect(() => {
-        if (!isEditing) {
-            setEditValue(normalizeRaceOptionKey(value))
-        }
-    }, [isEditing, value])
-
     const displayValue = formatRace(value)
     const fieldLabel = "Race / Ethnicity"
 
@@ -584,30 +554,24 @@ function InlineRaceField({
         }
 
         setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
         try {
             await onSave(editValue || null)
             setIsEditing(false)
             setError(null)
+            finishSaving()
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save")
-        } finally {
-            setIsSaving(false)
+            finishSaving()
         }
     }
 
     if (!isEditing) {
         return (
-            <div
+            <button
+                type="button"
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-                        event.preventDefault()
-                        handleStartEdit()
-                    }
-                }}
                 aria-label={`Edit ${fieldLabel}`}
             >
                 <span className={displayValue ? undefined : "text-muted-foreground"}>
@@ -617,7 +581,7 @@ function InlineRaceField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 
@@ -689,12 +653,6 @@ function InlineWeightField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    React.useEffect(() => {
-        if (!isEditing) {
-            setEditValue("")
-        }
-    }, [isEditing, value])
-
     const handleStartEdit = () => {
         setEditValue("")
         setError(null)
@@ -726,30 +684,24 @@ function InlineWeightField({
         }
 
         setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
         try {
             await onSave(parsed)
             setIsEditing(false)
             setError(null)
+            finishSaving()
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save")
-        } finally {
-            setIsSaving(false)
+            finishSaving()
         }
     }
 
     if (!isEditing) {
         return (
-            <div
+            <button
+                type="button"
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-                        event.preventDefault()
-                        handleStartEdit()
-                    }
-                }}
                 aria-label="Edit Weight"
             >
                 <span className={value == null ? "text-muted-foreground" : undefined}>
@@ -759,7 +711,7 @@ function InlineWeightField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 
@@ -848,10 +800,12 @@ function ChecklistStatusButton({
 
     const cycleChecklistValue = async () => {
         setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
         try {
             await onChange(nextValue)
-        } finally {
-            setIsSaving(false)
+            finishSaving()
+        } catch {
+            finishSaving()
         }
     }
 
@@ -923,64 +877,74 @@ function SsnField({
     const [isEditing, setIsEditing] = React.useState(false)
     const [editValue, setEditValue] = React.useState("")
     const [isSaving, setIsSaving] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
     const displayValue = revealedValue || maskedValue || "-"
 
     const save = async () => {
         setIsSaving(true)
+        const finishSaving = () => setIsSaving(false)
         try {
             await onSave(editValue.trim() || null)
             setEditValue("")
+            setError(null)
             setIsEditing(false)
-        } finally {
-            setIsSaving(false)
+            finishSaving()
+        } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to save ${label}`)
+            finishSaving()
         }
     }
 
     if (isEditing) {
         return (
-            <div className="flex min-w-0 items-center gap-2">
-                <input
-                    aria-label={label}
-                    value={editValue}
-                    onChange={(event) => setEditValue(event.target.value)}
-                    onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                            event.preventDefault()
-                            void save()
-                        }
-                        if (event.key === "Escape") {
+            <div className="space-y-1">
+                <div className="flex min-w-0 items-center gap-2">
+                    <input
+                        aria-label={label}
+                        value={editValue}
+                        onChange={(event) => setEditValue(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault()
+                                void save()
+                            }
+                            if (event.key === "Escape") {
+                                setEditValue("")
+                                setError(null)
+                                setIsEditing(false)
+                            }
+                        }}
+                        placeholder="XXX-XX-XXXX"
+                        className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        onClick={() => void save()}
+                        disabled={isSaving}
+                        aria-label={`Save ${label}`}
+                    >
+                        <CheckIcon className="size-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        onClick={() => {
                             setEditValue("")
+                            setError(null)
                             setIsEditing(false)
-                        }
-                    }}
-                    placeholder="XXX-XX-XXXX"
-                    className="h-7 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
-                />
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => void save()}
-                    disabled={isSaving}
-                    aria-label={`Save ${label}`}
-                >
-                    <CheckIcon className="size-3.5" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={() => {
-                        setEditValue("")
-                        setIsEditing(false)
-                    }}
-                    disabled={isSaving}
-                    aria-label={`Cancel editing ${label}`}
-                >
-                    <XIcon className="size-3.5" aria-hidden="true" />
-                </Button>
+                        }}
+                        disabled={isSaving}
+                        aria-label={`Cancel editing ${label}`}
+                    >
+                        <XIcon className="size-3.5" aria-hidden="true" />
+                    </Button>
+                </div>
+                {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
         )
     }
@@ -1008,7 +972,10 @@ function SsnField({
                 variant="ghost"
                 size="icon"
                 className="size-7"
-                onClick={() => setIsEditing(true)}
+                onClick={() => {
+                    setError(null)
+                    setIsEditing(true)
+                }}
                 aria-label={`Edit ${label}`}
             >
                 <PencilIcon className="size-3.5" aria-hidden="true" />
@@ -1023,11 +990,8 @@ export function SurrogateOverviewTab() {
     const detailContext = useSurrogateDetailContext()
     const surrogateData = detailContext?.surrogate
     const { data: defaultPipeline } = useDefaultPipeline()
-    const stageOptions = React.useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
-    const stageById = React.useMemo(
-        () => new Map(stageOptions.map((stage) => [stage.id, stage])),
-        [stageOptions]
-    )
+    const stageOptions = defaultPipeline?.stages || []
+    const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
     const { data: activityData } = useSurrogateActivity(id)
     const { data: tasksData } = useTasks({ surrogate_id: id, exclude_approvals: true })
     const updateSurrogateMutation = useUpdateSurrogate()
@@ -1042,23 +1006,14 @@ export function SurrogateOverviewTab() {
     const [isDeletingPersonalSection, setIsDeletingPersonalSection] = React.useState(false)
     const [personalSectionPendingDelete, setPersonalSectionPendingDelete] = React.useState<"surrogate" | "partner" | null>(null)
 
-    const bmiValue = React.useMemo(() => {
-        if (!surrogateData) return null
-        if (typeof surrogateData.bmi === "number") return surrogateData.bmi
-        return computeBmi(surrogateData.height_ft, surrogateData.weight_lb)
-    }, [surrogateData])
-    const stageContext = React.useMemo(
-        () => getSurrogateStageContext(surrogateData ?? null, stageById),
-        [surrogateData, stageById]
-    )
-    const leadIntakeWarnings = React.useMemo(
-        () => surrogateData?.lead_intake_warnings ?? [],
-        [surrogateData]
-    )
-    const leadWarningMap = React.useMemo(
-        () => new Map(leadIntakeWarnings.map((warning) => [warning.field_key, warning])),
-        [leadIntakeWarnings]
-    )
+    const bmiValue = surrogateData
+        ? typeof surrogateData.bmi === "number"
+            ? surrogateData.bmi
+            : computeBmi(surrogateData.height_ft, surrogateData.weight_lb)
+        : null
+    const stageContext = getSurrogateStageContext(surrogateData ?? null, stageById)
+    const leadIntakeWarnings = surrogateData?.lead_intake_warnings ?? []
+    const leadWarningMap = new Map(leadIntakeWarnings.map((warning) => [warning.field_key, warning]))
 
     if (!surrogateData) {
         return null
@@ -1136,6 +1091,7 @@ export function SurrogateOverviewTab() {
         if (!personalSectionPendingDelete) return
 
         setIsDeletingPersonalSection(true)
+        const finishDeleting = () => setIsDeletingPersonalSection(false)
         try {
             if (personalSectionPendingDelete === "surrogate") {
                 await updateSurrogate({
@@ -1168,8 +1124,9 @@ export function SurrogateOverviewTab() {
                 setPartnerSectionHidden(true)
             }
             setPersonalSectionPendingDelete(null)
-        } finally {
-            setIsDeletingPersonalSection(false)
+            finishDeleting()
+        } catch {
+            finishDeleting()
         }
     }
 

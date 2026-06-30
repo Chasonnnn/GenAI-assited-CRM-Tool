@@ -235,3 +235,26 @@ Full command after Batch 10: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1296`
 - Summary: `Security 2 warnings`, `Bugs 28 errors + 270 warnings`, `Performance 99 errors + 37 warnings`, `Accessibility 53 warnings`, `Maintainability 807 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-45216e1d-e7a5-4ec3-a531-f2484791ab4e`
+
+## Batch 11
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `components/surrogates/detail/tabs/SurrogateOverviewTab.tsx` | Valid: inline select, height, race, and weight editors synchronized draft state from props through effects. | High | Initialize editor drafts when editing starts or cancels instead of mirroring props through effects. Added a source guard to prevent the effect pattern from returning. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/surrogate-detail.test.tsx tests/surrogates-accessibility.test.tsx`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `components/surrogates/detail/tabs/SurrogateOverviewTab.tsx` | Valid: inline save handlers, checklist toggles, SSN saves, and personal-section deletion used unsupported `try`/`finally` or bare `try` shapes. | High | Replace finalizers with explicit success/error cleanup helpers and add error handling where the previous code relied on rejected async handlers. | Focused tests and full test suite passed; changed-scope React Doctor no longer reports compiler errors. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/detail/tabs/SurrogateOverviewTab.tsx` | Valid: React Compiler is enabled, so local `useMemo` wrappers around derived stage, BMI, and warning values are redundant. | High | Remove manual memoization and derive the values directly during render. | Changed-scope React Doctor no longer reports manual memoization warnings for this file. |
+| `react-doctor/prefer-tag-over-role` | `components/surrogates/detail/tabs/SurrogateOverviewTab.tsx` | Valid: inline editor display controls used `div role="button"` even though a native button fits the interaction. | High | Replace the faux buttons with `<button type="button">` controls. | Focused interaction/accessibility tests passed; changed-scope React Doctor no longer reports this warning. |
+
+Changed-scope command after Batch 11: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `3`
+- Remaining changed-file warnings: `no-giant-component` and `prefer-useReducer` for `SurrogateOverviewTab`; both are valid but larger structural refactors deferred to separate batches.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3ad3072b-d442-4e93-b79e-8fcd797a6bc1`
+
+Full command after Batch 11: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `26 / 100 Critical`
+- Total diagnostics: `1264`
+- Summary: `Security 2 warnings`, `Bugs 27 errors + 260 warnings`, `Performance 88 errors + 37 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-31a2e4f1-19a1-44bb-8289-2dd2594b4cb4`

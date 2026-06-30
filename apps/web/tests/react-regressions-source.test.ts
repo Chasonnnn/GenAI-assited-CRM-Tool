@@ -259,6 +259,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps surrogate overview inline editors compiler-friendly", () => {
+        const source = readSource("components/surrogates/detail/tabs/SurrogateOverviewTab.tsx")
+
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("finally")
+    })
+
     it("imports the API client directly from leaf API modules", () => {
         for (const { path, source } of readApiModuleSources()) {
             expect(source, path).not.toMatch(/from ['"]\.\/index['"]/)
