@@ -913,3 +913,26 @@ Full command after Batch 44: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1043`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 201 warnings`, `Performance 10 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 747 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7ad751bb-d8d1-4e32-aa10-d5f8e1a8d5ab`
+
+## Batch 45
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/surrogates/interviews/InterviewTab/context.tsx` | Valid: transcription start used a `try/finally` finalizer only to clear upload state, which blocks the current React Compiler path. | High | Replace the finalizer with a typed mutation-result branch, preserve success/error toasts, and clear upload state after success or error handling. Extended the source guard so it failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/interview-tab.test.tsx`; full React Doctor errors dropped from `15` to `13`. |
+| `react-hooks/set-state-in-effect` | `components/surrogates/interviews/InterviewTab/context.tsx` | Valid: the editor reset effect synchronously copied dialog/interview data into form state after render. | High | Move form construction into `buildInterviewFormState` and reset form directly when `openEditor` runs, eliminating the editor-reset effect while preserving add/edit dialog initialization. | Focused interview tests passed; `pnpm lint` no longer reports the `InterviewTab/context.tsx:206` warning. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/interviews/InterviewTab/context.tsx` | Valid: React Compiler is enabled, so local `useCallback` wrappers and the context `useMemo` wrapper are redundant in this touched provider. | High | Use plain local functions and a plain typed context value object. Extended the source guard so it failed on reintroduced `useCallback` or `useMemo`. | Focused tests and TypeScript passed; full React Doctor redundant memoization count dropped from `614` to `594`. |
+| `react-doctor/async-await-in-loop`, `react-doctor/no-giant-component` | `components/surrogates/interviews/InterviewTab/context.tsx` | Valid but deferred: attachment uploads are intentionally sequential today and provider extraction is a broader structural change. | Medium | Logged for a later interview-context batch instead of mixing upload semantics or provider decomposition into this commit. | Changed-scope React Doctor reports only these two remaining warnings for the interview context. |
+
+Changed-scope command after Batch 45: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Performance 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-824536a3-44ff-416e-870a-9d879b4d0a16`
+
+Full command after Batch 45: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `57 / 100 Critical`
+- Total diagnostics: `1018`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 198 warnings`, `Performance 8 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 727 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e65463b5-17ec-43a9-947e-55d614e906a1`

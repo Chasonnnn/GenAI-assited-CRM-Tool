@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { createContext, use, useState, useCallback, useMemo, useRef, useEffect } from "react"
+import { createContext, use, useState, useRef, useEffect } from "react"
 import { toast } from "sonner"
 import {
     useInterviews,
@@ -141,6 +141,26 @@ function toLocalDateTimeInput(dateString: string): string {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function buildInterviewFormState(interview: InterviewRead | null): FormState {
+    if (interview) {
+        return {
+            type: interview.interview_type as InterviewType,
+            date: toLocalDateTimeInput(interview.conducted_at),
+            duration: interview.duration_minutes?.toString() || "",
+            transcript: interview.transcript_json || null,
+            status: interview.status as InterviewStatus,
+        }
+    }
+
+    return {
+        type: "phone",
+        date: toLocalDateTimeInput(new Date().toISOString()),
+        duration: "",
+        transcript: null,
+        status: "completed",
+    }
+}
+
 export function InterviewTabProvider({ surrogateId, children }: InterviewTabProviderProps) {
     const { user } = useAuth()
 
@@ -155,13 +175,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     const uploadInputRef = useRef<HTMLInputElement>(null)
 
     // Form state
-    const [form, setForm] = useState<FormState>({
-        type: "phone",
-        date: toLocalDateTimeInput(new Date().toISOString()),
-        duration: "",
-        transcript: null,
-        status: "completed",
-    })
+    const [form, setForm] = useState<FormState>(() => buildInterviewFormState(null))
 
     // Data fetching
     const { data: interviews = [], isLoading } = useInterviews(surrogateId)
@@ -198,79 +212,57 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         return () => clearInterval(interval)
     }, [attachments, refetchInterview, selectedId])
 
-    // Reset form when editor opens
-    useEffect(() => {
-        if (dialog.type === "editor") {
-            const interview = dialog.interview
-            if (interview) {
-                setForm({
-                    type: interview.interview_type as InterviewType,
-                    date: toLocalDateTimeInput(interview.conducted_at),
-                    duration: interview.duration_minutes?.toString() || "",
-                    transcript: interview.transcript_json || null,
-                    status: interview.status as InterviewStatus,
-                })
-            } else {
-                setForm({
-                    type: "phone",
-                    date: toLocalDateTimeInput(new Date().toISOString()),
-                    duration: "",
-                    transcript: null,
-                    status: "completed",
-                })
-            }
-        }
-    }, [dialog])
-
     // Selection
-    const selectInterview = useCallback((id: string | null) => {
+    const selectInterview = (id: string | null) => {
         setSelectedId(id)
-    }, [])
+    }
 
     // Dialog actions
-    const openEditor = useCallback((interview?: InterviewRead | null) => {
-        setDialog({ type: "editor", interview: interview || null })
-    }, [])
+    const openEditor = (interview?: InterviewRead | null) => {
+        const nextInterview = interview || null
+        setForm(buildInterviewFormState(nextInterview))
+        setDialog({ type: "editor", interview: nextInterview })
+    }
 
-    const openDeleteDialog = useCallback((interview: InterviewRead) => {
+    const openDeleteDialog = (interview: InterviewRead) => {
         setDialog({ type: "delete", interview })
-    }, [])
+    }
 
-    const openVersionHistory = useCallback((interview: InterviewRead) => {
+    const openVersionHistory = (interview: InterviewRead) => {
         setDialog({ type: "version_history", interview })
-    }, [])
+    }
 
-    const openAttachments = useCallback(() => {
+    const openAttachments = () => {
         setDialog({ type: "attachments" })
-    }, [])
+    }
 
-    const closeDialog = useCallback(() => {
+    const closeDialog = () => {
         setDialog({ type: "closed" })
-    }, [])
+    }
 
     // Form setters
-    const setFormType = useCallback((type: InterviewType) => {
+    const setFormType = (type: InterviewType) => {
         setForm((prev) => ({ ...prev, type }))
-    }, [])
+    }
 
-    const setFormDate = useCallback((date: string) => {
+    const setFormDate = (date: string) => {
         setForm((prev) => ({ ...prev, date }))
-    }, [])
+    }
 
-    const setFormDuration = useCallback((duration: string) => {
+    const setFormDuration = (duration: string) => {
         setForm((prev) => ({ ...prev, duration }))
-    }, [])
+    }
 
-    const setFormTranscript = useCallback((transcript: TipTapDoc | null) => {
+    const setFormTranscript = (transcript: TipTapDoc | null) => {
         setForm((prev) => ({ ...prev, transcript }))
-    }, [])
+    }
 
-    const setFormStatus = useCallback((status: InterviewStatus) => {
+    const setFormStatus = (status: InterviewStatus) => {
         setForm((prev) => ({ ...prev, status }))
-    }, [])
+    }
 
     // Mutations
-    const createOrUpdateInterview = useCallback(async () => {
+    const createOrUpdateInterview = async () => {
         if (dialog.type !== "editor") return
 
         const editingInterview = dialog.interview
@@ -304,9 +296,9 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         } catch {
             toast.error(editingInterview ? "Failed to update interview" : "Failed to create interview")
         }
-    }, [dialog, form, surrogateId, createInterviewMutation, updateInterviewMutation, closeDialog])
+    }
 
-    const deleteInterview = useCallback(async () => {
+    const deleteInterview = async () => {
         if (dialog.type !== "delete") return
 
         try {
@@ -320,9 +312,9 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         } catch {
             toast.error("Failed to delete interview")
         }
-    }, [dialog, surrogateId, deleteInterviewMutation, closeDialog])
+    }
 
-    const uploadFiles = useCallback(async (files: FileList | null) => {
+    const uploadFiles = async (files: FileList | null) => {
         if (!selectedId || !files?.length) return
 
         setUpload({ type: "uploading" })
@@ -356,26 +348,31 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
             uploadInputRef.current.value = ""
         }
         setUpload({ type: "idle" })
-    }, [selectedId, uploadAttachmentMutation])
+    }
 
-    const requestTranscription = useCallback(async (attachmentId: string) => {
+    const requestTranscription = async (attachmentId: string) => {
         if (!selectedId) return
 
-        try {
-            setUpload({ type: "transcribing", attachmentId })
-            await requestTranscriptionMutation.mutateAsync({
-                interviewId: selectedId,
-                attachmentId,
-            })
-            toast.success("Transcription started")
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to start transcription")
-        } finally {
-            setUpload({ type: "idle" })
-        }
-    }, [selectedId, requestTranscriptionMutation])
+        setUpload({ type: "transcribing", attachmentId })
+        const result = await requestTranscriptionMutation.mutateAsync({
+            interviewId: selectedId,
+            attachmentId,
+        }).then(() => ({
+            status: "success" as const,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            message: error instanceof Error ? error.message : "Failed to start transcription",
+        }))
 
-    const generateAISummary = useCallback(async () => {
+        if (result.status === "success") {
+            toast.success("Transcription started")
+        } else {
+            toast.error(result.message)
+        }
+        setUpload({ type: "idle" })
+    }
+
+    const generateAISummary = async () => {
         if (!selectedId) return
 
         try {
@@ -398,10 +395,10 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
                 toast.error(message)
             }
         }
-    }, [selectedId, summarizeInterviewMutation])
+    }
 
     // Note mutations
-    const addNote = useCallback(async (data: {
+    const addNote = async (data: {
         content: string
         commentId: string
         anchorText: string
@@ -423,9 +420,9 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         } catch {
             toast.error("Failed to add comment")
         }
-    }, [selectedId, createNoteMutation])
+    }
 
-    const updateNote = useCallback(async (noteId: string, content: string) => {
+    const updateNote = async (noteId: string, content: string) => {
         if (!selectedId) return
 
         try {
@@ -438,9 +435,9 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         } catch {
             toast.error("Failed to update note")
         }
-    }, [selectedId, updateNoteMutation])
+    }
 
-    const deleteNote = useCallback(async (noteId: string) => {
+    const deleteNote = async (noteId: string) => {
         if (!selectedId) return
 
         try {
@@ -452,9 +449,9 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         } catch {
             toast.error("Failed to delete note")
         }
-    }, [selectedId, deleteNoteMutation])
+    }
 
-    const value: InterviewTabContextValue = useMemo(() => ({
+    const value: InterviewTabContextValue = {
         surrogateId,
         interviews,
         selectedInterview: selectedInterview || null,
@@ -500,45 +497,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         canEdit,
         canDelete,
         canEditNotes,
-    }), [
-        surrogateId,
-        interviews,
-        selectedInterview,
-        notes,
-        attachments,
-        isLoading,
-        selectedId,
-        selectInterview,
-        dialog,
-        openEditor,
-        openDeleteDialog,
-        openVersionHistory,
-        openAttachments,
-        closeDialog,
-        upload,
-        uploadInputRef,
-        form,
-        setFormType,
-        setFormDate,
-        setFormDuration,
-        setFormTranscript,
-        setFormStatus,
-        createOrUpdateInterview,
-        deleteInterview,
-        uploadFiles,
-        requestTranscription,
-        generateAISummary,
-        addNote,
-        updateNote,
-        deleteNote,
-        createInterviewMutation.isPending,
-        updateInterviewMutation.isPending,
-        deleteInterviewMutation.isPending,
-        summarizeInterviewMutation.isPending,
-        canEdit,
-        canDelete,
-        canEditNotes,
-    ])
+    }
 
     return (
         <InterviewTabContext.Provider value={value}>
