@@ -31,6 +31,9 @@ import {
     approveSubmission,
     rejectSubmission,
     uploadFormLogo,
+    updateSubmissionAnswers,
+    uploadSubmissionFile,
+    deleteSubmissionFile,
     listFormTemplates,
     getFormTemplate,
     createFormFromTemplate,
@@ -473,7 +476,6 @@ export function useUpdateSubmissionAnswers() {
             submissionId: string
             updates: { field_key: string; value: unknown }[]
         }) => {
-            const { updateSubmissionAnswers } = await import('@/lib/api/forms')
             return updateSubmissionAnswers(submissionId, updates)
         },
         onSuccess: (result: SubmissionAnswersUpdateResponse) => {
@@ -499,7 +501,6 @@ export function useUploadSubmissionFile() {
             surrogateId?: string | null
             fieldKey?: string | null
         }) => {
-            const { uploadSubmissionFile } = await import('@/lib/api/forms')
             return { result: await uploadSubmissionFile(submissionId, file, fieldKey), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
@@ -567,7 +568,6 @@ export function useDeleteSubmissionFile() {
             formId: string
             surrogateId?: string | null
         }) => {
-            const { deleteSubmissionFile } = await import('@/lib/api/forms')
             return { result: await deleteSubmissionFile(submissionId, fileId), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {

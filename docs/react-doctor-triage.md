@@ -431,3 +431,21 @@ Full command after Batch 19: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1150`
 - Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 49 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 795 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-96adef86-7974-4f35-b808-1858307c7ce7`
+
+## Batch 20
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `lib/hooks/use-forms.ts` | Valid: three submission mutation hooks used dynamic `import()` expressions inside mutation functions even though `lib/hooks/use-forms.ts` already statically imports the forms API module. React Compiler currently cannot lower those import expressions. | High | Statically import `updateSubmissionAnswers`, `uploadSubmissionFile`, and `deleteSubmissionFile`, then call them directly from the mutation functions. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/use-mutation-invalidations.test.ts`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 20: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 20: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1147`
+- Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 46 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 795 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-95348cac-83d8-436d-9777-aa0dbefb59dc`

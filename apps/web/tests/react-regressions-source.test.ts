@@ -411,6 +411,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("for (const endpoint of endpointCandidates)")
     })
 
+    it("keeps submission mutation hooks on static API imports", () => {
+        const source = readSource("lib/hooks/use-forms.ts")
+
+        expect(source).toContain("updateSubmissionAnswers,")
+        expect(source).toContain("uploadSubmissionFile,")
+        expect(source).toContain("deleteSubmissionFile,")
+        expect(source).not.toContain("await import('@/lib/api/forms')")
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")
