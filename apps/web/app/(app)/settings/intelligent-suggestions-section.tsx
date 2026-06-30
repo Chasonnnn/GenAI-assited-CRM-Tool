@@ -696,24 +696,25 @@ function useIntelligentSuggestionsController() {
     } catch (loadError) {
       console.error("Failed to load intelligent suggestion settings:", loadError)
       setError("Unable to load settings. Please retry.")
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }, [buildRuleDraft])
 
   useEffect(() => {
-    void loadSettings()
+    const timeoutId = window.setTimeout(() => void loadSettings(), 0)
+    return () => window.clearTimeout(timeoutId)
   }, [loadSettings])
 
-  useEffect(() => {
-    if (!newRuleDraft || templates.length === 0) return
+  const normalizedNewRuleDraft = (() => {
+    if (!newRuleDraft) return null
     const template = templateByKey.get(newRuleDraft.template_key)
-    if (!requiresStageSelection(template)) return
+    if (!requiresStageSelection(template)) return newRuleDraft
     const normalizedStage = resolveStageSlug(template, newRuleDraft.stage_slug)
     if (normalizedStage && normalizedStage !== newRuleDraft.stage_slug) {
-      setNewRuleDraft((previous) => (previous ? { ...previous, stage_slug: normalizedStage } : previous))
+      return { ...newRuleDraft, stage_slug: normalizedStage }
     }
-  }, [newRuleDraft, templateByKey, templates, requiresStageSelection, resolveStageSlug])
+    return newRuleDraft
+  })()
 
   const setDigestField = (rawValue: string) => {
     const parsed = Number.parseInt(rawValue, 10)
@@ -737,9 +738,8 @@ function useIntelligentSuggestionsController() {
       console.error("Failed to save intelligent suggestion settings:", saveError)
       setError("Unable to save settings. Please try again.")
       toast.error("Failed to save intelligent suggestion settings")
-    } finally {
-      setSaving(false)
     }
+    setSaving(false)
   }
 
   const handleNewRuleTemplateChange = (templateKey: string | null) => {
@@ -754,14 +754,14 @@ function useIntelligentSuggestionsController() {
   }
 
   const handleCreateRule = async () => {
-    if (!newRuleDraft) return
-    const template = templateByKey.get(newRuleDraft.template_key)
+    if (!normalizedNewRuleDraft) return
+    const template = templateByKey.get(normalizedNewRuleDraft.template_key)
     if (!template) {
       toast.error("Select a valid rule template")
       return
     }
     const stageSlug = requiresStageSelection(template)
-      ? resolveStageSlug(template, newRuleDraft.stage_slug)
+      ? resolveStageSlug(template, normalizedNewRuleDraft.stage_slug)
       : null
     if (requiresStageSelection(template) && !stageSlug) {
       toast.error("Select a stage for this workflow rule")
@@ -773,11 +773,11 @@ function useIntelligentSuggestionsController() {
       const selectedStage = stageSlug ? stageOptionByValue.get(stageSlug) : null
       const createdRule = await createIntelligentSuggestionRule({
         template_key: template.template_key,
-        name: newRuleDraft.name.trim() || template.name,
+        name: normalizedNewRuleDraft.name.trim() || template.name,
         stage_key: selectedStage?.stageKey ?? stageSlug,
         stage_slug: selectedStage?.slug ?? stageSlug,
-        business_days: Math.max(1, Math.min(60, newRuleDraft.business_days)),
-        enabled: newRuleDraft.enabled,
+        business_days: Math.max(1, Math.min(60, normalizedNewRuleDraft.business_days)),
+        enabled: normalizedNewRuleDraft.enabled,
       })
       setRules((previous) =>
         [...previous, createdRule].sort((left, right) => left.sort_order - right.sort_order),
@@ -788,9 +788,8 @@ function useIntelligentSuggestionsController() {
     } catch (ruleError) {
       console.error("Failed to create intelligent suggestion rule:", ruleError)
       toast.error("Failed to create workflow rule")
-    } finally {
-      setRuleSaving(false)
     }
+    setRuleSaving(false)
   }
 
   const handleToggleRuleEnabled = async (rule: IntelligentSuggestionRule) => {
@@ -809,9 +808,8 @@ function useIntelligentSuggestionsController() {
     } catch (ruleError) {
       console.error("Failed to toggle intelligent suggestion rule:", ruleError)
       toast.error("Failed to update rule status")
-    } finally {
-      setRuleSaving(false)
     }
+    setRuleSaving(false)
   }
 
   const startEditingRule = (rule: IntelligentSuggestionRule) => {
@@ -869,9 +867,8 @@ function useIntelligentSuggestionsController() {
     } catch (ruleError) {
       console.error("Failed to update intelligent suggestion rule:", ruleError)
       toast.error("Failed to update workflow rule")
-    } finally {
-      setRuleSaving(false)
     }
+    setRuleSaving(false)
   }
 
   const handleDeleteRule = async (rule: IntelligentSuggestionRule) => {
@@ -885,9 +882,8 @@ function useIntelligentSuggestionsController() {
     } catch (ruleError) {
       console.error("Failed to delete intelligent suggestion rule:", ruleError)
       toast.error("Failed to delete workflow rule")
-    } finally {
-      setRuleSaving(false)
     }
+    setRuleSaving(false)
   }
 
   const describeRule = (rule: IntelligentSuggestionRule) => {
@@ -914,7 +910,7 @@ function useIntelligentSuggestionsController() {
     settings,
     templates,
     rules,
-    newRuleDraft,
+    newRuleDraft: normalizedNewRuleDraft,
     editingRuleId,
     editingRuleDraft,
     loading,
@@ -925,8 +921,10 @@ function useIntelligentSuggestionsController() {
     stageOptions,
     stageLabelByRef,
     templateByKey,
-    newRuleTemplate: newRuleDraft ? templateByKey.get(newRuleDraft.template_key) : undefined,
-    newRuleNeedsStage: requiresStageSelection(newRuleDraft ? templateByKey.get(newRuleDraft.template_key) : undefined),
+    newRuleTemplate: normalizedNewRuleDraft ? templateByKey.get(normalizedNewRuleDraft.template_key) : undefined,
+    newRuleNeedsStage: requiresStageSelection(
+      normalizedNewRuleDraft ? templateByKey.get(normalizedNewRuleDraft.template_key) : undefined,
+    ),
     rulesPaused: settings ? !settings.enabled : false,
     requiresStageSelection,
     setSettings,

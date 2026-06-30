@@ -300,3 +300,24 @@ Full command after Batch 13: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1234`
 - Summary: `Security 2 warnings`, `Bugs 19 errors + 250 warnings`, `Performance 77 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-741f62a4-3228-4c53-ad58-a41c66cebf69`
+
+## Batch 14
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` | `app/(app)/settings/intelligent-suggestions-section.tsx` | Valid: the initial load effect immediately called a state-setting async loader, and a second effect normalized the new-rule stage draft by setting state after templates/stages changed. | High | Defer the initial loader through a timer and derive the normalized new-rule draft during render instead of writing normalized stage state from an effect. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/settings-page.test.tsx`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `app/(app)/settings/intelligent-suggestions-section.tsx` | Valid: settings load/save and rule create/toggle/update/delete handlers used `finally`, which blocks React Compiler optimization. | High | Replace finalizers with explicit cleanup after success/error handling while preserving toast/error behavior and rule-saving state resets. | Focused tests passed; changed-scope React Doctor no longer reports compiler errors for this file. |
+
+Changed-scope command after Batch 14: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `9`
+- Remaining changed-file warnings: `react-doctor/react-compiler-no-manual-memoization` for local callbacks/memos; valid but deferred because this batch targeted the 8-error compiler blockers.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5c6f8b2e-878c-4f00-8e09-4ecf8aad9d5a`
+
+Full command after Batch 14: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `39 / 100 Critical`
+- Total diagnostics: `1224`
+- Summary: `Security 2 warnings`, `Bugs 19 errors + 248 warnings`, `Performance 69 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9f5722fc-3c76-4013-8570-f967791b54ec`

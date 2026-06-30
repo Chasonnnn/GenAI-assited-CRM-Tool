@@ -1358,6 +1358,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setEditingRuleDraft({ ...editingRuleDraft")
     })
 
+    it("keeps intelligent suggestion settings compiler-friendly", () => {
+        const source = readSource("app/(app)/settings/intelligent-suggestions-section.tsx")
+
+        expect(source).toContain("const normalizedNewRuleDraft =")
+        expect(source).toContain("window.setTimeout(() => void loadSettings(), 0)")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("useEffect(() => {\n    void loadSettings()")
+        expect(source).not.toContain(
+            "setNewRuleDraft((previous) => (previous ? { ...previous, stage_slug: normalizedStage } : previous))",
+        )
+    })
+
     it("resets intended-parent trust drafts from edit events, not prop-sync effects", () => {
         const source = readSource("components/intended-parents/TrustInfoCard.tsx")
 
