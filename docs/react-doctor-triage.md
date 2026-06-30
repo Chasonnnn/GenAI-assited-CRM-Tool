@@ -189,3 +189,27 @@ Full command after Batch 8: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1371`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 298 warnings`, `Performance 121 errors + 39 warnings`, `Accessibility 54 warnings`, `Maintainability 823 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7f58c6f8-6c18-4459-ac7c-b8c51c29cc05`
+
+## Batch 9
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` | `app/ops/templates/system/[systemKey]/page.client.tsx` | Valid: the edit page copied loaded template fields and branding logo URL into local state through effects, and auto-switched editor mode through another state-setting effect. | High | Derive template/branding values during render until a user edits a draft field; derive effective editor mode from body complexity instead of setting it in an effect. Added tests for loaded values, complex HTML mode, and quick-edit save behavior. | `pnpm tsc --noEmit`; `pnpm test --run tests/platform-system-email-template-page.test.tsx`; changed-scope React Doctor no longer reports this error. |
+| `react-hooks-js/todo` | `app/ops/templates/system/[systemKey]/page.client.tsx` | Valid: member loading, save, branding save, logo upload, test send, and campaign send handlers used `finally` cleanup, which blocks React Compiler optimization. | High | Replace `finally` cleanup with explicit success/error cleanup helpers and keep version tracking in a handler-only ref. | Focused tests and full test suite passed; changed-scope React Doctor no longer reports compiler errors. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/templates/system/[systemKey]/page.client.tsx` | Valid: React Compiler is enabled, so local `useMemo` wrappers were redundant. | High | Move pure validation/preview/selection helpers to module scope and derive filtered orgs, selected org sets, variable checks, and preview HTML directly in render. | Changed-scope React Doctor no longer reports manual memoization warnings for this file. |
+| `react-doctor/no-event-handler` / `react-doctor/no-chain-state-updates` | `app/ops/templates/system/[systemKey]/page.client.tsx` | Valid: opening the campaign dialog triggered organization loading indirectly through `campaignOpen` and an effect. | High | Load organizations directly from the dialog `onOpenChange` handler when opening. Added coverage for organization loading on dialog open. | Focused test file passed. |
+| `react-doctor/control-has-associated-label` | `app/ops/templates/system/[systemKey]/page.client.tsx` | Valid: the hidden logo upload input had no accessible name. | High | Add an `aria-label` and assert the upload control is label-queryable. | Focused test file passed; changed-scope React Doctor no longer reports this warning. |
+
+Changed-scope command after Batch 9: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `5`
+- Remaining changed-file warnings: `no-giant-component`, `prefer-useReducer`, and `jsx-max-depth` for `PlatformSystemEmailTemplatePage`; all are valid but larger structural refactors deferred to a separate batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-28ba3d09-8055-4d5e-8dc7-537f55ef55b1`
+
+Full command after Batch 9: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `10 / 100 Critical`
+- Total diagnostics: `1336`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 289 warnings`, `Performance 111 errors + 37 warnings`, `Accessibility 54 warnings`, `Maintainability 809 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fb9ebcb4-619a-42e1-804e-3f891f4cefa8`

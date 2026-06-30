@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { type ChangeEvent, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
+import { type ChangeEvent, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
@@ -170,11 +170,158 @@ type EditorMode = "visual" | "html"
 
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
 
+type TemplateDraft = {
+    subject: string
+    fromEmail: string
+    body: string
+    isActive: boolean
+}
+
+type TemplateDraftSource = {
+    subject?: string | null
+    from_email?: string | null
+    body?: string | null
+    is_active?: boolean
+} | null | undefined
+
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
     const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
     const variables = matches.map((match) => match.replace(/{{\s*|\s*}}/g, ""))
     return Array.from(new Set(variables))
+}
+
+function buildTemplateDraft(template: TemplateDraftSource): TemplateDraft {
+    return {
+        subject: template?.subject ?? "",
+        fromEmail: template?.from_email ?? "",
+        body: template?.body ?? "",
+        isActive: template?.is_active ?? true,
+    }
+}
+
+function getFromEmailError(fromEmail: string): string | null {
+    const value = fromEmail.trim()
+    if (!value) return null
+    const basicEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/
+    const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
+    if (basicEmail.test(value) || namedEmail.test(value)) return null
+    return "Use a valid email or name <email@domain> format."
+}
+
+function getLogoPreviewUrl(logoUrl: string): string {
+    if (!logoUrl) return ""
+    if (logoUrl.startsWith("/platform/email/branding/logo/local/")) {
+        const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "")
+        return base ? `${base}${logoUrl}` : logoUrl
+    }
+    return logoUrl
+}
+
+function hasComplexEmailHtml(body: string): boolean {
+    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
+}
+
+function buildPreviewHtml(body: string, logoPreviewUrl: string): string {
+    const logoPlaceholder =
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
+    const platformLogoUrl = logoPreviewUrl || logoPlaceholder
+    const platformLogoBlock = logoPreviewUrl
+        ? `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
+        : ""
+    const rawHtml = body
+        .replace(/\{\{org_name\}\}/g, "Sample Organization")
+        .replace(/\{\{org_slug\}\}/g, "sample-org")
+        .replace(/\{\{first_name\}\}/g, "Avery")
+        .replace(/\{\{full_name\}\}/g, "Avery James")
+        .replace(/\{\{email\}\}/g, "avery@example.com")
+        .replace(/\{\{inviter_text\}\}/g, "")
+        .replace(/\{\{role_title\}\}/g, "Admin")
+        .replace(/\{\{invite_url\}\}/g, "https://app.surrogacyforce.com/invite/EXAMPLE")
+        .replace(/\{\{expires_block\}\}/g, "<p>This invitation expires in 7 days.</p>")
+        .replace(/\{\{platform_logo_url\}\}/g, platformLogoUrl)
+        .replace(/\{\{platform_logo_block\}\}/g, platformLogoBlock)
+        .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
+
+    return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
+        USE_PROFILES: { html: true },
+        ADD_TAGS: [
+            "table",
+            "thead",
+            "tbody",
+            "tfoot",
+            "tr",
+            "td",
+            "th",
+            "colgroup",
+            "col",
+            "img",
+            "hr",
+            "div",
+            "span",
+            "center",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+        ],
+        ADD_ATTR: [
+            "style",
+            "class",
+            "align",
+            "valign",
+            "width",
+            "height",
+            "cellpadding",
+            "cellspacing",
+            "border",
+            "bgcolor",
+            "colspan",
+            "rowspan",
+            "role",
+            "target",
+            "rel",
+            "href",
+            "src",
+            "alt",
+            "title",
+        ],
+    })
+}
+
+function recordSelection(
+    el: HTMLInputElement | HTMLTextAreaElement,
+    ref: MutableRefObject<{ start: number; end: number } | null>
+) {
+    ref.current = {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+}
+
+function insertIntoTextControl(
+    el: HTMLInputElement | HTMLTextAreaElement | null,
+    selectionRef: MutableRefObject<{ start: number; end: number } | null>,
+    setValue: Dispatch<SetStateAction<string>>,
+    token: string
+) {
+    if (!el) {
+        setValue((prev) => `${prev}${token}`)
+        return
+    }
+    const selection = selectionRef.current ?? {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+    const result = insertAtCursor(el.value, token, selection.start, selection.end)
+    setValue(result.nextValue)
+    requestAnimationFrame(() => {
+        el.focus()
+        el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+        selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
+    })
 }
 
 export default function PlatformSystemEmailTemplatePage() {
@@ -193,14 +340,13 @@ export default function PlatformSystemEmailTemplatePage() {
     const sendTest = useSendTestPlatformSystemEmailTemplate()
     const sendCampaign = useSendPlatformSystemEmailCampaign()
 
-    const [subject, setSubject] = useState("")
-    const [fromEmail, setFromEmail] = useState("")
-    const [body, setBody] = useState("")
-    const [isActive, setIsActive] = useState(true)
-    const [currentVersion, setCurrentVersion] = useState<number | null>(null)
+    const [templateDraftOverride, setTemplateDraftOverride] = useState<{
+        systemKey: string
+        draft: TemplateDraft
+    } | null>(null)
     const [editorMode, setEditorMode] = useState<EditorMode>("visual")
     const [editorModeTouched, setEditorModeTouched] = useState(false)
-    const [logoUrl, setLogoUrl] = useState("")
+    const [logoUrlOverride, setLogoUrlOverride] = useState<string | null>(null)
     const [testEmail, setTestEmail] = useState("")
     const [testOrgId, setTestOrgId] = useState("")
     const [saving, setSaving] = useState(false)
@@ -223,89 +369,95 @@ export default function PlatformSystemEmailTemplatePage() {
     const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
-    const [activeInsertionTarget, setActiveInsertionTarget] = useState<ActiveInsertionTarget>(null)
+    const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
+    const currentVersionRef = useRef<{ systemKey: string; version: number | null } | null>(null)
+
+    const setActiveInsertionTarget = (target: ActiveInsertionTarget) => {
+        activeInsertionTargetRef.current = target
+    }
+
+    const sourceDraft = buildTemplateDraft(template)
+    const draft =
+        templateDraftOverride?.systemKey === systemKey ? templateDraftOverride.draft : sourceDraft
+    const subject = draft.subject
+    const fromEmail = draft.fromEmail
+    const body = draft.body
+    const isActive = draft.isActive
+
+    const updateDraft = (updater: (current: TemplateDraft) => TemplateDraft) => {
+        setTemplateDraftOverride((current) => {
+            const base = current?.systemKey === systemKey ? current.draft : sourceDraft
+            return { systemKey, draft: updater(base) }
+        })
+    }
+
+    const setSubject: Dispatch<SetStateAction<string>> = (value) => {
+        updateDraft((current) => ({
+            ...current,
+            subject: typeof value === "function" ? value(current.subject) : value,
+        }))
+    }
+
+    const setFromEmail = (value: string) => {
+        updateDraft((current) => ({ ...current, fromEmail: value }))
+    }
+
+    const setBody: Dispatch<SetStateAction<string>> = (value) => {
+        updateDraft((current) => ({
+            ...current,
+            body: typeof value === "function" ? value(current.body) : value,
+        }))
+    }
+
+    const setIsActive = (value: boolean) => {
+        updateDraft((current) => ({ ...current, isActive: value }))
+    }
+
+    const logoUrl = logoUrlOverride ?? branding?.logo_url ?? ""
+    const setLogoUrl = (value: string) => setLogoUrlOverride(value)
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
-    const allowedVariableNames = useMemo(
-        () => new Set(templateVariables.map((variable) => variable.name)),
-        [templateVariables]
-    )
-    const requiredVariableNames = useMemo(() => {
-        const names: string[] = []
-        for (const variable of templateVariables) {
-            if (variable.required) {
-                names.push(variable.name)
-            }
+    const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
+    const requiredVariableNames: string[] = []
+    for (const variable of templateVariables) {
+        if (variable.required) {
+            requiredVariableNames.push(variable.name)
         }
-        return names
-    }, [templateVariables])
-    const usedVariableNames = useMemo(
-        () => extractTemplateVariables(`${subject}\n${body}`),
-        [subject, body]
-    )
-    const unknownVariables = useMemo(() => {
-        if (!canValidateVariables) return []
-        return usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
-    }, [allowedVariableNames, canValidateVariables, usedVariableNames])
-    const missingRequiredVariables = useMemo(() => {
-        if (!canValidateVariables) return []
-        return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
-    }, [canValidateVariables, requiredVariableNames, usedVariableNames])
+    }
+    const usedVariableNames = extractTemplateVariables(`${subject}\n${body}`)
+    const unknownVariables = canValidateVariables
+        ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
+        : []
+    const missingRequiredVariables = canValidateVariables
+        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        : []
+    const fromEmailError = getFromEmailError(fromEmail)
+    const logoPreviewUrl = getLogoPreviewUrl(logoUrl)
 
-    const recordSelection = (
-        el: HTMLInputElement | HTMLTextAreaElement,
-        ref: MutableRefObject<{ start: number; end: number } | null>
-    ) => {
-        ref.current = {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
+    const loadOrganizations = async () => {
+        setOrgsLoading(true)
+        const finishLoading = () => setOrgsLoading(false)
+        try {
+            const data = await listOrganizations({ limit: 200 })
+            setOrgs(data.items)
+            finishLoading()
+        } catch {
+            toast.error("Failed to load organizations")
+            finishLoading()
         }
     }
 
-    const fromEmailError = useMemo(() => {
-        const value = fromEmail.trim()
-        if (!value) return null
-        const basicEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/
-        const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
-        if (basicEmail.test(value) || namedEmail.test(value)) return null
-        return "Use a valid email or name <email@domain> format."
-    }, [fromEmail])
-
-    useEffect(() => {
-        if (!template) return
-        setSubject(template.subject ?? "")
-        setFromEmail(template.from_email ?? "")
-        setBody(template.body ?? "")
-        setIsActive(template.is_active)
-        setCurrentVersion(template.current_version)
-    }, [template])
-
-    useEffect(() => {
-        if (!branding) return
-        setLogoUrl(branding.logo_url ?? "")
-    }, [branding])
-
-    const logoPreviewUrl = useMemo(() => {
-        if (!logoUrl) return ""
-        if (logoUrl.startsWith("/platform/email/branding/logo/local/")) {
-            const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "")
-            return base ? `${base}${logoUrl}` : logoUrl
+    const handleCampaignOpenChange = (open: boolean) => {
+        setCampaignOpen(open)
+        if (open) {
+            void loadOrganizations()
         }
-        return logoUrl
-    }, [logoUrl])
-
-    useEffect(() => {
-        if (!campaignOpen) return
-        setOrgsLoading(true)
-        listOrganizations({ limit: 200 })
-            .then((data) => setOrgs(data.items))
-            .catch(() => toast.error("Failed to load organizations"))
-            .finally(() => setOrgsLoading(false))
-    }, [campaignOpen])
+    }
 
     const ensureMembersLoaded = async (orgId: string) => {
         if (orgMembers[orgId] || membersLoading[orgId]) return
         setMembersLoading((prev) => ({ ...prev, [orgId]: true }))
+        const finishLoading = () => setMembersLoading((prev) => ({ ...prev, [orgId]: false }))
         try {
             const members = await listMembers(orgId)
             setOrgMembers((prev) => ({ ...prev, [orgId]: members }))
@@ -316,10 +468,10 @@ export default function PlatformSystemEmailTemplatePage() {
                 }
             }
             setSelectedUsersByOrg((prev) => ({ ...prev, [orgId]: activeIds }))
+            finishLoading()
         } catch {
             toast.error("Failed to load org members")
-        } finally {
-            setMembersLoading((prev) => ({ ...prev, [orgId]: false }))
+            finishLoading()
         }
     }
 
@@ -365,17 +517,16 @@ export default function PlatformSystemEmailTemplatePage() {
         })
     }
 
-    const filteredOrgs = useMemo(() => {
-        const query = orgSearch.trim().toLowerCase()
-        if (!query) return orgs
-        return orgs.filter(
-            (org) =>
-                org.name.toLowerCase().includes(query) ||
-                org.slug.toLowerCase().includes(query)
-        )
-    }, [orgs, orgSearch])
+    const orgSearchQuery = orgSearch.trim().toLowerCase()
+    const filteredOrgs = orgSearchQuery
+        ? orgs.filter(
+              (org) =>
+                  org.name.toLowerCase().includes(orgSearchQuery) ||
+                  org.slug.toLowerCase().includes(orgSearchQuery)
+          )
+        : orgs
 
-    const selectedOrgSet = useMemo(() => new Set(selectedOrgIds), [selectedOrgIds])
+    const selectedOrgSet = new Set(selectedOrgIds)
     const allFilteredSelected = filteredOrgs.length > 0 && filteredOrgs.every((org) => selectedOrgSet.has(org.id))
 
     const toggleSelectAllOrgs = () => {
@@ -398,59 +549,27 @@ export default function PlatformSystemEmailTemplatePage() {
         })
     }
 
-    const totalSelectedUsers = useMemo(() => {
-        return Object.values(selectedUsersByOrg).reduce((acc, ids) => acc + ids.length, 0)
-    }, [selectedUsersByOrg])
+    const totalSelectedUsers = Object.values(selectedUsersByOrg).reduce((acc, ids) => acc + ids.length, 0)
 
-    const hasComplexHtml = useMemo(
-        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body),
-        [body]
-    )
-
-    useEffect(() => {
-        if (editorModeTouched) return
-        if (body && hasComplexHtml && editorMode !== "html") {
-            setEditorMode("html")
-            setActiveInsertionTarget(null)
-        }
-    }, [body, editorModeTouched, hasComplexHtml, editorMode])
+    const hasComplexHtml = hasComplexEmailHtml(body)
 
     const effectiveEditorMode: EditorMode =
         editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
 
-    const insertIntoTextControl = (
-        el: HTMLInputElement | HTMLTextAreaElement | null,
-        selectionRef: MutableRefObject<{ start: number; end: number } | null>,
-        setValue: Dispatch<SetStateAction<string>>,
-        token: string
-    ) => {
-        if (!el) {
-            setValue((prev) => `${prev}${token}`)
-            return
-        }
-        const selection = selectionRef.current ?? {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
-        }
-        const result = insertAtCursor(el.value, token, selection.start, selection.end)
-        setValue(result.nextValue)
-        requestAnimationFrame(() => {
-            el.focus()
-            el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
-            selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
-        })
-    }
-
     const insertToken = (token: string) => {
-        if (activeInsertionTarget === "subject") {
+        const activeInsertionTarget = activeInsertionTargetRef.current
+        const insertionTarget =
+            activeInsertionTarget === "body_visual" && effectiveEditorMode === "html" ? null : activeInsertionTarget
+
+        if (insertionTarget === "subject") {
             insertIntoTextControl(subjectRef.current, subjectSelectionRef, setSubject, token)
             return
         }
-        if (activeInsertionTarget === "body_html") {
+        if (insertionTarget === "body_html") {
             insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
             return
         }
-        if (activeInsertionTarget === "body_visual") {
+        if (insertionTarget === "body_visual") {
             visualBodyRef.current?.insertText(token)
             return
         }
@@ -479,74 +598,7 @@ export default function PlatformSystemEmailTemplatePage() {
         setBody(SF_INVITE_BODY)
     }
 
-    const previewHtml = useMemo(() => {
-        const logoPlaceholder =
-            "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
-        const platformLogoUrl = logoPreviewUrl || logoPlaceholder
-        const platformLogoBlock = logoPreviewUrl
-            ? `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
-            : ""
-        const rawHtml = body
-            .replace(/\{\{org_name\}\}/g, "Sample Organization")
-            .replace(/\{\{org_slug\}\}/g, "sample-org")
-            .replace(/\{\{first_name\}\}/g, "Avery")
-            .replace(/\{\{full_name\}\}/g, "Avery James")
-            .replace(/\{\{email\}\}/g, "avery@example.com")
-            .replace(/\{\{inviter_text\}\}/g, "")
-            .replace(/\{\{role_title\}\}/g, "Admin")
-            .replace(/\{\{invite_url\}\}/g, "https://app.surrogacyforce.com/invite/EXAMPLE")
-            .replace(/\{\{expires_block\}\}/g, "<p>This invitation expires in 7 days.</p>")
-            .replace(/\{\{platform_logo_url\}\}/g, platformLogoUrl)
-            .replace(/\{\{platform_logo_block\}\}/g, platformLogoBlock)
-            .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
-
-        return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
-            USE_PROFILES: { html: true },
-            ADD_TAGS: [
-                "table",
-                "thead",
-                "tbody",
-                "tfoot",
-                "tr",
-                "td",
-                "th",
-                "colgroup",
-                "col",
-                "img",
-                "hr",
-                "div",
-                "span",
-                "center",
-                "h1",
-                "h2",
-                "h3",
-                "h4",
-                "h5",
-                "h6",
-            ],
-            ADD_ATTR: [
-                "style",
-                "class",
-                "align",
-                "valign",
-                "width",
-                "height",
-                "cellpadding",
-                "cellspacing",
-                "border",
-                "bgcolor",
-                "colspan",
-                "rowspan",
-                "role",
-                "target",
-                "rel",
-                "href",
-                "src",
-                "alt",
-                "title",
-            ],
-        })
-    }, [body, logoPreviewUrl])
+    const previewHtml = buildPreviewHtml(body, logoPreviewUrl)
 
     const handleSave = async () => {
         if (!subject.trim()) {
@@ -563,7 +615,12 @@ export default function PlatformSystemEmailTemplatePage() {
         }
 
         setSaving(true)
+        const finishSaving = () => setSaving(false)
         try {
+            const expectedVersion =
+                currentVersionRef.current?.systemKey === systemKey
+                    ? currentVersionRef.current.version
+                    : template?.current_version ?? null
             const payload: {
                 subject: string
                 body: string
@@ -576,19 +633,19 @@ export default function PlatformSystemEmailTemplatePage() {
                 is_active: isActive,
                 from_email: fromEmail.trim() ? fromEmail.trim() : null,
             }
-            if (currentVersion !== null) {
-                payload.expected_version = currentVersion
+            if (expectedVersion !== null) {
+                payload.expected_version = expectedVersion
             }
             const updated = await updateTemplate.mutateAsync({
                 systemKey,
                 payload,
             })
-            setCurrentVersion(updated.current_version)
+            currentVersionRef.current = { systemKey, version: updated.current_version }
             toast.success("System template updated")
+            finishSaving()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to update template")
-        } finally {
-            setSaving(false)
+            finishSaving()
         }
     }
 
@@ -606,42 +663,47 @@ export default function PlatformSystemEmailTemplatePage() {
 
     const handleSaveBranding = async () => {
         setBrandingSaving(true)
+        const finishSaving = () => setBrandingSaving(false)
         try {
             await updateBranding.mutateAsync({
                 logo_url: logoUrl.trim() ? logoUrl.trim() : null,
             })
             toast.success("Platform branding updated")
+            finishSaving()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to update branding")
-        } finally {
-            setBrandingSaving(false)
+            finishSaving()
         }
     }
 
     const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0]
+        const input = event.currentTarget
+        const file = input.files?.[0]
         if (!file) return
 
         const allowedTypes = ["image/png", "image/jpeg"]
         if (!allowedTypes.includes(file.type)) {
             toast.error("Logo must be a PNG or JPEG file")
-            event.target.value = ""
+            input.value = ""
             return
         }
         if (file.size > 1024 * 1024) {
             toast.error("Logo must be less than 1MB")
-            event.target.value = ""
+            input.value = ""
             return
         }
 
+        const clearInput = () => {
+            input.value = ""
+        }
         try {
             const result = await uploadBrandingLogo.mutateAsync(file)
             setLogoUrl(result.logo_url ?? "")
             toast.success("Logo uploaded")
+            clearInput()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to upload logo")
-        } finally {
-            event.target.value = ""
+            clearInput()
         }
     }
 
@@ -655,6 +717,7 @@ export default function PlatformSystemEmailTemplatePage() {
             return
         }
         setSending(true)
+        const finishSending = () => setSending(false)
         try {
             await sendTest.mutateAsync({
                 systemKey,
@@ -664,10 +727,10 @@ export default function PlatformSystemEmailTemplatePage() {
                 },
             })
             toast.success("Test email sent")
+            finishSending()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
-        } finally {
-            setSending(false)
+            finishSending()
         }
     }
 
@@ -686,6 +749,7 @@ export default function PlatformSystemEmailTemplatePage() {
         }
 
         setCampaignSending(true)
+        const finishSending = () => setCampaignSending(false)
         try {
             const result = await sendCampaign.mutateAsync({
                 systemKey,
@@ -695,10 +759,10 @@ export default function PlatformSystemEmailTemplatePage() {
                 `Campaign sent: ${result.sent} delivered, ${result.suppressed} suppressed, ${result.failed} failed`
             )
             setCampaignOpen(false)
+            finishSending()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send campaign")
-        } finally {
-            setCampaignSending(false)
+            finishSending()
         }
     }
 
@@ -766,7 +830,7 @@ export default function PlatformSystemEmailTemplatePage() {
                         )}
                         Delete
                     </Button>
-                    <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
+                    <Dialog open={campaignOpen} onOpenChange={handleCampaignOpenChange}>
                         <DialogTrigger className={buttonVariants({ variant: "outline" })}>
                             <UsersIcon className="mr-2 size-4" />
                             Send campaign
@@ -1006,6 +1070,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                 <div>
                                     <input
                                         id="platform-branding-logo-upload"
+                                        aria-label="Platform branding logo upload"
                                         name="platform_branding_logo_upload"
                                         type="file"
                                         ref={logoFileInputRef}
@@ -1128,9 +1193,10 @@ export default function PlatformSystemEmailTemplatePage() {
                                             if (!next) return
                                             setEditorMode(next)
                                             setEditorModeTouched(true)
-                                            setActiveInsertionTarget((current) =>
-                                                current === "subject"
-                                                    ? current
+                                            const currentTarget = activeInsertionTargetRef.current
+                                            setActiveInsertionTarget(
+                                                currentTarget === "subject"
+                                                    ? currentTarget
                                                     : next === "html"
                                                       ? "body_html"
                                                       : "body_visual"
