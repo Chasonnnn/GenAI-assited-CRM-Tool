@@ -1,7 +1,8 @@
 "use client"
 
 import Image from "next/image"
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
+import { useQueries } from "@tanstack/react-query"
 import { CheckIcon, ImageOffIcon, Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -14,9 +15,9 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { useAttachmentDownloadUrl, useImageAttachments } from "@/lib/hooks/use-attachments"
+import { useImageAttachments } from "@/lib/hooks/use-attachments"
 import { useUpdateMilestoneFeaturedImage } from "@/lib/hooks/use-journey"
-import type { Attachment } from "@/lib/api/attachments"
+import { attachmentsApi } from "@/lib/api/attachments"
 
 interface MilestoneImageSelectorProps {
     open: boolean
@@ -27,6 +28,23 @@ interface MilestoneImageSelectorProps {
     currentAttachmentId: string | null
 }
 
+type ImageSelectionState = {
+    open: boolean
+    currentAttachmentId: string | null
+    selectedId: string | null
+}
+
+function createImageSelectionState(
+    open: boolean,
+    currentAttachmentId: string | null
+): ImageSelectionState {
+    return {
+        open,
+        currentAttachmentId,
+        selectedId: currentAttachmentId,
+    }
+}
+
 export function MilestoneImageSelector({
     open,
     onOpenChange,
@@ -35,47 +53,40 @@ export function MilestoneImageSelector({
     milestoneLabel,
     currentAttachmentId,
 }: MilestoneImageSelectorProps) {
-    const [selectedId, setSelectedId] = useState<string | null>(currentAttachmentId)
+    const [selectionState, setSelectionState] = useState<ImageSelectionState>(() =>
+        createImageSelectionState(open, currentAttachmentId)
+    )
     const { data: attachments, isLoading } = useImageAttachments(surrogateId)
-    const downloadMutation = useAttachmentDownloadUrl()
     const updateMutation = useUpdateMilestoneFeaturedImage(surrogateId)
+    const attachmentDownloadQueries = useQueries({
+        queries: (attachments ?? []).map((attachment) => ({
+            queryKey: ["attachments", "download-url", attachment.id],
+            queryFn: () => attachmentsApi.getDownloadUrl(attachment.id),
+            enabled: open,
+        })),
+    })
 
-    // Track which images have loaded their signed URLs
-    const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
-    const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set())
+    if (
+        selectionState.open !== open ||
+        (open && selectionState.currentAttachmentId !== currentAttachmentId)
+    ) {
+        setSelectionState(createImageSelectionState(open, currentAttachmentId))
+    }
 
-    const loadImageUrl = useCallback(async (attachment: Attachment) => {
-        if (imageUrls[attachment.id] || loadingUrls.has(attachment.id)) return
+    const selectedId = selectionState.selectedId
+    const selectAttachmentId = (nextSelectedId: string | null) => {
+        setSelectionState((current) => ({
+            ...current,
+            selectedId: nextSelectedId,
+        }))
+    }
 
-        setLoadingUrls((prev) => new Set([...prev, attachment.id]))
-        try {
-            const result = await downloadMutation.mutateAsync(attachment.id)
-            setImageUrls((prev) => ({ ...prev, [attachment.id]: result.download_url }))
-        } catch {
-            // Silently fail - will show placeholder
-        } finally {
-            setLoadingUrls((prev) => {
-                const next = new Set(prev)
-                next.delete(attachment.id)
-                return next
-            })
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (nextOpen) {
+            setSelectionState(createImageSelectionState(nextOpen, currentAttachmentId))
         }
-    }, [downloadMutation, imageUrls, loadingUrls])
-
-    useEffect(() => {
-        if (!attachments || attachments.length === 0) return
-        attachments.forEach((attachment) => {
-            if (!imageUrls[attachment.id] && !loadingUrls.has(attachment.id)) {
-                void loadImageUrl(attachment)
-            }
-        })
-    }, [attachments, imageUrls, loadingUrls, loadImageUrl])
-
-    useEffect(() => {
-        if (open) {
-            setSelectedId(currentAttachmentId)
-        }
-    }, [open, currentAttachmentId])
+        onOpenChange(nextOpen)
+    }
 
     const handleSave = async () => {
         try {
@@ -104,7 +115,7 @@ export function MilestoneImageSelector({
     const hasChanges = selectedId !== currentAttachmentId
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Select Featured Image</DialogTitle>
@@ -117,7 +128,7 @@ export function MilestoneImageSelector({
                     {/* Default option */}
                     <button
                         type="button"
-                        onClick={() => setSelectedId(null)}
+                        onClick={() => selectAttachmentId(null)}
                         className={cn(
                             "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -147,21 +158,19 @@ export function MilestoneImageSelector({
                         </div>
                     ) : attachments && attachments.length > 0 ? (
                         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-                            {attachments.map((attachment) => {
-                                const url = imageUrls[attachment.id]
+                            {attachments.map((attachment, index) => {
+                                const downloadQuery = attachmentDownloadQueries[index]
+                                const url = downloadQuery?.data?.download_url
                                 const isSelected = selectedId === attachment.id
-                                const isLoading = loadingUrls.has(attachment.id)
-
-                                // Load URL when component mounts
-                                if (!url && !isLoading) {
-                                    void loadImageUrl(attachment)
-                                }
+                                const isImageLoading =
+                                    downloadQuery?.isPending ||
+                                    downloadQuery?.isFetching
 
                                 return (
                                     <button
                                         key={attachment.id}
                                         type="button"
-                                        onClick={() => setSelectedId(attachment.id)}
+                                        onClick={() => selectAttachmentId(attachment.id)}
                                         className={cn(
                                             "group relative aspect-square overflow-hidden rounded-lg border-2 transition-all",
                                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -170,7 +179,7 @@ export function MilestoneImageSelector({
                                                 : "border-transparent hover:border-primary/50"
                                         )}
                                     >
-                                        {isLoading || !url ? (
+                                        {isImageLoading || !url ? (
                                             <div className="flex size-full items-center justify-center bg-stone-100 dark:bg-stone-800">
                                                 <Loader2Icon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
                                             </div>

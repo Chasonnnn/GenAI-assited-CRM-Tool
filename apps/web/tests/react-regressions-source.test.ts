@@ -289,6 +289,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("globalIndex++")
     })
 
+    it("keeps milestone image selection draft state compiler-friendly", () => {
+        const source = readSource("components/surrogates/journey/MilestoneImageSelector.tsx")
+
+        expect(source).toContain("type ImageSelectionState")
+        expect(source).toContain("useQueries")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("setSelectedId(currentAttachmentId)")
+    })
+
     it("keeps surrogate application form-link defaults compiler-friendly", () => {
         const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
 

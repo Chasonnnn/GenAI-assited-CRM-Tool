@@ -602,3 +602,22 @@ Full command after Batch 28: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1102`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 208 warnings`, `Performance 34 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 775 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-109b5f61-ea30-4f43-beac-c90a9a0bdfe0`
+
+## Batch 29
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-derived-state` / `react-doctor/no-derived-useState` | `components/surrogates/journey/MilestoneImageSelector.tsx` | Valid: the selected featured-image draft copied `currentAttachmentId` into local state in an effect after opening, so reopening a dialog could briefly retain a stale cancelled selection. | High | Track the selected image in a small draft-state object and reset it synchronously when `open` or `currentAttachmentId` changes. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor reported no issues. |
+| `react-hooks-js/todo` / `react-doctor/no-event-handler` / `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/journey/MilestoneImageSelector.tsx` | Valid: image preview URLs were loaded through a mutation, `useCallback`, an effect, and a `try/finally` finalizer even though they are server-state reads. | High | Replace mutation/effect URL loading with `useQueries` keyed by attachment id, and remove the `try/finally`, local URL/loading state, and manual callback memoization. | Focused tests passed; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 29: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 29: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1094`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 32 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 774 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5a972b32-7ed2-488f-8141-62fa84a8ef2f`
