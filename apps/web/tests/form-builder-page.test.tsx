@@ -244,6 +244,19 @@ describe("FormBuilderPage", () => {
         expect(updatedInput).toHaveFocus()
     })
 
+    it("returns field settings to General when another field is selected", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
+        fireEvent.click(await screen.findByRole("tab", { name: "Advanced" }))
+
+        expect(screen.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true")
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
+
+        expect(await screen.findByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true")
+    })
+
     it("keeps the field library in the left sidebar, filters categories, and adds fields with click-to-add", async () => {
         render(<FormBuilderPage />)
 

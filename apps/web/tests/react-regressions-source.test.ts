@@ -1344,6 +1344,16 @@ describe("React regression guards (source)", () => {
         expect(automationFormBuilderSource).not.toMatch(/\.filter\(\(option\) => option\.is_critical\)\s*\.map/)
     })
 
+    it("keeps form builder field settings tab reset render-derived", () => {
+        const source = readSource("components/forms/builder/FormBuilderWorkspace.tsx")
+
+        expect(source).toContain("type FieldSettingsTabState")
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+        expect(source).not.toContain('setActiveTab("general")')
+    })
+
     it("keeps surrogate card, task calendar, and CSV derived lists single pass", () => {
         const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
         const taskCalendarSource = readSource("components/surrogates/SurrogateTasksCalendar.tsx")

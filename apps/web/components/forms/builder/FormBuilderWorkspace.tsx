@@ -93,6 +93,11 @@ type FormBuilderWorkspaceProps = {
     document: WorkspaceDocument
 }
 
+type FieldSettingsTabState = {
+    fieldId: string | null
+    tab: string
+}
+
 function buildCanvasField(field: BuilderFormField): FormField {
     return {
         key: field.id,
@@ -216,7 +221,7 @@ function CanvasFieldSurface({
     onDelete: (fieldId: string) => void
 }) {
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
-    const publicField = React.useMemo(() => buildCanvasField(field), [field])
+    const publicField = buildCanvasField(field)
     const fieldLabel = field.label.trim() || "Untitled"
     const usesFallbackRenderer = ["address", "file", "repeatable_table"].includes(field.type)
     const floatingActionButtonClass =
@@ -334,10 +339,6 @@ function PageStrip({
 }) {
     const activeIndex = Math.max(0, pages.findIndex((page) => page.id === activePage))
     const currentPageLabel = currentPage.name.trim() || `Page ${activeIndex + 1}`
-    const getPageLabel = React.useCallback(
-        (page: BuilderFormPage, index: number) => page.name.trim() || `Page ${index + 1}`,
-        [],
-    )
 
     return (
         <div className="border-b border-border/70 pb-4">
@@ -345,7 +346,7 @@ function PageStrip({
                 <div className="min-w-0 flex-1 space-y-2">
                     <div role="tablist" aria-label="Form pages" className="flex flex-wrap items-center gap-1.5">
                         {pages.map((page, index) => {
-                            const pageLabel = getPageLabel(page, index)
+                            const pageLabel = page.name.trim() || `Page ${index + 1}`
                             const isActive = page.id === activePage
                             const widthStyle = { width: `${Math.max(7, Math.min(pageLabel.length + 2, 22))}ch` }
 
@@ -579,29 +580,19 @@ function FieldInspector({
     addOption: (fieldId: string) => void
     removeOption: (fieldId: string, optionIndex: number) => void
 }) {
-    const [activeTab, setActiveTab] = React.useState("general")
+    const selectedFieldId = selectedFieldData?.id ?? null
+    const [activeTabState, setActiveTabState] = React.useState<FieldSettingsTabState>(() => ({
+        fieldId: selectedFieldId,
+        tab: "general",
+    }))
+    const activeTab = activeTabState.fieldId === selectedFieldId ? activeTabState.tab : "general"
     const settingsPanelClass =
         "w-full border-t border-border/70 bg-card p-4 xl:min-h-[58rem] xl:w-auto xl:self-stretch xl:overflow-y-auto xl:border-t-0 xl:border-l xl:p-6"
-    const selectedFieldId = selectedFieldData?.id ?? null
-    const conditionalFields = React.useMemo(
-        () => currentPage.fields.filter((field) => field.id !== selectedFieldId),
-        [currentPage.fields, selectedFieldId],
+    const conditionalFields = currentPage.fields.filter((field) => field.id !== selectedFieldId)
+    const fieldLabelMap = new Map(
+        conditionalFields.map((field) => [field.id, field.label.trim() || "Untitled field"] as const),
     )
-    const fieldLabelMap = React.useMemo(
-        () =>
-            new Map(
-                conditionalFields.map((field) => [field.id, field.label.trim() || "Untitled field"] as const),
-            ),
-        [conditionalFields],
-    )
-    const mappingLabelMap = React.useMemo(
-        () => new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const)),
-        [mappingOptions],
-    )
-
-    React.useEffect(() => {
-        setActiveTab("general")
-    }, [selectedFieldData?.id])
+    const mappingLabelMap = new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const))
 
     if (!selectedFieldData) {
         return (
@@ -661,7 +652,11 @@ function FieldInspector({
                     </div>
                 </div>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col gap-4">
+                <Tabs
+                    value={activeTab}
+                    onValueChange={(tab) => setActiveTabState({ fieldId: selectedFieldId, tab })}
+                    className="flex min-h-0 flex-1 flex-col gap-4"
+                >
                     <TabsList aria-label="Field settings sections" className="grid w-full grid-cols-2 bg-stone-100">
                         <TabsTrigger value="general">General</TabsTrigger>
                         <TabsTrigger value="advanced">Advanced</TabsTrigger>

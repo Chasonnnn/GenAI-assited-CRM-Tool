@@ -1044,3 +1044,25 @@ Full command after Batch 50: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `995`
 - Summary: `Security 2 warnings`, `Bugs 4 errors + 188 warnings`, `Performance 1 error + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 722 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-152446e0-0bc3-4593-a69e-154b5189c43f`
+
+## Batch 51
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks/set-state-in-effect`, `react-doctor/no-adjust-state-on-prop-change` | `components/forms/builder/FormBuilderWorkspace.tsx` | Valid: the field inspector effect synchronously reset the active settings tab to General after `selectedFieldData.id` changed, causing a stale Advanced tab render for the newly selected field. | High | Replace the effect with selected-field-keyed tab state so a different field derives `general` during render while preserving tab selection for the active field. Added a behavior test for switching fields and a source guard that failed on the old effect. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/form-builder-page.test.tsx`; full React Doctor errors dropped from `5` to `3`. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/forms/builder/FormBuilderWorkspace.tsx` | Valid: React Compiler is enabled, so the touched workspace's `useMemo`/`useCallback` wrappers around canvas fields, page labels, conditional field lists, and lookup maps were redundant. | High | Remove the wrappers and derive these values directly during render. Extended the source guard so it failed on reintroduced manual memoization. | Changed-scope React Doctor dropped from `7` warnings to `2` warnings. |
+| `react-doctor/prefer-tag-over-role`, `react-doctor/no-giant-component` | `components/forms/builder/FormBuilderWorkspace.tsx` | Valid but deferred: changing the field surface from `role="button"` to `<button>` needs a nested-action-button restructure, and splitting `FieldInspector` is a broad component extraction. | Medium | Logged for a later structural form-builder batch instead of mixing markup/API restructuring into this prop-sync fix. | Changed-scope React Doctor reports only these two warnings after the tab and memoization cleanup. |
+
+Changed-scope command after Batch 51: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Accessibility 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fb2a7fcf-2a81-4bd3-a84b-c50fa3c7d107`
+
+Full command after Batch 51: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `63 / 100 Needs work`
+- Total diagnostics: `987`
+- Summary: `Security 2 warnings`, `Bugs 3 errors + 187 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 717 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9434f942-1a63-49c5-99cf-d8b9d39ab347`
