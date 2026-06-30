@@ -775,3 +775,25 @@ Full command after Batch 37: `cd /private/tmp/react-doctor-pregnancy-codex-84352
 - Total diagnostics: `1071`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 20 errors + 36 warnings`, `Accessibility 40 warnings`, `Maintainability 765 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4ec3cb42-c84f-42f2-b5ce-c83308903860`
+
+## Batch 38
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/surrogates/CombinedMedicalInsuranceCard.tsx` | Valid: the section delete handler used a `try/finally` finalizer only to clear deleting state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch, clear `isDeletingSection` after success or failure handling, and preserve prior rejection behavior by rethrowing failed deletes after cleanup. Extended the source regression guard so it failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports the compiler blocker. |
+| `react-hooks/set-state-in-effect` | `components/surrogates/CombinedMedicalInsuranceCard.tsx` | Valid: the optimistic hidden-section cleanup effect synchronously set state after render. | High | Replace effect cleanup with optimistic hidden entries keyed to the current `surrogateData` object, so the section is hidden only while the stale pre-update data snapshot is still rendering. Extended the source guard to fail on reintroduced `useEffect`. | Focused source guard and TypeScript passed; `pnpm lint` no longer reports this file's set-state-in-effect warning. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/CombinedMedicalInsuranceCard.tsx` | Valid: React Compiler is enabled, so the local `useMemo` wrappers around section derivation are redundant in this touched component. | High | Derive section lists directly during render with explicit loops and no chained `filter().map()` sweep. Extended the source guard to fail on reintroduced `useMemo`. | Focused source guard passed; full React Doctor shows redundant memoization dropped by 3. |
+| `react-doctor/rerender-state-only-in-handlers` | `components/surrogates/CombinedMedicalInsuranceCard.tsx` | Invalid: `manuallyAdded` and `optimisticallyHiddenSections` are read during render to build `visibleSections`, which determines whether medical/insurance sections are shown. They are not handler-only refs. | High | Leave as state. No suppression added; logged as an invalid touched-file finding. | Changed-scope React Doctor reports only these two warnings, score `97 / 100 Great`. |
+
+Changed-scope command after Batch 38: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Invalid diagnostics: `react-doctor/rerender-state-only-in-handlers` for `manuallyAdded` and `optimisticallyHiddenSections`
+
+Full command after Batch 38: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1067`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 18 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 762 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a68560ac-8bbb-47de-86cd-056bcdacffdc`

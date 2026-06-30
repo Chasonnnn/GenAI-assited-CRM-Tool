@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useState } from "react"
 import {
     ShieldIcon,
     HospitalIcon,
@@ -44,6 +44,11 @@ import { SurrogateRead } from "@/lib/types/surrogate"
 import { SurrogateUpdatePayload } from "@/lib/api/surrogates"
 
 type SectionType = "insurance" | "pcp" | "lab_clinic" | "clinic" | "monitoring_clinic" | "ob" | "delivery_hospital"
+
+type OptimisticallyHiddenSection = {
+    key: SectionType
+    dataSnapshot: SurrogateRead
+}
 
 interface SectionConfig {
     key: SectionType
@@ -184,46 +189,47 @@ function SectionActionIcon({
 
 export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: CombinedMedicalInsuranceCardProps) {
     const [manuallyAdded, setManuallyAdded] = useState<SectionType[]>([])
-    const [optimisticallyHiddenSections, setOptimisticallyHiddenSections] = useState<SectionType[]>([])
+    const [optimisticallyHiddenSections, setOptimisticallyHiddenSections] = useState<OptimisticallyHiddenSection[]>([])
     const [sectionPendingDelete, setSectionPendingDelete] = useState<SectionType | null>(null)
     const [isDeletingSection, setIsDeletingSection] = useState(false)
 
     const dataRecord = surrogateData as unknown as Record<string, string | null | undefined>
 
-    const sectionsWithData = useMemo(() => {
-        const sections: SectionType[] = []
-        for (const section of SECTION_CONFIGS) {
-            const hasData = section.fields.some((f) => {
-                const val = dataRecord[f]
-                return val !== null && val !== undefined && val !== ""
-            })
-            if (hasData) sections.push(section.key)
+    const sectionsWithData: SectionType[] = []
+    for (const section of SECTION_CONFIGS) {
+        const hasData = section.fields.some((field) => {
+            const value = dataRecord[field]
+            return value !== null && value !== undefined && value !== ""
+        })
+        if (hasData) sectionsWithData.push(section.key)
+    }
+
+    const visibleKeys = new Set([...sectionsWithData, ...manuallyAdded])
+    const hiddenKeys = new Set<SectionType>()
+    for (const entry of optimisticallyHiddenSections) {
+        if (entry.dataSnapshot === surrogateData) {
+            hiddenKeys.add(entry.key)
         }
-        return sections
-    }, [dataRecord])
+    }
 
-    useEffect(() => {
-        setOptimisticallyHiddenSections((prev) =>
-            prev.filter((key) => sectionsWithData.includes(key))
-        )
-    }, [sectionsWithData])
-
-    const visibleSections = useMemo(() => {
-        const visible = new Set([...sectionsWithData, ...manuallyAdded])
-        const hidden = new Set(optimisticallyHiddenSections)
-        const sections: SectionConfig[] = []
-        for (const section of SECTION_CONFIGS) {
-            if (visible.has(section.key) && !hidden.has(section.key)) {
-                sections.push(section)
-            }
+    const visibleSections: SectionConfig[] = []
+    for (const section of SECTION_CONFIGS) {
+        if (visibleKeys.has(section.key) && !hiddenKeys.has(section.key)) {
+            visibleSections.push(section)
         }
-        return sections
-    }, [sectionsWithData, manuallyAdded, optimisticallyHiddenSections])
+    }
 
-    const availableSections = useMemo(() => {
-        const visibleKeys = new Set(visibleSections.map((s) => s.key))
-        return SECTION_CONFIGS.filter((s) => !visibleKeys.has(s.key))
-    }, [visibleSections])
+    const availableSectionKeys = new Set<SectionType>()
+    for (const section of visibleSections) {
+        availableSectionKeys.add(section.key)
+    }
+
+    const availableSections: SectionConfig[] = []
+    for (const section of SECTION_CONFIGS) {
+        if (!availableSectionKeys.has(section.key)) {
+            availableSections.push(section)
+        }
+    }
 
     const deletableSections = visibleSections
     const canEditSections = availableSections.length > 0 || deletableSections.length > 0
@@ -237,7 +243,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
     }
 
     const handleAddSection = (key: SectionType) => {
-        setOptimisticallyHiddenSections((prev) => prev.filter((sectionKey) => sectionKey !== key))
+        setOptimisticallyHiddenSections((prev) => prev.filter((entry) => entry.key !== key))
         setManuallyAdded((prev) => (prev.includes(key) ? prev : [...prev, key]))
     }
 
@@ -247,19 +253,25 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
         if (!section) return
 
         setIsDeletingSection(true)
-        try {
-            const clearedFields = Object.fromEntries(
-                section.fields.map((field) => [field, null])
-            ) as Partial<SurrogateUpdatePayload>
-            await onUpdate(clearedFields)
+        const clearedFields = Object.fromEntries(
+            section.fields.map((field) => [field, null])
+        ) as Partial<SurrogateUpdatePayload>
+        const result = await onUpdate(clearedFields).then(() => ({
+            status: "success" as const,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            error,
+        }))
+
+        if (result.status === "success") {
             setManuallyAdded((prev) => prev.filter((key) => key !== section.key))
             setOptimisticallyHiddenSections((prev) =>
-                prev.includes(section.key) ? prev : [...prev, section.key]
+                [...prev.filter((entry) => entry.key !== section.key), { key: section.key, dataSnapshot: surrogateData }]
             )
             setSectionPendingDelete(null)
-        } finally {
-            setIsDeletingSection(false)
         }
+        setIsDeletingSection(false)
+        if (result.status === "error") throw result.error
     }
 
     return (

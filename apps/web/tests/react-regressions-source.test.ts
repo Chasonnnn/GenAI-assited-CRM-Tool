@@ -1301,6 +1301,9 @@ describe("React regression guards (source)", () => {
         const csvUploadSource = readSource("components/import/CSVUpload.tsx")
         const metaMappingSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
 
+        expect(medicalInsuranceSource).not.toContain("finally")
+        expect(medicalInsuranceSource).not.toContain("useEffect")
+        expect(medicalInsuranceSource).not.toContain("useMemo")
         expect(medicalInsuranceSource).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*?\)\.map\(/)
         expect(medicalInsuranceSource).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*?\)\s*\.filter\(/)
         expect(taskCalendarSource).toContain("const orphanedCompletedTasks = useMemo")
