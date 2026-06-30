@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { FileTextIcon, PaperclipIcon, ArrowRightIcon, Loader2Icon } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,11 +34,8 @@ export function LatestUpdatesCard({
     const latestAttachment = attachments?.[0]  // Already sorted newest first
     const lastStageChange = statusHistory?.[0]  // Array access
 
-    // Sanitize note HTML (memoized to avoid re-sanitizing on every render)
-    const sanitizedNoteHtml = useMemo(() => {
-        if (!latestNote?.body) return ''
-        return sanitizeHtml(latestNote.body)
-    }, [latestNote?.body])
+    const latestNoteBody = latestNote?.body ?? ""
+    const sanitizedNoteHtml = latestNoteBody ? sanitizeHtml(latestNoteBody) : ""
 
     // Click-to-download: call API directly (no hook that auto-opens)
     const handleAttachmentClick = async (attachmentId: string) => {
@@ -46,8 +43,10 @@ export function LatestUpdatesCard({
         try {
             const { download_url, filename } = await attachmentsApi.getDownloadUrl(attachmentId)
             openDownloadUrlWithSpreadsheetWarning(download_url, filename)
-        } finally {
             setIsDownloading(false)
+        } catch (error) {
+            setIsDownloading(false)
+            throw error
         }
     }
 
@@ -81,6 +80,7 @@ export function LatestUpdatesCard({
                 {/* Most Recent File - click to fetch signed URL and open */}
                 {latestAttachment ? (
                     <button
+                        type="button"
                         onClick={() => handleAttachmentClick(latestAttachment.id)}
                         disabled={isDownloading}
                         className="flex w-full items-start gap-2 rounded p-1 -m-1 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

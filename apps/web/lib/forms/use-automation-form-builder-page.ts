@@ -163,7 +163,6 @@ export function useAutomationFormBuilderPage() {
     })
 
     const logoInputRef = useRef<HTMLInputElement>(null)
-    const lastSavedFingerprintRef = useRef<string>("")
     const hydratedFormRef = useRef<string | null>(null)
     const orgLogoInitRef = useRef(false)
     const { state, patchState, resetForForm, hydrateFromForm } = useAutomationFormBuilderState(isNewForm)
@@ -227,17 +226,17 @@ export function useAutomationFormBuilderPage() {
         [mappingOptionsData],
     )
 
-    const syncAutosaveMeta = useCallback((status: "idle" | "saved", savedAt: Date | null) => {
+    const syncAutosaveMeta = useCallback((status: "idle" | "saved", savedAt: Date | null, fingerprint: string) => {
         patchState({
             autoSaveStatus: status,
             lastSavedAt: savedAt,
+            lastSavedFingerprint: fingerprint,
         })
     }, [patchState])
 
     useEffect(() => {
         resetForForm(isNewForm)
         hydratedFormRef.current = null
-        lastSavedFingerprintRef.current = ""
         orgLogoInitRef.current = false
         resetDocument()
     }, [formId, isNewForm, resetDocument, resetForForm])
@@ -317,19 +316,18 @@ export function useAutomationFormBuilderPage() {
         [debouncedPayload],
     )
     const draftIsDebounced = draftPayload === debouncedPayload
-    const isDirty = !draftIsDebounced || debouncedFingerprint !== lastSavedFingerprintRef.current
+    const isDirty = !draftIsDebounced || debouncedFingerprint !== state.lastSavedFingerprint
 
     useEffect(() => {
         if (!state.hasHydrated) return
         const identity = isNewForm ? "new" : formId || "unknown"
         if (hydratedFormRef.current === identity) return
         hydratedFormRef.current = identity
-        lastSavedFingerprintRef.current = debouncedFingerprint
         if (!isNewForm && formData?.updated_at) {
-            syncAutosaveMeta("saved", new Date(formData.updated_at))
+            syncAutosaveMeta("saved", new Date(formData.updated_at), debouncedFingerprint)
             return
         }
-        syncAutosaveMeta("idle", null)
+        syncAutosaveMeta("idle", null, debouncedFingerprint)
     }, [debouncedFingerprint, formData?.updated_at, formId, isNewForm, state.hasHydrated, syncAutosaveMeta])
 
     const requestDeletePage = useCallback((pageId: number) => {
@@ -352,10 +350,10 @@ export function useAutomationFormBuilderPage() {
     }, [deletePage, patchState, state.pageToDelete])
 
     const markSaved = useCallback((fingerprint: string, savedForm?: FormRead) => {
-        lastSavedFingerprintRef.current = fingerprint
         patchState({
             autoSaveStatus: "saved",
             lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
+            lastSavedFingerprint: fingerprint,
         })
     }, [patchState])
 
@@ -402,15 +400,16 @@ export function useAutomationFormBuilderPage() {
             return
         }
         patchState({ isSaving: true })
+        const finishSaving = () => patchState({ isSaving: false })
         try {
             const savedForm = await persistForm(draftPayload)
             markSaved(JSON.stringify(draftPayload), savedForm)
             toast.success("Form saved")
+            finishSaving()
         } catch {
             patchState({ autoSaveStatus: "error" })
             toast.error("Failed to save form")
-        } finally {
-            patchState({ isSaving: false })
+            finishSaving()
         }
     }, [draftPayload, markSaved, patchState, persistForm, state.formName])
 
@@ -418,7 +417,7 @@ export function useAutomationFormBuilderPage() {
         if (!state.hasHydrated) return
         if (!state.formName.trim()) return
         if (draftPayload !== debouncedPayload) return
-        if (debouncedFingerprint === lastSavedFingerprintRef.current) return
+        if (debouncedFingerprint === state.lastSavedFingerprint) return
         if (state.isSaving || state.isPublishing) return
         if (
             createFormMutation.isPending ||
@@ -457,6 +456,7 @@ export function useAutomationFormBuilderPage() {
         state.hasHydrated,
         state.isPublishing,
         state.isSaving,
+        state.lastSavedFingerprint,
         updateFormMutation.isPending,
     ])
 
@@ -592,6 +592,7 @@ export function useAutomationFormBuilderPage() {
         }
 
         patchState({ isPublishing: true })
+        const finishPublishing = () => patchState({ isPublishing: false })
         try {
             const savedForm = await persistForm(draftPayload)
             markSaved(JSON.stringify(draftPayload), savedForm)
@@ -606,11 +607,11 @@ export function useAutomationFormBuilderPage() {
             }
             patchState({ showPublishDialog: false })
             toast.success("Form published")
+            finishPublishing()
         } catch {
             patchState({ autoSaveStatus: "error" })
             toast.error("Failed to publish form")
-        } finally {
-            patchState({ isPublishing: false })
+            finishPublishing()
         }
     }, [draftPayload, hasMissingCriticalMappings, markSaved, patchState, persistForm, publishFormMutation, refetchIntakeLinks])
 
@@ -764,6 +765,7 @@ export function useAutomationFormBuilderPage() {
 
         const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" })
         const svgUrl = URL.createObjectURL(svgBlob)
+        const revokeSvgUrl = () => URL.revokeObjectURL(svgUrl)
         try {
             const image = new Image()
             image.crossOrigin = "anonymous"
@@ -780,6 +782,7 @@ export function useAutomationFormBuilderPage() {
             const context = canvas.getContext("2d")
             if (!context) {
                 toast.error("Could not prepare PNG download")
+                revokeSvgUrl()
                 return
             }
             context.drawImage(image, 0, 0)
@@ -789,13 +792,14 @@ export function useAutomationFormBuilderPage() {
             )
             if (!blob) {
                 toast.error("Could not generate PNG")
+                revokeSvgUrl()
                 return
             }
             downloadBlob(blob, buildQrFilename("png"))
+            revokeSvgUrl()
         } catch {
+            revokeSvgUrl()
             toast.error("Failed to download PNG")
-        } finally {
-            URL.revokeObjectURL(svgUrl)
         }
     }, [buildQrFilename, downloadBlob, getQrSvgMarkup])
 

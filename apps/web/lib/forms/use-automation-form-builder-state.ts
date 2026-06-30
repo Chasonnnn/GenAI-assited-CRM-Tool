@@ -44,6 +44,7 @@ type AutomationBuilderState = {
     fieldLibraryCategory: string
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
+    lastSavedFingerprint: string
 }
 
 type AutomationBuilderAction =
@@ -90,6 +91,7 @@ const buildInitialState = (isNewForm: boolean): AutomationBuilderState => ({
     fieldLibraryCategory: "all",
     autoSaveStatus: "idle",
     lastSavedAt: null,
+    lastSavedFingerprint: "",
 })
 
 function reducer(state: AutomationBuilderState, action: AutomationBuilderAction): AutomationBuilderState {

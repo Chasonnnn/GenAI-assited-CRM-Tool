@@ -432,6 +432,7 @@ export default function AuditLogPage() {
                                             }
                                             return (
                                                 <button
+                                                    type="button"
                                                     key={entry.id}
                                                     className="flex items-start gap-2 text-xs w-full text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
                                                     onClick={() => setEventTypeFilter(entry.event_type)}

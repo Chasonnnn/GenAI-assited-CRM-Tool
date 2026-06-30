@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -143,7 +143,9 @@ export default function AIWorkflowBuilderPage() {
     const initialScope = searchParams.get("scope") === "org" ? "org" : "personal"
 
     const [mode, setMode] = useState<"workflow" | "email_template">(initialMode)
-    const [workflowScope, setWorkflowScope] = useState<"personal" | "org">(initialScope)
+    const [requestedWorkflowScope, setRequestedWorkflowScope] = useState<"personal" | "org">(initialScope)
+    const workflowScope =
+        requestedWorkflowScope === "org" && canManageAutomation ? "org" : "personal"
 
     const [isGenerating, setIsGenerating] = useState(false)
     const [isSavingWorkflow, setIsSavingWorkflow] = useState(false)
@@ -173,12 +175,6 @@ export default function AIWorkflowBuilderPage() {
         isLoading: templateVariableCatalogLoading,
         error: templateVariableCatalogError,
     } = useEmailTemplateVariables()
-
-    useEffect(() => {
-        if (workflowScope === "org" && !canManageAutomation) {
-            setWorkflowScope("personal")
-        }
-    }, [workflowScope, canManageAutomation])
 
     const resetGeneratedArtifacts = () => {
         setGeneratedWorkflow(null)
@@ -258,6 +254,7 @@ export default function AIWorkflowBuilderPage() {
         }
 
         setIsGenerating(true)
+        const finishGenerating = () => setIsGenerating(false)
 
         if (mode === "workflow") {
             setGeneratedWorkflow(null)
@@ -282,9 +279,8 @@ export default function AIWorkflowBuilderPage() {
                 }
             } catch {
                 toast.error("Failed to generate workflow. Please try again.")
-            } finally {
-                setIsGenerating(false)
             }
+            finishGenerating()
             return
         }
 
@@ -317,15 +313,15 @@ export default function AIWorkflowBuilderPage() {
             }
         } catch {
             toast.error("Failed to generate template. Please try again.")
-        } finally {
-            setIsGenerating(false)
         }
+        finishGenerating()
     }
 
     const handleSaveWorkflow = async () => {
         if (!generatedWorkflow) return
 
         setIsSavingWorkflow(true)
+        const finishSavingWorkflow = () => setIsSavingWorkflow(false)
         try {
             const result = await saveAIWorkflow(generatedWorkflow, workflowScope)
 
@@ -337,9 +333,8 @@ export default function AIWorkflowBuilderPage() {
             }
         } catch {
             toast.error("Failed to save workflow. Please try again.")
-        } finally {
-            setIsSavingWorkflow(false)
         }
+        finishSavingWorkflow()
     }
 
     const handleSaveEmailTemplate = async () => {
@@ -475,6 +470,7 @@ export default function AIWorkflowBuilderPage() {
                             <div className="flex flex-wrap gap-2">
                                 {suggestionList.slice(0, 3).map((suggestion) => (
                                     <button
+                                        type="button"
                                         key={suggestion}
                                         onClick={() => handleSuggestionClick(suggestion)}
                                         className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
@@ -491,7 +487,7 @@ export default function AIWorkflowBuilderPage() {
                                 <Tabs
                                     value={workflowScope}
                                     onValueChange={(value) =>
-                                        setWorkflowScope(value as "personal" | "org")
+                                        setRequestedWorkflowScope(value as "personal" | "org")
                                     }
                                 >
                                     <TabsList>

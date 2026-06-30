@@ -39,7 +39,6 @@ export function useTemplateFormBuilderPage() {
     const updateTemplateMutation = useUpdatePlatformFormTemplate()
     const publishTemplateMutation = usePublishPlatformFormTemplate()
     const deleteTemplateMutation = useDeletePlatformFormTemplate()
-    const lastSavedFingerprintRef = useRef<string>("")
     const currentVersionRef = useRef<number | null>(null)
     const templateIdRef = useRef<string | null>(isNewForm ? null : id)
     const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -181,22 +180,22 @@ export function useTemplateFormBuilderPage() {
         [debouncedPayload],
     )
     const draftIsDebounced = draftPayload === debouncedPayload
-    const isDirty = !draftIsDebounced || debouncedFingerprint !== lastSavedFingerprintRef.current
+    const isDirty = !draftIsDebounced || debouncedFingerprint !== state.lastSavedFingerprint
 
     useEffect(() => {
         if (!state.hasHydrated) return
         const identity = isNewForm ? "new" : formId || "unknown"
         if (hydratedFormRef.current === identity) return
         hydratedFormRef.current = identity
-        lastSavedFingerprintRef.current = debouncedFingerprint
         if (!isNewForm && templateData?.updated_at) {
             patchState({
                 autoSaveStatus: "saved",
                 lastSavedAt: new Date(templateData.updated_at),
+                lastSavedFingerprint: debouncedFingerprint,
             })
             return
         }
-        patchState({ autoSaveStatus: "idle" })
+        patchState({ autoSaveStatus: "idle", lastSavedFingerprint: debouncedFingerprint })
     }, [debouncedFingerprint, formId, isNewForm, patchState, state.hasHydrated, templateData?.updated_at])
 
     const requestDeletePage = useCallback((pageId: number) => {
@@ -219,10 +218,10 @@ export function useTemplateFormBuilderPage() {
     }, [deletePage, patchState, state.pageToDelete])
 
     const markSaved = useCallback((fingerprint: string, savedForm?: PlatformFormTemplate) => {
-        lastSavedFingerprintRef.current = fingerprint
         patchState({
             autoSaveStatus: "saved",
             lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
+            lastSavedFingerprint: fingerprint,
         })
     }, [patchState])
 
@@ -278,15 +277,16 @@ export function useTemplateFormBuilderPage() {
             return
         }
         patchState({ isSaving: true })
+        const finishSaving = () => patchState({ isSaving: false })
         try {
             const savedTemplate = await queueSave(draftPayload)
             markSaved(JSON.stringify(draftPayload), savedTemplate)
             toast.success("Template saved")
+            finishSaving()
         } catch {
             patchState({ autoSaveStatus: "error" })
             toast.error("Failed to save template")
-        } finally {
-            patchState({ isSaving: false })
+            finishSaving()
         }
     }, [draftPayload, markSaved, patchState, queueSave, state.formName])
 
@@ -294,7 +294,7 @@ export function useTemplateFormBuilderPage() {
         if (!state.hasHydrated) return
         if (!state.formName.trim()) return
         if (draftPayload !== debouncedPayload) return
-        if (debouncedFingerprint === lastSavedFingerprintRef.current) return
+        if (debouncedFingerprint === state.lastSavedFingerprint) return
         if (state.isSaving || state.isPublishing) return
 
         let cancelled = false
@@ -324,6 +324,7 @@ export function useTemplateFormBuilderPage() {
         state.hasHydrated,
         state.isPublishing,
         state.isSaving,
+        state.lastSavedFingerprint,
     ])
 
     const handlePreview = useCallback(() => {
@@ -351,6 +352,7 @@ export function useTemplateFormBuilderPage() {
 
     const confirmPublish = useCallback(async () => {
         patchState({ isPublishing: true })
+        const finishPublishing = () => patchState({ isPublishing: false })
         try {
             const savedTemplate = await queueSave(draftPayload)
             markSaved(JSON.stringify(draftPayload), savedTemplate)
@@ -366,11 +368,11 @@ export function useTemplateFormBuilderPage() {
                 showPublishDialog: false,
             })
             toast.success("Template published")
+            finishPublishing()
         } catch {
             patchState({ autoSaveStatus: "error" })
             toast.error("Failed to publish template")
-        } finally {
-            patchState({ isPublishing: false })
+            finishPublishing()
         }
     }, [draftPayload, markSaved, patchState, publishTemplateMutation, queueSave])
 

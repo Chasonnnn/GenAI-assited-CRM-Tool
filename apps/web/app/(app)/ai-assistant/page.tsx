@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon } from "lucide-react"
-import { useState, useRef, useEffect, useMemo, useCallback } from "react"
+import { useState, useRef, useEffect, useMemo, useCallback, useReducer } from "react"
 import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
@@ -42,6 +42,51 @@ const CHAT_HISTORY_USER_KEY = "ai-assistant-chat-history-user-v1"
 const MAX_CHAT_HISTORY = 10
 const SESSION_MESSAGE_LIMIT = 50
 const SESSION_PREVIEW_LIMIT = 80
+
+type ChatState = {
+    chatHistory: ChatSession[]
+    activeSessionId: string | null
+    messages: Message[]
+}
+
+type ChatAction =
+    | { type: "patch"; payload: Partial<ChatState> }
+    | { type: "update_history"; updater: (prev: ChatSession[]) => ChatSession[] }
+
+function createWelcomeMessage(): Message {
+    return {
+        id: "welcome",
+        role: "assistant",
+        content: "Hello! I'm your AI assistant. Ask me anything about your workflows.",
+        timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        status: "done",
+    }
+}
+
+function buildInitialChatState(): ChatState {
+    return {
+        chatHistory: [],
+        activeSessionId: null,
+        messages: [createWelcomeMessage()],
+    }
+}
+
+function resolveStateValue<T>(value: T | ((prev: T) => T), previous: T): T {
+    return typeof value === "function"
+        ? (value as (prev: T) => T)(previous)
+        : value
+}
+
+function chatReducer(state: ChatState, action: ChatAction): ChatState {
+    switch (action.type) {
+        case "patch":
+            return { ...state, ...action.payload }
+        case "update_history":
+            return { ...state, chatHistory: action.updater(state.chatHistory) }
+        default:
+            return state
+    }
+}
 
 function truncateText(text: string, max: number) {
     if (text.length <= max) return text
@@ -147,21 +192,31 @@ export default function AIAssistantPage() {
     const { user } = useAuth()
     const [message, setMessage] = useState("")
     const [isStreaming, setIsStreaming] = useState(false)
-    const [chatHistory, setChatHistory] = useState<ChatSession[]>([])
-    const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: "welcome",
-            role: "assistant",
-            content: "Hello! I'm your AI assistant. Ask me anything about your workflows.",
-            timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-            status: "done",
-        },
-    ])
+    const [chatState, dispatchChat] = useReducer(chatReducer, undefined, buildInitialChatState)
+    const chatStateRef = useRef(chatState)
+    const { chatHistory, activeSessionId, messages } = chatState
     const scrollRef = useRef<HTMLDivElement>(null)
     const streamingMessageIdRef = useRef<string | null>(null)
     const streamAbortRef = useRef<AbortController | null>(null)
     const stopRequestedRef = useRef(false)
+
+    useEffect(() => {
+        chatStateRef.current = chatState
+    }, [chatState])
+
+    const patchChatState = useCallback((payload: Partial<ChatState>) => {
+        chatStateRef.current = { ...chatStateRef.current, ...payload }
+        dispatchChat({ type: "patch", payload })
+    }, [])
+
+    const setMessages = useCallback((value: Message[] | ((prev: Message[]) => Message[])) => {
+        const next = resolveStateValue(value, chatStateRef.current.messages)
+        patchChatState({ messages: next })
+    }, [patchChatState])
+
+    const setActiveSessionId = useCallback((value: string | null) => {
+        patchChatState({ activeSessionId: value })
+    }, [patchChatState])
 
     const aiSettingsQuery = useAISettings()
     const {
@@ -203,13 +258,11 @@ export default function AIAssistantPage() {
 
     const updateHistory = useCallback(
         (updater: (prev: ChatSession[]) => ChatSession[]) => {
-            setChatHistory((prev) => {
-                const next = updater(prev)
-                persistHistory(next)
-                return next
-            })
+            const next = updater(chatStateRef.current.chatHistory)
+            persistHistory(next)
+            patchChatState({ chatHistory: next })
         },
-        [persistHistory]
+        [patchChatState, persistHistory]
     )
 
     const buildSessionLabel = useCallback(() => "Global Chat", [])
@@ -256,14 +309,16 @@ export default function AIAssistantPage() {
     )
 
     const clearChatHistory = useCallback(() => {
-        setChatHistory([])
-        setActiveSessionId(null)
-        setMessages([buildWelcomeMessage()])
+        patchChatState({
+            chatHistory: [],
+            activeSessionId: null,
+            messages: [buildWelcomeMessage()],
+        })
         if (typeof window !== "undefined") {
             sessionStorage.removeItem(CHAT_HISTORY_KEY)
             sessionStorage.removeItem(CHAT_HISTORY_USER_KEY)
         }
-    }, [buildWelcomeMessage])
+    }, [buildWelcomeMessage, patchChatState])
 
     const historyLoadedRef = useRef(false)
     const initialSessionCreatedRef = useRef(false)
@@ -284,13 +339,15 @@ export default function AIAssistantPage() {
         }
         if (!historyLoadedRef.current) {
             const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
-            setChatHistory(storedHistory)
-            setActiveSessionId(null)
-            setMessages([buildWelcomeMessage()])
+            patchChatState({
+                chatHistory: storedHistory,
+                activeSessionId: null,
+                messages: [buildWelcomeMessage()],
+            })
             historyLoadedRef.current = true
         }
         sessionStorage.setItem(CHAT_HISTORY_USER_KEY, user.user_id)
-    }, [user?.user_id, clearChatHistory, buildWelcomeMessage])
+    }, [user?.user_id, clearChatHistory, buildWelcomeMessage, patchChatState])
 
     useEffect(() => {
         if (!user?.user_id || !historyLoadedRef.current || initialSessionCreatedRef.current) return
@@ -306,9 +363,11 @@ export default function AIAssistantPage() {
             conversationId: null,
             messages: [],
         })
-        setActiveSessionId(sessionId)
-        setMessages([buildWelcomeMessage()])
-    }, [user?.user_id, upsertSession, buildSessionLabel, buildWelcomeMessage])
+        patchChatState({
+            activeSessionId: sessionId,
+            messages: [buildWelcomeMessage()],
+        })
+    }, [user?.user_id, upsertSession, buildSessionLabel, buildWelcomeMessage, patchChatState])
 
     const currentSession = useMemo(
         () => chatHistory.find((session) => session.id === activeSessionId) || null,
@@ -325,7 +384,7 @@ export default function AIAssistantPage() {
             return
         }
         setMessages([buildWelcomeMessage()])
-    }, [currentSession, isStreaming, buildWelcomeMessage])
+    }, [currentSession, isStreaming, buildWelcomeMessage, setMessages])
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -358,11 +417,11 @@ export default function AIAssistantPage() {
         })
         setActiveSessionId(sessionId)
         return sessionId
-    }, [activeSessionId, chatHistory, buildSessionLabel, upsertSession])
+    }, [activeSessionId, chatHistory, buildSessionLabel, setActiveSessionId, upsertSession])
 
     const updateMessageById = useCallback((id: string, updater: (msg: Message) => Message) => {
         setMessages((prev) => prev.map((msg) => (msg.id === id ? updater(msg) : msg)))
-    }, [])
+    }, [setMessages])
 
     const updateMessageAndSession = useCallback(
         (
@@ -377,7 +436,7 @@ export default function AIAssistantPage() {
                 return next
             })
         },
-        [updateSessionMessages]
+        [setMessages, updateSessionMessages]
     )
 
     const handleSelectSession = useCallback(
@@ -386,7 +445,7 @@ export default function AIAssistantPage() {
             const sessionMessages = session.messages.length ? session.messages : [buildWelcomeMessage()]
             setMessages(sessionMessages)
         },
-        [buildWelcomeMessage]
+        [buildWelcomeMessage, setActiveSessionId, setMessages]
     )
 
     const handleNewChat = useCallback(() => {
@@ -403,7 +462,7 @@ export default function AIAssistantPage() {
         })
         setActiveSessionId(sessionId)
         setMessages([buildWelcomeMessage()])
-    }, [buildSessionLabel, upsertSession, buildWelcomeMessage])
+    }, [buildSessionLabel, setActiveSessionId, setMessages, upsertSession, buildWelcomeMessage])
 
     const setAssistantError = useCallback(
         (
@@ -470,6 +529,10 @@ export default function AIAssistantPage() {
         streamAbortRef.current = controller
         streamingMessageIdRef.current = assistantId
         setIsStreaming(true)
+        const finishStreaming = () => {
+            setIsStreaming(false)
+            streamingMessageIdRef.current = null
+        }
 
         try {
             const request = {
@@ -538,6 +601,7 @@ export default function AIAssistantPage() {
                     )
                 }
                 stopRequestedRef.current = false
+                finishStreaming()
                 return
             }
             setAssistantError(
@@ -545,10 +609,8 @@ export default function AIAssistantPage() {
                 `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
                 sessionId
             )
-        } finally {
-            setIsStreaming(false)
-            streamingMessageIdRef.current = null
         }
+        finishStreaming()
     }
 
     const handleStop = useCallback(() => {
@@ -690,6 +752,7 @@ export default function AIAssistantPage() {
                             <div className="space-y-0">
                                 {suggestedActions.map((suggestion) => (
                                     <button
+                                        type="button"
                                         key={suggestion}
                                         onClick={() => setMessage(suggestion)}
                                         disabled={!isAIEnabled || isStreaming}
@@ -722,6 +785,7 @@ export default function AIAssistantPage() {
                                     <div className="space-y-1">
                                         {chatHistory.map((session) => (
                                             <button
+                                                type="button"
                                                 key={session.id}
                                                 data-testid="chat-history-item"
                                                 onClick={() => handleSelectSession(session)}

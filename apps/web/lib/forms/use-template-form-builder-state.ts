@@ -30,6 +30,7 @@ type TemplateBuilderState = {
     fieldLibraryCategory: string
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
+    lastSavedFingerprint: string
     showPublishDialog: boolean
     showDeleteTemplateDialog: boolean
     showDeletePageDialog: boolean
@@ -72,6 +73,7 @@ const buildInitialState = (isNewForm: boolean): TemplateBuilderState => ({
     fieldLibraryCategory: "all",
     autoSaveStatus: "idle",
     lastSavedAt: null,
+    lastSavedFingerprint: "",
     showPublishDialog: false,
     showDeleteTemplateDialog: false,
     showDeletePageDialog: false,

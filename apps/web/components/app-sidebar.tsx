@@ -469,6 +469,7 @@ function AppSidebarContent({
                     <DropdownMenuTrigger
                         render={
                             <button
+                                type="button"
                                 className={cn(
                                     "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
                                     getNavItemClass(false)
