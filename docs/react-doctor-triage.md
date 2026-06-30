@@ -834,3 +834,22 @@ Full command after Batch 40: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1063`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 16 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 760 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-acf1eb78-f412-402b-9291-da663cec8a77`
+
+## Batch 41
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/ops/agencies/SupportSessionDialog.tsx` | Valid: the support-session start handler used a `try/finally` finalizer only to clear submitting state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch, preserve popup redirect/close behavior and success/error toasts, and clear submitting after success or error handling. Extended the source guard so it failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/ops-support-session-dialog.test.tsx`; changed-scope React Doctor reported no issues. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/ops/agencies/SupportSessionDialog.tsx` | Valid: React Compiler is enabled, so the local `useMemo` wrappers around portal URL normalization and host derivation are redundant in this touched component. | High | Move URL normalization and portal host derivation into module-scope helpers and call them directly during render. Extended the source guard to fail on reintroduced `useMemo`. | Focused tests passed; full React Doctor shows redundant memoization dropped by 2. |
+
+Changed-scope command after Batch 41: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 41: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1060`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 15 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 758 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c46f877d-aaff-4696-9400-694179773891`

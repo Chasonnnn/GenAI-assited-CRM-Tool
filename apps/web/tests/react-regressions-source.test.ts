@@ -223,6 +223,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("applyPopupStyles")
         expect(source).toContain(".style.cssText")
         expect(source).not.toContain("useState")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("finally")
         expect(source).not.toContain(".style.fontSize")
         expect(source).not.toContain(".style.opacity")
         expect(source).not.toContain(".style.padding")

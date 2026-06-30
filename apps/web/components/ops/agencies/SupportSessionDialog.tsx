@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useReducer } from "react"
+import { useEffect, useReducer } from "react"
 import { toast } from "sonner"
 import { ArrowUpRight, Eye, Loader2 } from "lucide-react"
 
@@ -118,6 +118,29 @@ function applyPopupStyles(element: HTMLElement, cssText: string) {
     element.style.cssText = cssText
 }
 
+function normalizePortalUrl(portalBaseUrl: string | null | undefined): string | null {
+    const candidate = portalBaseUrl?.trim()
+    if (!candidate) return null
+    try {
+        return new URL(candidate).toString()
+    } catch {
+        try {
+            return new URL(`https://${candidate}`).toString()
+        } catch {
+            return null
+        }
+    }
+}
+
+function getPortalHost(normalizedPortalUrl: string | null): string | null {
+    if (!normalizedPortalUrl) return null
+    try {
+        return new URL(normalizedPortalUrl).host
+    } catch {
+        return normalizedPortalUrl.replace(/^https?:\/\//, "")
+    }
+}
+
 export function SupportSessionDialog({
     orgId,
     orgName,
@@ -131,28 +154,8 @@ export function SupportSessionDialog({
     const reasonTextLength = reasonTextTrimmed.length
     const reasonTextTooLong = reasonTextLength > 500
 
-    const normalizedPortalUrl = useMemo(() => {
-        const candidate = portalBaseUrl?.trim()
-        if (!candidate) return null
-        try {
-            return new URL(candidate).toString()
-        } catch {
-            try {
-                return new URL(`https://${candidate}`).toString()
-            } catch {
-                return null
-            }
-        }
-    }, [portalBaseUrl])
-
-    const portalHost = useMemo(() => {
-        if (!normalizedPortalUrl) return null
-        try {
-            return new URL(normalizedPortalUrl).host
-        } catch {
-            return normalizedPortalUrl.replace(/^https?:\/\//, "")
-        }
-    }, [normalizedPortalUrl])
+    const normalizedPortalUrl = normalizePortalUrl(portalBaseUrl)
+    const portalHost = getPortalHost(normalizedPortalUrl)
 
     useEffect(() => {
         if (!open) return
@@ -211,17 +214,23 @@ export function SupportSessionDialog({
         }
 
         dispatch({ type: "setSubmitting", submitting: true })
-        try {
-            const session = await createSupportSession({
-                org_id: orgId,
-                role,
-                mode,
-                reason_code: reasonCode,
-                reason_text: reasonTextTrimmed ? reasonTextTrimmed : null,
-            })
+        const result = await createSupportSession({
+            org_id: orgId,
+            role,
+            mode,
+            reason_code: reasonCode,
+            reason_text: reasonTextTrimmed ? reasonTextTrimmed : null,
+        }).then((session) => ({
+            status: "success" as const,
+            session,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            message: error instanceof Error ? error.message : "Failed to start support session",
+        }))
 
+        if (result.status === "success") {
             toast.success(
-                `Support session started: ${ROLE_LABELS[session.role]} (${MODE_LABELS[session.mode]})`
+                `Support session started: ${ROLE_LABELS[result.session.role]} (${MODE_LABELS[result.session.mode]})`
             )
             dispatch({ type: "setOpen", open: false })
 
@@ -233,13 +242,11 @@ export function SupportSessionDialog({
                     window.location.href = normalizedPortalUrl
                 }
             }
-        } catch (error) {
+        } else {
             if (popup) popup.close()
-            const message = error instanceof Error ? error.message : "Failed to start support session"
-            toast.error(message)
-        } finally {
-            dispatch({ type: "setSubmitting", submitting: false })
+            toast.error(result.message)
         }
+        dispatch({ type: "setSubmitting", submitting: false })
     }
 
     return (
