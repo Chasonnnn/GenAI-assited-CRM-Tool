@@ -361,3 +361,29 @@ Full command after Batch 16: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1202`
 - Summary: `Security 2 warnings`, `Bugs 9 errors + 234 warnings`, `Performance 64 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 808 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cd6c5c73-ec18-4498-8fc4-5fb0cbfd7031`
+
+## Batch 17
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `app/(app)/settings/page.tsx` | Valid: profile fields and organization branding fields were reset through effects when user/signature/org settings changed, causing extra renders and risking draft loss on parent refreshes. | High | Replace profile and branding reset effects with keyed draft state derived from the active user/signature/org settings data. Move organization settings loading to a TanStack Query hook. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/settings-page.test.tsx`; full `pnpm test --run` passed; changed-scope React Doctor reported no issues. |
+| `react-hooks-js/todo` | `app/(app)/settings/page.tsx` | Valid: profile save, organization branding save, org settings load, and preview handlers used `finally`, which blocks React Compiler optimization. | High | Remove finalizers and keep explicit success/error cleanup after awaited work. | Focused tests and changed-scope React Doctor reported no issues. |
+| `react-doctor/control-has-associated-label` / `react-doctor/prefer-module-scope-pure-function` / `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/page.tsx` | Valid: hidden file/color inputs lacked explicit labels, session helpers were rebuilt in `ActiveSessionsSection`, and preview sanitization had redundant manual memoization. | High | Add `aria-label` attributes, move session helpers to module scope, and derive sanitized preview HTML directly. | Focused tests and changed-scope React Doctor reported no issues. |
+
+Changed-scope command before Batch 17 warning cleanup: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `6`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0b5c4ab0-f541-40ce-8ade-2bbca072afff`
+
+Changed-scope command after Batch 17 warning cleanup: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 17: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `51 / 100 Critical`
+- Total diagnostics: `1183`
+- Summary: `Security 2 warnings`, `Bugs 9 errors + 231 warnings`, `Performance 57 errors + 34 warnings`, `Accessibility 46 warnings`, `Maintainability 804 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-46cddc3e-cbdc-4176-b3f9-c00b63f174cc`

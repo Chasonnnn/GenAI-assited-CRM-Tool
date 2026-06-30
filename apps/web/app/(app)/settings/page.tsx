@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, startTransition, use, useEffect, useState, useRef, useCallback, useMemo } from "react"
+import { Suspense, startTransition, use, useEffect, useState, useRef } from "react"
 import type { Route } from "next"
 import NextImage from "next/image"
 import { useRouter } from "next/navigation"
@@ -30,7 +30,7 @@ import {
   LightbulbIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getOrgSettings, updateProfile, updateOrgSettings } from "@/lib/api/settings"
+import { updateProfile } from "@/lib/api/settings"
 import {
   useOrgSignature,
   useUpdateOrgSignature,
@@ -45,7 +45,9 @@ import {
   useDeleteAvatar,
 } from "@/lib/hooks/use-sessions"
 import { useSystemHealth } from "@/lib/hooks/use-system"
-import type { SocialLink } from "@/lib/api/signature"
+import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-settings"
+import type { OrgSignature, SocialLink } from "@/lib/api/signature"
+import type { OrgSettings } from "@/lib/api/settings"
 import { toast } from "sonner"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 import { SafeHtmlContent } from "@/components/safe-html-content"
@@ -64,6 +66,11 @@ type ProfileFormState = {
   title: string
 }
 
+type ProfileDraftState = {
+  profileKey: string
+  form: ProfileFormState
+}
+
 type OrgBrandingFormState = {
   template: string
   primaryColor: string
@@ -75,20 +82,16 @@ type OrgBrandingFormState = {
   orgEmail: string
 }
 
+type OrgBrandingDraftState = {
+  brandingKey: string
+  form: OrgBrandingFormState
+}
+
 type OrgBrandingUiState = {
   saved: boolean
   saving: boolean
   previewLoading: boolean
   previewHtml: string | null
-  orgSettingsLoading: boolean
-  orgSettingsError: string | null
-  initialized: boolean
-}
-
-type OrgDefaultsState = {
-  name: string
-  address: string
-  phone: string
 }
 
 type SignatureTemplateOption = {
@@ -120,6 +123,91 @@ function toUrlSearchParams(searchParams: Record<string, string | string[] | unde
     }
   }
   return nextParams
+}
+
+function createProfileDraftKey(
+  userId: string,
+  displayName: string,
+  phone: string,
+  title: string,
+) {
+  return [userId, displayName, phone, title].join("\u0000")
+}
+
+function createProfileDraftState(
+  profileKey: string,
+  displayName: string,
+  phone: string,
+  title: string,
+): ProfileDraftState {
+  return {
+    profileKey,
+    form: {
+      name: displayName,
+      phone,
+      title,
+    },
+  }
+}
+
+function createOrgBrandingDraftKey(
+  orgSig: OrgSignature | null | undefined,
+  orgSettings: OrgSettings | null | undefined,
+  orgName: string,
+) {
+  return [
+    orgSig?.signature_template ?? "",
+    orgSig?.signature_primary_color ?? "",
+    orgSig?.signature_company_name ?? "",
+    orgSig?.signature_address ?? "",
+    orgSig?.signature_phone ?? "",
+    orgSig?.signature_website ?? "",
+    orgSig?.signature_disclaimer ?? "",
+    orgSettings?.name ?? "",
+    orgSettings?.address ?? "",
+    orgSettings?.phone ?? "",
+    orgSettings?.email ?? "",
+    orgName,
+  ].join("\u0000")
+}
+
+function createOrgBrandingDraftState(
+  brandingKey: string,
+  orgSig: OrgSignature | null | undefined,
+  orgSettings: OrgSettings | null | undefined,
+  orgName: string,
+): OrgBrandingDraftState {
+  return {
+    brandingKey,
+    form: {
+      template: orgSig?.signature_template || "classic",
+      primaryColor: orgSig?.signature_primary_color || "#E444A4",
+      companyName: orgSig?.signature_company_name || orgSettings?.name || orgName,
+      address: orgSig?.signature_address || orgSettings?.address || "",
+      phone: orgSig?.signature_phone || orgSettings?.phone || "",
+      website: orgSig?.signature_website || "",
+      disclaimer: orgSig?.signature_disclaimer || "",
+      orgEmail: orgSettings?.email || "",
+    },
+  }
+}
+
+function formatSessionDate(dateStr: string) {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+function getSessionDeviceIcon(deviceInfo: string | null) {
+  const info = deviceInfo?.toLowerCase() || ""
+  if (info.includes("mobile") || info.includes("android") || info.includes("iphone")) {
+    return <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
+  }
+  return <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
 }
 
 function SignatureTemplatePicker({
@@ -209,6 +297,7 @@ function OrganizationLogoField({
             ref={fileInputRef}
             onChange={onUpload}
             accept="image/png,image/jpeg"
+            aria-label="Organization logo upload"
             className="hidden"
           />
           <Button
@@ -265,6 +354,7 @@ function OrganizationBrandingFields({
               id="primaryColor"
               value={brandingForm.primaryColor}
               onChange={(event) => onFieldChange("primaryColor", event.target.value)}
+              aria-label="Primary color"
               className="size-10 rounded cursor-pointer border"
             />
           </div>
@@ -425,36 +515,34 @@ function ProfileSection() {
   const deleteAvatarMutation = useDeleteAvatar()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [profileForm, setProfileForm] = useState<ProfileFormState>({
-    name: user?.display_name || "",
-    phone: user?.phone || "",
-    title: user?.title || "",
-  })
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
+  const userId = user?.user_id || ""
   const userDisplayName = user?.display_name || ""
   const userPhone = user?.phone || ""
   const userTitle = user?.title || ""
-
-  useEffect(() => {
-    setProfileForm((current) => {
-      if (
-        current.name === userDisplayName
-        && current.phone === userPhone
-        && current.title === userTitle
-      ) {
-        return current
-      }
-      return {
-        name: userDisplayName,
-        phone: userPhone,
-        title: userTitle,
-      }
-    })
-  }, [userDisplayName, userPhone, userTitle])
+  const activeProfileKey = createProfileDraftKey(userId, userDisplayName, userPhone, userTitle)
+  const [profileDraft, setProfileDraft] = useState<ProfileDraftState>(() =>
+    createProfileDraftState(activeProfileKey, userDisplayName, userPhone, userTitle)
+  )
+  const profileForm = profileDraft.profileKey === activeProfileKey
+    ? profileDraft.form
+    : createProfileDraftState(activeProfileKey, userDisplayName, userPhone, userTitle).form
 
   const updateProfileForm = (field: keyof ProfileFormState, value: string) => {
-    setProfileForm((current) => ({ ...current, [field]: value }))
+    setProfileDraft((current) => {
+      const activeDraft = current.profileKey === activeProfileKey
+        ? current
+        : createProfileDraftState(activeProfileKey, userDisplayName, userPhone, userTitle)
+
+      return {
+        profileKey: activeProfileKey,
+        form: {
+          ...activeDraft.form,
+          [field]: value,
+        },
+      }
+    })
   }
 
   const initials =
@@ -511,9 +599,8 @@ function ProfileSection() {
       refetch()
     } catch (error) {
       console.error("Failed to save profile:", error)
-    } finally {
-      setProfileSaving(false)
     }
+    setProfileSaving(false)
   }
 
   return (
@@ -531,6 +618,7 @@ function ProfileSection() {
             ref={fileInputRef}
             onChange={handleAvatarUpload}
             accept="image/png,image/jpeg,image/webp"
+            aria-label="Profile photo upload"
             className="hidden"
           />
           <button
@@ -664,24 +752,6 @@ function ActiveSessionsSection() {
     }
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
-  const getDeviceIcon = (deviceInfo: string | null) => {
-    const info = deviceInfo?.toLowerCase() || ""
-    if (info.includes("mobile") || info.includes("android") || info.includes("iphone")) {
-      return <SmartphoneIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
-    }
-    return <MonitorIcon className="mt-0.5 size-5 text-muted-foreground" aria-hidden="true" />
-  }
-
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -721,7 +791,7 @@ function ActiveSessionsSection() {
           className="flex items-start justify-between rounded-lg border border-border p-4"
         >
           <div className="flex gap-3">
-            {getDeviceIcon(session.device_info)}
+            {getSessionDeviceIcon(session.device_info)}
             <div>
               <p className="font-medium">
                 {session.device_info || "Unknown device"}
@@ -731,7 +801,7 @@ function ActiveSessionsSection() {
               </p>
               <p className="text-sm text-muted-foreground">
                 {session.ip_address || "Unknown IP"} &middot; Last active{" "}
-                {formatDate(session.last_active_at)}
+                {formatSessionDate(session.last_active_at)}
               </p>
             </div>
           </div>
@@ -933,97 +1003,44 @@ function OrganizationBrandingSection() {
   const uploadLogo = useUploadOrgLogo()
   const deleteLogo = useDeleteOrgLogo()
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const [brandingForm, setBrandingForm] = useState<OrgBrandingFormState>({
-    template: "",
-    primaryColor: "#E444A4",
-    companyName: "",
-    address: "",
-    phone: "",
-    website: "",
-    disclaimer: "",
-    orgEmail: "",
-  })
+  const orgSettingsQuery = useOrgSettings({ enabled: Boolean(user?.org_id) })
+  const updateOrgSettingsMutation = useUpdateOrgSettings()
+  const orgSettings = orgSettingsQuery.data
+  const orgName = user?.org_name || ""
+  const activeBrandingKey = createOrgBrandingDraftKey(orgSig, orgSettings, orgName)
+  const [brandingDraft, setBrandingDraft] = useState<OrgBrandingDraftState>(() =>
+    createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName)
+  )
+  const brandingForm = brandingDraft.brandingKey === activeBrandingKey
+    ? brandingDraft.form
+    : createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName).form
   const [brandingUi, setBrandingUi] = useState<OrgBrandingUiState>({
     saved: false,
     saving: false,
     previewLoading: false,
     previewHtml: null,
-    orgSettingsLoading: true,
-    orgSettingsError: null,
-    initialized: false,
   })
-  const [orgDefaults, setOrgDefaults] = useState<OrgDefaultsState>({ name: "", address: "", phone: "" })
+  const orgSettingsLoading = Boolean(user?.org_id) && orgSettingsQuery.isLoading
+  const orgSettingsError = orgSettingsQuery.isError
+    ? "Unable to load organization settings. Please retry."
+    : null
 
-  const sanitizedPreviewHtml = useMemo(
-    () => (brandingUi.previewHtml ? DOMPurify.sanitize(brandingUi.previewHtml) : null),
-    [brandingUi.previewHtml]
-  )
-
-  const isMountedRef = useRef(true)
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
-
-  const loadOrgSettings = useCallback(async () => {
-    if (!user?.org_id) return
-    setBrandingUi((current) => ({
-      ...current,
-      orgSettingsLoading: true,
-      orgSettingsError: null,
-    }))
-    try {
-      const settings = await getOrgSettings()
-      if (!isMountedRef.current) return
-      setOrgDefaults({
-        name: settings.name || "",
-        address: settings.address || "",
-        phone: settings.phone || "",
-      })
-      setBrandingForm((current) => ({ ...current, orgEmail: settings.email || "" }))
-    } catch (error) {
-      console.error("Failed to load organization settings:", error)
-      if (!isMountedRef.current) return
-      setBrandingUi((current) => ({
-        ...current,
-        orgSettingsError: "Unable to load organization settings. Please retry.",
-      }))
-    } finally {
-      if (isMountedRef.current) {
-        setBrandingUi((current) => ({ ...current, orgSettingsLoading: false }))
-      }
-    }
-  }, [user?.org_id])
-
-  useEffect(() => {
-    if (user?.org_id) {
-      void loadOrgSettings()
-    } else {
-      setBrandingUi((current) => ({ ...current, orgSettingsLoading: false }))
-    }
-  }, [user?.org_id, loadOrgSettings])
-
-  useEffect(() => {
-    if (brandingUi.initialized) return
-    if (sigLoading || brandingUi.orgSettingsLoading) return
-    setBrandingForm((current) => ({
-      ...current,
-      template: orgSig?.signature_template || "classic",
-      primaryColor: orgSig?.signature_primary_color || "#E444A4",
-      companyName: orgSig?.signature_company_name || orgDefaults.name || user?.org_name || "",
-      address: orgSig?.signature_address || orgDefaults.address || "",
-      phone: orgSig?.signature_phone || orgDefaults.phone || "",
-      website: orgSig?.signature_website || "",
-      disclaimer: orgSig?.signature_disclaimer || "",
-    }))
-    setBrandingUi((current) => ({ ...current, initialized: true }))
-  }, [brandingUi.initialized, sigLoading, brandingUi.orgSettingsLoading, orgSig, orgDefaults, user?.org_name])
+  const sanitizedPreviewHtml = brandingUi.previewHtml ? DOMPurify.sanitize(brandingUi.previewHtml) : null
 
   const updateBrandingForm = <K extends keyof OrgBrandingFormState>(field: K, value: OrgBrandingFormState[K]) => {
-    setBrandingForm((current) => ({ ...current, [field]: value }))
+    setBrandingDraft((current) => {
+      const activeDraft = current.brandingKey === activeBrandingKey
+        ? current
+        : createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName)
+
+      return {
+        brandingKey: activeBrandingKey,
+        form: {
+          ...activeDraft.form,
+          [field]: value,
+        },
+      }
+    })
   }
 
   const handleSave = async () => {
@@ -1046,12 +1063,12 @@ function OrganizationBrandingSection() {
         signature_disclaimer: trimmedDisclaimer || null,
       }
 
-      if (brandingUi.orgSettingsError) {
+      if (orgSettingsError) {
         await updateOrgSig.mutateAsync(signaturePayload)
       } else {
         await Promise.all([
           updateOrgSig.mutateAsync(signaturePayload),
-          updateOrgSettings({
+          updateOrgSettingsMutation.mutateAsync({
             ...(trimmedCompanyName ? { name: trimmedCompanyName } : {}),
             ...(trimmedAddress ? { address: trimmedAddress } : {}),
             ...(trimmedPhone ? { phone: trimmedPhone } : {}),
@@ -1068,9 +1085,8 @@ function OrganizationBrandingSection() {
     } catch (error) {
       console.error("Failed to save organization branding:", error)
       toast.error("Failed to save organization branding")
-    } finally {
-      setBrandingUi((current) => ({ ...current, saving: false }))
     }
+    setBrandingUi((current) => ({ ...current, saving: false }))
   }
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1102,12 +1118,11 @@ function OrganizationBrandingSection() {
       setBrandingUi((current) => ({ ...current, previewHtml: result.html }))
     } catch {
       // Silent fail
-    } finally {
-      setBrandingUi((current) => ({ ...current, previewLoading: false }))
     }
+    setBrandingUi((current) => ({ ...current, previewLoading: false }))
   }
 
-  if (sigLoading || brandingUi.orgSettingsLoading) {
+  if (sigLoading || orgSettingsLoading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse motion-reduce:animate-none flex gap-4">
@@ -1137,11 +1152,16 @@ function OrganizationBrandingSection() {
         </p>
       </div>
 
-      {brandingUi.orgSettingsError && (
+      {orgSettingsError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>{brandingUi.orgSettingsError}</span>
-            <Button variant="outline" onClick={loadOrgSettings}>
+            <span>{orgSettingsError}</span>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void orgSettingsQuery.refetch()
+              }}
+            >
               Retry
             </Button>
           </div>
@@ -1165,7 +1185,7 @@ function OrganizationBrandingSection() {
 
       <OrganizationBrandingFields
         brandingForm={brandingForm}
-        orgSettingsError={brandingUi.orgSettingsError}
+        orgSettingsError={orgSettingsError}
         onFieldChange={updateBrandingForm}
       />
 
@@ -1176,7 +1196,7 @@ function OrganizationBrandingSection() {
         previewHtml={sanitizedPreviewHtml}
         onPreview={handlePreviewTemplate}
         onSave={handleSave}
-        saveDisabled={brandingUi.saving || sigLoading || brandingUi.orgSettingsLoading}
+        saveDisabled={brandingUi.saving || sigLoading || orgSettingsLoading}
       />
     </div>
   )

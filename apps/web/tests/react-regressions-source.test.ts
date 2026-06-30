@@ -1383,6 +1383,29 @@ describe("React regression guards (source)", () => {
         )
     })
 
+    it("keeps settings profile and organization branding state compiler-friendly", () => {
+        const source = readSource("app/(app)/settings/page.tsx")
+
+        expect(source).toContain("type ProfileDraftState")
+        expect(source).toContain("type OrgBrandingDraftState")
+        expect(source).toContain("function createProfileDraftState")
+        expect(source).toContain("function createOrgBrandingDraftState")
+        expect(source).toContain("function formatSessionDate")
+        expect(source).toContain("function getSessionDeviceIcon")
+        expect(source).toContain("useOrgSettings")
+        expect(source).toContain('aria-label="Organization logo upload"')
+        expect(source).toContain('aria-label="Primary color"')
+        expect(source).toContain('aria-label="Profile photo upload"')
+        expect(source).not.toContain("setProfileForm")
+        expect(source).not.toContain("setOrgDefaults")
+        expect(source).not.toContain("loadOrgSettings")
+        expect(source).not.toContain("const formatDate =")
+        expect(source).not.toContain("const getDeviceIcon =")
+        expect(source).not.toContain("initialized")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("useMemo")
+    })
+
     it("resets intended-parent trust drafts from edit events, not prop-sync effects", () => {
         const source = readSource("components/intended-parents/TrustInfoCard.tsx")
 
