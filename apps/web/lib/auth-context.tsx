@@ -34,53 +34,60 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function shouldSkipAuthFetch() {
+    if (typeof window === 'undefined') return false;
+
+    const pathname = window.location.pathname || '';
+    const hostname = window.location.hostname || '';
+    const isOpsRoute = pathname.startsWith('/ops') || hostname.startsWith('ops.');
+    const isMfaRoute = pathname.startsWith('/mfa') || pathname.startsWith('/auth/duo/callback');
+
+    return isOpsRoute && !isMfaRoute;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(() => !shouldSkipAuthFetch());
     const [error, setError] = useState<Error | null>(null);
 
     const fetchUser = async () => {
         setIsLoading(true);
         setError(null);
-        try {
-            const data = await api.get<User>('/auth/me');
-            setUser(data);
-        } catch (err) {
+        const result = await api.get<User>('/auth/me').then((data) => ({
+            status: 'success' as const,
+            data,
+        })).catch((err: unknown) => ({
+            status: 'error' as const,
+            err,
+        }));
+
+        if (result.status === 'success') {
+            setUser(result.data);
+        } else {
             setUser(null);
-            if (err instanceof Error) {
+            if (result.err instanceof Error) {
                 // Don't treat 401 as error - just means not logged in
-                if ('status' in err && (err as { status: number }).status === 401) {
+                if ('status' in result.err && (result.err as { status: number }).status === 401) {
                     setError(null);
                 } else {
-                    setError(err);
+                    setError(result.err);
                 }
             }
-        } finally {
-            setIsLoading(false);
         }
+        setIsLoading(false);
     };
 
     useEffect(() => {
-        if (typeof window === 'undefined') {
-            void fetchUser();
-            return;
-        }
+        if (shouldSkipAuthFetch()) return;
 
-        const pathname = window.location.pathname || '';
-        const hostname = window.location.hostname || '';
-        const isOpsRoute = pathname.startsWith('/ops') || hostname.startsWith('ops.');
-        const isMfaRoute = pathname.startsWith('/mfa') || pathname.startsWith('/auth/duo/callback');
-
-        if (isOpsRoute && !isMfaRoute) {
-            setIsLoading(false);
-            return;
-        }
-
-        void fetchUser();
+        const timeoutId = window.setTimeout(() => {
+            void fetchUser()
+        }, 0);
+        return () => window.clearTimeout(timeoutId);
     }, []);
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, error, refetch: () => { void fetchUser(); } }}>
+        <AuthContext.Provider value={{ user, isLoading, error, refetch: () => { void fetchUser() } }}>
             {children}
         </AuthContext.Provider>
     );

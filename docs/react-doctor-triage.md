@@ -853,3 +853,22 @@ Full command after Batch 41: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1060`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 202 warnings`, `Performance 15 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 758 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c46f877d-aaff-4696-9400-694179773891`
+
+## Batch 42
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `lib/auth-context.tsx` | Valid: the auth fetch helper used a `try/finally` finalizer only to clear loading state, which blocks the current React Compiler path. | High | Replace the finalizer with an explicit promise-result branch and clear loading after success or error handling while preserving 401-as-logged-out behavior. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/auth-context.test.tsx`; changed-scope React Doctor reported no issues. |
+| `react-hooks/set-state-in-effect` | `lib/auth-context.tsx` | Valid: the mount effect directly called `fetchUser`, which synchronously set loading/error state before the effect returned. | High | Initialize ops-route loading state synchronously with `shouldSkipAuthFetch`, then defer the mount fetch with `window.setTimeout` so the effect schedules external work instead of directly setting state. Extended the source guard to fail on the old mount flow. | `pnpm lint` no longer reports the `lib/auth-context.tsx` warning; focused auth tests passed. |
+
+Changed-scope command after Batch 42: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 42: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `57 / 100 Critical`
+- Total diagnostics: `1057`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 201 warnings`, `Performance 13 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 758 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-08071977-253f-4c22-a91c-34f33a7972ac`

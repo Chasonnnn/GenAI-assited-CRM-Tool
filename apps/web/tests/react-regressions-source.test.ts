@@ -1354,6 +1354,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps auth provider fetch and mount flow compiler-compatible", () => {
+        const source = readSource("lib/auth-context.tsx")
+
+        expect(source).toContain("function shouldSkipAuthFetch()")
+        expect(source).toContain("useState(() => !shouldSkipAuthFetch())")
+        expect(source).toContain("window.setTimeout")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("void fetchUser();")
+    })
+
     it("uses single-pass filtered display lists for dashboard and campaign details", () => {
         const stageChartSource = readSource("app/(app)/dashboard/components/stage-chart.tsx")
         const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
