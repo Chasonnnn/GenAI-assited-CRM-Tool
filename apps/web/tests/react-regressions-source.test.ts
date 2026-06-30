@@ -87,6 +87,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const getActionValidationError =")
     })
 
+    it("keeps AI builder template derivations compiler-friendly", () => {
+        const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).toContain("const sanitizedTemplateBody = DOMPurify.sanitize(templateBody)")
+        expect(source).toContain("const requiredTemplateVariableNames: string[] = []")
+        expect(source).toContain("for (const variable of templateVariableCatalog) {")
+        expect(source).not.toContain("const allowedTemplateVariableNames = useMemo")
+        expect(source).not.toContain("const missingRequiredVariables = useMemo")
+        expect(source).not.toContain("const unknownTemplateVariables = useMemo")
+    })
+
     it("keeps automation route search param parsing in the server wrapper", () => {
         const source = readSource("app/(app)/automation/page.tsx")
 
@@ -1996,7 +2008,7 @@ describe("React regression guards (source)", () => {
         expect(emailTemplatesSource).toContain("for (const variable of templateVariables) {")
         expect(emailTemplatesSource).not.toContain("templateVariables.filter((variable) => variable.required).map")
 
-        expect(aiBuilderSource).toContain("const requiredTemplateVariableNames = useMemo(() => {")
+        expect(aiBuilderSource).toContain("const requiredTemplateVariableNames: string[] = []")
         expect(aiBuilderSource).toContain("for (const variable of templateVariableCatalog) {")
         expect(aiBuilderSource).toContain("const workflowActionDetails = Object.entries(action).flatMap")
         expect(aiBuilderSource).not.toContain("templateVariableCatalog.filter((variable) => variable.required).map")

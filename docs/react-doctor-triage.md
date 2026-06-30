@@ -1245,3 +1245,24 @@ Full command after Batch 60: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `841`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 580 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a9f0f47f-fe48-44b0-92c8-623747649fd4`
+
+## Batch 61
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/automation/ai-builder/page.client.tsx` | Valid: the AI builder manually memoized email-template sanitization and variable derivations that React Compiler can cache. | High | Remove `useMemo`, derive the sanitized body, detected variables, allowed variable set, required variable list, missing variables, and unknown variables directly, while preserving the existing single-pass required-variable loop. Added a source guard that failed on the old `useMemo` import/calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/ai-builder-page.test.tsx`; changed-scope React Doctor reports no manual memoization warnings; full React Doctor manual memoization count dropped from `449` to `443`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/automation/ai-builder/page.client.tsx` | Valid but out of scope: the page remains a large orchestration component with 17 local state hooks. | Medium | Deferred to a separate behavior/refactor batch because splitting the page and grouping generation/template state is broader than the template-derivation cleanup. | Changed-scope React Doctor reports these two remaining warnings with score `92 / 100`; no suppression added. |
+
+Changed-scope command after Batch 61: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Deferred: `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` in `app/(app)/automation/ai-builder/page.client.tsx`
+
+Full command after Batch 61: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `835`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 574 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7364dcad-e707-4d97-8876-62de7d1bf9d7`

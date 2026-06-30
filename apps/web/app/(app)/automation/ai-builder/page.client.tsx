@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -164,10 +164,7 @@ export default function AIWorkflowBuilderPage() {
     const [templateErrors, setTemplateErrors] = useState<string[]>([])
     const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
 
-    const sanitizedTemplateBody = useMemo(
-        () => DOMPurify.sanitize(templateBody),
-        [templateBody]
-    )
+    const sanitizedTemplateBody = DOMPurify.sanitize(templateBody)
 
     const createEmailTemplate = useCreateEmailTemplate()
     const {
@@ -194,38 +191,26 @@ export default function AIWorkflowBuilderPage() {
         setMode(nextMode)
     }
 
-    const templateVariables = useMemo(
-        () => extractTemplateVariables(`${templateSubject}\n${templateBody}`),
-        [templateSubject, templateBody]
-    )
+    const templateVariables = extractTemplateVariables(`${templateSubject}\n${templateBody}`)
     const canValidateTemplateVariables =
         !templateVariableCatalogLoading &&
         !templateVariableCatalogError &&
         templateVariableCatalog.length > 0
-    const allowedTemplateVariableNames = useMemo(
-        () => new Set(templateVariableCatalog.map((variable) => variable.name)),
-        [templateVariableCatalog]
-    )
-    const requiredTemplateVariableNames = useMemo(() => {
-        const names: string[] = []
-        for (const variable of templateVariableCatalog) {
-            if (variable.required) {
-                names.push(variable.name)
-            }
+    const allowedTemplateVariableNames = new Set(templateVariableCatalog.map((variable) => variable.name))
+    const requiredTemplateVariableNames: string[] = []
+    for (const variable of templateVariableCatalog) {
+        if (variable.required) {
+            requiredTemplateVariableNames.push(variable.name)
         }
-        return names
-    }, [templateVariableCatalog])
-    const missingRequiredVariables = useMemo(() => {
-        if (!generatedTemplate) return []
-        if (!canValidateTemplateVariables) return []
-        if (requiredTemplateVariableNames.length === 0) return []
-        return requiredTemplateVariableNames.filter((required) => !templateVariables.includes(required))
-    }, [canValidateTemplateVariables, generatedTemplate, requiredTemplateVariableNames, templateVariables])
+    }
+    const missingRequiredVariables =
+        generatedTemplate && canValidateTemplateVariables && requiredTemplateVariableNames.length > 0
+            ? requiredTemplateVariableNames.filter((required) => !templateVariables.includes(required))
+            : []
     const hasMissingRequiredVariables = missingRequiredVariables.length > 0
-    const unknownTemplateVariables = useMemo(() => {
-        if (!canValidateTemplateVariables) return []
-        return templateVariables.filter((variable) => !allowedTemplateVariableNames.has(variable))
-    }, [allowedTemplateVariableNames, canValidateTemplateVariables, templateVariables])
+    const unknownTemplateVariables = canValidateTemplateVariables
+        ? templateVariables.filter((variable) => !allowedTemplateVariableNames.has(variable))
+        : []
     const hasUnknownTemplateVariables = unknownTemplateVariables.length > 0
 
     const disableReason = !isAIEnabled
