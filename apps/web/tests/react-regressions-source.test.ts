@@ -1646,6 +1646,13 @@ describe("React regression guards (source)", () => {
         expect(publishDialogSource).not.toContain("Loading organizations...")
     })
 
+    it("keeps ops alert actions compiler-compatible", () => {
+        const source = readSource("app/ops/alerts/page.client.tsx")
+
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("finally")
+    })
+
     it("destructures navigation methods in smaller operational pages", () => {
         const appLinkSource = readSource("components/app-link.tsx")
         const opsLayoutSource = readSource("app/ops/layout.tsx")

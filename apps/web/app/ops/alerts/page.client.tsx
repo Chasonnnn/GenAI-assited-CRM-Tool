@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useReducer } from 'react';
+import { useEffect, useReducer, type Dispatch, type ElementType } from 'react';
 import Link from "@/components/app-link";
 import { listAlerts, acknowledgeAlert, resolveAlert, type PlatformAlert } from '@/lib/api/platform';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { RelativeTime } from '@/components/ui/time-display';
 import { AlertTriangle, CheckCircle, XCircle, AlertCircle, RefreshCw, Loader2, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-type SeverityConfig = { icon: React.ElementType; color: string; badge: string };
+type SeverityConfig = { icon: ElementType; color: string; badge: string };
 
 const DEFAULT_SEVERITY_CONFIG: SeverityConfig = {
     icon: AlertCircle,
@@ -110,55 +110,73 @@ function alertsReducer(state: AlertsState, action: AlertsAction): AlertsState {
     }
 }
 
+async function loadAlerts(
+    dispatch: Dispatch<AlertsAction>,
+    filters: { statusFilter: string; severityFilter: string },
+): Promise<void> {
+    dispatch({ type: "load-start" });
+    try {
+        const data = await listAlerts({
+            ...(filters.statusFilter ? { status: filters.statusFilter } : {}),
+            ...(filters.severityFilter ? { severity: filters.severityFilter } : {}),
+        });
+        dispatch({ type: "load-success", alerts: data.items, total: data.total });
+    } catch (error) {
+        console.error('Failed to fetch alerts:', error);
+        toast.error('Failed to load alerts');
+        dispatch({ type: "load-error" });
+    }
+}
+
 export default function GlobalAlertsPage() {
     const [state, dispatch] = useReducer(alertsReducer, INITIAL_ALERTS_STATE);
     const { alerts, total, isLoading, statusFilter, severityFilter, actionLoading } = state;
 
-    const fetchAlerts = useCallback(async () => {
-        dispatch({ type: "load-start" });
-        try {
-            const data = await listAlerts({
-                ...(statusFilter ? { status: statusFilter } : {}),
-                ...(severityFilter ? { severity: severityFilter } : {}),
-            });
-            dispatch({ type: "load-success", alerts: data.items, total: data.total });
-        } catch (error) {
-            console.error('Failed to fetch alerts:', error);
-            toast.error('Failed to load alerts');
-            dispatch({ type: "load-error" });
-        }
-    }, [statusFilter, severityFilter]);
+    const fetchAlerts = () => {
+        void loadAlerts(dispatch, { statusFilter, severityFilter });
+    };
 
     useEffect(() => {
-        void fetchAlerts();
-    }, [fetchAlerts]);
+        void loadAlerts(dispatch, { statusFilter, severityFilter });
+    }, [statusFilter, severityFilter]);
 
     const handleAcknowledge = async (alertId: string) => {
         dispatch({ type: "set-action-loading", alertId });
-        try {
-            await acknowledgeAlert(alertId);
+        const result = await acknowledgeAlert(alertId).then(() => ({
+            status: "success" as const,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            error,
+        }));
+
+        if (result.status === "success") {
             dispatch({ type: "acknowledge-alert", alertId });
             toast.success('Alert acknowledged');
-        } catch (error) {
-            console.error('Failed to acknowledge alert:', error);
+        } else {
+            console.error('Failed to acknowledge alert:', result.error);
             toast.error('Failed to acknowledge alert');
-        } finally {
-            dispatch({ type: "set-action-loading", alertId: null });
         }
+        dispatch({ type: "set-action-loading", alertId: null });
     };
 
     const handleResolve = async (alertId: string) => {
         dispatch({ type: "set-action-loading", alertId });
-        try {
-            const result = await resolveAlert(alertId);
-            dispatch({ type: "resolve-alert", alertId, resolvedAt: result.resolved_at ?? undefined });
+        const result = await resolveAlert(alertId).then((alert) => ({
+            status: "success" as const,
+            resolvedAt: alert.resolved_at ?? undefined,
+        })).catch((error: unknown) => ({
+            status: "error" as const,
+            error,
+        }));
+
+        if (result.status === "success") {
+            dispatch({ type: "resolve-alert", alertId, resolvedAt: result.resolvedAt });
             toast.success('Alert resolved');
-        } catch (error) {
-            console.error('Failed to resolve alert:', error);
+        } else {
+            console.error('Failed to resolve alert:', result.error);
             toast.error('Failed to resolve alert');
-        } finally {
-            dispatch({ type: "set-action-loading", alertId: null });
         }
+        dispatch({ type: "set-action-loading", alertId: null });
     };
 
     return (

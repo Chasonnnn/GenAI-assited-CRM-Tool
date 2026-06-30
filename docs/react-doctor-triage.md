@@ -676,3 +676,22 @@ Full command after Batch 32: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1088`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 29 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 771 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e52fa172-20a9-4867-87ce-fcb04f959aa8`
+
+## Batch 33
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/ops/alerts/page.client.tsx` | Valid: the acknowledge and resolve handlers used `try/finally` finalizers only to clear row-level loading state, which blocks the current React Compiler path. | High | Replace both finalizers with explicit promise-result branches and clear `actionLoading` after success or failure handling. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/ops-alerts-page.test.tsx`; changed-scope React Doctor reported no issues after also addressing touched-file memoization. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/alerts/page.client.tsx` | Valid: React Compiler is enabled, so the touched file's `useCallback` around `fetchAlerts` is redundant manual memoization. | High | Move alert loading into a module-level helper and use a plain refresh handler plus a filter-driven effect. Extended the source guard to fail on reintroduced `useCallback`. | Focused tests passed; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 33: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 33: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics: `1085`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 203 warnings`, `Performance 27 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 770 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-08c82089-5bb1-4bb6-a696-806ad3490683`
