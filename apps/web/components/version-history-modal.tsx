@@ -128,11 +128,13 @@ export function VersionHistoryModal({
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => toggleExpanded(v.version)}
+                                                aria-label={expandedVersion === v.version ? "Collapse details" : "Expand details"}
+                                                aria-expanded={expandedVersion === v.version}
                                             >
                                                 {expandedVersion === v.version ? (
-                                                    <ChevronUp className="size-4" />
+                                                    <ChevronUp className="size-4" aria-hidden="true" />
                                                 ) : (
-                                                    <ChevronDown className="size-4" />
+                                                    <ChevronDown className="size-4" aria-hidden="true" />
                                                 )}
                                             </Button>
                                             {canRollback && v.version !== currentVersion && onRollback && (

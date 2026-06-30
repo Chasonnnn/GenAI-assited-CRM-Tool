@@ -94,4 +94,37 @@ describe('VersionHistoryModal', () => {
 
         expect(screen.queryByText(/rollback/i)).not.toBeInTheDocument()
     })
+
+    it('labels expandable version details and exposes expanded state', () => {
+        render(
+            <VersionHistoryModal
+                open
+                onOpenChange={() => {}}
+                title="Template"
+                entityType="email_template"
+                currentVersion={1}
+                canRollback={false}
+                versions={[
+                    {
+                        id: 'v1',
+                        version: 1,
+                        payload: { subject: 'Hi' },
+                        comment: null,
+                        created_by_user_id: null,
+                        created_at: FIXED_CREATED_AT,
+                    },
+                ]}
+            />
+        )
+
+        const expandButton = screen.getByRole('button', { name: /expand details/i })
+        expect(expandButton).toHaveAttribute('aria-expanded', 'false')
+        expect(expandButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+
+        fireEvent.click(expandButton)
+
+        const collapseButton = screen.getByRole('button', { name: /collapse details/i })
+        expect(collapseButton).toHaveAttribute('aria-expanded', 'true')
+        expect(collapseButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    })
 })

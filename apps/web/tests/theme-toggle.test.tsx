@@ -19,6 +19,11 @@ describe("ThemeToggle", () => {
 
         expect(await screen.findByRole("button", { name: "Toggle theme" })).toBeInTheDocument()
         expect(container.querySelector(".sr-only")).toBeNull()
+        expect(
+            Array.from(container.querySelectorAll("svg")).every(
+                (icon) => icon.getAttribute("aria-hidden") === "true"
+            )
+        ).toBe(true)
     })
 
     it("toggles the theme directly", async () => {

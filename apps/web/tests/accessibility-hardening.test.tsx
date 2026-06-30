@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { readFileSync } from "node:fs"
 import { AIFloatingButton } from "@/components/ai/AIFloatingButton"
+import { ErrorState } from "@/components/error-state"
 import { DashboardFilterBar } from "../app/(app)/dashboard/components/dashboard-filter-bar"
 
 const mockUseAIContext = vi.fn()
@@ -9,6 +11,7 @@ const mockUseAuth = vi.fn()
 const mockUseAssignees = vi.fn()
 const mockUseDashboardFilters = vi.fn()
 const FIXED_LAST_UPDATED = Date.parse("2026-01-01T00:00:00.000Z")
+const readSource = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8")
 
 vi.mock("@/lib/context/ai-context", () => ({
     useAIContext: () => mockUseAIContext(),
@@ -100,5 +103,41 @@ describe("accessibility hardening", () => {
         expect(
             screen.getByRole("button", { name: /refresh dashboard/i })
         ).toBeInTheDocument()
+    })
+
+    it("exposes error detail expansion state and hides the decorative chevron", () => {
+        render(<ErrorState error={new Error("Boom")} reset={vi.fn()} showDetails />)
+
+        const toggle = screen.getByRole("button", { name: /error details/i })
+        expect(toggle).toHaveAttribute("aria-expanded", "false")
+        expect(toggle.querySelector("svg")).toHaveAttribute("aria-hidden", "true")
+
+        fireEvent.click(toggle)
+
+        expect(toggle).toHaveAttribute("aria-expanded", "true")
+        expect(toggle.querySelector("svg")).toHaveAttribute("aria-hidden", "true")
+    })
+
+    it("keeps shared calendar chevrons decorative", () => {
+        const source = readSource("../components/ui/calendar.tsx")
+
+        expect(source).toContain('<ChevronLeftIcon className={cn("size-4", className)} aria-hidden="true" {...props} />')
+        expect(source).toContain('<ChevronRightIcon className={cn("size-4", className)} aria-hidden="true" {...props} />')
+        expect(source).toContain('<ChevronDownIcon className={cn("size-4", className)} aria-hidden="true" {...props} />')
+    })
+
+    it("keeps dropdown trigger icons decorative without layout-only wrappers", () => {
+        const surrogatesSource = readSource("../app/(app)/surrogates/page.client.tsx")
+        const campaignsSource = readSource("../app/(app)/automation/campaigns/page.tsx")
+        const intendedParentSource = readSource("../app/(app)/intended-parents/[id]/components/IntendedParentDetailSections.tsx")
+        const surrogateHeaderSource = readSource("../components/surrogates/detail/SurrogateDetailLayout/HeaderActions.tsx")
+
+        expect(surrogatesSource).toContain('<UserPlusIcon className="size-4" aria-hidden="true" />')
+        expect(surrogatesSource).toContain('<MoreVerticalIcon className="size-4" aria-hidden="true" />')
+        expect(surrogatesSource).not.toContain('<span className="inline-flex items-center gap-1">')
+        expect(campaignsSource).toContain('<MoreVerticalIcon className="size-4" aria-hidden="true" />')
+        expect(campaignsSource).not.toContain('<span className="inline-flex items-center justify-center">')
+        expect(intendedParentSource).toContain('<MoreVerticalIcon className="size-4" aria-hidden="true" />')
+        expect(surrogateHeaderSource).toContain('<MoreVerticalIcon className="size-4" aria-hidden="true" />')
     })
 })

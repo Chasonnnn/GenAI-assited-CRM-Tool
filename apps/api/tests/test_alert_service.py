@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import event
 
 from app.db.enums import AlertSeverity, AlertStatus, AlertType
 from app.db.models import Organization, SystemAlert
@@ -83,6 +84,89 @@ def test_list_alerts_returns_exact_total_on_full_page(db, test_org):
 
     assert len(items) == 2
     assert total == 3
+
+
+def test_count_alerts_uses_direct_count_and_preserves_filters(db, test_org):
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other Alert Org",
+        slug=f"other-alert-org-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(other_org)
+    now = datetime.now(timezone.utc)
+    db.add_all(
+        [
+            SystemAlert(
+                organization_id=test_org.id,
+                dedupe_key="open-error",
+                alert_type=AlertType.API_ERROR.value,
+                severity=AlertSeverity.ERROR.value,
+                status=AlertStatus.OPEN.value,
+                title="Open error",
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            SystemAlert(
+                organization_id=test_org.id,
+                dedupe_key="resolved-error",
+                alert_type=AlertType.API_ERROR.value,
+                severity=AlertSeverity.ERROR.value,
+                status=AlertStatus.RESOLVED.value,
+                title="Resolved error",
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            SystemAlert(
+                organization_id=test_org.id,
+                dedupe_key="open-warning",
+                alert_type=AlertType.API_ERROR.value,
+                severity=AlertSeverity.WARN.value,
+                status=AlertStatus.OPEN.value,
+                title="Open warning",
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            SystemAlert(
+                organization_id=other_org.id,
+                dedupe_key="other-org-error",
+                alert_type=AlertType.API_ERROR.value,
+                severity=AlertSeverity.ERROR.value,
+                status=AlertStatus.OPEN.value,
+                title="Other org error",
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+        ]
+    )
+    db.flush()
+
+    statements: list[str] = []
+
+    def capture_count_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if "system_alerts" in normalized and "count" in normalized:
+            statements.append(normalized)
+
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", capture_count_sql)
+    try:
+        assert alert_service.count_alerts(db, test_org.id) == 3
+        assert alert_service.count_alerts(db, test_org.id, status=AlertStatus.OPEN) == 2
+        assert alert_service.count_alerts(db, test_org.id, severity=AlertSeverity.ERROR) == 2
+        assert (
+            alert_service.count_alerts(
+                db,
+                test_org.id,
+                status=AlertStatus.OPEN,
+                severity=AlertSeverity.ERROR,
+            )
+            == 1
+        )
+    finally:
+        event.remove(bind, "before_cursor_execute", capture_count_sql)
+
+    assert statements
+    assert all("from (select" not in statement for statement in statements)
 
 
 def test_create_or_update_alert_snooze_reopen_semantics(db, test_org):

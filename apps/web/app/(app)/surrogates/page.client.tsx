@@ -154,14 +154,12 @@ function FloatingActionBar({
                     {canAssign && (
                         <DropdownMenu>
                             <DropdownMenuTrigger
-                                className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                                className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "inline-flex items-center gap-1")}
                                 disabled={isLoading}
                                 aria-label="Assign to user"
                             >
-                                <span className="inline-flex items-center gap-1">
-                                    <UserPlusIcon className="size-4" />
-                                    Assign to
-                                </span>
+                                <UserPlusIcon className="size-4" aria-hidden="true" />
+                                Assign to
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
                                 {assignees?.map((user) => (
@@ -1734,7 +1732,7 @@ export function SurrogatesPageClient() {
                                                             className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-8")}
                                                             aria-label={`Actions for ${surrogateItem.full_name}`}
                                                         >
-                                                            <MoreVerticalIcon className="size-4" />
+                                                            <MoreVerticalIcon className="size-4" aria-hidden="true" />
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuItem onClick={() => window.location.href = detailHref}>

@@ -9,6 +9,7 @@ class MockQuery:
         self._offset = 0
         self._limit: int | None = None
         self.count_calls = 0
+        self.order_by_calls: list[tuple[object, ...]] = []
 
     def offset(self, offset: int) -> "MockQuery":
         self._offset = offset
@@ -25,6 +26,10 @@ class MockQuery:
     def count(self) -> int:
         self.count_calls += 1
         return len(self._items)
+
+    def order_by(self, *entities: object) -> "MockQuery":
+        self.order_by_calls.append(entities)
+        return self
 
 
 def test_paginate_query_skips_count_for_short_first_page() -> None:
@@ -55,6 +60,7 @@ def test_paginate_query_counts_for_full_page() -> None:
     assert items == [1, 2, 3, 4, 5]
     assert total == 10
     assert query.count_calls == 1
+    assert query.order_by_calls == [(None,)]
 
 
 def test_paginate_query_counts_for_empty_out_of_range_page() -> None:
@@ -65,6 +71,7 @@ def test_paginate_query_counts_for_empty_out_of_range_page() -> None:
     assert items == []
     assert total == 3
     assert query.count_calls == 1
+    assert query.order_by_calls == [(None,)]
 
 
 def test_paginate_query_by_offset_skips_count_for_short_first_slice() -> None:
@@ -95,6 +102,7 @@ def test_paginate_query_by_offset_counts_for_full_slice() -> None:
     assert items == [1, 2, 3, 4, 5]
     assert total == 10
     assert query.count_calls == 1
+    assert query.order_by_calls == [(None,)]
 
 
 def test_paginate_query_by_offset_counts_for_empty_out_of_range_slice() -> None:
@@ -105,3 +113,4 @@ def test_paginate_query_by_offset_counts_for_empty_out_of_range_slice() -> None:
     assert items == []
     assert total == 3
     assert query.count_calls == 1
+    assert query.order_by_calls == [(None,)]

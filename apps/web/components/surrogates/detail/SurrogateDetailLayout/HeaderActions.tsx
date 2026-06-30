@@ -225,7 +225,7 @@ export function HeaderActions() {
                     className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
                     aria-label="More actions"
                 >
-                    <MoreVerticalIcon className="size-4" />
+                    <MoreVerticalIcon className="size-4" aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
