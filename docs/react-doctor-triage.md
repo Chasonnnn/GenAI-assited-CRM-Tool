@@ -980,3 +980,24 @@ Full command after Batch 47: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1008`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 193 warnings`, `Performance 4 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 726 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f3ac4b77-1493-42f3-9d03-e0dd6a574e98`
+
+## Batch 48
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks/preserve-manual-memoization` | `components/surrogates/detail/SurrogateDetailLayout/context.tsx` | Valid: `visibleStageOptions` read `user.role`, while its dependency array used `user?.role`; React Compiler inferred the broader `user` dependency and skipped optimizing the provider. | High | Align the manual memo dependency with the compiler-inferred `user` object dependency while preserving the existing memoized context-value shape. Extended the source guard so it failed on the old dependency array. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; full React Doctor errors dropped from `9` to `8`. |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/no-event-handler`, `react-doctor/no-giant-component` | `components/surrogates/detail/SurrogateDetailLayout/context.tsx` | Valid but deferred: the provider still has many manual memo wrappers, a dialog-reset effect, and an oversized provider body. | Medium | Logged for a later provider-structure batch because removing all provider memoization and moving event logic changes a broad context API and render-propagation surface beyond this single compiler-skip fix. | Changed-scope React Doctor reports these warnings after the dependency fix. |
+
+Changed-scope command after Batch 48: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `33`
+- Summary: `Bugs 1 warning`, `Maintainability 32 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a557290c-f078-402f-a8c9-1af451c4c18c`
+
+Full command after Batch 48: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `59 / 100 Critical`
+- Total diagnostics: `1007`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 193 warnings`, `Performance 3 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 726 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-82642791-6da4-4b7f-bc6a-154def5ce780`

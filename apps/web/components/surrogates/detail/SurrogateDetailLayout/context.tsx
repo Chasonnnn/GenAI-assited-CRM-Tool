@@ -339,7 +339,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         return stageOptions.filter((stage) =>
             canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)
         )
-    }, [defaultPipeline?.feature_config, stageOptions, user?.role])
+    }, [defaultPipeline?.feature_config, stageOptions, user])
     const stageContext = useMemo(
         () => getSurrogateStageContext(surrogateData ?? null, stageById),
         [surrogateData, stageById]

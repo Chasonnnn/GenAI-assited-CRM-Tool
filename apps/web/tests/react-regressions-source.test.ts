@@ -675,6 +675,8 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("const router = useRouter()")
         expect(contextSource).not.toContain("router.push")
         expect(contextSource).not.toContain("router.replace")
+        expect(contextSource).not.toContain("[defaultPipeline?.feature_config, stageOptions, user?.role]")
+        expect(contextSource).toContain("[defaultPipeline?.feature_config, stageOptions, user]")
     })
 
     it("keeps narrow utility API internals private", () => {
