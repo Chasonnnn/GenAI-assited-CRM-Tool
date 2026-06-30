@@ -165,3 +165,27 @@ Full command after Batch 7: `cd apps/web && npx react-doctor@latest . --verbose`
 - Code verification: `corepack pnpm tsc --noEmit`; `corepack pnpm lint`; `corepack pnpm test --run`.
 - Full React Doctor after refresh: `4 / 100 Critical`, `1394` diagnostics, `158` errors.
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-19dfef0f-3f86-4a74-8fc3-73bf5dd26876`
+
+## Batch 8
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` | `app/ops/templates/system/new/page.client.tsx` | Valid: the new system-template page derived the system key and forced HTML editor mode through effects that immediately set state. | High | Derive the system key and effective editor mode during render instead of correcting them through effects. Added characterization coverage for auto-derived keys and complex-HTML editor mode. | `pnpm tsc --noEmit`; `pnpm test --run tests/platform-system-email-template-new-page.test.tsx`; changed-scope React Doctor no longer reports this error. |
+| `react-hooks-js/todo` | `app/ops/templates/system/new/page.client.tsx` | Valid: the create handler used `try` with `finally` cleanup, which blocks React Compiler optimization. | High | Replace `finally` cleanup with explicit success/error cleanup helpers. Added coverage that failed creates re-enable the Create button. | Focused test file passed; changed-scope React Doctor no longer reports this error. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/templates/system/new/page.client.tsx` | Valid: React Compiler is enabled, so local `useMemo` wrappers were redundant and one large preview calculation was better as a module-scope helper. | High | Move pure validation/preview/selection helpers to module scope and derive validation values directly in render. | Changed-scope React Doctor no longer reports manual memoization warnings for this file. |
+| `react-doctor/rerender-state-only-in-handlers` | `app/ops/templates/system/new/page.client.tsx` | Valid: the active insertion target did not affect rendering and only guided event handlers. | High | Store the active insertion target in a ref instead of component state. | Changed-scope React Doctor no longer reports this warning. |
+| `react-doctor/js-combine-iterations` | `app/ops/templates/system/new/page.client.tsx` | Valid: required variable names used chained `filter().map()` over the same list. | High | Replace with one `for...of` pass. | Changed-scope React Doctor no longer reports this warning. |
+
+Changed-scope command after Batch 8: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Remaining changed-file warnings: `no-giant-component`, `prefer-useReducer` for `PlatformSystemEmailTemplateNewPage`; both are valid but larger structural refactors deferred to a separate batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b72360c8-dc4b-44b1-8f36-dbb9709ad7d8`
+
+Full command after Batch 8: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `5 / 100 Critical`
+- Total diagnostics: `1371`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 298 warnings`, `Performance 121 errors + 39 warnings`, `Accessibility 54 warnings`, `Maintainability 823 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7f58c6f8-6c18-4459-ac7c-b8c51c29cc05`

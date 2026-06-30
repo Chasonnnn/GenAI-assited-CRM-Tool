@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react"
 import * as React from "react"
 import PlatformSystemEmailTemplateNewPage from "../app/ops/templates/system/new/page"
 
@@ -104,5 +104,58 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
             ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
         )
         expect(hasEmojiEnabled).toBe(true)
+    })
+
+    it("derives the system key from the name until the key is edited manually", async () => {
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        const nameInput = screen.getByLabelText("Name")
+        const systemKeyInput = screen.getByLabelText("System key")
+
+        fireEvent.change(nameInput, { target: { value: "Password Reset Notice" } })
+        await waitFor(() => expect(systemKeyInput).toHaveValue("password_reset_notice"))
+
+        fireEvent.change(systemKeyInput, { target: { value: "manual_key" } })
+        fireEvent.change(nameInput, { target: { value: "Changed Name" } })
+
+        expect(systemKeyInput).toHaveValue("manual_key")
+    })
+
+    it("switches to HTML editing when visual content contains complex HTML", async () => {
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        const latestEditorProps = richTextEditorSpy.mock.calls.at(-1)?.[0] as {
+            onChange?: (html: string) => void
+        }
+        act(() => {
+            latestEditorProps.onChange?.("<table><tbody><tr><td>Hello</td></tr></tbody></table>")
+        })
+
+        expect(await screen.findByPlaceholderText("Paste or edit the HTML for this template...")).toBeInTheDocument()
+    })
+
+    it("reenables creation after a create failure", async () => {
+        mockCreate.mockRejectedValueOnce(new Error("System key already exists"))
+
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        fireEvent.change(screen.getByLabelText("System key"), {
+            target: { value: "custom_announcement" },
+        })
+        fireEvent.change(screen.getByLabelText("Name"), {
+            target: { value: "Custom Announcement" },
+        })
+        fireEvent.change(screen.getByLabelText("Subject"), {
+            target: { value: "Announcement for {{org_name}}" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
+        fireEvent.change(screen.getByPlaceholderText("Paste or edit the HTML for this template..."), {
+            target: { value: "<p>Hello</p>" },
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+        expect(screen.getByRole("button", { name: "Create" })).toBeEnabled()
     })
 })

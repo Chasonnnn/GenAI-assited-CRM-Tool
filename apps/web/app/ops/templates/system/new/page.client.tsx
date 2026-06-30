@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
+import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { toast } from "sonner"
@@ -44,14 +44,152 @@ function buildSystemKeyFromName(name: string): string {
     return key.slice(0, 100)
 }
 
+function getFromEmailError(fromEmail: string): string | null {
+    const value = fromEmail.trim()
+    if (!value) return null
+    const basicEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/
+    const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
+    if (basicEmail.test(value) || namedEmail.test(value)) return null
+    return "Use a valid email or name <email@domain> format."
+}
+
+function getSystemKeyError(systemKey: string): string | null {
+    const value = systemKey.trim()
+    if (!value) return "System key is required."
+    if (!/^[a-z0-9_]+$/.test(value)) {
+        return "Use only lowercase letters, numbers, and underscores."
+    }
+    if (value.length < 2 || value.length > 100) {
+        return "System key must be between 2 and 100 characters."
+    }
+    if (value === "new") return "System key cannot be 'new'."
+    return null
+}
+
+function getNameError(name: string): string | null {
+    if (!name.trim()) return "Name is required."
+    if (name.trim().length > 120) return "Name must be 120 characters or less."
+    return null
+}
+
+function getSubjectError(subject: string): string | null {
+    if (!subject.trim()) return "Subject is required."
+    if (subject.trim().length > 200) return "Subject must be 200 characters or less."
+    return null
+}
+
+function getBodyError(body: string): string | null {
+    if (!body.trim()) return "Body is required."
+    return null
+}
+
+function hasComplexEmailHtml(body: string): boolean {
+    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
+}
+
+function buildPreviewHtml(body: string): string {
+    const platformLogoUrl =
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
+    const rawHtml = body
+        .replace(/\{\{org_name\}\}/g, "Sample Organization")
+        .replace(/\{\{org_slug\}\}/g, "sample-org")
+        .replace(/\{\{first_name\}\}/g, "Avery")
+        .replace(/\{\{full_name\}\}/g, "Avery James")
+        .replace(/\{\{email\}\}/g, "avery@example.com")
+        .replace(/\{\{inviter_text\}\}/g, "")
+        .replace(/\{\{role_title\}\}/g, "Admin")
+        .replace(/\{\{invite_url\}\}/g, "https://app.surrogacyforce.com/invite/EXAMPLE")
+        .replace(/\{\{expires_block\}\}/g, "<p>This invitation expires in 7 days.</p>")
+        .replace(/\{\{platform_logo_url\}\}/g, platformLogoUrl)
+        .replace(
+            /\{\{platform_logo_block\}\}/g,
+            `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
+        )
+        .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
+
+    return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
+        USE_PROFILES: { html: true },
+        ADD_TAGS: [
+            "table",
+            "thead",
+            "tbody",
+            "tfoot",
+            "tr",
+            "td",
+            "th",
+            "colgroup",
+            "col",
+            "img",
+            "hr",
+            "div",
+            "span",
+            "center",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+        ],
+        ADD_ATTR: [
+            "style",
+            "class",
+            "align",
+            "valign",
+            "width",
+            "height",
+            "cellpadding",
+            "cellspacing",
+            "border",
+            "bgcolor",
+            "src",
+            "alt",
+            "href",
+            "target",
+        ],
+    })
+}
+
+function recordSelection(
+    el: HTMLInputElement | HTMLTextAreaElement,
+    ref: MutableRefObject<{ start: number; end: number } | null>
+) {
+    ref.current = {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+}
+
+function insertIntoTextControl(
+    el: HTMLInputElement | HTMLTextAreaElement | null,
+    selectionRef: MutableRefObject<{ start: number; end: number } | null>,
+    setValue: Dispatch<SetStateAction<string>>,
+    token: string
+) {
+    if (!el) {
+        setValue((prev) => `${prev}${token}`)
+        return
+    }
+    const selection = selectionRef.current ?? {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+    const result = insertAtCursor(el.value, token, selection.start, selection.end)
+    setValue(result.nextValue)
+    requestAnimationFrame(() => {
+        el.focus()
+        el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+        selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
+    })
+}
+
 export default function PlatformSystemEmailTemplateNewPage() {
     const { push } = useRouter()
     const createTemplate = useCreatePlatformSystemEmailTemplate()
     const { data: templateVariables = [], isLoading: variablesLoading } =
         usePlatformSystemEmailTemplateVariables("org_invite")
 
-    const [systemKey, setSystemKey] = useState("")
-    const systemKeyTouchedRef = useRef(false)
+    const [manualSystemKey, setManualSystemKey] = useState<string | null>(null)
     const [name, setName] = useState("")
     const [subject, setSubject] = useState("")
     const [fromEmail, setFromEmail] = useState("")
@@ -67,199 +205,55 @@ export default function PlatformSystemEmailTemplateNewPage() {
     const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
-    const [activeInsertionTarget, setActiveInsertionTarget] = useState<ActiveInsertionTarget>(null)
+    const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
 
-    useEffect(() => {
-        if (systemKeyTouchedRef.current) return
-        if (!name.trim()) return
-        setSystemKey(buildSystemKeyFromName(name))
-    }, [name])
+    const setActiveInsertionTarget = (target: ActiveInsertionTarget) => {
+        activeInsertionTargetRef.current = target
+    }
 
-    const fromEmailError = useMemo(() => {
-        const value = fromEmail.trim()
-        if (!value) return null
-        const basicEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/
-        const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
-        if (basicEmail.test(value) || namedEmail.test(value)) return null
-        return "Use a valid email or name <email@domain> format."
-    }, [fromEmail])
+    const systemKey = manualSystemKey ?? buildSystemKeyFromName(name)
 
-    const systemKeyError = useMemo(() => {
-        const value = systemKey.trim()
-        if (!value) return "System key is required."
-        if (!/^[a-z0-9_]+$/.test(value)) {
-            return "Use only lowercase letters, numbers, and underscores."
-        }
-        if (value.length < 2 || value.length > 100) {
-            return "System key must be between 2 and 100 characters."
-        }
-        if (value === "new") return "System key cannot be 'new'."
-        return null
-    }, [systemKey])
-
-    const nameError = useMemo(() => {
-        if (!name.trim()) return "Name is required."
-        if (name.trim().length > 120) return "Name must be 120 characters or less."
-        return null
-    }, [name])
-
-    const subjectError = useMemo(() => {
-        if (!subject.trim()) return "Subject is required."
-        if (subject.trim().length > 200) return "Subject must be 200 characters or less."
-        return null
-    }, [subject])
-
-    const bodyError = useMemo(() => {
-        if (!body.trim()) return "Body is required."
-        return null
-    }, [body])
-
-    const hasComplexHtml = useMemo(
-        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body),
-        [body]
-    )
-
-    useEffect(() => {
-        if (editorModeTouched) return
-        if (body && hasComplexHtml && editorMode !== "html") {
-            setEditorMode("html")
-            setActiveInsertionTarget(null)
-        }
-    }, [body, editorModeTouched, hasComplexHtml, editorMode])
+    const fromEmailError = getFromEmailError(fromEmail)
+    const systemKeyError = getSystemKeyError(systemKey)
+    const nameError = getNameError(name)
+    const subjectError = getSubjectError(subject)
+    const bodyError = getBodyError(body)
+    const hasComplexHtml = hasComplexEmailHtml(body)
 
     const effectiveEditorMode: EditorMode =
         editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
-    const allowedVariableNames = useMemo(
-        () => new Set(templateVariables.map((variable) => variable.name)),
-        [templateVariables]
-    )
-    const requiredVariableNames = useMemo(() => {
-        const names: string[] = []
-        for (const variable of templateVariables) {
-            if (variable.required) {
-                names.push(variable.name)
-            }
-        }
-        return names
-    }, [templateVariables])
-    const usedVariableNames = useMemo(() => extractTemplateVariables(`${subject}\n${body}`), [subject, body])
-    const unknownVariables = useMemo(() => {
-        if (!canValidateVariables) return []
-        return usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
-    }, [allowedVariableNames, canValidateVariables, usedVariableNames])
-    const missingRequiredVariables = useMemo(() => {
-        if (!canValidateVariables) return []
-        return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
-    }, [canValidateVariables, requiredVariableNames, usedVariableNames])
-
-    const previewHtml = useMemo(() => {
-        const platformLogoUrl =
-            "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
-        const rawHtml = body
-            .replace(/\{\{org_name\}\}/g, "Sample Organization")
-            .replace(/\{\{org_slug\}\}/g, "sample-org")
-            .replace(/\{\{first_name\}\}/g, "Avery")
-            .replace(/\{\{full_name\}\}/g, "Avery James")
-            .replace(/\{\{email\}\}/g, "avery@example.com")
-            .replace(/\{\{inviter_text\}\}/g, "")
-            .replace(/\{\{role_title\}\}/g, "Admin")
-            .replace(/\{\{invite_url\}\}/g, "https://app.surrogacyforce.com/invite/EXAMPLE")
-            .replace(/\{\{expires_block\}\}/g, "<p>This invitation expires in 7 days.</p>")
-            .replace(/\{\{platform_logo_url\}\}/g, platformLogoUrl)
-            .replace(
-                /\{\{platform_logo_block\}\}/g,
-                `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
-            )
-            .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
-
-        return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
-            USE_PROFILES: { html: true },
-            ADD_TAGS: [
-                "table",
-                "thead",
-                "tbody",
-                "tfoot",
-                "tr",
-                "td",
-                "th",
-                "colgroup",
-                "col",
-                "img",
-                "hr",
-                "div",
-                "span",
-                "center",
-                "h1",
-                "h2",
-                "h3",
-                "h4",
-                "h5",
-                "h6",
-            ],
-            ADD_ATTR: [
-                "style",
-                "class",
-                "align",
-                "valign",
-                "width",
-                "height",
-                "cellpadding",
-                "cellspacing",
-                "border",
-                "bgcolor",
-                "src",
-                "alt",
-                "href",
-                "target",
-            ],
-        })
-    }, [body])
-
-    const recordSelection = (
-        el: HTMLInputElement | HTMLTextAreaElement,
-        ref: MutableRefObject<{ start: number; end: number } | null>
-    ) => {
-        ref.current = {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
+    const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
+    const requiredVariableNames: string[] = []
+    for (const variable of templateVariables) {
+        if (variable.required) {
+            requiredVariableNames.push(variable.name)
         }
     }
-
-    const insertIntoTextControl = (
-        el: HTMLInputElement | HTMLTextAreaElement | null,
-        selectionRef: MutableRefObject<{ start: number; end: number } | null>,
-        setValue: Dispatch<SetStateAction<string>>,
-        token: string
-    ) => {
-        if (!el) {
-            setValue((prev) => `${prev}${token}`)
-            return
-        }
-        const selection = selectionRef.current ?? {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
-        }
-        const result = insertAtCursor(el.value, token, selection.start, selection.end)
-        setValue(result.nextValue)
-        requestAnimationFrame(() => {
-            el.focus()
-            el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
-            selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
-        })
-    }
+    const usedVariableNames = extractTemplateVariables(`${subject}\n${body}`)
+    const unknownVariables = canValidateVariables
+        ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
+        : []
+    const missingRequiredVariables = canValidateVariables
+        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        : []
+    const previewHtml = buildPreviewHtml(body)
 
     const insertToken = (token: string) => {
-        if (activeInsertionTarget === "subject") {
+        const activeInsertionTarget = activeInsertionTargetRef.current
+        const insertionTarget =
+            activeInsertionTarget === "body_visual" && effectiveEditorMode === "html" ? null : activeInsertionTarget
+
+        if (insertionTarget === "subject") {
             insertIntoTextControl(subjectRef.current, subjectSelectionRef, setSubject, token)
             return
         }
-        if (activeInsertionTarget === "body_html") {
+        if (insertionTarget === "body_html") {
             insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
             return
         }
-        if (activeInsertionTarget === "body_visual") {
+        if (insertionTarget === "body_visual") {
             visualBodyRef.current?.insertText(token)
             return
         }
@@ -294,6 +288,7 @@ export default function PlatformSystemEmailTemplateNewPage() {
     const handleCreate = async () => {
         if (!canSubmit) return
         setSaving(true)
+        const finishSaving = () => setSaving(false)
         try {
             const created = await createTemplate.mutateAsync({
                 system_key: systemKey.trim(),
@@ -305,10 +300,10 @@ export default function PlatformSystemEmailTemplateNewPage() {
             })
             toast.success("System email template created")
             push(`/ops/templates/system/${created.system_key}`)
+            finishSaving()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to create system template")
-        } finally {
-            setSaving(false)
+            finishSaving()
         }
     }
 
@@ -353,8 +348,7 @@ export default function PlatformSystemEmailTemplateNewPage() {
                                     id="system-key"
                                     value={systemKey}
                                     onChange={(event) => {
-                                        systemKeyTouchedRef.current = true
-                                        setSystemKey(event.target.value)
+                                        setManualSystemKey(event.target.value)
                                     }}
                                     placeholder="e.g. password_reset"
                                     className={systemKeyError ? "border-red-500" : ""}
@@ -448,9 +442,10 @@ export default function PlatformSystemEmailTemplateNewPage() {
                                         if (!next) return
                                         setEditorMode(next)
                                         setEditorModeTouched(true)
-                                        setActiveInsertionTarget((current) =>
-                                            current === "subject"
-                                                ? current
+                                        const currentTarget = activeInsertionTargetRef.current
+                                        setActiveInsertionTarget(
+                                            currentTarget === "subject"
+                                                ? currentTarget
                                                 : next === "html"
                                                   ? "body_html"
                                                   : "body_visual"
