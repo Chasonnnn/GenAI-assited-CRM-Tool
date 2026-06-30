@@ -511,3 +511,21 @@ Full command after Batch 23: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1115`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 214 warnings`, `Performance 40 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4e1ccb8a-4ad5-49ac-8435-5de23df7f6f5`
+
+## Batch 24
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-initialize-state` | `hooks/use-mobile.ts` | Valid: `useIsMobile` rendered an empty initial value and then set state in an effect from `window.innerWidth`, even though the real subscription source is `matchMedia`. | High | Replace effect-managed local state with `useSyncExternalStore` over the mobile media query. Added a hook test that fails when `matchMedia.matches` and `innerWidth` disagree. | `pnpm tsc --noEmit`; `pnpm test --run tests/use-mobile.test.tsx`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 24: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 24: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1113`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 213 warnings`, `Performance 39 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0f7fa248-f09a-4814-85e7-102ea5f8dfc0`
