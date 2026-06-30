@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
@@ -237,15 +237,12 @@ export function StageChart() {
     const hasOrgSurrogates = (orgTotal ?? 0) > 0
 
     // Build stage color map from pipeline (NOT from API)
-    const stageColorMap = useMemo(() => {
-        if (!pipeline?.stages) return new Map<string, string>()
-        return new Map(pipeline.stages.map((s) => [s.id, s.color]))
-    }, [pipeline])
+    const stageColorMap = pipeline?.stages
+        ? new Map(pipeline.stages.map((s) => [s.id, s.color]))
+        : new Map<string, string>()
 
     // Transform and sort data by order
-    const { data: chartData, total: totalCount } = useMemo(() => {
-        return buildStageChartData(statusData, stageColorMap)
-    }, [statusData, stageColorMap])
+    const { data: chartData, total: totalCount } = buildStageChartData(statusData, stageColorMap)
 
     const buildStageUrl = (stageId: string) => {
         const params = new URLSearchParams()

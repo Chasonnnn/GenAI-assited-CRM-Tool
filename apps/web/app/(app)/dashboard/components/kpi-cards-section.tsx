@@ -1,6 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
 import { UsersIcon, UserPlusIcon, CheckSquareIcon } from "lucide-react"
 import { KPICard } from "./kpi-card"
 import type { useSurrogateStats } from "@/lib/hooks/use-surrogates"
@@ -27,23 +26,17 @@ export function KPICardsSection({
     const { user } = useAuth()
 
     // Compute sparkline data from trend
-    const sparklineData = useMemo(() => {
-        if (!trendQuery.data?.length) return undefined
-        // Take last 7 data points for mini sparkline
-        return trendQuery.data.slice(-7).map((d) => d.count)
-    }, [trendQuery.data])
+    // Take last 7 data points for mini sparkline
+    const sparklineData = trendQuery.data?.length
+        ? trendQuery.data.slice(-7).map((d) => d.count)
+        : undefined
 
-    const statusTotal = useMemo(() => {
-        if (!statusQuery.data?.length) return 0
-        return statusQuery.data.reduce((sum, item) => sum + item.count, 0)
-    }, [statusQuery.data])
+    const statusTotal = statusQuery.data?.reduce((sum, item) => sum + item.count, 0) ?? 0
 
-    const activeTotal = useMemo(() => {
-        if (filters.dateRange !== "all") {
-            return statusQuery.data ? statusTotal : (statsQuery.data?.total ?? 0)
-        }
-        return statsQuery.data?.total ?? statusTotal
-    }, [filters.dateRange, statusQuery.data, statusTotal, statsQuery.data?.total])
+    const activeTotal =
+        filters.dateRange !== "all"
+            ? statusQuery.data ? statusTotal : (statsQuery.data?.total ?? 0)
+            : statsQuery.data?.total ?? statusTotal
 
     // Build drilldown URL with current filter params
     const buildSurrogatesUrl = (additionalParams?: Record<string, string>) => {

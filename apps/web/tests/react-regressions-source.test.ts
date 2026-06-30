@@ -276,6 +276,20 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps dashboard overview derivations compiler-friendly", () => {
+        const sources = [
+            "app/(app)/dashboard/page.client.tsx",
+            "app/(app)/dashboard/components/kpi-cards-section.tsx",
+            "app/(app)/dashboard/components/stage-chart.tsx",
+            "app/(app)/dashboard/components/trend-chart.tsx",
+        ].map(readSource)
+
+        for (const source of sources) {
+            expect(source).not.toContain("useMemo")
+            expect(source).not.toContain("useCallback")
+        }
+    })
+
     it("keeps report chart surfaces code split from Recharts", () => {
         const sources = [
             readSource("components/reports/TeamPerformanceChart.tsx"),

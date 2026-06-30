@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useCallback, useEffect } from "react"
+import { useEffect } from "react"
 import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
@@ -46,10 +46,7 @@ function DashboardContent() {
     const queryClient = useQueryClient()
     const { getDateParams, filters } = useDashboardFilters()
     const dateParams = getDateParams()
-    const browserTimezone = useMemo(
-        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        [],
-    )
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
     const statsParams = {
         ...dateParams,
         timezone: browserTimezone,
@@ -97,37 +94,23 @@ function DashboardContent() {
     const tasksQuery = useTasks(tasksParams)
     const upcomingQuery = useUpcoming(upcomingParams)
 
-    const statusTotal = useMemo(() => {
-        if (!statusQuery.data?.length) return 0
-        return statusQuery.data.reduce((sum, item) => sum + item.count, 0)
-    }, [statusQuery.data])
+    const statusTotal = statusQuery.data?.reduce((sum, item) => sum + item.count, 0) ?? 0
 
-    const kpiTotalForCheck = useMemo(() => {
-        if (filters.dateRange !== "all") {
-            return statusQuery.data ? statusTotal : (statsQuery.data?.total ?? 0)
-        }
-        return statsQuery.data?.total ?? statusTotal
-    }, [filters.dateRange, statusQuery.data, statusTotal, statsQuery.data?.total])
+    const kpiTotalForCheck =
+        filters.dateRange !== "all"
+            ? statusQuery.data ? statusTotal : (statsQuery.data?.total ?? 0)
+            : statsQuery.data?.total ?? statusTotal
 
     // Calculate last updated timestamp
-    const lastUpdated = useMemo(() => {
-        const timestamps = [
-            statsQuery.dataUpdatedAt,
-            trendQuery.dataUpdatedAt,
-            statusQuery.dataUpdatedAt,
-            attentionQuery.dataUpdatedAt,
-            tasksQuery.dataUpdatedAt,
-            upcomingQuery.dataUpdatedAt,
-        ].filter(Boolean)
-        return timestamps.length ? Math.max(...timestamps) : null
-    }, [
+    const lastUpdatedTimestamps = [
         statsQuery.dataUpdatedAt,
         trendQuery.dataUpdatedAt,
         statusQuery.dataUpdatedAt,
         attentionQuery.dataUpdatedAt,
         tasksQuery.dataUpdatedAt,
         upcomingQuery.dataUpdatedAt,
-    ])
+    ].filter(Boolean)
+    const lastUpdated = lastUpdatedTimestamps.length ? Math.max(...lastUpdatedTimestamps) : null
 
     // Check if any query is currently fetching
     const isRefreshing =
@@ -161,12 +144,12 @@ function DashboardContent() {
     ])
 
     // Refresh all dashboard data
-    const handleRefresh = useCallback(() => {
+    const handleRefresh = () => {
         void queryClient.invalidateQueries({ queryKey: ["surrogates", "stats"] })
         void queryClient.invalidateQueries({ queryKey: ["analytics"] })
         void queryClient.invalidateQueries({ queryKey: ["dashboard"] })
         void queryClient.invalidateQueries({ queryKey: taskKeys.all })
-    }, [queryClient])
+    }
 
     // Current date for header
     const currentDate = new Date().toLocaleDateString("en-US", {

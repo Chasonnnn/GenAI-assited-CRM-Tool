@@ -1186,3 +1186,22 @@ Full command after Batch 57: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `911`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 650 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7ae5e07e-f4bc-4e8c-a99d-ad05b31e9acd`
+
+## Batch 58
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/dashboard/page.client.tsx`, `app/(app)/dashboard/components/kpi-cards-section.tsx`, `app/(app)/dashboard/components/trend-chart.tsx`, `app/(app)/dashboard/components/stage-chart.tsx` | Valid: dashboard overview and chart components wrapped local derived values and callbacks in `useMemo`/`useCallback` even though React Compiler can cache these values. | High | Remove the wrappers and keep the same direct calculations for dashboard totals, timestamps, chart params, chart data, and refresh/navigation handlers. Added a source guard that failed on the old imports/calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/dashboard.test.tsx tests/accessibility-hardening.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `517` to `502`. |
+
+Changed-scope command after Batch 58: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 58: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `896`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 635 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9936e2a8-1f68-4501-a247-50da47d3d1bc`

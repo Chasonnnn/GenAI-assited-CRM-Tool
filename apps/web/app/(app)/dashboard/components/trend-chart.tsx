@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -131,38 +131,31 @@ const SurrogatesTrendChart = dynamic<SurrogatesTrendChartProps>(
 export function TrendChart() {
     const [period, setPeriod] = useState<TrendPeriod>("day")
     const { filters, getDateParams } = useDashboardFilters()
-    const browserTimezone = useMemo(
-        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        [],
-    )
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
 
-    const dateParams = useMemo(() => {
-        const today = startOfLocalDay()
-        let fromDate: Date
-        switch (period) {
-            case "week":
-                fromDate = subWeeks(today, MAX_TREND_POINTS - 1)
-                break
-            case "month":
-                fromDate = subMonths(today, MAX_TREND_POINTS - 1)
-                break
-            default:
-                fromDate = subDays(today, MAX_TREND_POINTS - 1)
-        }
-        const fallbackDateParams = {
-            from_date: formatLocalDate(fromDate),
-            to_date: formatLocalDate(today),
-        }
-        if (filters.dateRange === "all") {
-            return fallbackDateParams
-        }
-
-        const dashboardDateParams = getDateParams()
-        return {
+    const today = startOfLocalDay()
+    let fromDate: Date
+    switch (period) {
+        case "week":
+            fromDate = subWeeks(today, MAX_TREND_POINTS - 1)
+            break
+        case "month":
+            fromDate = subMonths(today, MAX_TREND_POINTS - 1)
+            break
+        default:
+            fromDate = subDays(today, MAX_TREND_POINTS - 1)
+    }
+    const fallbackDateParams = {
+        from_date: formatLocalDate(fromDate),
+        to_date: formatLocalDate(today),
+    }
+    const dashboardDateParams = filters.dateRange === "all" ? null : getDateParams()
+    const dateParams = dashboardDateParams
+        ? {
             from_date: dashboardDateParams.from_date ?? fallbackDateParams.from_date,
             to_date: dashboardDateParams.to_date ?? fallbackDateParams.to_date,
         }
-    }, [period, filters.dateRange, getDateParams])
+        : fallbackDateParams
 
     const trendParams = {
         period,
@@ -174,13 +167,10 @@ export function TrendChart() {
     const orgStatsQuery = useSurrogateStats()
     const isRestricted = error instanceof ApiError && error.status === 403
     const orgTotal = orgStatsQuery.data?.total
-    const trendData = useMemo(
-        () => (data?.length ? data.slice(-MAX_TREND_POINTS) : []),
-        [data],
-    )
+    const trendData = data?.length ? data.slice(-MAX_TREND_POINTS) : []
 
     // Transform data for chart
-    const chartData = useMemo(() => {
+    const chartData = (() => {
         if (!trendData.length) return []
         const parsed = trendData.map((item) => {
             const dateObj = parseDateInput(item.date)
@@ -205,13 +195,10 @@ export function TrendChart() {
                     : item.monthDay,
             surrogates: item.surrogates,
         }))
-    }, [trendData])
+    })()
 
     // Calculate total for subtitle
-    const totalCount = useMemo(() => {
-        if (!trendData.length) return 0
-        return trendData.reduce((sum, item) => sum + item.count, 0)
-    }, [trendData])
+    const totalCount = trendData.reduce((sum, item) => sum + item.count, 0)
 
     const buildSurrogatesUrl = () => {
         const params = new URLSearchParams()
