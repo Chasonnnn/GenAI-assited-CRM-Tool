@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useReducer } from "react"
+import { useReducer, useState } from "react"
 
 import type { FormPurpose, FormRead } from "@/lib/api/forms"
 import { schemaToMetadata } from "@/lib/forms/form-builder-document"
@@ -131,17 +131,17 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
 export function useAutomationFormBuilderState(isNewForm: boolean) {
     const [state, dispatch] = useReducer(reducer, buildInitialState(isNewForm))
 
-    const patchState = useCallback((payload: Partial<AutomationBuilderState>) => {
+    const [patchState] = useState(() => (payload: Partial<AutomationBuilderState>) => {
         dispatch({ type: "patch", payload })
-    }, [])
+    })
 
-    const resetForForm = useCallback((nextIsNewForm: boolean) => {
+    const [resetForForm] = useState(() => (nextIsNewForm: boolean) => {
         dispatch({ type: "reset_for_form", payload: { isNewForm: nextIsNewForm } })
-    }, [])
+    })
 
-    const hydrateFromForm = useCallback((payload: { form: FormRead }) => {
+    const [hydrateFromForm] = useState(() => (payload: { form: FormRead }) => {
         dispatch({ type: "hydrate_from_form", payload })
-    }, [])
+    })
 
     return {
         state,

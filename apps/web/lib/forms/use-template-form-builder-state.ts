@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useReducer } from "react"
+import { useReducer, useState } from "react"
 
 import type { FormSchema } from "@/lib/api/forms"
 import { schemaToMetadata } from "@/lib/forms/form-builder-document"
@@ -123,15 +123,15 @@ function reducer(state: TemplateBuilderState, action: TemplateBuilderAction): Te
 export function useTemplateFormBuilderState(isNewForm: boolean) {
     const [state, dispatch] = useReducer(reducer, buildInitialState(isNewForm))
 
-    const patchState = useCallback((payload: Partial<TemplateBuilderState>) => {
+    const [patchState] = useState(() => (payload: Partial<TemplateBuilderState>) => {
         dispatch({ type: "patch", payload })
-    }, [])
+    })
 
-    const resetForForm = useCallback((nextIsNewForm: boolean) => {
+    const [resetForForm] = useState(() => (nextIsNewForm: boolean) => {
         dispatch({ type: "reset_for_form", payload: { isNewForm: nextIsNewForm } })
-    }, [])
+    })
 
-    const hydrateFromTemplate = useCallback((
+    const [hydrateFromTemplate] = useState(() => (
         payload: {
             name: string
             description: string
@@ -142,7 +142,7 @@ export function useTemplateFormBuilderState(isNewForm: boolean) {
         },
     ) => {
         dispatch({ type: "hydrate_from_template", payload })
-    }, [])
+    })
 
     return {
         state,

@@ -1148,3 +1148,22 @@ Full command after Batch 55: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `923`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 662 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7bc3a239-5aed-442d-b2e1-08af751af1db`
+
+## Batch 56
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/forms/use-template-form-builder-state.ts`, `lib/forms/use-automation-form-builder-state.ts` | Valid: both reducer-backed state hooks wrapped stable dispatch helpers in `useCallback`, which is redundant with React Compiler. The returned action identities still need to stay stable because page hooks depend on them from effects. | High | Replace the `useCallback` wrappers with lazy `useState` function initializers that capture React's stable reducer dispatch once. Added a source guard that failed on the old `useCallback` imports and wrappers. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/platform-form-template-page.test.tsx tests/form-builder-page.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `529` to `523`. |
+
+Changed-scope command after Batch 56: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 56: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `917`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 656 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ac527b0c-93a4-4dc2-8a52-4b42c51f264b`

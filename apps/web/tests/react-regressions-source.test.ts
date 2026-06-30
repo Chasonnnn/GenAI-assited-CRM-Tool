@@ -1392,6 +1392,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useRef<Promise<void>>(Promise.resolve())")
     })
 
+    it("keeps form builder state hooks compiler-derived", () => {
+        const templateSource = readSource("lib/forms/use-template-form-builder-state.ts")
+        const automationSource = readSource("lib/forms/use-automation-form-builder-state.ts")
+
+        expect(templateSource).not.toContain("useCallback")
+        expect(automationSource).not.toContain("useCallback")
+    })
+
     it("keeps surrogate card, task calendar, and CSV derived lists single pass", () => {
         const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
         const taskCalendarSource = readSource("components/surrogates/SurrogateTasksCalendar.tsx")
