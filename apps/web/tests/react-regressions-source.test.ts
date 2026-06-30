@@ -308,6 +308,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setSelectedId(currentAttachmentId)")
     })
 
+    it("keeps sessions revoke handlers compiler-friendly", () => {
+        const source = readSource("app/(app)/settings/sessions/page.tsx")
+
+        expect(source).toContain("setRevokingSessionId(null)")
+        expect(source).not.toContain("finally")
+    })
+
     it("keeps surrogate application form-link defaults compiler-friendly", () => {
         const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
 

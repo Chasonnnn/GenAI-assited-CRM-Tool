@@ -167,14 +167,16 @@ export default function SessionsPage() {
 
     const handleRevokeSession = async (sessionId: string) => {
         setRevokingSessionId(sessionId)
-        try {
-            await revokeSession.mutateAsync(sessionId)
+        const result = await revokeSession.mutateAsync(sessionId).then(
+            () => ({ status: "success" as const }),
+            (error: unknown) => ({ status: "error" as const, error })
+        )
+        if (result.status === "success") {
             toast.success("Session revoked successfully")
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to revoke session")
-        } finally {
-            setRevokingSessionId(null)
+        } else {
+            toast.error(result.error instanceof Error ? result.error.message : "Failed to revoke session")
         }
+        setRevokingSessionId(null)
     }
 
     const handleRevokeAllSessions = async () => {
