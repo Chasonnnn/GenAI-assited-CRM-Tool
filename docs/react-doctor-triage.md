@@ -1001,3 +1001,25 @@ Full command after Batch 48: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1007`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 193 warnings`, `Performance 3 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 726 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-82642791-6da4-4b7f-bc6a-154def5ce780`
+
+## Batch 49
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks/set-state-in-effect` | `components/forms/PublicFormFieldRenderer.tsx` | Valid: the height field effect synchronously copied incoming prop-derived feet/inches into local select state after render. | High | Replace the two mirrored select states and reset effect with a single draft selection keyed by the serialized height value, so external prop changes are derived during render while user-cleared drafts remain stable after parent acceptance. Added a source guard that failed on the old effect. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/public-form-field-renderer.test.tsx`; `pnpm lint` no longer reports `PublicFormFieldRenderer.tsx:426`; full React Doctor errors dropped from `8` to `7`. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/forms/PublicFormFieldRenderer.tsx` | Valid: `FixedTableFieldInput` memoized rows derived directly from props even though React Compiler can cache the value. | High | Remove the `React.useMemo` wrapper and compute normalized table rows directly during render. Extended the source guard so it failed before this fix. | Changed-scope React Doctor dropped from `2` warnings to `1` warning after removing the wrapper. |
+| `react-doctor/prefer-tag-over-role` | `components/forms/PublicFormFieldRenderer.tsx` | Invalid: the flagged `role="group"` wraps a configured table row, not contact information; replacing it with `<address>` would give incorrect native semantics. | High | Left the row container as `role="group"` and logged the false positive instead of changing semantics for score. | Changed-scope React Doctor reports this as the only remaining touched-file warning. |
+
+Changed-scope command after Batch 49: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Accessibility 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3ed0baa0-5fc9-43bf-a566-efcd54e6a137`
+
+Full command after Batch 49: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `60 / 100 Needs work`
+- Total diagnostics: `998`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 189 warnings`, `Performance 2 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 722 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-23c8c09e-1d5d-4308-a741-bac3ed6f2fe1`

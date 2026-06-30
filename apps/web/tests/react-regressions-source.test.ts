@@ -719,6 +719,15 @@ describe("React regression guards (source)", () => {
         expect(versionHistorySource).not.toContain("export interface VersionItem")
     })
 
+    it("keeps public height field prop synchronization render-derived", () => {
+        const source = readSource("components/forms/PublicFormFieldRenderer.tsx")
+
+        expect(source).toContain("type HeightDraftSelection")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("setFeetValue(parsedSelection.feet)")
+        expect(source).not.toContain("setInchesValue(parsedSelection.inches)")
+    })
+
     it("keeps intended-parent option defaults private", () => {
         const trustFundingSource = readSource("lib/trust-funding-status.ts")
         const maritalStatusSource = readSource("lib/intended-parent-marital-status.ts")

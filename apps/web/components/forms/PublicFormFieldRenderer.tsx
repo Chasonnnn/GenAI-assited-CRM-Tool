@@ -233,6 +233,22 @@ function serializeHeightSelection(feet: string, inches: string): string | null {
     return normalizedHeight === null ? null : normalizedHeight.toFixed(2)
 }
 
+type HeightDraftSelection = {
+    serializedValue: string | null
+    feet: string
+    inches: string
+}
+
+function getHeightDraftSelection(value: PublicFormAnswerValue | undefined): HeightDraftSelection {
+    const parsedSelection = parseHeightSelection(value)
+
+    return {
+        serializedValue: serializeHeightSelection(parsedSelection.feet, parsedSelection.inches),
+        feet: parsedSelection.feet,
+        inches: parsedSelection.inches,
+    }
+}
+
 function normalizeFixedTableRows(
     field: FormField,
     value: PublicFormAnswerValue | undefined,
@@ -268,7 +284,7 @@ function FixedTableFieldInput({
     updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
 }) {
     const columns = field.columns || []
-    const rows = React.useMemo(() => normalizeFixedTableRows(field, value), [field, value])
+    const rows = normalizeFixedTableRows(field, value)
 
     const updateCell = (rowKey: string, columnKey: string, nextValue: string) => {
         const nextRows = rows.map((row) =>
@@ -407,30 +423,22 @@ function HeightFieldInput({
     requiredMark: React.ReactNode
     updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
 }) {
-    const parsedSelection = React.useMemo(() => parseHeightSelection(value), [value])
-    const [feetValue, setFeetValue] = React.useState(() => parsedSelection.feet)
-    const [inchesValue, setInchesValue] = React.useState(() => parsedSelection.inches)
-    const serializedSelection = React.useMemo(
-        () => serializeHeightSelection(feetValue, inchesValue),
-        [feetValue, inchesValue],
-    )
-    const serializedIncomingValue = React.useMemo(
-        () => serializeHeightSelection(parsedSelection.feet, parsedSelection.inches),
-        [parsedSelection.feet, parsedSelection.inches],
-    )
-
-    React.useEffect(() => {
-        if (serializedIncomingValue === serializedSelection) {
-            return
-        }
-        setFeetValue(parsedSelection.feet)
-        setInchesValue(parsedSelection.inches)
-    }, [parsedSelection.feet, parsedSelection.inches, serializedIncomingValue, serializedSelection])
+    const incomingSelection = getHeightDraftSelection(value)
+    const [draftSelection, setDraftSelection] = React.useState<HeightDraftSelection>(() => incomingSelection)
+    const currentSelection = draftSelection.serializedValue === incomingSelection.serializedValue
+        ? draftSelection
+        : incomingSelection
+    const feetValue = currentSelection.feet
+    const inchesValue = currentSelection.inches
 
     const syncHeight = (nextFeet: string, nextInches: string) => {
-        setFeetValue(nextFeet)
-        setInchesValue(nextInches)
-        updateField(field.key, serializeHeightSelection(nextFeet, nextInches))
+        const nextValue = serializeHeightSelection(nextFeet, nextInches)
+        setDraftSelection({
+            serializedValue: nextValue,
+            feet: nextFeet,
+            inches: nextInches,
+        })
+        updateField(field.key, nextValue)
     }
 
     return (
