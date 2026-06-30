@@ -52,3 +52,23 @@ Full command after Batch 2: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1445`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 304 warnings`, `Performance 158 errors + 44 warnings`, `Accessibility 54 warnings`, `Maintainability 849 warnings`
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-48f82c62-7081-4025-89cd-78e1c453539d`
+
+## Batch 3
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/(app)/settings/admin/page.tsx` | Valid: the admin data handlers used `try` with `finally`, then after the first rewrite React Doctor exposed the related compiler limitation for `throw` statements inside `try`/`catch`. | High | Add characterization coverage for developer access and export cleanup, then move export/import validation and response parsing into module-scope helpers so the component handler has no compiler-blocking syntax. | `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run tests/admin-data-page.test.tsx`; changed-scope React Doctor reports no issues. |
+| `react-doctor/async-await-in-loop` | `app/(app)/settings/admin/page.tsx` | Valid concern in shape, but this polling is intentionally sequential because each status request depends on elapsed time and previous job status. | High | Preserve sequential polling with a bounded recursive helper instead of an `await` inside a loop. | Changed-scope React Doctor reports no issues. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/admin/page.tsx` | Valid: React Compiler is enabled in `next.config.js`, so local `useCallback` wrappers around event handlers are redundant. | High | Remove redundant `useCallback` wrappers while preserving handler behavior. | Changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 3: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 3: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `0 / 100 Critical`
+- Total diagnostics: `1431`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 304 warnings`, `Performance 147 errors + 43 warnings`, `Accessibility 54 warnings`, `Maintainability 847 warnings`
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-05a399bf-33da-496c-8f45-dddde566dda0`

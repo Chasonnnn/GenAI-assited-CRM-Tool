@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,149 @@ import { getCsrfHeaders } from "@/lib/csrf"
 import { toast } from "sonner"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+const EXPORT_POLL_INTERVAL_MS = 2000
+const EXPORT_MAX_ATTEMPTS = 60
+
+type ExportType = "surrogates" | "config" | "analytics"
+type ImportType = "config" | "surrogates" | "all"
+type ImportFiles = { config?: File; surrogates?: File }
+
+type ExportJob = {
+    jobId: string
+    status: string
+    error: string | null
+}
+
+type ExportDownload = {
+    downloadUrl: string
+    filename: string
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "Unknown error"
+}
+
+async function readExportJob(type: ExportType, headers: Record<string, string>): Promise<ExportJob> {
+    const response = await fetch(`${API_BASE}/admin/exports/${type}`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+    })
+
+    if (!response.ok) {
+        throw new Error(`Export failed: ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (
+        !data
+        || typeof data.job_id !== "string"
+        || typeof data.status !== "string"
+    ) {
+        throw new Error("Invalid export response")
+    }
+
+    return {
+        jobId: data.job_id,
+        status: data.status,
+        error: typeof data.error === "string" ? data.error : null,
+    }
+}
+
+async function readExportJobStatus(jobId: string, headers: Record<string, string>): Promise<ExportJob> {
+    const response = await fetch(`${API_BASE}/admin/exports/jobs/${jobId}`, {
+        credentials: "include",
+        headers,
+    })
+
+    if (!response.ok) {
+        throw new Error(`Export status failed: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return {
+        jobId,
+        status: typeof data.status === "string" ? data.status : "failed",
+        error: typeof data.error === "string" ? data.error : null,
+    }
+}
+
+async function waitForExportCompletion(
+    job: ExportJob,
+    headers: Record<string, string>,
+    attempt = 0
+): Promise<void> {
+    if (job.status === "completed") return
+    if (job.status === "failed") {
+        throw new Error(job.error || "Export failed")
+    }
+    if (attempt >= EXPORT_MAX_ATTEMPTS) {
+        throw new Error(job.error || "Export failed or timed out")
+    }
+
+    await sleep(EXPORT_POLL_INTERVAL_MS)
+    const nextJob = await readExportJobStatus(job.jobId, headers)
+    await waitForExportCompletion(nextJob, headers, attempt + 1)
+}
+
+async function readExportDownload(jobId: string, headers: Record<string, string>): Promise<ExportDownload> {
+    const response = await fetch(`${API_BASE}/admin/exports/jobs/${jobId}/download`, {
+        credentials: "include",
+        headers,
+    })
+
+    if (!response.ok) {
+        throw new Error(`Export download failed: ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (
+        !data
+        || typeof data.download_url !== "string"
+        || typeof data.filename !== "string"
+    ) {
+        throw new Error("Invalid export download response")
+    }
+
+    return {
+        downloadUrl: data.download_url,
+        filename: data.filename,
+    }
+}
+
+function buildImportFormData(type: ImportType, files: ImportFiles) {
+    const formData = new FormData()
+    if (type === "config" || type === "all") {
+        if (!files.config) throw new Error("Config ZIP required")
+        formData.append("config_zip", files.config)
+    }
+    if (type === "surrogates" || type === "all") {
+        if (!files.surrogates) throw new Error("Surrogates CSV required")
+        formData.append("surrogates_csv", files.surrogates)
+    }
+    return formData
+}
+
+async function importAdminData(type: ImportType, files: ImportFiles) {
+    const response = await fetch(`${API_BASE}/admin/imports/${type}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            ...getCsrfHeaders(),
+        },
+        body: buildImportFormData(type, files),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+        throw new Error(data.detail || `Import failed: ${response.status}`)
+    }
+
+    return data
+}
 
 export default function AdminDataPage() {
     const { user } = useAuth()
@@ -33,75 +176,15 @@ export default function AdminDataPage() {
 
     const isDeveloper = user?.role === "developer"
 
-    const handleExport = useCallback(async (type: "surrogates" | "config" | "analytics") => {
+    const handleExport = async (type: ExportType) => {
         setIsExporting(type)
         const headers = { ...getCsrfHeaders() }
-
-        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+        const finishExport = () => setIsExporting(null)
 
         try {
-            const createResponse = await fetch(`${API_BASE}/admin/exports/${type}`, {
-                method: "POST",
-                credentials: "include",
-                headers,
-            })
-
-            if (!createResponse.ok) {
-                throw new Error(`Export failed: ${createResponse.status}`)
-            }
-
-            const createData = await createResponse.json()
-            if (
-                !createData
-                || typeof createData.job_id !== "string"
-                || typeof createData.status !== "string"
-            ) {
-                throw new Error("Invalid export response")
-            }
-            const jobId = createData.job_id
-
-            let jobStatus = createData.status
-            let jobError: string | null = null
-
-            for (let attempt = 0; attempt < 60; attempt += 1) {
-                if (jobStatus === "completed") break
-                if (jobStatus === "failed") break
-
-                await sleep(2000)
-                const statusResponse = await fetch(`${API_BASE}/admin/exports/jobs/${jobId}`, {
-                    credentials: "include",
-                    headers,
-                })
-                if (!statusResponse.ok) {
-                    throw new Error(`Export status failed: ${statusResponse.status}`)
-                }
-                const statusData = await statusResponse.json()
-                jobStatus = statusData.status
-                jobError = statusData.error || null
-            }
-
-            if (jobStatus !== "completed") {
-                throw new Error(jobError || "Export failed or timed out")
-            }
-
-            const downloadResponse = await fetch(`${API_BASE}/admin/exports/jobs/${jobId}/download`, {
-                credentials: "include",
-                headers,
-            })
-            if (!downloadResponse.ok) {
-                throw new Error(`Export download failed: ${downloadResponse.status}`)
-            }
-
-            const downloadData = await downloadResponse.json()
-            if (
-                !downloadData
-                || typeof downloadData.download_url !== "string"
-                || typeof downloadData.filename !== "string"
-            ) {
-                throw new Error("Invalid export download response")
-            }
-            const downloadUrl = downloadData.download_url
-            const filename = downloadData.filename
+            const exportJob = await readExportJob(type, headers)
+            await waitForExportCompletion(exportJob, headers)
+            const { downloadUrl, filename } = await readExportDownload(exportJob.jobId, headers)
 
             const link = document.createElement("a")
             link.href = downloadUrl
@@ -113,63 +196,40 @@ export default function AdminDataPage() {
             link.remove()
 
             toast.success("Export complete", { description: `Downloaded ${filename}` })
+            finishExport()
         } catch (error) {
             console.error("Export failed:", error)
             toast.error("Export failed", {
-                description: error instanceof Error ? error.message : "Unknown error",
+                description: getErrorMessage(error),
             })
-        } finally {
-            setIsExporting(null)
+            finishExport()
         }
-    }, [])
+    }
 
-    const handleImport = useCallback(async (type: "config" | "surrogates" | "all", files: { config?: File; surrogates?: File }) => {
+    const handleImport = async (type: ImportType, files: ImportFiles) => {
         setIsImporting(true)
         setImportResult(null)
+        const finishImport = () => setIsImporting(false)
 
         try {
-            const formData = new FormData()
-            if (type === "config" || type === "all") {
-                if (!files.config) throw new Error("Config ZIP required")
-                formData.append("config_zip", files.config)
-            }
-            if (type === "surrogates" || type === "all") {
-                if (!files.surrogates) throw new Error("Surrogates CSV required")
-                formData.append("surrogates_csv", files.surrogates)
-            }
-
-            const response = await fetch(`${API_BASE}/admin/imports/${type}`, {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    ...getCsrfHeaders(),
-                },
-                body: formData,
-            })
-
-            const data = await response.json()
-
-            if (!response.ok) {
-                throw new Error(data.detail || `Import failed: ${response.status}`)
-            }
-
+            const data = await importAdminData(type, files)
             setImportResult({ status: "success", details: data })
             toast.success("Import complete", {
                 description: `Imported ${data.surrogates_imported || 0} surrogates`,
             })
+            finishImport()
         } catch (error) {
             console.error("Import failed:", error)
             setImportResult({
                 status: "error",
-                details: { message: error instanceof Error ? error.message : "Unknown error" }
+                details: { message: getErrorMessage(error) }
             })
             toast.error("Import failed", {
-                description: error instanceof Error ? error.message : "Unknown error",
+                description: getErrorMessage(error),
             })
-        } finally {
-            setIsImporting(false)
+            finishImport()
         }
-    }, [])
+    }
 
     if (!isDeveloper) {
         return (
