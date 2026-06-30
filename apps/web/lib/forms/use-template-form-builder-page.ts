@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -15,7 +15,7 @@ import {
 } from "@/lib/forms/form-builder-document"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useTemplateFormBuilderState } from "@/lib/forms/use-template-form-builder-state"
-import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
+import type { TemplateBuilderState } from "@/lib/forms/use-template-form-builder-state"
 import {
     useCreatePlatformFormTemplate,
     useDeletePlatformFormTemplate,
@@ -25,6 +25,149 @@ import {
 } from "@/lib/hooks/use-platform-templates"
 
 const surrogateFieldMappings = DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
+
+type TemplateDraftValues = Pick<
+    TemplateBuilderState,
+    | "allowedMimeTypesText"
+    | "formDescription"
+    | "formName"
+    | "logoUrl"
+    | "maxFileCount"
+    | "maxFileSizeMb"
+    | "privacyNotice"
+    | "publicEyebrow"
+    | "publicSubtitle"
+    | "publicTitle"
+>
+
+type TemplateDraftPayload = {
+    name: string
+    description: string | null
+    schema_json: FormSchema
+    settings_json: Record<string, unknown>
+}
+
+type SaveQueueRef = {
+    current: Promise<void> | null
+}
+
+type TemplateCreateMutation = {
+    mutateAsync: (payload: TemplateDraftPayload) => Promise<PlatformFormTemplate>
+}
+
+type TemplateUpdateMutation = {
+    mutateAsync: (variables: {
+        id: string
+        payload: TemplateDraftPayload & { expected_version: number | null }
+    }) => Promise<PlatformFormTemplate>
+}
+
+type TemplateRouter = ReturnType<typeof useRouter>
+
+const buildTemplateDraftPayload = (
+    pages: ReturnType<typeof useFormBuilderDocument>["pages"],
+    state: TemplateDraftValues,
+): TemplateDraftPayload => {
+    const allowedMimeTypes: string[] = []
+    for (const entry of state.allowedMimeTypesText.split(",")) {
+        const trimmedEntry = entry.trim()
+        if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
+    }
+    const mappings = buildMappings(pages)
+    const settingsJson: Record<string, unknown> = {
+        max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),
+        max_file_count: Math.max(0, Math.round(state.maxFileCount)),
+        allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
+    }
+    if (mappings.length > 0) {
+        settingsJson.mappings = mappings
+    }
+
+    return {
+        name: state.formName.trim(),
+        description: state.formDescription.trim() || null,
+        schema_json: buildFormSchema(pages, {
+            publicEyebrow: state.publicEyebrow,
+            publicTitle: state.publicTitle,
+            publicSubtitle: state.publicSubtitle,
+            logoUrl: state.logoUrl,
+            privacyNotice: state.privacyNotice,
+        }),
+        settings_json: settingsJson,
+    }
+}
+
+const buildSavedState = (fingerprint: string, savedForm?: PlatformFormTemplate): Partial<TemplateBuilderState> => ({
+    autoSaveStatus: "saved",
+    lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
+    lastSavedFingerprint: fingerprint,
+})
+
+const queueTemplateSave = <T>(saveQueueRef: SaveQueueRef, run: () => Promise<T>): Promise<T> => {
+    const currentQueue = saveQueueRef.current ?? Promise.resolve()
+    const chained = currentQueue.then(run, run)
+    saveQueueRef.current = chained.then(() => {}, () => {})
+    return chained
+}
+
+const persistTemplatePayload = async ({
+    payload,
+    templateIdRef,
+    currentVersionRef,
+    createTemplateMutation,
+    updateTemplateMutation,
+    router,
+    patchState,
+    templateCurrentVersion,
+}: {
+    payload: TemplateDraftPayload
+    templateIdRef: { current: string | null }
+    currentVersionRef: { current: number | null }
+    createTemplateMutation: TemplateCreateMutation
+    updateTemplateMutation: TemplateUpdateMutation
+    router: TemplateRouter
+    patchState: (payload: Partial<TemplateBuilderState>) => void
+    templateCurrentVersion: number | null | undefined
+}): Promise<PlatformFormTemplate> => {
+    let savedTemplate: PlatformFormTemplate
+    const templateId = templateIdRef.current
+    if (!templateId) {
+        savedTemplate = await createTemplateMutation.mutateAsync(payload)
+        templateIdRef.current = savedTemplate.id
+        router.replace(`/ops/templates/forms/${savedTemplate.id}`)
+    } else {
+        savedTemplate = await updateTemplateMutation.mutateAsync({
+            id: templateId,
+            payload: {
+                ...payload,
+                expected_version: currentVersionRef.current ?? templateCurrentVersion ?? null,
+            },
+        })
+    }
+
+    patchState({ isPublished: (savedTemplate.published_version ?? 0) > 0 })
+    if (typeof savedTemplate.current_version === "number") {
+        currentVersionRef.current = savedTemplate.current_version
+    }
+    return savedTemplate
+}
+
+const getAutoSaveLabel = (state: TemplateBuilderState, isDirty: boolean) => {
+    if (!state.hasHydrated) return null
+    if (state.isSaving || state.autoSaveStatus === "saving") return "Saving..."
+    if (state.autoSaveStatus === "error") return "Autosave failed"
+    if (isDirty) return "Unsaved changes"
+    if (state.autoSaveStatus === "saved") {
+        if (state.lastSavedAt) {
+            return `Saved ${state.lastSavedAt.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+            })}`
+        }
+        return "Saved"
+    }
+    return "Autosave on"
+}
 
 export function useTemplateFormBuilderPage() {
     const params = useParams<{ id: string }>()
@@ -41,7 +184,7 @@ export function useTemplateFormBuilderPage() {
     const deleteTemplateMutation = useDeletePlatformFormTemplate()
     const currentVersionRef = useRef<number | null>(null)
     const templateIdRef = useRef<string | null>(isNewForm ? null : id)
-    const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
+    const saveQueueRef = useRef<Promise<void> | null>(null)
     const hydratedFormRef = useRef<string | null>(null)
 
     const { state, patchState, resetForForm, hydrateFromTemplate } = useTemplateFormBuilderState(isNewForm)
@@ -133,54 +276,9 @@ export function useTemplateFormBuilderPage() {
         }
     }, [templateData?.current_version])
 
-    const draftPayload = useMemo(() => {
-        const allowedMimeTypes: string[] = []
-        for (const entry of state.allowedMimeTypesText.split(",")) {
-            const trimmedEntry = entry.trim()
-            if (trimmedEntry) allowedMimeTypes.push(trimmedEntry)
-        }
-        const mappings = buildMappings(pages)
-        const settingsJson: Record<string, unknown> = {
-            max_file_size_bytes: Math.max(1, Math.round(state.maxFileSizeMb * 1024 * 1024)),
-            max_file_count: Math.max(0, Math.round(state.maxFileCount)),
-            allowed_mime_types: allowedMimeTypes.length > 0 ? allowedMimeTypes : null,
-        }
-        if (mappings.length > 0) {
-            settingsJson.mappings = mappings
-        }
-
-        return {
-            name: state.formName.trim(),
-            description: state.formDescription.trim() || null,
-            schema_json: buildFormSchema(pages, {
-                publicEyebrow: state.publicEyebrow,
-                publicTitle: state.publicTitle,
-                publicSubtitle: state.publicSubtitle,
-                logoUrl: state.logoUrl,
-                privacyNotice: state.privacyNotice,
-            }),
-            settings_json: settingsJson,
-        }
-    }, [
-        pages,
-        state.allowedMimeTypesText,
-        state.formDescription,
-        state.formName,
-        state.logoUrl,
-        state.maxFileCount,
-        state.maxFileSizeMb,
-        state.privacyNotice,
-        state.publicEyebrow,
-        state.publicSubtitle,
-        state.publicTitle,
-    ])
-    const debouncedPayload = useDebouncedValue(draftPayload, 1200)
-    const debouncedFingerprint = useMemo(
-        () => JSON.stringify(debouncedPayload),
-        [debouncedPayload],
-    )
-    const draftIsDebounced = draftPayload === debouncedPayload
-    const isDirty = !draftIsDebounced || debouncedFingerprint !== state.lastSavedFingerprint
+    const draftPayload = buildTemplateDraftPayload(pages, state)
+    const draftFingerprint = JSON.stringify(draftPayload)
+    const isDirty = draftFingerprint !== state.lastSavedFingerprint
 
     useEffect(() => {
         if (!state.hasHydrated) return
@@ -191,21 +289,21 @@ export function useTemplateFormBuilderPage() {
             patchState({
                 autoSaveStatus: "saved",
                 lastSavedAt: new Date(templateData.updated_at),
-                lastSavedFingerprint: debouncedFingerprint,
+                lastSavedFingerprint: draftFingerprint,
             })
             return
         }
-        patchState({ autoSaveStatus: "idle", lastSavedFingerprint: debouncedFingerprint })
-    }, [debouncedFingerprint, formId, isNewForm, patchState, state.hasHydrated, templateData?.updated_at])
+        patchState({ autoSaveStatus: "idle", lastSavedFingerprint: draftFingerprint })
+    }, [draftFingerprint, formId, isNewForm, patchState, state.hasHydrated, templateData?.updated_at])
 
-    const requestDeletePage = useCallback((pageId: number) => {
+    const requestDeletePage = (pageId: number) => {
         patchState({
             pageToDelete: pageId,
             showDeletePageDialog: true,
         })
-    }, [patchState])
+    }
 
-    const confirmDeletePage = useCallback(() => {
+    const confirmDeletePage = () => {
         if (state.pageToDelete === null) {
             patchState({ showDeletePageDialog: false })
             return
@@ -215,63 +313,9 @@ export function useTemplateFormBuilderPage() {
             showDeletePageDialog: false,
             pageToDelete: null,
         })
-    }, [deletePage, patchState, state.pageToDelete])
+    }
 
-    const markSaved = useCallback((fingerprint: string, savedForm?: PlatformFormTemplate) => {
-        patchState({
-            autoSaveStatus: "saved",
-            lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
-            lastSavedFingerprint: fingerprint,
-        })
-    }, [patchState])
-
-    const persistTemplate = useCallback(
-        async (payloadOverride?: typeof draftPayload): Promise<PlatformFormTemplate> => {
-            const payload = payloadOverride ?? draftPayload
-
-            let savedTemplate: PlatformFormTemplate
-            const templateId = templateIdRef.current
-            if (!templateId) {
-                savedTemplate = await createTemplateMutation.mutateAsync(payload)
-                templateIdRef.current = savedTemplate.id
-                router.replace(`/ops/templates/forms/${savedTemplate.id}`)
-            } else {
-                savedTemplate = await updateTemplateMutation.mutateAsync({
-                    id: templateId,
-                    payload: {
-                        ...payload,
-                        expected_version: currentVersionRef.current ?? templateData?.current_version ?? null,
-                    },
-                })
-            }
-
-            patchState({ isPublished: (savedTemplate.published_version ?? 0) > 0 })
-            if (typeof savedTemplate.current_version === "number") {
-                currentVersionRef.current = savedTemplate.current_version
-            }
-            return savedTemplate
-        },
-        [
-            createTemplateMutation,
-            draftPayload,
-            patchState,
-            router,
-            templateData?.current_version,
-            updateTemplateMutation,
-        ],
-    )
-
-    const queueSave = useCallback(
-        async (payloadOverride?: typeof draftPayload): Promise<PlatformFormTemplate> => {
-            const run = () => persistTemplate(payloadOverride)
-            const chained = saveQueueRef.current.then(run, run)
-            saveQueueRef.current = chained.then(() => {}, () => {})
-            return chained
-        },
-        [persistTemplate],
-    )
-
-    const handleSave = useCallback(async () => {
+    const handleSave = async () => {
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
@@ -279,8 +323,19 @@ export function useTemplateFormBuilderPage() {
         patchState({ isSaving: true })
         const finishSaving = () => patchState({ isSaving: false })
         try {
-            const savedTemplate = await queueSave(draftPayload)
-            markSaved(JSON.stringify(draftPayload), savedTemplate)
+            const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
+                persistTemplatePayload({
+                    payload: draftPayload,
+                    templateIdRef,
+                    currentVersionRef,
+                    createTemplateMutation,
+                    updateTemplateMutation,
+                    router,
+                    patchState,
+                    templateCurrentVersion: templateData?.current_version,
+                }),
+            )
+            patchState(buildSavedState(draftFingerprint, savedTemplate))
             toast.success("Template saved")
             finishSaving()
         } catch {
@@ -288,57 +343,90 @@ export function useTemplateFormBuilderPage() {
             toast.error("Failed to save template")
             finishSaving()
         }
-    }, [draftPayload, markSaved, patchState, queueSave, state.formName])
+    }
 
     useEffect(() => {
         if (!state.hasHydrated) return
         if (!state.formName.trim()) return
-        if (draftPayload !== debouncedPayload) return
-        if (debouncedFingerprint === state.lastSavedFingerprint) return
+        if (draftFingerprint === state.lastSavedFingerprint) return
         if (state.isSaving || state.isPublishing) return
 
         let cancelled = false
-        patchState({ autoSaveStatus: "saving" })
+        const timeout = setTimeout(() => {
+            if (cancelled) return
+            patchState({ autoSaveStatus: "saving" })
+            const payload = buildTemplateDraftPayload(pages, {
+                allowedMimeTypesText: state.allowedMimeTypesText,
+                formDescription: state.formDescription,
+                formName: state.formName,
+                logoUrl: state.logoUrl,
+                maxFileCount: state.maxFileCount,
+                maxFileSizeMb: state.maxFileSizeMb,
+                privacyNotice: state.privacyNotice,
+                publicEyebrow: state.publicEyebrow,
+                publicSubtitle: state.publicSubtitle,
+                publicTitle: state.publicTitle,
+            })
 
-        queueSave(debouncedPayload)
-            .then((savedForm) => {
-                if (cancelled) return
-                markSaved(debouncedFingerprint, savedForm)
-            })
-            .catch(() => {
-                if (cancelled) return
-                patchState({ autoSaveStatus: "error" })
-            })
+            queueTemplateSave(saveQueueRef, () =>
+                persistTemplatePayload({
+                    payload,
+                    templateIdRef,
+                    currentVersionRef,
+                    createTemplateMutation,
+                    updateTemplateMutation,
+                    router,
+                    patchState,
+                    templateCurrentVersion: templateData?.current_version,
+                }),
+            )
+                .then((savedForm) => {
+                    if (cancelled) return
+                    patchState(buildSavedState(draftFingerprint, savedForm))
+                })
+                .catch(() => {
+                    if (cancelled) return
+                    patchState({ autoSaveStatus: "error" })
+                })
+        }, 1200)
 
         return () => {
             cancelled = true
+            clearTimeout(timeout)
         }
     }, [
-        debouncedFingerprint,
-        debouncedPayload,
-        draftPayload,
-        markSaved,
+        createTemplateMutation,
+        draftFingerprint,
+        pages,
         patchState,
-        queueSave,
+        router,
+        state.allowedMimeTypesText,
+        state.formDescription,
         state.formName,
         state.hasHydrated,
         state.isPublishing,
         state.isSaving,
         state.lastSavedFingerprint,
+        state.logoUrl,
+        state.maxFileCount,
+        state.maxFileSizeMb,
+        state.privacyNotice,
+        state.publicEyebrow,
+        state.publicSubtitle,
+        state.publicTitle,
+        templateData?.current_version,
+        updateTemplateMutation,
     ])
 
-    const handlePreview = useCallback(() => {
+    const handlePreview = () => {
         if (pages.every((page) => page.fields.length === 0)) {
             toast.error("Add at least one field before previewing")
             return
         }
         patchState({ workspaceTab: "preview" })
-    }, [
-        pages,
-        patchState,
-    ])
+    }
 
-    const handlePublish = useCallback(() => {
+    const handlePublish = () => {
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
@@ -348,14 +436,25 @@ export function useTemplateFormBuilderPage() {
             return
         }
         patchState({ showPublishDialog: true })
-    }, [pages, patchState, state.formName])
+    }
 
-    const confirmPublish = useCallback(async () => {
+    const confirmPublish = async () => {
         patchState({ isPublishing: true })
         const finishPublishing = () => patchState({ isPublishing: false })
         try {
-            const savedTemplate = await queueSave(draftPayload)
-            markSaved(JSON.stringify(draftPayload), savedTemplate)
+            const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
+                persistTemplatePayload({
+                    payload: draftPayload,
+                    templateIdRef,
+                    currentVersionRef,
+                    createTemplateMutation,
+                    updateTemplateMutation,
+                    router,
+                    patchState,
+                    templateCurrentVersion: templateData?.current_version,
+                }),
+            )
+            patchState(buildSavedState(draftFingerprint, savedTemplate))
             await publishTemplateMutation.mutateAsync({
                 id: savedTemplate.id,
                 payload: {
@@ -374,9 +473,9 @@ export function useTemplateFormBuilderPage() {
             toast.error("Failed to publish template")
             finishPublishing()
         }
-    }, [draftPayload, markSaved, patchState, publishTemplateMutation, queueSave])
+    }
 
-    const handleDeleteTemplate = useCallback(async () => {
+    const handleDeleteTemplate = async () => {
         if (isNewForm || deleteTemplateMutation.isPending) return
         try {
             await deleteTemplateMutation.mutateAsync({ id })
@@ -386,107 +485,50 @@ export function useTemplateFormBuilderPage() {
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to delete template")
         }
-    }, [deleteTemplateMutation, id, isNewForm, patchState, router])
+    }
 
-    const autoSaveLabel = useMemo(() => {
-        if (!state.hasHydrated) return null
-        if (state.isSaving || state.autoSaveStatus === "saving") return "Saving..."
-        if (state.autoSaveStatus === "error") return "Autosave failed"
-        if (isDirty) return "Unsaved changes"
-        if (state.autoSaveStatus === "saved") {
-            if (state.lastSavedAt) {
-                return `Saved ${state.lastSavedAt.toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                })}`
-            }
-            return "Saved"
-        }
-        return "Autosave on"
-    }, [isDirty, state.autoSaveStatus, state.hasHydrated, state.isSaving, state.lastSavedAt])
+    const autoSaveLabel = getAutoSaveLabel(state, isDirty)
 
-    const workspaceDocument = useMemo(
-        () => ({
-            pages,
-            activePage,
-            currentPage,
-            selectedField,
-            selectedFieldData,
-            dropIndicatorId,
-            isDragging,
-            setActivePage,
-            selectField,
-            requestDeletePage,
-            handleAddPage,
-            handleDuplicatePage,
-            handleDragStart,
-            handleFieldDragStart,
-            handleDragOver,
-            handleCanvasDragOver,
-            handleFieldDragOver,
-            handleDrop,
-            handleDropOnField,
-            handleDragEnd,
-            handleInsertField,
-            handleUpdateField,
-            handleDuplicateField,
-            handleDeleteField,
-            handleValidationChange,
-            handleAddColumn,
-            handleUpdateColumn,
-            handleRemoveColumn,
-            handleAddRow,
-            handleUpdateRow,
-            handleRemoveRow,
-            handleShowIfChange,
-            handleMappingChange,
-            syncOptionKeys,
-            addOption,
-            removeOption,
-            handleRenamePage,
-            handleMovePage,
-        }),
-        [
-            activePage,
-            addOption,
-            currentPage,
-            dropIndicatorId,
-            handleAddColumn,
-            handleAddRow,
-            handleAddPage,
-            handleCanvasDragOver,
-            handleDeleteField,
-            handleDragEnd,
-            handleDragOver,
-            handleDragStart,
-            handleDrop,
-            handleDropOnField,
-            handleDuplicateField,
-            handleDuplicatePage,
-            handleFieldDragOver,
-            handleFieldDragStart,
-            handleInsertField,
-            handleMappingChange,
-            handleMovePage,
-            handleRemoveColumn,
-            handleRemoveRow,
-            handleRenamePage,
-            handleShowIfChange,
-            handleUpdateColumn,
-            handleUpdateField,
-            handleUpdateRow,
-            handleValidationChange,
-            isDragging,
-            pages,
-            removeOption,
-            requestDeletePage,
-            selectField,
-            selectedField,
-            selectedFieldData,
-            setActivePage,
-            syncOptionKeys,
-        ],
-    )
+    const workspaceDocument = {
+        pages,
+        activePage,
+        currentPage,
+        selectedField,
+        selectedFieldData,
+        dropIndicatorId,
+        isDragging,
+        setActivePage,
+        selectField,
+        requestDeletePage,
+        handleAddPage,
+        handleDuplicatePage,
+        handleDragStart,
+        handleFieldDragStart,
+        handleDragOver,
+        handleCanvasDragOver,
+        handleFieldDragOver,
+        handleDrop,
+        handleDropOnField,
+        handleDragEnd,
+        handleInsertField,
+        handleUpdateField,
+        handleDuplicateField,
+        handleDeleteField,
+        handleValidationChange,
+        handleAddColumn,
+        handleUpdateColumn,
+        handleRemoveColumn,
+        handleAddRow,
+        handleUpdateRow,
+        handleRemoveRow,
+        handleShowIfChange,
+        handleMappingChange,
+        syncOptionKeys,
+        addOption,
+        removeOption,
+        handleRenamePage,
+        handleMovePage,
+    }
 
     return {
         deleteTemplateMutation,

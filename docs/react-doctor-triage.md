@@ -1128,3 +1128,23 @@ Full command after Batch 54: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `938`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 38 warnings`, `Accessibility 40 warnings`, `Maintainability 676 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-40a01f68-4dfc-4a43-b287-056f19393bfb`
+
+## Batch 55
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/forms/use-template-form-builder-page.ts` | Valid: the template form-builder hook still wrapped draft payloads, handlers, autosave labels, and workspace document props in manual `useMemo`/`useCallback` even though React Compiler can cache them. | High | Remove the wrappers, derive the payload and workspace document directly, and keep autosave behavior stable by debouncing a deterministic payload fingerprint instead of a fresh object. Added a source guard that failed on the old `useMemo`/`useCallback` imports and calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/platform-form-template-page.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `543` to `529`. |
+| `react-doctor/rerender-lazy-ref-init` | `lib/forms/use-template-form-builder-page.ts` | Valid: `useRef<Promise<void>>(Promise.resolve())` rebuilt a throwaway promise on every render. | High | Initialize the save queue ref with `null` and lazily create the resolved queue inside the module-scope queue helper when a save actually runs. | Full React Doctor no longer reports `rerender-lazy-ref-init` for `use-template-form-builder-page.ts`; performance warnings dropped from `38` to `37`. |
+
+Changed-scope command after Batch 55: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 55: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `65 / 100 Needs work`
+- Total diagnostics: `923`
+- Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 662 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7bc3a239-5aed-442d-b2e1-08af751af1db`
