@@ -66,11 +66,6 @@ export function DateTimePicker({
     const resolvedTimeInputId = timeInputId ?? generatedTimeInputId
     const { date: draftDate, time: draftTime } = draft
 
-    React.useEffect(() => {
-        if (!open) return
-        setDraft(getDraftFromValue(value))
-    }, [open, value])
-
     const displayLabel = value ? format(value, "MMM d, yyyy 'at' h:mm a") : placeholder
 
     const apply = () => {

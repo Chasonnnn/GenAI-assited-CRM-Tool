@@ -131,7 +131,11 @@ describe("React regression guards (source)", () => {
         const source = readSource("components/ui/date-time-picker.tsx")
 
         expect(source).toContain("function getDraftFromValue(")
+        expect(source).toContain("setDraft(getDraftFromValue(value))")
         expect(source).not.toContain("React.useState<Date | undefined>(value)")
+        expect(source).not.toContain(
+            "React.useEffect(() => {\n        if (!open) return\n        setDraft(getDraftFromValue(value))"
+        )
         expect(source).not.toContain("defaultMonth={draftDate || new Date()}")
     })
 

@@ -565,3 +565,21 @@ Full command after Batch 26: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1108`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 211 warnings`, `Performance 36 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8739e2f8-25c6-4cfb-a216-90c485027fdb`
+
+## Batch 27
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` | `components/ui/date-time-picker.tsx` | Valid: the picker already resets its draft from `value` in the popover open handler, so the open-gated effect repeated the same prop-to-state synchronization after render. | High | Remove the duplicate effect and keep draft synchronization in the user-triggered open handler. Added a source regression guard that failed before the fix. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 27: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 27: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1105`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 209 warnings`, `Performance 35 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4b7fd980-5254-4701-9dc5-c2c6f2d62922`
