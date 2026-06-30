@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
@@ -102,20 +102,18 @@ export default function AgencyDetailPage() {
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
     const [purgeSubmitting, setPurgeSubmitting] = useState(false);
-    const isMountedRef = useRef(true);
     const alertsRequestIdRef = useRef(0);
-
-    useEffect(() => {
-        return () => {
-            isMountedRef.current = false;
-        };
-    }, []);
 
     useEffect(() => {
         let isCurrent = true;
 
         async function fetchData() {
             setIsLoading(true);
+            const finishLoading = () => {
+                if (isCurrent) {
+                    setIsLoading(false);
+                }
+            };
             try {
                 const [orgData, subData, membersData, invitesData, logsData] = await Promise.all([
                     getOrganization(orgId),
@@ -124,20 +122,20 @@ export default function AgencyDetailPage() {
                     listInvites(orgId),
                     getAdminActionLogs(orgId, { limit: 20 }),
                 ]);
-                if (!isCurrent) return;
-                setOrg(orgData);
-                setSubscription(subData);
-                setNotesDraft(subData?.notes ?? '');
-                setMembers(membersData);
-                setInvites(invitesData);
-                setActionLogs(logsData.items);
-            } catch (error) {
-                if (!isCurrent) return;
-                console.error('Failed to fetch agency data:', error);
-                toast.error('Failed to load agency details');
-            } finally {
                 if (isCurrent) {
-                    setIsLoading(false);
+                    setOrg(orgData);
+                    setSubscription(subData);
+                    setNotesDraft(subData?.notes ?? '');
+                    setMembers(membersData);
+                    setInvites(invitesData);
+                    setActionLogs(logsData.items);
+                    finishLoading();
+                }
+            } catch (error) {
+                if (isCurrent) {
+                    console.error('Failed to fetch agency data:', error);
+                    toast.error('Failed to load agency details');
+                    finishLoading();
                 }
             }
         }
@@ -149,34 +147,69 @@ export default function AgencyDetailPage() {
         };
     }, [orgId]);
 
-    const fetchOrgAlerts = useCallback(async () => {
+    const fetchOrgAlerts = async () => {
         if (!orgId) return;
         const requestId = alertsRequestIdRef.current + 1;
         alertsRequestIdRef.current = requestId;
         setAlertsLoading(true);
-        try {
-            const data = await listAlerts({ org_id: orgId });
-            if (!isMountedRef.current || requestId !== alertsRequestIdRef.current) return;
-            setOrgAlerts(data.items);
-        } catch (error) {
-            if (!isMountedRef.current || requestId !== alertsRequestIdRef.current) return;
-            console.error('Failed to fetch org alerts:', error);
-            toast.error('Failed to load organization alerts');
-        } finally {
-            if (isMountedRef.current && requestId === alertsRequestIdRef.current) {
+        const finishAlertsLoading = () => {
+            if (requestId === alertsRequestIdRef.current) {
                 setAlertsLoading(false);
             }
+        };
+        try {
+            const data = await listAlerts({ org_id: orgId });
+            if (requestId === alertsRequestIdRef.current) {
+                setOrgAlerts(data.items);
+                finishAlertsLoading();
+            }
+        } catch (error) {
+            if (requestId === alertsRequestIdRef.current) {
+                console.error('Failed to fetch org alerts:', error);
+                toast.error('Failed to load organization alerts');
+                finishAlertsLoading();
+            }
         }
-    }, [orgId]);
+    };
 
     useEffect(() => {
-        void fetchOrgAlerts();
-    }, [fetchOrgAlerts]);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
 
-    const openAlertCount = useMemo(
-        () => orgAlerts.filter((alert) => alert.status === 'open').length,
-        [orgAlerts]
-    );
+            const requestId = alertsRequestIdRef.current + 1;
+            alertsRequestIdRef.current = requestId;
+            setAlertsLoading(true);
+            const finishAlertsLoading = () => {
+                if (!cancelled && requestId === alertsRequestIdRef.current) {
+                    setAlertsLoading(false);
+                }
+            };
+
+            async function fetchInitialOrgAlerts() {
+                try {
+                    const data = await listAlerts({ org_id: orgId });
+                    if (!cancelled && requestId === alertsRequestIdRef.current) {
+                        setOrgAlerts(data.items);
+                        finishAlertsLoading();
+                    }
+                } catch (error) {
+                    if (!cancelled && requestId === alertsRequestIdRef.current) {
+                        console.error('Failed to fetch org alerts:', error);
+                        toast.error('Failed to load organization alerts');
+                        finishAlertsLoading();
+                    }
+                }
+            }
+
+            void fetchInitialOrgAlerts();
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [orgId]);
+
+    const openAlertCount = orgAlerts.filter((alert) => alert.status === 'open').length;
 
     useEffect(() => {
         if (activeTab !== 'invites') return;
@@ -184,17 +217,22 @@ export default function AgencyDetailPage() {
 
         async function fetchEmailStatus() {
             setPlatformEmailLoading(true);
-            try {
-                const status = await getPlatformEmailStatus();
-                if (!isCurrent) return;
-                setPlatformEmailStatus(status);
-            } catch (error) {
-                if (!isCurrent) return;
-                console.error('Failed to fetch platform email status:', error);
-                toast.error('Failed to load platform email sender status');
-            } finally {
+            const finishPlatformEmailLoading = () => {
                 if (isCurrent) {
                     setPlatformEmailLoading(false);
+                }
+            };
+            try {
+                const status = await getPlatformEmailStatus();
+                if (isCurrent) {
+                    setPlatformEmailStatus(status);
+                    finishPlatformEmailLoading();
+                }
+            } catch (error) {
+                if (isCurrent) {
+                    console.error('Failed to fetch platform email status:', error);
+                    toast.error('Failed to load platform email sender status');
+                    finishPlatformEmailLoading();
                 }
             }
         }
@@ -209,36 +247,39 @@ export default function AgencyDetailPage() {
     const handleDeleteOrganization = async () => {
         if (!org) return;
         setDeleteSubmitting(true);
+        const finishDelete = () => setDeleteSubmitting(false);
         try {
             const updated = await deleteOrganization(org.id);
             setOrg(updated);
             toast.success('Organization scheduled for deletion');
+            finishDelete();
         } catch (error) {
             console.error('Failed to delete organization:', error);
             toast.error(getErrorMessage(error, 'Failed to delete organization'));
-        } finally {
-            setDeleteSubmitting(false);
+            finishDelete();
         }
     };
 
     const handleRestoreOrganization = async () => {
         if (!org) return;
         setRestoreSubmitting(true);
+        const finishRestore = () => setRestoreSubmitting(false);
         try {
             const updated = await restoreOrganization(org.id);
             setOrg(updated);
             toast.success('Organization restored');
+            finishRestore();
         } catch (error) {
             console.error('Failed to restore organization:', error);
             toast.error(getErrorMessage(error, 'Failed to restore organization'));
-        } finally {
-            setRestoreSubmitting(false);
+            finishRestore();
         }
     };
 
     const handlePurgeOrganization = async () => {
         if (!org) return;
         setPurgeSubmitting(true);
+        const finishPurge = () => setPurgeSubmitting(false);
         try {
             const result = await purgeOrganization(org.id);
             if (result.deleted) {
@@ -247,11 +288,11 @@ export default function AgencyDetailPage() {
                 toast.success('Deletion scheduled; org removed from ops list');
             }
             push('/ops/agencies');
+            finishPurge();
         } catch (error) {
             console.error('Failed to purge organization:', error);
             toast.error(getErrorMessage(error, 'Failed to delete organization'));
-        } finally {
-            setPurgeSubmitting(false);
+            finishPurge();
         }
     };
 
@@ -270,14 +311,15 @@ export default function AgencyDetailPage() {
 
     const handleResetMfa = async (member: OrgMember) => {
         setMfaResetting(member.id);
+        const finishMfaReset = () => setMfaResetting(null);
         try {
             await resetMemberMfa(orgId, member.id);
             toast.success(`MFA and Duo reset for ${member.email}`);
+            finishMfaReset();
         } catch (error) {
             console.error('Failed to reset MFA:', error);
             toast.error(getErrorMessage(error, 'Failed to reset MFA and Duo enrollment'));
-        } finally {
-            setMfaResetting(null);
+            finishMfaReset();
         }
     };
 
@@ -297,16 +339,17 @@ export default function AgencyDetailPage() {
     const handleSaveNotes = async () => {
         if (!subscription) return;
         setNotesSaving(true);
+        const finishNotesSave = () => setNotesSaving(false);
         try {
             const updated = await updateSubscription(orgId, { notes: notesDraft });
             setSubscription(updated);
             setNotesDraft(updated.notes ?? '');
             toast.success('Subscription notes updated');
+            finishNotesSave();
         } catch (error) {
             console.error('Failed to update subscription notes:', error);
             toast.error(getErrorMessage(error, 'Failed to update subscription notes'));
-        } finally {
-            setNotesSaving(false);
+            finishNotesSave();
         }
     };
 
@@ -338,16 +381,17 @@ export default function AgencyDetailPage() {
 
     const handleResendInvite = async (inviteId: string) => {
         setInviteResending(inviteId);
+        const finishInviteResend = () => setInviteResending(null);
         try {
             await resendInvite(orgId, inviteId);
             const refreshed = await listInvites(orgId);
             setInvites(refreshed);
             toast.success('Invite resent');
+            finishInviteResend();
         } catch (error) {
             console.error('Failed to resend invite:', error);
             toast.error(getErrorMessage(error, 'Failed to resend invite'));
-        } finally {
-            setInviteResending(null);
+            finishInviteResend();
         }
     };
 
@@ -358,6 +402,7 @@ export default function AgencyDetailPage() {
             return;
         }
         setInviteSubmitting(true);
+        const finishInviteCreate = () => setInviteSubmitting(false);
         try {
             const invite = await createInvite(orgId, {
                 email: inviteForm.email.trim().toLowerCase(),
@@ -367,16 +412,17 @@ export default function AgencyDetailPage() {
             setInviteOpen(false);
             setInviteForm({ email: '', role: INVITE_ROLE_OPTIONS[0] });
             toast.success('Invite created');
+            finishInviteCreate();
         } catch (error) {
             const message = getErrorMessage(error, 'Failed to create invite');
             setInviteError(message);
-        } finally {
-            setInviteSubmitting(false);
+            finishInviteCreate();
         }
     };
 
     const handleAcknowledgeAlert = async (alertId: string) => {
         setAlertsUpdating(alertId);
+        const finishAlertUpdate = () => setAlertsUpdating(null);
         try {
             await acknowledgeAlert(alertId);
             setOrgAlerts((prev) =>
@@ -385,16 +431,17 @@ export default function AgencyDetailPage() {
                 )
             );
             toast.success('Alert acknowledged');
+            finishAlertUpdate();
         } catch (error) {
             console.error('Failed to acknowledge alert:', error);
             toast.error(getErrorMessage(error, 'Failed to acknowledge alert'));
-        } finally {
-            setAlertsUpdating(null);
+            finishAlertUpdate();
         }
     };
 
     const handleResolveAlert = async (alertId: string) => {
         setAlertsUpdating(alertId);
+        const finishAlertUpdate = () => setAlertsUpdating(null);
         try {
             const result = await resolveAlert(alertId);
             setOrgAlerts((prev) =>
@@ -405,11 +452,11 @@ export default function AgencyDetailPage() {
                 )
             );
             toast.success('Alert resolved');
+            finishAlertUpdate();
         } catch (error) {
             console.error('Failed to resolve alert:', error);
             toast.error(getErrorMessage(error, 'Failed to resolve alert'));
-        } finally {
-            setAlertsUpdating(null);
+            finishAlertUpdate();
         }
     };
 

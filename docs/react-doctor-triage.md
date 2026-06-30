@@ -72,3 +72,25 @@ Full command after Batch 3: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1431`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 304 warnings`, `Performance 147 errors + 43 warnings`, `Accessibility 54 warnings`, `Maintainability 847 warnings`
 - Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-05a399bf-33da-496c-8f45-dddde566dda0`
+
+## Batch 4
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `app/ops/agencies/[orgId]/page.client.tsx` | Valid: ops agency load/action handlers used `try` statements with `finally` clauses, which blocks React Compiler optimization. | High | Replace each `finally` cleanup with explicit success/catch cleanup helpers while preserving stale-request guards. | `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run tests/react-regressions-source.test.ts tests/ops-support-session-dialog.test.tsx tests/agency-users-tab.test.tsx tests/agency-time-rendering.test.tsx`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/set-state-in-effect` | `app/ops/agencies/[orgId]/page.client.tsx` | Valid: initial alert refresh synchronously called a callback that set loading state from an effect. | High | Defer the initial alert load into a microtask and keep manual refresh as an event-driven handler. | Changed-scope React Doctor no longer reports `set-state-in-effect`. |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/agencies/[orgId]/page.client.tsx` | Valid: React Compiler is enabled, so the alert-count `useMemo` was redundant. | High | Derive `openAlertCount` directly and update the source regression guard to keep duplicate state out instead of requiring `useMemo`. | Focused source regression tests passed. |
+
+Changed-scope command after Batch 4: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Remaining changed-file warnings: `no-giant-component`, `prefer-useReducer` for `AgencyDetailPage`; both are valid but larger refactors deferred to a separate batch.
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b5b974f7-e6ca-40ba-a249-5ef2d313f7c6`
+
+Full command after Batch 4: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `0 / 100 Critical`
+- Total diagnostics: `1412`
+- Summary: `Security 2 warnings`, `Bugs 34 errors + 303 warnings`, `Performance 134 errors + 40 warnings`, `Accessibility 54 warnings`, `Maintainability 845 warnings`
+- Diagnostics: `/private/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4ede4ff8-d0be-4f21-95f6-29d325ec8a9d`
