@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { CommentCard } from "../CommentCard"
-import { useInterviewComments, getMinSidebarHeight } from "./context"
+import { useInterviewComments } from "./context"
+import { getMinSidebarHeight } from "./comment-layout"
 import { PendingCommentInput } from "./PendingCommentInput"
 
 interface CommentsSidebarProps {
@@ -32,13 +32,13 @@ export function CommentsSidebar({ className }: CommentsSidebarProps) {
     } = useInterviewComments()
 
     // Handle comment card hover
-    const handleCardHover = useCallback((commentId: string | null, hover: boolean) => {
+    const handleCardHover = (commentId: string | null, hover: boolean) => {
         if (isSelectingRef.current) return
         setHoveredCommentId(hover ? commentId : null)
-    }, [isSelectingRef, setHoveredCommentId])
+    }
 
     // Handle comment card click
-    const handleCardClick = useCallback((commentId: string | null) => {
+    const handleCardClick = (commentId: string | null) => {
         setFocusedCommentId(commentId)
         // Scroll highlight into view
         if (commentId && transcriptRef.current) {
@@ -47,7 +47,7 @@ export function CommentsSidebar({ className }: CommentsSidebarProps) {
             )
             highlight?.scrollIntoView({ behavior: "smooth", block: "center" })
         }
-    }, [setFocusedCommentId, transcriptRef])
+    }
 
     return (
         <div className={cn("w-72 shrink-0 border-l border-stone-200 dark:border-stone-800 relative z-30", className)}>

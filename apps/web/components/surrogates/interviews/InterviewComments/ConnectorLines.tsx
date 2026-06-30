@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useInterviewComments, getMinSidebarHeight } from "./context"
+import { useInterviewComments } from "./context"
+import { getMinSidebarHeight } from "./comment-layout"
 
 export function ConnectorLines() {
     const {

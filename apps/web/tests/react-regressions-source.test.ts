@@ -159,6 +159,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/for \(const note of notes\)[\s\S]*new RegExp/)
     })
 
+    it("keeps interview comment context compiler-friendly", () => {
+        const source = readSource("components/surrogates/interviews/InterviewComments/context.tsx")
+
+        expect(source).toContain("function resolveMutationResult")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("export function getMinSidebarHeight")
+        expect(source).not.toContain("finally")
+        expect(source).not.toMatch(/try \{\s+await onAddNote/)
+    })
+
     it("uses Set membership for attachment upload extension validation", () => {
         const source = readSource("components/FileUploadZone.tsx")
 

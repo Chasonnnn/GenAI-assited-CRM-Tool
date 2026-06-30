@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { createContext, use, useState, useCallback, useRef, useMemo } from "react"
+import { createContext, use, useState, useRef } from "react"
 import type {
     InterviewRead,
     InterviewNoteRead,
 } from "@/lib/api/interviews"
+import { getMinSidebarHeight } from "./comment-layout"
 
 // ============================================================================
 // Types
@@ -112,6 +113,19 @@ function buildCommentNoteMap(notes: InterviewNoteRead[]): Map<string, string> {
     return map
 }
 
+type MutationResult = { ok: true } | { ok: false; error: unknown }
+
+function resolveMutationResult(promise: Promise<void>): Promise<MutationResult> {
+    return promise.then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error })
+    )
+}
+
+function throwMutationError(error: unknown): never {
+    throw error
+}
+
 // ============================================================================
 // Provider Props
 // ============================================================================
@@ -164,40 +178,32 @@ export function InterviewCommentsProvider({
     const [layoutMinHeight, setLayoutMinHeight] = useState(0)
 
     // Derived data
-    const commentNoteMap = useMemo(() => buildCommentNoteMap(notes), [notes])
-    const anchoredNotes = useMemo(
-        () => notes.filter((n) => n.comment_id || n.anchor_text),
-        [notes]
-    )
-    const generalNotes = useMemo(
-        () => notes.filter((n) => !n.comment_id && !n.anchor_text),
-        [notes]
-    )
-
-    const activeNoteId = useMemo(() => {
-        if (interaction.type !== "focused") return null
-        return commentNoteMap.get(interaction.commentId) ?? null
-    }, [interaction, commentNoteMap])
+    const commentNoteMap = buildCommentNoteMap(notes)
+    const anchoredNotes = notes.filter((n) => n.comment_id || n.anchor_text)
+    const generalNotes = notes.filter((n) => !n.comment_id && !n.anchor_text)
+    const activeNoteId = interaction.type === "focused"
+        ? commentNoteMap.get(interaction.commentId) ?? null
+        : null
 
     // Interaction helpers
-    const setHoveredCommentId = useCallback((commentId: string | null) => {
+    const setHoveredCommentId = (commentId: string | null) => {
         if (commentId) {
             setInteraction({ type: "hovering", commentId })
         } else if (interaction.type === "hovering") {
             setInteraction({ type: "idle" })
         }
-    }, [interaction.type])
+    }
 
-    const setFocusedCommentId = useCallback((commentId: string | null) => {
+    const setFocusedCommentId = (commentId: string | null) => {
         if (commentId) {
             setInteraction({ type: "focused", commentId })
         } else {
             setInteraction({ type: "idle" })
         }
-    }, [])
+    }
 
     // Position calculation
-    const calculatePositions = useCallback(() => {
+    const calculatePositions = () => {
         if (!transcriptRef.current) return
 
         const container = transcriptRef.current
@@ -278,118 +284,103 @@ export function InterviewCommentsProvider({
         const commentsHeight = getMinSidebarHeight(positions)
         const transcriptHeight = transcriptRef.current?.scrollHeight ?? 0
         setLayoutMinHeight(Math.max(commentsHeight, transcriptHeight, 200))
-    }, [anchoredNotes, newComment])
+    }
 
     // Comment actions
-    const startPendingComment = useCallback(
-        (selection: { text: string; range: Range }) => {
-            const commentId = crypto.randomUUID()
-            const rect = selection.range.getClientRects()[0]
-            const transcriptRect = transcriptRef.current?.getBoundingClientRect()
-            const layoutRect = layoutRef.current?.getBoundingClientRect()
-            const anchorTop = rect && transcriptRect
-                ? rect.top - transcriptRect.top
-                : 0
-            const anchorLeft = rect && layoutRect
-                ? rect.left - layoutRect.left + Math.min(rect.width, 12)
-                : 0
-            const firstLine = selection.text.split(/\r?\n/)[0] ?? ""
-            const anchorText = firstLine.replace(/\s+/g, " ").trim()
+    const startPendingComment = (selection: { text: string; range: Range }) => {
+        const commentId = crypto.randomUUID()
+        const rect = selection.range.getClientRects()[0]
+        const transcriptRect = transcriptRef.current?.getBoundingClientRect()
+        const layoutRect = layoutRef.current?.getBoundingClientRect()
+        const anchorTop = rect && transcriptRect
+            ? rect.top - transcriptRect.top
+            : 0
+        const anchorLeft = rect && layoutRect
+            ? rect.left - layoutRect.left + Math.min(rect.width, 12)
+            : 0
+        const firstLine = selection.text.split(/\r?\n/)[0] ?? ""
+        const anchorText = firstLine.replace(/\s+/g, " ").trim()
 
-            setNewComment({
-                type: "pending",
-                text: anchorText,
-                commentId,
-                anchorTop,
-                anchorLeft,
-            })
-        },
-        []
-    )
+        setNewComment({
+            type: "pending",
+            text: anchorText,
+            commentId,
+            anchorTop,
+            anchorLeft,
+        })
+    }
 
-    const cancelPendingComment = useCallback(() => {
+    const cancelPendingComment = () => {
         setNewComment({ type: "none" })
-    }, [])
+    }
 
-    const startAddingGeneralNote = useCallback(() => {
+    const startAddingGeneralNote = () => {
         setNewComment({ type: "adding_general" })
-    }, [])
+    }
 
-    const cancelAddingGeneralNote = useCallback(() => {
+    const cancelAddingGeneralNote = () => {
         setNewComment({ type: "none" })
         setNewNoteContent("")
-    }, [])
+    }
 
     // Mutations
-    const submitComment = useCallback(
-        async (content: string) => {
-            if (newComment.type !== "pending" || !content.trim()) return
+    const submitComment = async (content: string) => {
+        if (newComment.type !== "pending" || !content.trim()) return
 
-            setIsSubmitting(true)
-            try {
-                await onAddNote({
-                    content: content.trim(),
-                    commentId: newComment.commentId,
-                    anchorText: newComment.text,
-                })
-                setNewComment({ type: "none" })
-            } finally {
-                setIsSubmitting(false)
-            }
-        },
-        [newComment, onAddNote]
-    )
+        setIsSubmitting(true)
+        const result = await resolveMutationResult(onAddNote({
+            content: content.trim(),
+            commentId: newComment.commentId,
+            anchorText: newComment.text,
+        }))
+        setIsSubmitting(false)
+        if (!result.ok) {
+            throwMutationError(result.error)
+        }
+        setNewComment({ type: "none" })
+    }
 
-    const submitGeneralNote = useCallback(async () => {
+    const submitGeneralNote = async () => {
         if (!newNoteContent.trim()) return
 
         setIsSubmitting(true)
-        try {
-            await onAddNote({
-                content: newNoteContent.trim(),
-                commentId: "",
-                anchorText: "",
-            })
-            setNewNoteContent("")
-            setNewComment({ type: "none" })
-        } finally {
-            setIsSubmitting(false)
+        const result = await resolveMutationResult(onAddNote({
+            content: newNoteContent.trim(),
+            commentId: "",
+            anchorText: "",
+        }))
+        setIsSubmitting(false)
+        if (!result.ok) {
+            throwMutationError(result.error)
         }
-    }, [newNoteContent, onAddNote])
+        setNewNoteContent("")
+        setNewComment({ type: "none" })
+    }
 
-    const submitReply = useCallback(
-        async (noteId: string, content: string) => {
-            const parentNote = notes.find((n) => n.id === noteId)
-            if (!parentNote) return
+    const submitReply = async (noteId: string, content: string) => {
+        const parentNote = notes.find((n) => n.id === noteId)
+        if (!parentNote) return
 
-            setIsSubmitting(true)
-            try {
-                await onAddNote({
-                    content,
-                    commentId: "",
-                    anchorText: "",
-                    parentId: noteId,
-                })
-            } finally {
-                setIsSubmitting(false)
-            }
-        },
-        [notes, onAddNote]
-    )
+        setIsSubmitting(true)
+        const result = await resolveMutationResult(onAddNote({
+            content,
+            commentId: "",
+            anchorText: "",
+            parentId: noteId,
+        }))
+        setIsSubmitting(false)
+        if (!result.ok) {
+            throwMutationError(result.error)
+        }
+    }
 
-    const updateNote = useCallback(
-        async (noteId: string, content: string) => {
-            await onUpdateNote(noteId, content)
-        },
-        [onUpdateNote]
-    )
+    const updateNote = async (noteId: string, content: string) => {
+        await onUpdateNote(noteId, content)
+    }
 
-    const deleteNote = useCallback(
-        async (noteId: string) => {
-            await onDeleteNote(noteId)
-        },
-        [onDeleteNote]
-    )
+    const deleteNote = async (noteId: string) => {
+        await onDeleteNote(noteId)
+    }
 
     const value: InterviewCommentsContextValue = {
         // Data
@@ -468,13 +459,4 @@ function avoidCollisions(positions: CommentPosition[]) {
             curr.top = minTop
         }
     }
-}
-
-export function getMinSidebarHeight(positions: CommentPosition[]): number {
-    if (positions.length === 0) return 100
-    let maxBottom = 0
-    for (const position of positions) {
-        maxBottom = Math.max(maxBottom, position.top + position.height)
-    }
-    return maxBottom + 40
 }

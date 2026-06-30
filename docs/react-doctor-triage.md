@@ -449,3 +449,25 @@ Full command after Batch 20: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1147`
 - Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 46 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 795 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-95348cac-83d8-436d-9777-aa0dbefb59dc`
+
+## Batch 21
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/todo` | `components/surrogates/interviews/InterviewComments/context.tsx` | Valid: comment, general-note, and reply submission handlers used `try`/`finally`, which blocks the current React Compiler path. | High | Replace finalizers with a promise-result helper that preserves rejected promises while explicitly clearing submission state. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/surrogate-interview-accessibility.test.tsx tests/transcript-viewer.test.tsx`; changed-scope React Doctor no longer reports errors. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/interviews/InterviewComments/context.tsx`, `components/surrogates/interviews/InterviewComments/CommentsSidebar.tsx` | Valid: React Compiler is enabled, so the local `useMemo`/`useCallback` wrappers are redundant in this context provider and sidebar. | High | Derive note lists/maps directly and use plain local functions. | Focused tests passed; changed-scope React Doctor no longer reports manual memoization warnings for these files. |
+| `react-doctor/only-export-components` | `components/surrogates/interviews/InterviewComments/context.tsx` | Valid: `getMinSidebarHeight` is a non-component helper exported from a component file and used by sibling components. | High | Move the helper to `comment-layout.ts` and update sibling imports. | Focused tests passed; changed-scope React Doctor no longer reports `only-export-components` for this file. |
+
+Changed-scope command after Batch 21: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining changed-file warning: `prefer-useReducer` for `InterviewCommentsProvider`; valid but larger state-shape refactor than this compiler-error batch.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-05b73d4c-ad91-4994-9e06-5bf0c28edf69`
+
+Full command after Batch 21: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1124`
+- Summary: `Security 2 warnings`, `Bugs 7 errors + 219 warnings`, `Performance 43 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 775 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b251672-af4f-4d35-9a01-1e9241a83852`
