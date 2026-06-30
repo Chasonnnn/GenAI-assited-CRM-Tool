@@ -243,35 +243,23 @@ export function SurrogateApplicationTab({
     publishedForms = EMPTY_PUBLISHED_FORMS,
 }: SurrogateApplicationTabProps) {
     const { user } = useAuth()
-    const [baseUrl, setBaseUrl] = React.useState("")
+    const baseUrl =
+        user?.org_portal_base_url ||
+        (typeof window !== "undefined" ? window.location.origin : "")
 
-    React.useEffect(() => {
-        if (user?.org_portal_base_url) {
-            setBaseUrl(user.org_portal_base_url)
-            return
-        }
-        if (typeof window !== "undefined") {
-            setBaseUrl(window.location.origin)
-        }
-    }, [user?.org_portal_base_url])
-
-    const [selectedFormId, setSelectedFormId] = React.useState<string>("")
+    const [selectedFormIdOverride, setSelectedFormIdOverride] = React.useState<string>("")
     const [useAdvancedOverride, setUseAdvancedOverride] = React.useState(false)
     const [confirmOverride, setConfirmOverride] = React.useState(false)
-
-    React.useEffect(() => {
-        if (!useAdvancedOverride) {
-            setSelectedFormId("")
-            setConfirmOverride(false)
-            return
-        }
-        if (selectedFormId && publishedForms.some((form) => form.id === selectedFormId)) return
-        const fallback =
-            publishedForms.find((form) => form.id !== formId)?.id ||
-            publishedForms[0]?.id ||
-            ""
-        setSelectedFormId(fallback)
-    }, [formId, publishedForms, selectedFormId, useAdvancedOverride])
+    const fallbackOverrideFormId =
+        publishedForms.find((form) => form.id !== formId)?.id ||
+        publishedForms[0]?.id ||
+        ""
+    const selectedFormId =
+        useAdvancedOverride
+            ? publishedForms.some((form) => form.id === selectedFormIdOverride)
+                ? selectedFormIdOverride
+                : fallbackOverrideFormId
+            : ""
 
     const effectiveFormId = useAdvancedOverride ? selectedFormId : formId || ""
     const selectedFormMeta =
@@ -299,7 +287,7 @@ export function SurrogateApplicationTab({
     const [deletingFileId, setDeletingFileId] = React.useState<string | null>(null)
     const [isEditMode, setIsEditMode] = React.useState(false)
     const [isExporting, setIsExporting] = React.useState(false)
-    const [uploadFieldKey, setUploadFieldKey] = React.useState("")
+    const [uploadFieldKeyOverride, setUploadFieldKeyOverride] = React.useState("")
 
     // Section collapse state
     const [sectionOpen, setSectionOpen] = React.useState<Record<number, boolean>>({})
@@ -319,66 +307,36 @@ export function SurrogateApplicationTab({
     const [approveNotes, setApproveNotes] = React.useState("")
     const [formLinkCopied, setFormLinkCopied] = React.useState(false)
     const [formLink, setFormLink] = React.useState("")
-    const [selectedIntakeLinkId, setSelectedIntakeLinkId] = React.useState("")
-    const [selectedTemplateId, setSelectedTemplateId] = React.useState("")
+    const [selectedIntakeLinkIdOverride, setSelectedIntakeLinkIdOverride] = React.useState("")
+    const [selectedTemplateIdOverride, setSelectedTemplateIdOverride] = React.useState("")
 
     // Loading state for actions
     const [isApproving, setIsApproving] = React.useState(false)
     const [isRejecting, setIsRejecting] = React.useState(false)
     const [isSendingLink, setIsSendingLink] = React.useState(false)
 
-    const activeIntakeLinks = React.useMemo(
-        () => intakeLinks.filter((link) => link.is_active),
-        [intakeLinks],
-    )
+    const activeIntakeLinks = intakeLinks.filter((link) => link.is_active)
     const sendableIntakeLinks = activeIntakeLinks.length > 0 ? activeIntakeLinks : intakeLinks
-    const selectedIntakeLink = React.useMemo(() => {
-        if (sendableIntakeLinks.length === 0) return null
-        return (
-            sendableIntakeLinks.find((link) => link.id === selectedIntakeLinkId) ||
-            sendableIntakeLinks[0] ||
-            null
-        )
-    }, [selectedIntakeLinkId, sendableIntakeLinks])
-
-    React.useEffect(() => {
-        if (!submission?.schema_snapshot?.pages) return
-        const initialState: Record<number, boolean> = {}
-        submission.schema_snapshot.pages.forEach((_page, index) => {
-            initialState[index] = true
-        })
-        setSectionOpen(initialState)
-    }, [submission?.schema_snapshot])
-
-    React.useEffect(() => {
-        const pages = submission?.schema_snapshot?.pages || []
-        const fileFields = pages.flatMap((page) =>
-            page.fields.filter((field) => field.type === "file"),
-        )
-        if (fileFields.length === 1) {
-            setUploadFieldKey(fileFields[0]?.key || "")
-        }
-        if (fileFields.length === 0) {
-            setUploadFieldKey("")
-        }
-    }, [submission?.schema_snapshot])
-
-    React.useEffect(() => {
-        if (selectedTemplateId) return
-        if (emailTemplates.length === 0) return
-        setSelectedTemplateId(emailTemplates[0]?.id || "")
-    }, [emailTemplates, selectedTemplateId])
-
-    React.useEffect(() => {
-        if (sendableIntakeLinks.length === 0) {
-            setSelectedIntakeLinkId("")
-            setFormLink("")
-            return
-        }
-        if (!sendableIntakeLinks.some((link) => link.id === selectedIntakeLinkId)) {
-            setSelectedIntakeLinkId(sendableIntakeLinks[0]?.id || "")
-        }
-    }, [selectedIntakeLinkId, sendableIntakeLinks])
+    const selectedIntakeLinkId =
+        sendableIntakeLinks.some((link) => link.id === selectedIntakeLinkIdOverride)
+            ? selectedIntakeLinkIdOverride
+            : sendableIntakeLinks[0]?.id || ""
+    const selectedIntakeLink =
+        sendableIntakeLinks.find((link) => link.id === selectedIntakeLinkId) || null
+    const selectedTemplateId =
+        emailTemplates.some((template) => template.id === selectedTemplateIdOverride)
+            ? selectedTemplateIdOverride
+            : emailTemplates[0]?.id || ""
+    const submissionPages = submission?.schema_snapshot?.pages || []
+    const submissionFileFields = submissionPages.flatMap((page) =>
+        page.fields.filter((field) => field.type === "file"),
+    )
+    const uploadFieldKey =
+        submissionFileFields.some((field) => field.key === uploadFieldKeyOverride)
+            ? uploadFieldKeyOverride
+            : submissionFileFields.length === 1
+              ? submissionFileFields[0]?.key || ""
+              : ""
 
     const copyFormLink = async () => {
         if (!formLink) {
@@ -394,6 +352,7 @@ export function SurrogateApplicationTab({
     const handleApprove = async () => {
         if (!submission) return
         setIsApproving(true)
+        const finishApproving = () => setIsApproving(false)
         try {
             await approveMutation.mutateAsync({
                 submissionId: submission.id,
@@ -402,16 +361,17 @@ export function SurrogateApplicationTab({
             toast.success("Application approved and surrogate updated")
             setApproveModalOpen(false)
             setApproveNotes("")
+            finishApproving()
         } catch {
             toast.error("Failed to approve application")
-        } finally {
-            setIsApproving(false)
+            finishApproving()
         }
     }
 
     const handleReject = async () => {
         if (!rejectReason.trim() || !submission) return
         setIsRejecting(true)
+        const finishRejecting = () => setIsRejecting(false)
         try {
             await rejectMutation.mutateAsync({
                 submissionId: submission.id,
@@ -420,10 +380,10 @@ export function SurrogateApplicationTab({
             toast.success("Application rejected")
             setRejectModalOpen(false)
             setRejectReason("")
+            finishRejecting()
         } catch {
             toast.error("Failed to reject application")
-        } finally {
-            setIsRejecting(false)
+            finishRejecting()
         }
     }
 
@@ -455,6 +415,7 @@ export function SurrogateApplicationTab({
             return
         }
         setIsSendingLink(true)
+        const finishSending = () => setIsSendingLink(false)
         try {
             const response = await sendIntakeLinkMutation.mutateAsync({
                 formId: effectiveFormId,
@@ -464,10 +425,10 @@ export function SurrogateApplicationTab({
             })
             setFormLink(response.intake_url || resolveIntakeLink(baseUrl, selectedIntakeLink))
             toast.success("Application link sent")
+            finishSending()
         } catch {
             toast.error("Failed to send application link")
-        } finally {
-            setIsSendingLink(false)
+            finishSending()
         }
     }
 
@@ -521,35 +482,33 @@ export function SurrogateApplicationTab({
     const handleExport = async () => {
         if (!submission) return
         setIsExporting(true)
+        const finishExporting = () => setIsExporting(false)
         try {
             await exportSubmissionPdf(submission.id)
             toast.success("Application exported as PDF")
+            finishExporting()
         } catch {
             toast.error("Failed to export application")
-        } finally {
-            setIsExporting(false)
+            finishExporting()
         }
     }
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
+        const input = e.currentTarget
+        const file = input.files?.[0]
         if (!file || !submission) return
+        const clearInput = () => {
+            input.value = ""
+        }
         if (!submission.surrogate_id) {
             toast.error("Resolve submission match before uploading files.")
-            if (fileInputRef.current) {
-                fileInputRef.current.value = ""
-            }
+            clearInput()
             return
         }
 
-        const fileFields = (submission.schema_snapshot?.pages || []).flatMap((page) =>
-            page.fields.filter((field) => field.type === "file"),
-        )
-        if (fileFields.length > 1 && !uploadFieldKey) {
+        if (submissionFileFields.length > 1 && !uploadFieldKey) {
             toast.error("Select a file field first")
-            if (fileInputRef.current) {
-                fileInputRef.current.value = ""
-            }
+            clearInput()
             return
         }
 
@@ -559,15 +518,13 @@ export function SurrogateApplicationTab({
                 file,
                 formId: submission.form_id,
                 surrogateId: submission.surrogate_id,
-                fieldKey: uploadFieldKey ?? null,
+                fieldKey: uploadFieldKey || null,
             })
             toast.success(`Uploaded: ${file.name}`)
+            clearInput()
         } catch {
             toast.error("Failed to upload file")
-        } finally {
-            if (fileInputRef.current) {
-                fileInputRef.current.value = ""
-            }
+            clearInput()
         }
     }
 
@@ -579,6 +536,7 @@ export function SurrogateApplicationTab({
         }
 
         setDeletingFileId(fileId)
+        const finishDeleting = () => setDeletingFileId(null)
         try {
             await deleteFileMutation.mutateAsync({
                 submissionId: submission.id,
@@ -587,10 +545,10 @@ export function SurrogateApplicationTab({
                 surrogateId: submission.surrogate_id,
             })
             toast.success(`Deleted: ${filename}`)
+            finishDeleting()
         } catch {
             toast.error("Failed to delete file")
-        } finally {
-            setDeletingFileId(null)
+            finishDeleting()
         }
     }
 
@@ -922,7 +880,7 @@ export function SurrogateApplicationTab({
                                         if (!next) {
                                             setConfirmOverride(false)
                                         } else {
-                                            setSelectedFormId(
+                                            setSelectedFormIdOverride(
                                                 selectedFormId ||
                                                     availableForms.find((form) => form.id !== (formId || ""))?.id ||
                                                     "",
@@ -942,7 +900,7 @@ export function SurrogateApplicationTab({
                                     <SelectControl
                                         value={selectedFormId}
                                         onValueChange={(nextValue) => {
-                                            setSelectedFormId(nextValue)
+                                            setSelectedFormIdOverride(nextValue)
                                             setConfirmOverride(false)
                                         }}
                                         options={availableForms.map((form) => ({
@@ -1000,7 +958,7 @@ export function SurrogateApplicationTab({
                             <SelectControl
                                 id="intake-link-select"
                                 value={selectedIntakeLinkId}
-                                onValueChange={setSelectedIntakeLinkId}
+                                onValueChange={setSelectedIntakeLinkIdOverride}
                                 options={sendableIntakeLinks.map((link) => ({
                                     value: link.id,
                                     label: link.campaign_name || link.event_name || link.slug,
@@ -1057,7 +1015,7 @@ export function SurrogateApplicationTab({
                                     <SelectControl
                                         id="application-template"
                                         value={selectedTemplateId}
-                                        onValueChange={setSelectedTemplateId}
+                                        onValueChange={setSelectedTemplateIdOverride}
                                         options={emailTemplates.map((template) => ({
                                             value: template.id,
                                             label: template.name,
@@ -1116,11 +1074,8 @@ export function SurrogateApplicationTab({
     // Has submission - show application details
     const status = submission.status
     const isPending = status === "pending_review"
-    const schema = submission.schema_snapshot as FormSchema | null
-    const pages = schema?.pages || []
-    const fileFields = pages.flatMap((page) =>
-        page.fields.filter((field) => field.type === "file"),
-    )
+    const pages = submissionPages
+    const fileFields = submissionFileFields
     const fileFieldLabels = new Map(
         fileFields.map((field) => [field.key, field.label]),
     )
@@ -1430,7 +1385,7 @@ export function SurrogateApplicationTab({
                                             {fileFields.length > 1 && (
                                                 <SelectControl
                                                     value={uploadFieldKey}
-                                                    onValueChange={setUploadFieldKey}
+                                                    onValueChange={setUploadFieldKeyOverride}
                                                     options={fileFields.map((field) => ({
                                                         value: field.key,
                                                         label: field.label,
@@ -1447,6 +1402,7 @@ export function SurrogateApplicationTab({
                                                 ref={fileInputRef}
                                                 type="file"
                                                 className="hidden"
+                                                aria-label="Upload application file"
                                                 onChange={handleFileUpload}
                                                 accept="*/*"
                                             />

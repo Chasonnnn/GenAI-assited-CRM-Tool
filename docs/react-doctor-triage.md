@@ -213,3 +213,25 @@ Full command after Batch 9: `cd apps/web && npx react-doctor@latest . --verbose`
 - Total diagnostics: `1336`
 - Summary: `Security 2 warnings`, `Bugs 34 errors + 289 warnings`, `Performance 111 errors + 37 warnings`, `Accessibility 54 warnings`, `Maintainability 809 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fb9ebcb4-619a-42e1-804e-3f891f4cefa8`
+
+## Batch 10
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `components/surrogates/SurrogateApplicationTab.tsx` | Valid: form-link defaults, selected templates, selected intake links, upload field defaults, section-open defaults, and portal base URL were copied into local state through effects. | High | Derive defaults during render from current props/query data, while keeping explicit user choices in override state. Added a source regression guard for the old effect-driven defaults. | `pnpm tsc --noEmit`; `pnpm test --run tests/surrogate-application-tab.test.tsx tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `components/surrogates/SurrogateApplicationTab.tsx` | Valid: approve, reject, send-link, export, upload, and delete handlers used `try` statements with `finally` cleanup, which blocks React Compiler optimization. | High | Replace `finally` cleanup with explicit success/error cleanup helpers and clear file inputs on every early-return/error/success path. | Focused tests and full test suite passed; changed-scope React Doctor no longer reports compiler errors for this file. |
+| `react-doctor/control-has-associated-label` | `components/surrogates/SurrogateApplicationTab.tsx` | Valid: the hidden application upload input had no accessible name. | High | Add an `aria-label` and assert it in the source regression guard. | Changed-scope React Doctor no longer reports this accessibility warning. |
+
+Changed-scope command after Batch 10: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `3`
+- Remaining changed-file warnings: `prefer-module-scope-pure-function`, `no-giant-component`, and `prefer-useReducer` for `SurrogateApplicationTab`; all are valid but larger structural refactors deferred to separate batches.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-131f4490-9e5e-4086-9fcf-d9cd57352dcf`
+
+Full command after Batch 10: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `19 / 100 Critical`
+- Total diagnostics: `1296`
+- Summary: `Security 2 warnings`, `Bugs 28 errors + 270 warnings`, `Performance 99 errors + 37 warnings`, `Accessibility 53 warnings`, `Maintainability 807 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-45216e1d-e7a5-4ec3-a531-f2484791ab4e`

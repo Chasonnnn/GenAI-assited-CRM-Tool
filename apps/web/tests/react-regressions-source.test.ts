@@ -249,6 +249,16 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps surrogate application form-link defaults compiler-friendly", () => {
+        const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
+
+        expect(source).toContain('aria-label="Upload application file"')
+        expect(source).not.toContain("setSelectedTemplateId(emailTemplates[0]?.id")
+        expect(source).not.toContain("setSelectedIntakeLinkId(sendableIntakeLinks[0]?.id")
+        expect(source).not.toContain("setUploadFieldKey(fileFields[0]?.key")
+        expect(source).not.toContain("finally")
+    })
+
     it("imports the API client directly from leaf API modules", () => {
         for (const { path, source } of readApiModuleSources()) {
             expect(source, path).not.toMatch(/from ['"]\.\/index['"]/)
