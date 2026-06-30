@@ -532,10 +532,76 @@ type PublicApplicationFormProps = {
     slug: string
 }
 
+type DraftSessionState = {
+    slug: string
+    id: string | null
+    exists: boolean
+}
+
 type SharedResumePrompt = {
     sourceDraftId: string
     updatedAt: string | null
     fingerprint: string
+}
+
+type ResumeIdentity = {
+    fingerprint: string
+    lookupAnswers: Record<string, AnswerValue>
+}
+
+function createDraftSessionId(): string {
+    if (typeof window !== "undefined" && typeof window.crypto?.randomUUID === "function") {
+        return window.crypto.randomUUID()
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+}
+
+function createDraftSessionState(slug: string): DraftSessionState {
+    if (!slug || typeof window === "undefined") {
+        return { slug, id: null, exists: false }
+    }
+    const storageKey = `intake-draft-session:${slug}`
+    const existing = window.localStorage.getItem(storageKey)
+    if (existing) {
+        return { slug, id: existing, exists: true }
+    }
+    return { slug, id: createDraftSessionId(), exists: false }
+}
+
+function resolveResumeIdentity(schema: FormSchema, answers: Answers): ResumeIdentity | null {
+    const identityKeys = resolveIdentityFieldKeys(schema)
+    if (!identityKeys.fullNameKey || !identityKeys.dateOfBirthKey) {
+        return null
+    }
+
+    const fullName = sanitizeIdentityValue(answers[identityKeys.fullNameKey] ?? null)
+    const dateOfBirth = sanitizeIdentityValue(answers[identityKeys.dateOfBirthKey] ?? null)
+    const email = identityKeys.emailKey
+        ? sanitizeIdentityValue(answers[identityKeys.emailKey] ?? null)
+        : ""
+    const phone = identityKeys.phoneKey
+        ? sanitizeIdentityValue(answers[identityKeys.phoneKey] ?? null)
+        : ""
+
+    if (!fullName || !dateOfBirth || (!email && !phone)) {
+        return null
+    }
+
+    const lookupAnswers: Record<string, AnswerValue> = {
+        [identityKeys.fullNameKey]: fullName,
+        [identityKeys.dateOfBirthKey]: dateOfBirth,
+    }
+    if (identityKeys.emailKey && email) {
+        lookupAnswers[identityKeys.emailKey] = email
+    }
+    if (identityKeys.phoneKey && phone) {
+        lookupAnswers[identityKeys.phoneKey] = phone
+    }
+
+    return {
+        fingerprint: buildIdentityFingerprint({ fullName, dateOfBirth, email, phone }),
+        lookupAnswers,
+    }
 }
 
 // Main Form Component
@@ -558,36 +624,22 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [draftRestored, setDraftRestored] = React.useState(false)
     const [draftSaveState, setDraftSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
     const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
-    const [draftSessionId, setDraftSessionId] = React.useState<string | null>(null)
-    const [draftSessionExists, setDraftSessionExists] = React.useState(false)
+    const [draftSession, setDraftSession] = React.useState<DraftSessionState>(() => createDraftSessionState(slug))
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const autosaveTimerRef = React.useRef<number | null>(null)
     const resumeLookupTimerRef = React.useRef<number | null>(null)
     const skipNextAutosaveRef = React.useRef(true)
-    const createdDraftSessionRef = React.useRef<string | null>(null)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string>>(new Set())
     const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found">>(new Map())
     const lookupSeqRef = React.useRef(0)
 
-    React.useEffect(() => {
-        if (!slug) return
-        const storageKey = `intake-draft-session:${slug}`
-        const existing = window.localStorage.getItem(storageKey)
-        if (existing) {
-            createdDraftSessionRef.current = existing
-            setDraftSessionExists(true)
-            setDraftSessionId(existing)
-            return
-        }
-        const nextSessionId =
-            typeof window.crypto?.randomUUID === "function"
-                ? window.crypto.randomUUID()
-                : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-        createdDraftSessionRef.current = nextSessionId
-        setDraftSessionExists(false)
-        setDraftSessionId(nextSessionId)
-    }, [slug])
+    if (draftSession.slug !== slug) {
+        setDraftSession(createDraftSessionState(slug))
+    }
+
+    const draftSessionId = draftSession.slug === slug ? draftSession.id : null
+    const draftSessionExists = draftSession.slug === slug && draftSession.exists
 
     // Validate shared link on mount
     React.useEffect(() => {
@@ -604,7 +656,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             try {
                 const form = await getSharedPublicForm(token)
                 if (!isIntakePublicRead(form)) {
-                    throw new Error("Invalid form payload")
+                    setFormError("This form link is invalid or has expired.")
+                    setIsLoading(false)
+                    return
                 }
                 setFormConfig(form)
                 setLogoError(false)
@@ -624,7 +678,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     } catch (error) {
                         if (error instanceof ApiError && error.status === 404) {
                             window.localStorage.removeItem(`intake-draft-session:${token}`)
-                            setDraftSessionExists(false)
+                            setDraftSession((current) =>
+                                current.slug === token ? { ...current, exists: false } : current,
+                            )
                         } else {
                             setDraftSaveState("error")
                         }
@@ -639,55 +695,32 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         void loadForm()
     }, [draftSessionExists, draftSessionId, token, isPreview])
 
+    const resumeIdentity = formConfig ? resolveResumeIdentity(formConfig.form_schema, answers) : null
+    const activeResumePrompt =
+        resumeIdentity && resumePrompt?.fingerprint === resumeIdentity.fingerprint
+            ? resumePrompt
+            : null
+
     React.useEffect(() => {
         if (!token || !formConfig || !draftSessionId || isPreview || isSubmitted || isRestoringResume) return
 
-        const identityKeys = resolveIdentityFieldKeys(formConfig.form_schema)
-        if (!identityKeys.fullNameKey || !identityKeys.dateOfBirthKey) {
-            return
-        }
-
-        const fullName = sanitizeIdentityValue(answers[identityKeys.fullNameKey] ?? null)
-        const dateOfBirth = sanitizeIdentityValue(answers[identityKeys.dateOfBirthKey] ?? null)
-        const email = identityKeys.emailKey
-            ? sanitizeIdentityValue(answers[identityKeys.emailKey] ?? null)
-            : ""
-        const phone = identityKeys.phoneKey
-            ? sanitizeIdentityValue(answers[identityKeys.phoneKey] ?? null)
-            : ""
-        const hasEnoughIdentity = Boolean(fullName && dateOfBirth && (email || phone))
-
-        if (!hasEnoughIdentity) {
-            setResumePrompt(null)
-            return
-        }
-
-        const fingerprint = buildIdentityFingerprint({ fullName, dateOfBirth, email, phone })
+        const identity = resolveResumeIdentity(formConfig.form_schema, answers)
+        if (!identity) return
+        const { fingerprint, lookupAnswers } = identity
         if (suppressedIdentityFingerprintsRef.current.has(fingerprint)) {
             return
         }
 
         const cached = lookupCacheRef.current.get(fingerprint)
         if (cached === "no_match") {
-            setResumePrompt(null)
             return
         }
-        if (cached === "match_found" && resumePrompt?.fingerprint === fingerprint) {
+        if (cached === "match_found" && activeResumePrompt?.fingerprint === fingerprint) {
             return
         }
 
         if (resumeLookupTimerRef.current) {
             window.clearTimeout(resumeLookupTimerRef.current)
-        }
-
-        const lookupAnswers: Record<string, AnswerValue> = {}
-        lookupAnswers[identityKeys.fullNameKey] = fullName
-        lookupAnswers[identityKeys.dateOfBirthKey] = dateOfBirth
-        if (identityKeys.emailKey && email) {
-            lookupAnswers[identityKeys.emailKey] = email
-        }
-        if (identityKeys.phoneKey && phone) {
-            lookupAnswers[identityKeys.phoneKey] = phone
         }
 
         resumeLookupTimerRef.current = window.setTimeout(() => {
@@ -734,12 +767,12 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         }
     }, [
         answers,
+        activeResumePrompt?.fingerprint,
         draftSessionId,
         formConfig,
         isPreview,
         isRestoringResume,
         isSubmitted,
-        resumePrompt?.fingerprint,
         token,
     ])
 
@@ -760,8 +793,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const persistDraftSession = React.useCallback((sessionId: string) => {
         if (!token) return
         window.localStorage.setItem(`intake-draft-session:${token}`, sessionId)
-        createdDraftSessionRef.current = sessionId
-        setDraftSessionExists(true)
+        setDraftSession({ slug: token, id: sessionId, exists: true })
     }, [token])
 
     const saveDraftNow = React.useCallback(async () => {
@@ -784,13 +816,14 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     }, [answers, draftSessionId, formConfig, hasAnyDraftAnswer, persistDraftSession, token])
 
     const handleContinuePreviousApplication = React.useCallback(async () => {
-        if (!resumePrompt || !draftSessionId || !formConfig) return
+        if (!activeResumePrompt || !draftSessionId || !formConfig) return
         setIsRestoringResume(true)
+        const finishRestoring = () => setIsRestoringResume(false)
         try {
             const restored = await restoreSharedPublicFormDraft(
                 token,
                 draftSessionId,
-                resumePrompt.sourceDraftId,
+                activeResumePrompt.sourceDraftId,
             )
             const nextAnswers = filterDraftAnswersForSchema(formConfig.form_schema, restored.answers)
             skipNextAutosaveRef.current = true
@@ -799,21 +832,21 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             setDraftUpdatedAt(restored.updated_at)
             setDraftSaveState("saved")
             setDraftRestored(true)
-            suppressedIdentityFingerprintsRef.current.add(resumePrompt.fingerprint)
+            suppressedIdentityFingerprintsRef.current.add(activeResumePrompt.fingerprint)
             setResumePrompt(null)
             toast.success("Restored your previous application")
+            finishRestoring()
         } catch {
             toast.error("Unable to restore previous application")
-        } finally {
-            setIsRestoringResume(false)
+            finishRestoring()
         }
-    }, [draftSessionId, formConfig, persistDraftSession, resumePrompt, token])
+    }, [activeResumePrompt, draftSessionId, formConfig, persistDraftSession, token])
 
     const handleStartNewApplication = React.useCallback(() => {
-        if (!resumePrompt) return
-        suppressedIdentityFingerprintsRef.current.add(resumePrompt.fingerprint)
+        if (!activeResumePrompt) return
+        suppressedIdentityFingerprintsRef.current.add(activeResumePrompt.fingerprint)
         setResumePrompt(null)
-    }, [resumePrompt])
+    }, [activeResumePrompt])
 
     // Autosave drafts (answers only, not file uploads)
     React.useEffect(() => {
@@ -865,6 +898,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         }),
         { id: pages.length + 1, label: "Review & Submit", shortLabel: "Review" },
     ]
+    const boundedCurrentStep = Math.min(currentStep, steps.length)
 
     const totalFiles = Object.values(fileUploads).reduce((sum, group) => sum + group.length, 0)
     const maxTotalFiles = formConfig?.max_file_count ?? 10
@@ -1048,12 +1082,6 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         return getPublicFieldValidationError(field, value)
     }
 
-    React.useEffect(() => {
-        if (currentStep > steps.length) {
-            setCurrentStep(steps.length)
-        }
-    }, [currentStep, steps.length])
-
     const validateStep = (step: number): boolean => {
         if (!formConfig) return false
         if (step > pages.length) return true
@@ -1073,18 +1101,18 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     }
 
     const handleNext = () => {
-        if (!validateStep(currentStep)) return
+        if (!validateStep(boundedCurrentStep)) return
         if (!isPreview) void saveDraftNow()
-        if (currentStep < steps.length) {
-            setCurrentStep((previousStep) => Math.min(previousStep + 1, steps.length))
+        if (boundedCurrentStep < steps.length) {
+            setCurrentStep(Math.min(boundedCurrentStep + 1, steps.length))
             window.scrollTo({ top: 0, behavior: "smooth" })
         }
     }
 
     const handleBack = () => {
-        if (currentStep > 1) {
+        if (boundedCurrentStep > 1) {
             if (!isPreview) void saveDraftNow()
-            setCurrentStep((previousStep) => Math.max(previousStep - 1, 1))
+            setCurrentStep(Math.max(boundedCurrentStep - 1, 1))
             window.scrollTo({ top: 0, behavior: "smooth" })
         }
     }
@@ -1119,6 +1147,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         }
 
         setIsSubmitting(true)
+        const finishSubmitting = () => setIsSubmitting(false)
         try {
             const fileEntries = Object.entries(fileUploads).flatMap(([fieldKey, items]) =>
                 items.map((file) => ({ fieldKey, file })),
@@ -1133,10 +1162,10 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             }
             setSubmissionOutcome(response.outcome)
             setIsSubmitted(true)
+            finishSubmitting()
         } catch {
             toast.error("Failed to submit application. Please try again.")
-        } finally {
-            setIsSubmitting(false)
+            finishSubmitting()
         }
     }
 
@@ -1145,8 +1174,8 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         window.scrollTo({ top: 0, behavior: "smooth" })
     }
 
-    const isReviewStep = currentStep === steps.length
-    const currentPage = pages[currentStep - 1]
+    const isReviewStep = boundedCurrentStep === steps.length
+    const currentPage = pages[boundedCurrentStep - 1]
     const currentVisibleFields = currentPage
         ? getVisibleFieldGroups(currentPage.fields, answers, isFieldVisible)
         : { standardFields: [], fileFields: [] }
@@ -1377,14 +1406,14 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                         Restored saved progress
                     </div>
                 )}
-                {!isPreview && resumePrompt && (
-                    <div className="mx-auto w-full max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
+                {!isPreview && activeResumePrompt && (
+                     <div className="mx-auto w-full max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
                         <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                                 <div className="font-medium">Continue previous application?</div>
                                 <div className="text-xs text-amber-900/80">
                                     We found saved progress from{" "}
-                                    {formatSavedDateTime(resumePrompt.updatedAt) || "a recent session"}.
+                                    {formatSavedDateTime(activeResumePrompt.updatedAt) || "a recent session"}.
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1417,7 +1446,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     </div>
                 )}
                 <div className="space-y-4">
-                    <ProgressStepper currentStep={currentStep} steps={steps} />
+                    <ProgressStepper currentStep={boundedCurrentStep} steps={steps} />
                     {!isPreview && hasAnyFileFields && (
                         <div
                             data-slot="public-upload-note"
@@ -1520,9 +1549,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 ) : currentPage ? (
                     <Card className={publicFormCardClassName}>
                         <CardHeader className={publicFormCardHeaderClassName}>
-                            <CardTitle className="text-lg text-stone-950">
-                                {currentPage.title || `Step ${currentStep}`}
-                            </CardTitle>
+                             <CardTitle className="text-lg text-stone-950">
+                                 {currentPage.title || `Step ${boundedCurrentStep}`}
+                             </CardTitle>
                         </CardHeader>
                         <CardContent className={publicFormCardContentClassName}>
                             {currentVisibleFields.standardFields.length === 0 ? (
@@ -1568,16 +1597,16 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     <div className="max-w-3xl mx-auto px-4">
                         <div className="flex items-center justify-end gap-3 rounded-lg border border-stone-200/80 bg-white/95 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur md:shadow-sm">
                             <Button
-                                variant="ghost"
-                                onClick={handleBack}
-                                disabled={currentStep === 1}
-                                className="h-11 px-5 text-stone-600"
-                            >
+                                 variant="ghost"
+                                 onClick={handleBack}
+                                 disabled={boundedCurrentStep === 1}
+                                 className="h-11 px-5 text-stone-600"
+                             >
                                 <ChevronLeftIcon className="size-4 mr-2" />
                                 Back
                             </Button>
 
-                            {currentStep < steps.length ? (
+                             {boundedCurrentStep < steps.length ? (
                                 <Button
                                     onClick={handleNext}
                                     className="h-11 px-7 bg-primary hover:bg-primary/90"

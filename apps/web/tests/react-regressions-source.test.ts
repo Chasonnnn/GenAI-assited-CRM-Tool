@@ -919,6 +919,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("currentPage.fields\n                                    .filter")
     })
 
+    it("keeps hosted intake draft and resume state compiler-friendly", () => {
+        const source = readSource("app/intake/[slug]/page.client.tsx")
+
+        expect(source).toContain("type DraftSessionState")
+        expect(source).not.toContain("setDraftSessionId")
+        expect(source).not.toContain("setDraftSessionExists")
+        expect(source).not.toContain('throw new Error("Invalid form payload")')
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain("if (currentStep > steps.length)")
+    })
+
     it("keeps dashboard URL filter sync in one reducer update", () => {
         const source = readSource("app/(app)/dashboard/context/dashboard-filters.tsx")
 

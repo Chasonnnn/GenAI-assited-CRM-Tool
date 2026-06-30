@@ -258,3 +258,24 @@ Full command after Batch 11: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1264`
 - Summary: `Security 2 warnings`, `Bugs 27 errors + 260 warnings`, `Performance 88 errors + 37 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-31a2e4f1-19a1-44bb-8289-2dd2594b4cb4`
+
+## Batch 12
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-adjust-state-on-prop-change` | `app/intake/[slug]/page.client.tsx` | Valid: draft-session identity, resume prompt clearing, and current-step bounds were adjusted through effects, causing extra renders and stale intermediate UI. | High | Collapse draft session id/existence into one initialized state object, derive the active resume prompt from current identity answers, and use a bounded current step instead of correcting step state through an effect. Added a source regression guard. | `pnpm tsc --noEmit`; `pnpm test --run tests/forms-shared-intake.test.tsx tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports errors. |
+| `react-hooks-js/todo` | `app/intake/[slug]/page.client.tsx` | Valid: restore/submit handlers used `finally`, and invalid form-payload handling used a throw inside a `try` path unsupported by React Compiler. | High | Replace finalizers with explicit success/error cleanup helpers and convert invalid payload handling to an early error state return. | Focused tests and full test suite passed; changed-scope React Doctor no longer reports compiler errors. |
+
+Changed-scope command after Batch 12: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `85 / 100 Great`
+- Total diagnostics in changed files: `28`
+- Remaining changed-file warnings include manual memoization, upload/progress accessibility, lazy ref initialization, and structural `prefer-useReducer`/`no-giant-component`; all are valid but deferred because this batch targeted the 11-error intake cluster.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1e17099c-36b9-463c-9625-cda451fb98f4`
+
+Full command after Batch 12: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `31 / 100 Critical`
+- Total diagnostics: `1246`
+- Summary: `Security 2 warnings`, `Bugs 22 errors + 254 warnings`, `Performance 82 errors + 36 warnings`, `Accessibility 49 warnings`, `Maintainability 801 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8574ec44-b8a2-41ef-bb4c-055b80d22701`
