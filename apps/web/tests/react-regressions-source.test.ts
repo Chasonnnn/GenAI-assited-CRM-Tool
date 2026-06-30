@@ -143,6 +143,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("String.raw`rtl:**:[.rdp-button\\_")
     })
 
+    it("keeps browser notification permission initialization compiler-friendly", () => {
+        const source = readSource("app/(app)/settings/notifications/page.tsx")
+
+        expect(source).toContain("function getBrowserNotificationPermission")
+        expect(source).toContain("useState(getBrowserNotificationPermission)")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("finally")
+    })
+
     it("keeps ThemeToggle out of document-driven view transitions", () => {
         const source = readSource("components/theme-toggle.tsx")
 

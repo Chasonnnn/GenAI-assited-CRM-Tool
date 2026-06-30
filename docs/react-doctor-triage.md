@@ -529,3 +529,21 @@ Full command after Batch 24: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `1113`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 213 warnings`, `Performance 39 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0f7fa248-f09a-4814-85e7-102ea5f8dfc0`
+
+## Batch 25
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks-js/set-state-in-effect` / `react-doctor/no-initialize-state` / `react-hooks-js/todo` | `app/(app)/settings/notifications/page.tsx` | Valid: the browser notification card initialized permission through an effect, treated a present-but-undefined `Notification` global as supported, and used `try/finally` in the request handler. | High | Read browser notification permission during state initialization, treat missing `Notification` as unsupported, and replace the request finalizer with an explicit promise chain cleanup. Added source and UI regression coverage. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/notification-settings-page.test.tsx`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 25: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+
+Full command after Batch 25: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `55 / 100 Critical`
+- Total diagnostics: `1109`
+- Summary: `Security 2 warnings`, `Bugs 5 errors + 211 warnings`, `Performance 37 errors + 34 warnings`, `Accessibility 44 warnings`, `Maintainability 776 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-465a774f-bd78-4a29-a2ad-2cad01c756d5`

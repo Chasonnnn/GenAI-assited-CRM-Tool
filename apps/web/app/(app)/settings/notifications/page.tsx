@@ -5,49 +5,54 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar } from "lucide-react"
 import { toast } from "sonner"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { useAuth } from "@/lib/auth-context"
 import type { NotificationSettings } from "@/lib/api/notifications"
 
+type BrowserNotificationPermission = NotificationPermission | "unsupported"
+
+function getBrowserNotificationPermission(): BrowserNotificationPermission {
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+        return "unsupported"
+    }
+
+    return Notification.permission
+}
+
 // Browser push notification card
 function BrowserNotificationsCard() {
-    const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default")
+    const [permission, setPermission] = useState(getBrowserNotificationPermission)
     const [isRequesting, setIsRequesting] = useState(false)
 
-    useEffect(() => {
-        if (typeof window !== "undefined" && "Notification" in window) {
-            setPermission(Notification.permission)
-        } else {
-            setPermission("unsupported")
-        }
-    }, [])
-
-    const handleRequestPermission = async () => {
+    const handleRequestPermission = () => {
         if (permission === "unsupported") {
             toast.error("Push notifications are not supported in your browser")
             return
         }
 
         setIsRequesting(true)
-        try {
-            const result = await Notification.requestPermission()
-            setPermission(result)
 
-            if (result === "granted") {
-                toast.success("Browser notifications enabled!")
-                new Notification("Notifications Enabled", {
-                    body: "You'll now receive browser notifications for important updates.",
-                    icon: "/favicon.ico",
-                })
-            } else if (result === "denied") {
-                toast.error("Notifications were blocked. You can enable them in browser settings.")
-            }
-        } catch {
-            toast.error("Failed to request notification permission")
-        } finally {
-            setIsRequesting(false)
-        }
+        void Notification.requestPermission()
+            .then((result) => {
+                setPermission(result)
+
+                if (result === "granted") {
+                    toast.success("Browser notifications enabled!")
+                    new Notification("Notifications Enabled", {
+                        body: "You'll now receive browser notifications for important updates.",
+                        icon: "/favicon.ico",
+                    })
+                } else if (result === "denied") {
+                    toast.error("Notifications were blocked. You can enable them in browser settings.")
+                }
+            })
+            .catch(() => {
+                toast.error("Failed to request notification permission")
+            })
+            .then(() => {
+                setIsRequesting(false)
+            })
     }
 
     const getStatusDisplay = () => {
