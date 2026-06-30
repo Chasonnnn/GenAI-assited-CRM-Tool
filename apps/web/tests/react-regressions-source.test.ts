@@ -1100,6 +1100,14 @@ describe("React regression guards (source)", () => {
         expect(embedSource).not.toContain("pages.flatMap((page) => page.fields.filter")
     })
 
+    it("keeps share dialog embed settings render-derived", () => {
+        const source = readSource("components/forms/builder/ShareApplicationDialog.tsx")
+
+        expect(source).toContain("function buildEmbedSettingsFromLink")
+        expect(source).not.toContain("React.useEffect")
+        expect(source).not.toContain("setEmbedSettings(DEFAULT_EMBED_SETTINGS)")
+    })
+
     it("uses indexed lookups for campaign selected filter labels", () => {
         const source = readSource("app/(app)/automation/campaigns/page.tsx")
 

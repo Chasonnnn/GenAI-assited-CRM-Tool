@@ -1023,3 +1023,24 @@ Full command after Batch 49: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `998`
 - Summary: `Security 2 warnings`, `Bugs 5 errors + 189 warnings`, `Performance 2 errors + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 722 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-23c8c09e-1d5d-4308-a741-bac3ed6f2fe1`
+
+## Batch 50
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-hooks/set-state-in-effect`, `react-doctor/no-adjust-state-on-prop-change` | `components/forms/builder/ShareApplicationDialog.tsx` | Valid: the dialog effect synchronously copied `selectedQrLink` props into local embed-settings state, creating a stale render when the selected link changed. | High | Replace the effect with render-derived settings plus a link-keyed local draft, preserving local edits for the active link and deriving settings immediately when a different link is selected. Added a behavior test for switching links and a source guard that failed on the old effect. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/share-application-dialog.test.tsx`; full React Doctor errors dropped from `7` to `5`. |
+| `react-doctor/no-giant-component` | `components/forms/builder/ShareApplicationDialog.tsx` | Valid but deferred: `ShareApplicationDialog` remains a large component after removing the state-sync effect. | Medium | Logged for a later structural split because extracting the hosted/QR/embed tab sections is broader than the prop-sync error fix. | Changed-scope React Doctor reports this as the only remaining touched-file warning. |
+
+Changed-scope command after Batch 50: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-57e5fe16-a8fc-4df1-a0e4-dc456e859f8a`
+
+Full command after Batch 50: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `61 / 100 Needs work`
+- Total diagnostics: `995`
+- Summary: `Security 2 warnings`, `Bugs 4 errors + 188 warnings`, `Performance 1 error + 38 warnings`, `Accessibility 40 warnings`, `Maintainability 722 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-152446e0-0bc3-4593-a69e-154b5189c43f`

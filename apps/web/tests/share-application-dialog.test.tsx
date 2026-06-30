@@ -158,4 +158,48 @@ describe("ShareApplicationDialog", () => {
             consentText: null,
         })
     })
+
+    it("shows embed settings for the currently selected share link", () => {
+        const alternateLink: FormIntakeLinkRead = {
+            ...link,
+            id: "link-2",
+            embed_enabled: false,
+            allowed_embed_origins: ["https://apply.example.com"],
+            tracking_mode: "privacy_safe_lead",
+            consent_text: "Use my information for application follow-up.",
+        }
+
+        const { rerender } = render(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={link}
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={vi.fn()}
+                embedHealth={health}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "Embed" }))
+        expect(screen.getByLabelText("Allowed origins")).toHaveValue("https://www.ewisurrogacy.com")
+
+        rerender(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={alternateLink}
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={vi.fn()}
+                embedHealth={health}
+            />,
+        )
+
+        expect(screen.getByLabelText("Allowed origins")).toHaveValue("https://apply.example.com")
+        expect(screen.getByLabelText("Consent text")).toHaveValue("Use my information for application follow-up.")
+        expect(screen.getAllByText("Privacy-safe Lead").length).toBeGreaterThan(0)
+    })
 })

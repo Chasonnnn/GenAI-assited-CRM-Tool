@@ -60,11 +60,27 @@ type EmbedSettingsState = {
     consentText: string
 }
 
+type EmbedSettingsDraft = {
+    linkId: string | null
+    settings: EmbedSettingsState
+}
+
 const DEFAULT_EMBED_SETTINGS: EmbedSettingsState = {
     embedEnabled: false,
     originText: "",
     trackingMode: "enhanced_match_lead",
     consentText: "",
+}
+
+function buildEmbedSettingsFromLink(link: FormIntakeLinkRead | null): EmbedSettingsState {
+    if (!link) return DEFAULT_EMBED_SETTINGS
+
+    return {
+        embedEnabled: link.embed_enabled,
+        originText: (link.allowed_embed_origins || []).join("\n"),
+        trackingMode: link.tracking_mode || "enhanced_match_lead",
+        consentText: link.consent_text || "",
+    }
 }
 
 export function ShareApplicationDialog({
@@ -80,21 +96,30 @@ export function ShareApplicationDialog({
     isEmbedHealthFetching = false,
     onRefreshEmbedHealth,
 }: ShareApplicationDialogProps) {
-    const [embedSettings, setEmbedSettings] = React.useState<EmbedSettingsState>(DEFAULT_EMBED_SETTINGS)
+    const selectedLinkId = selectedQrLink?.id ?? null
+    const [embedSettingsDraft, setEmbedSettingsDraft] = React.useState<EmbedSettingsDraft>(() => ({
+        linkId: selectedLinkId,
+        settings: buildEmbedSettingsFromLink(selectedQrLink),
+    }))
+    const embedSettings =
+        embedSettingsDraft.linkId === selectedLinkId
+            ? embedSettingsDraft.settings
+            : buildEmbedSettingsFromLink(selectedQrLink)
     const { embedEnabled, originText, trackingMode, consentText } = embedSettings
 
-    React.useEffect(() => {
-        if (!selectedQrLink) {
-            setEmbedSettings(DEFAULT_EMBED_SETTINGS)
-            return
-        }
-        setEmbedSettings({
-            embedEnabled: selectedQrLink.embed_enabled,
-            originText: (selectedQrLink.allowed_embed_origins || []).join("\n"),
-            trackingMode: selectedQrLink.tracking_mode || "enhanced_match_lead",
-            consentText: selectedQrLink.consent_text || "",
+    const updateEmbedSettings = (update: (current: EmbedSettingsState) => EmbedSettingsState) => {
+        setEmbedSettingsDraft((current) => {
+            const currentSettings =
+                current.linkId === selectedLinkId
+                    ? current.settings
+                    : buildEmbedSettingsFromLink(selectedQrLink)
+
+            return {
+                linkId: selectedLinkId,
+                settings: update(currentSettings),
+            }
         })
-    }, [selectedQrLink])
+    }
 
     const embedSnippet = selectedQrLink ? buildEmbedSnippet(selectedQrLink) : ""
     const copyEmbedSnippet = async () => {
@@ -217,7 +242,7 @@ export function ShareApplicationDialog({
                                             id="sf-embed-enabled"
                                             checked={embedEnabled}
                                             onCheckedChange={(checked) =>
-                                                setEmbedSettings((current) => ({ ...current, embedEnabled: checked }))
+                                                updateEmbedSettings((current) => ({ ...current, embedEnabled: checked }))
                                             }
                                             disabled={isEmbedSettingsPending}
                                         />
@@ -228,7 +253,7 @@ export function ShareApplicationDialog({
                                             id="sf-embed-origins"
                                             value={originText}
                                             onChange={(event) =>
-                                                setEmbedSettings((current) => ({
+                                                updateEmbedSettings((current) => ({
                                                     ...current,
                                                     originText: event.target.value,
                                                 }))
@@ -244,7 +269,7 @@ export function ShareApplicationDialog({
                                         <Select
                                             value={trackingMode}
                                             onValueChange={(value) =>
-                                                setEmbedSettings((current) => ({
+                                                updateEmbedSettings((current) => ({
                                                     ...current,
                                                     trackingMode: value as TrackingMode,
                                                 }))
@@ -272,7 +297,7 @@ export function ShareApplicationDialog({
                                             id="sf-embed-consent"
                                             value={consentText}
                                             onChange={(event) =>
-                                                setEmbedSettings((current) => ({
+                                                updateEmbedSettings((current) => ({
                                                     ...current,
                                                     consentText: event.target.value,
                                                 }))
