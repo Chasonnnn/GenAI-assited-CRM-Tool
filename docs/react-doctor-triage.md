@@ -1513,3 +1513,22 @@ Full command after Batch 73: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `794`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 540 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9ff9e33a-1507-4610-b4a8-3ff5440eb4d8`
+
+## Batch 74
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/intelligent-suggestions-section.tsx` | Valid: the section imported React `useMemo`/`useCallback` and used them for deterministic stage maps, template maps, stage label helpers, draft builders, and the initial settings loader. React Compiler is enabled in `apps/web/next.config.js`, and the current rule prompt says these wrappers are redundant unless a preserve-manual-memoization case applies. | High | Move pure stage/template/draft helpers to module scope, derive maps directly during render, keep retry loading as a plain handler, and make the initial load effect call a cancellable async loader keyed by pipeline data instead of depending on a memoized callback. Added a source guard that failed on the old `useMemo`/`useCallback` import/calls. | `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run tests/react-regressions-source.test.ts tests/settings-page.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `414` to `405`. |
+
+Changed-scope command after Batch 74: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 74: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `785`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 531 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6d26159c-ba2d-40a5-b7db-86f8f9887793`

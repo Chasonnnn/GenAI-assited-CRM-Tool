@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -53,10 +53,146 @@ type IntelligentSuggestionsState = {
   error: string | null
 }
 
+type PipelineStageLike = {
+  slug?: string
+  status?: string
+  stage_key?: string
+  label?: string
+  is_active?: boolean
+}
+
+type PipelineLike = {
+  stages?: ReadonlyArray<PipelineStageLike | Record<string, unknown>> | null
+}
+
+type LoadedIntelligentSuggestions = {
+  settings: IntelligentSuggestionSettings
+  templates: IntelligentSuggestionTemplate[]
+  rules: IntelligentSuggestionRule[]
+  newRuleDraft: IntelligentSuggestionRuleDraft | null
+}
+
 function resolveStateUpdate<T>(updater: React.SetStateAction<T>, current: T): T {
   return typeof updater === "function"
     ? (updater as (previous: T) => T)(current)
     : updater
+}
+
+function buildStageOptions(pipelines: ReadonlyArray<PipelineLike> | null | undefined): StageOption[] {
+  const byValue = new Map<string, StageOption>()
+  for (const pipeline of pipelines ?? []) {
+    for (const rawStage of pipeline.stages ?? []) {
+      const stage = rawStage as PipelineStageLike
+      const slug = stage.slug ?? stage.status
+      const stageKey = stage.stage_key ?? slug
+      if (!slug || !stageKey || stage.is_active === false) continue
+      if (!byValue.has(stageKey)) {
+        byValue.set(stageKey, {
+          value: stageKey,
+          slug,
+          stageKey,
+          label: stage.label ?? stageKey,
+        })
+      }
+    }
+  }
+  return Array.from(byValue.values()).sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function buildStageLabelByRef(stageOptions: StageOption[]): Map<string, string> {
+  return new Map(
+    stageOptions.flatMap((option) => [
+      [option.value, option.label] as const,
+      [option.slug, option.label] as const,
+    ]),
+  )
+}
+
+function buildStageOptionByValue(stageOptions: StageOption[]): Map<string, StageOption> {
+  return new Map(stageOptions.map((option) => [option.value, option]))
+}
+
+function buildTemplateByKey(
+  templates: IntelligentSuggestionTemplate[],
+): Map<string, IntelligentSuggestionTemplate> {
+  return new Map(templates.map((template) => [template.template_key, template]))
+}
+
+function requiresStageSelection(template: IntelligentSuggestionTemplate | undefined): boolean {
+  if (!template) return false
+  return template.rule_kind === "stage_inactivity" && template.template_key !== "preapproval_stuck"
+}
+
+function resolveStageSlug(
+  template: IntelligentSuggestionTemplate | undefined,
+  stageSlug: string | null | undefined,
+  stageOptions: StageOption[],
+): string {
+  if (!template || !requiresStageSelection(template)) return ""
+  const normalized = (stageSlug ?? "").trim()
+  if (normalized) {
+    const matchingOption = stageOptions.find(
+      (option) => option.value === normalized || option.slug === normalized,
+    )
+    if (matchingOption) {
+      return matchingOption.value
+    }
+  }
+  const defaultStage = (template.default_stage_key ?? template.default_stage_slug ?? "").trim()
+  if (defaultStage) {
+    const matchingDefault = stageOptions.find(
+      (option) => option.value === defaultStage || option.slug === defaultStage,
+    )
+    if (matchingDefault) {
+      return matchingDefault.value
+    }
+  }
+  return stageOptions[0]?.value ?? defaultStage
+}
+
+function buildRuleDraft(
+  template: IntelligentSuggestionTemplate | undefined,
+  sortOrder: number,
+  stageOptions: StageOption[],
+  overrides: Partial<IntelligentSuggestionRuleDraft> = {},
+): IntelligentSuggestionRuleDraft | null {
+  if (!template) return null
+  return {
+    template_key: template.template_key,
+    name: overrides.name ?? template.name,
+    stage_slug: resolveStageSlug(
+      template,
+      overrides.stage_slug ?? template.default_stage_key ?? template.default_stage_slug,
+      stageOptions,
+    ),
+    business_days: overrides.business_days ?? template.default_business_days,
+    enabled: overrides.enabled ?? true,
+    sort_order: overrides.sort_order ?? sortOrder,
+  }
+}
+
+function formatStageLabel(stageLabelByRef: Map<string, string>, stageRef: string | null | undefined): string {
+  if (!stageRef) return "N/A"
+  return stageLabelByRef.get(stageRef) ?? "Unknown stage"
+}
+
+async function loadIntelligentSuggestionData(
+  stageOptions: StageOption[],
+): Promise<LoadedIntelligentSuggestions> {
+  const [settingsResponse, templatesResponse, rulesResponse] = await Promise.all([
+    getIntelligentSuggestionSettings(),
+    getIntelligentSuggestionTemplates(),
+    getIntelligentSuggestionRules(),
+  ])
+  const templateSeed = templatesResponse.find((template) => template.is_default) ?? templatesResponse[0]
+  return {
+    settings: settingsResponse,
+    templates: templatesResponse,
+    rules: rulesResponse,
+    newRuleDraft: templateSeed
+      ? buildRuleDraft(templateSeed, (rulesResponse.at(-1)?.sort_order ?? 0) + 1, stageOptions)
+      : null,
+  }
 }
 
 function SuggestionStageInput({
@@ -569,147 +705,74 @@ function useIntelligentSuggestionsController() {
     }))
   }
 
-  const stageOptions = useMemo(() => {
-    const byValue = new Map<string, StageOption>()
-    for (const pipeline of pipelines ?? []) {
-      for (const rawStage of pipeline.stages ?? []) {
-        const stage = rawStage as {
-          slug?: string
-          status?: string
-          stage_key?: string
-          label?: string
-          is_active?: boolean
-        }
-        const slug = stage.slug ?? stage.status
-        const stageKey = stage.stage_key ?? slug
-        if (!slug || !stageKey || stage.is_active === false) continue
-        if (!byValue.has(stageKey)) {
-          byValue.set(stageKey, {
-            value: stageKey,
-            slug,
-            stageKey,
-            label: stage.label ?? stageKey,
-          })
-        }
-      }
-    }
-    return Array.from(byValue.values()).sort((left, right) => left.label.localeCompare(right.label))
-  }, [pipelines])
+  const stageOptions = buildStageOptions(pipelines)
+  const stageLabelByRef = buildStageLabelByRef(stageOptions)
+  const stageOptionByValue = buildStageOptionByValue(stageOptions)
+  const templateByKey = buildTemplateByKey(templates)
 
-  const stageLabelByRef = useMemo(
-    () =>
-      new Map(
-        stageOptions.flatMap((option) => [
-          [option.value, option.label] as const,
-          [option.slug, option.label] as const,
-        ]),
-      ),
-    [stageOptions],
-  )
-  const stageOptionByValue = useMemo(
-    () => new Map(stageOptions.map((option) => [option.value, option])),
-    [stageOptions],
-  )
-  const templateByKey = useMemo(
-    () => new Map(templates.map((template) => [template.template_key, template])),
-    [templates],
-  )
-
-  const formatStageLabel = useCallback(
-    (stageRef: string | null | undefined) => {
-      if (!stageRef) return "N/A"
-      return stageLabelByRef.get(stageRef) ?? "Unknown stage"
-    },
-    [stageLabelByRef],
-  )
-
-  const requiresStageSelection = useCallback((template: IntelligentSuggestionTemplate | undefined) => {
-    if (!template) return false
-    return template.rule_kind === "stage_inactivity" && template.template_key !== "preapproval_stuck"
-  }, [])
-
-  const resolveStageSlug = useCallback(
-    (template: IntelligentSuggestionTemplate | undefined, stageSlug: string | null | undefined) => {
-      if (!template || !requiresStageSelection(template)) return ""
-      const normalized = (stageSlug ?? "").trim()
-      if (normalized) {
-        const matchingOption = stageOptions.find(
-          (option) => option.value === normalized || option.slug === normalized,
-        )
-        if (matchingOption) {
-          return matchingOption.value
-        }
-      }
-      const defaultStage = (template.default_stage_key ?? template.default_stage_slug ?? "").trim()
-      if (defaultStage) {
-        const matchingDefault = stageOptions.find(
-          (option) => option.value === defaultStage || option.slug === defaultStage,
-        )
-        if (matchingDefault) {
-          return matchingDefault.value
-        }
-      }
-      return stageOptions[0]?.value ?? defaultStage
-    },
-    [requiresStageSelection, stageOptions],
-  )
-
-  const buildRuleDraft = useCallback(
-    (
-      template: IntelligentSuggestionTemplate | undefined,
-      sortOrder: number,
-      overrides: Partial<IntelligentSuggestionRuleDraft> = {},
-    ): IntelligentSuggestionRuleDraft | null => {
-      if (!template) return null
-      return {
-        template_key: template.template_key,
-        name: overrides.name ?? template.name,
-        stage_slug: resolveStageSlug(
-          template,
-          overrides.stage_slug ?? template.default_stage_key ?? template.default_stage_slug,
-        ),
-        business_days: overrides.business_days ?? template.default_business_days,
-        enabled: overrides.enabled ?? true,
-        sort_order: overrides.sort_order ?? sortOrder,
-      }
-    },
-    [resolveStageSlug],
-  )
-
-  const loadSettings = useCallback(async () => {
+  const loadSettings = async () => {
     setLoading(true)
     setError(null)
     try {
-      const [settingsResponse, templatesResponse, rulesResponse] = await Promise.all([
-        getIntelligentSuggestionSettings(),
-        getIntelligentSuggestionTemplates(),
-        getIntelligentSuggestionRules(),
-      ])
-      setSettings(settingsResponse)
-      setTemplates(templatesResponse)
-      setRules(rulesResponse)
-      const templateSeed = templatesResponse.find((template) => template.is_default) ?? templatesResponse[0]
-      if (templateSeed) {
-        const draft = buildRuleDraft(templateSeed, (rulesResponse.at(-1)?.sort_order ?? 0) + 1)
-        if (draft) setNewRuleDraft(draft)
-      }
+      const loaded = await loadIntelligentSuggestionData(stageOptions)
+      setSettings(loaded.settings)
+      setTemplates(loaded.templates)
+      setRules(loaded.rules)
+      if (loaded.newRuleDraft) setNewRuleDraft(loaded.newRuleDraft)
     } catch (loadError) {
       console.error("Failed to load intelligent suggestion settings:", loadError)
       setError("Unable to load settings. Please retry.")
     }
     setLoading(false)
-  }, [buildRuleDraft])
+  }
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => void loadSettings(), 0)
-    return () => window.clearTimeout(timeoutId)
-  }, [loadSettings])
+    let cancelled = false
+
+    const loadInitialSettings = async () => {
+      setSuggestionState((current) => ({
+        ...current,
+        loading: true,
+        error: null,
+      }))
+      try {
+        const loaded = await loadIntelligentSuggestionData(buildStageOptions(pipelines))
+        if (cancelled) return
+        setSuggestionState((current) => ({
+          ...current,
+          settings: loaded.settings,
+          templates: loaded.templates,
+          rules: loaded.rules,
+          newRuleDraft: loaded.newRuleDraft ?? current.newRuleDraft,
+        }))
+      } catch (loadError) {
+        if (cancelled) return
+        console.error("Failed to load intelligent suggestion settings:", loadError)
+        setSuggestionState((current) => ({
+          ...current,
+          error: "Unable to load settings. Please retry.",
+        }))
+      }
+      if (!cancelled) {
+        setSuggestionState((current) => ({
+          ...current,
+          loading: false,
+        }))
+      }
+    }
+
+    const timeoutId = window.setTimeout(() => void loadInitialSettings(), 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [pipelines])
 
   const normalizedNewRuleDraft = (() => {
     if (!newRuleDraft) return null
     const template = templateByKey.get(newRuleDraft.template_key)
     if (!requiresStageSelection(template)) return newRuleDraft
-    const normalizedStage = resolveStageSlug(template, newRuleDraft.stage_slug)
+    const normalizedStage = resolveStageSlug(template, newRuleDraft.stage_slug, stageOptions)
     if (normalizedStage && normalizedStage !== newRuleDraft.stage_slug) {
       return { ...newRuleDraft, stage_slug: normalizedStage }
     }
@@ -747,7 +810,7 @@ function useIntelligentSuggestionsController() {
     const template = templateByKey.get(templateKey)
     if (!template) return
     setNewRuleDraft((previous) =>
-      buildRuleDraft(template, previous?.sort_order ?? (rules.at(-1)?.sort_order ?? 0) + 1, {
+      buildRuleDraft(template, previous?.sort_order ?? (rules.at(-1)?.sort_order ?? 0) + 1, stageOptions, {
         enabled: previous?.enabled ?? true,
       }),
     )
@@ -761,7 +824,7 @@ function useIntelligentSuggestionsController() {
       return
     }
     const stageSlug = requiresStageSelection(template)
-      ? resolveStageSlug(template, normalizedNewRuleDraft.stage_slug)
+      ? resolveStageSlug(template, normalizedNewRuleDraft.stage_slug, stageOptions)
       : null
     if (requiresStageSelection(template) && !stageSlug) {
       toast.error("Select a stage for this workflow rule")
@@ -782,7 +845,7 @@ function useIntelligentSuggestionsController() {
       setRules((previous) =>
         [...previous, createdRule].sort((left, right) => left.sort_order - right.sort_order),
       )
-      const resetDraft = buildRuleDraft(template, createdRule.sort_order + 1, { enabled: true })
+      const resetDraft = buildRuleDraft(template, createdRule.sort_order + 1, stageOptions, { enabled: true })
       if (resetDraft) setNewRuleDraft(resetDraft)
       toast.success("Workflow rule created")
     } catch (ruleError) {
@@ -814,7 +877,7 @@ function useIntelligentSuggestionsController() {
 
   const startEditingRule = (rule: IntelligentSuggestionRule) => {
     const template = templateByKey.get(rule.template_key)
-    const nextDraft = buildRuleDraft(template, rule.sort_order, {
+    const nextDraft = buildRuleDraft(template, rule.sort_order, stageOptions, {
       name: rule.name,
       stage_slug: rule.stage_key ?? rule.stage_slug ?? template?.default_stage_key ?? template?.default_stage_slug ?? "",
       business_days: rule.business_days,
@@ -839,7 +902,7 @@ function useIntelligentSuggestionsController() {
       return
     }
     const stageSlug = requiresStageSelection(template)
-      ? resolveStageSlug(template, editingRuleDraft.stage_slug)
+      ? resolveStageSlug(template, editingRuleDraft.stage_slug, stageOptions)
       : null
     if (requiresStageSelection(template) && !stageSlug) {
       toast.error("Select a stage for this workflow rule")
@@ -893,7 +956,7 @@ function useIntelligentSuggestionsController() {
     if (rule.template_key === "preapproval_stuck") {
       return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
     }
-    return `${rule.stage_label ?? formatStageLabel(rule.stage_key ?? rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+    return `${rule.stage_label ?? formatStageLabel(stageLabelByRef, rule.stage_key ?? rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
   }
 
   const getRuleStageLabel = (rule: IntelligentSuggestionRule) => {
@@ -903,7 +966,7 @@ function useIntelligentSuggestionsController() {
     if (rule.template_key === "preapproval_stuck") {
       return "Intake Pre-approval Stages"
     }
-    return rule.stage_label ?? formatStageLabel(rule.stage_key ?? rule.stage_slug)
+    return rule.stage_label ?? formatStageLabel(stageLabelByRef, rule.stage_key ?? rule.stage_slug)
   }
 
   return {

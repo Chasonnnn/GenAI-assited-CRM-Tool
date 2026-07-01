@@ -1721,7 +1721,9 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/settings/intelligent-suggestions-section.tsx")
 
         expect(source).toContain("const normalizedNewRuleDraft =")
-        expect(source).toContain("window.setTimeout(() => void loadSettings(), 0)")
+        expect(source).toContain("window.setTimeout(() => void loadInitialSettings(), 0)")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
         expect(source).not.toContain("finally")
         expect(source).not.toContain("useEffect(() => {\n    void loadSettings()")
         expect(source).not.toContain(
