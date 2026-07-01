@@ -1829,3 +1829,33 @@ Full command after Batch 86: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `620`
 - Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 387 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-06570955-c15b-4904-869b-4cee9398a426`
+
+## Batch 87
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/reports/MetaSpendDashboard.tsx`, `components/reports/TeamPerformanceChart.tsx`, `components/reports/TeamPerformanceTable.tsx` | Valid: the report components wrapped deterministic query params, chart series, sorted rows, mobile summaries, and average calculations in `useMemo`. React Compiler is enabled, and none of these wrappers guarded an identity-sensitive contract. | High | Replace the memo wrappers with plain derived values and add a source guard that failed against the previous `useMemo` imports/usages. | `pnpm test --run tests/react-regressions-source.test.ts tests/team-performance-table.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor no longer reports manual memoization in `components/reports`; full React Doctor manual memoization count dropped from `266` to `258`. |
+| `react-doctor/prefer-module-scope-pure-function` | `components/reports/TeamPerformanceTable.tsx` | Valid: `formatDays`, `formatPercent`, and `conversionBadgeClass` do not depend on render-local state and were rebuilt every render. | High | Move those helpers to module scope. | Scoped React Doctor no longer reports pure-function warnings in the reports scope. |
+| `react-doctor/prefer-tag-over-role` | `components/reports/TeamPerformanceTable.tsx` | Valid: the mobile summary used `role="list"` on a generic container even though native list markup could preserve the same presentation and label. | High | Replace the role-bearing container with `<ul>`/`<li>` while preserving the existing `aria-label` and article labels. | Focused table tests still pass; scoped React Doctor no longer reports the role warning. |
+| `react-doctor/no-giant-component` | `components/reports/TeamPerformanceTable.tsx` | Valid but out of scope: splitting the table into smaller sections is a structural component refactor, separate from this compiler/accessibility cleanup. | Medium | Deferred to a dedicated report table decomposition batch. No suppression added. | Final scoped React Doctor reports one remaining warning: `TeamPerformanceTable` is still a large component. |
+
+Scoped command after Batch 87: `cd apps/web && npx react-doctor@latest components/reports --verbose`
+
+- Score: `96 / 100 Great`
+- Total diagnostics in scope: `1`
+- Remaining: `no-giant-component` in `TeamPerformanceTable.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-198eef04-8221-4c78-868d-dc9ced79b374`
+
+Changed-scope command after Batch 87: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining: `no-giant-component` in `components/reports/TeamPerformanceTable.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-955797dc-e66b-4f8c-80ce-2bf66fb8c43a`
+
+Full command after Batch 87: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `608`
+- Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 376 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-718293b5-ac7b-45b2-a728-7e017d501a36`

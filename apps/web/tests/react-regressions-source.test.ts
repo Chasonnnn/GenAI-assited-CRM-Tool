@@ -369,6 +369,24 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps report derived data compiler-friendly", () => {
+        const sources = [
+            readSource("components/reports/TeamPerformanceChart.tsx"),
+            readSource("components/reports/MetaSpendDashboard.tsx"),
+            readSource("components/reports/TeamPerformanceTable.tsx"),
+        ]
+
+        for (const source of sources) {
+            expect(source).not.toContain("useMemo")
+        }
+
+        const teamTableSource = sources[2]
+        expect(teamTableSource).toContain("function formatDays")
+        expect(teamTableSource).toContain("function formatPercent")
+        expect(teamTableSource).toContain("function conversionBadgeClass")
+        expect(teamTableSource).not.toContain('role="list"')
+    })
+
     it("uses Next Image for journey, AI studio, and platform branding images", () => {
         const sources = [
             readSource("components/surrogates/journey/JourneyPrintView.tsx"),

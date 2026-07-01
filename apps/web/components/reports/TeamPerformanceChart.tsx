@@ -1,6 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
 import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2Icon, BarChart3Icon } from "lucide-react"
@@ -109,40 +108,35 @@ export function TeamPerformanceChart({
     isError = false,
     title = "Conversion Rate by Team Member",
 }: TeamPerformanceChartProps) {
-    const chartData = useMemo(() => {
-        if (!data) return []
-        return data
-            .filter((user) => user.total_surrogates > 0)
-            .toSorted((a, b) => b.conversion_rate - a.conversion_rate)
-            .slice(0, 10)
-            .map((user) => ({
-                userId: user.user_id,
-                name: user.user_name.split(" ")[0] ?? user.user_name,
-                fullName: user.user_name,
-                conversion_rate: user.conversion_rate,
-                total_surrogates: user.total_surrogates,
-                converted_count: conversionStageKey
-                    ? (user.stage_counts[conversionStageKey] ?? 0)
-                    : 0,
-                fill: getConversionColor(user.conversion_rate),
-            }))
-    }, [conversionStageKey, data])
+    const chartData = data
+        ? data
+              .filter((user) => user.total_surrogates > 0)
+              .toSorted((a, b) => b.conversion_rate - a.conversion_rate)
+              .slice(0, 10)
+              .map((user) => ({
+                  userId: user.user_id,
+                  name: user.user_name.split(" ")[0] ?? user.user_name,
+                  fullName: user.user_name,
+                  conversion_rate: user.conversion_rate,
+                  total_surrogates: user.total_surrogates,
+                  converted_count: conversionStageKey
+                      ? (user.stage_counts[conversionStageKey] ?? 0)
+                      : 0,
+                  fill: getConversionColor(user.conversion_rate),
+              }))
+        : []
 
-    const avgConversionRate = useMemo(() => {
-        if (!data || data.length === 0) return 0
-        const usersWithSurrogates = data.filter((u) => u.total_surrogates > 0)
-        if (usersWithSurrogates.length === 0) return 0
-        const totalConverted = usersWithSurrogates.reduce(
-            (sum, u) =>
-                sum + (conversionStageKey ? (u.stage_counts[conversionStageKey] ?? 0) : 0),
-            0
-        )
-        const totalSurrogates = usersWithSurrogates.reduce(
-            (sum, u) => sum + u.total_surrogates,
-            0
-        )
-        return totalSurrogates > 0 ? (totalConverted / totalSurrogates) * 100 : 0
-    }, [conversionStageKey, data])
+    const usersWithSurrogates = data?.filter((user) => user.total_surrogates > 0) ?? []
+    const totalConverted = usersWithSurrogates.reduce(
+        (sum, user) =>
+            sum + (conversionStageKey ? (user.stage_counts[conversionStageKey] ?? 0) : 0),
+        0
+    )
+    const totalSurrogates = usersWithSurrogates.reduce(
+        (sum, user) => sum + user.total_surrogates,
+        0
+    )
+    const avgConversionRate = totalSurrogates > 0 ? (totalConverted / totalSurrogates) * 100 : 0
 
     if (isLoading) {
         return (

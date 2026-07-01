@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -684,11 +684,10 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
     const [selectedAdAccount, setSelectedAdAccount] = useState<string>("")
     const [breakdownTab, setBreakdownTab] = useState<BreakdownParams["breakdown_type"]>("publisher_platform")
 
-    // Build params with ad account filter
-    const spendParams = useMemo(() => ({
+    const spendParams = {
         ...dateParams,
         ...(selectedAdAccount ? { ad_account_id: selectedAdAccount } : {}),
-    }), [dateParams, selectedAdAccount])
+    }
 
     // Fetch data
     const { data: adAccounts, isLoading: adAccountsLoading } = useMetaAdAccounts()
@@ -703,35 +702,31 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
     const { data: platforms, isLoading: platformsLoading, isError: platformsError } = useMetaPlatformBreakdown(dateParams)
     const { data: ads, isLoading: adsLoading, isError: adsError } = useMetaAdPerformance(dateParams)
 
-    // Transform trend data for chart
-    const trendChartData = useMemo(() => {
-        if (!trend) return []
-        return trend.map(point => ({
+    const trendChartData = trend
+        ? trend.map(point => ({
             date: new Date(point.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
             spend: point.spend,
             leads: point.leads,
         }))
-    }, [trend])
+        : []
 
-    const platformChartData = useMemo(() => {
-        if (!platforms) return []
-        return platforms.map((item, idx) => ({
+    const platformChartData = platforms
+        ? platforms.map((item, idx) => ({
             platformKey: item.platform,
             platform: item.platform.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
             leads: item.lead_count,
             fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
         }))
-    }, [platforms])
+        : []
 
-    const adChartData = useMemo(() => {
-        if (!ads) return []
-        return ads.slice(0, 8).map((item, idx) => ({
+    const adChartData = ads
+        ? ads.slice(0, 8).map((item, idx) => ({
             ad: item.ad_name,
             leads: item.lead_count,
             surrogates: item.surrogate_count,
             fill: BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length],
         }))
-    }, [ads])
+        : []
 
     return (
         <div className="space-y-6">

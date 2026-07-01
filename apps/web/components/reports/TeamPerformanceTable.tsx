@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -82,6 +82,23 @@ function getSortableValue(user: UserPerformanceData, sortKey: SortKey): number |
     return 0
 }
 
+function formatDays(value: number | null) {
+    return value === null ? "-" : `${value.toFixed(1)}d`
+}
+
+function formatPercent(value: number | null) {
+    return value === null ? "-" : `${value}%`
+}
+
+function conversionBadgeClass(value: number | null) {
+    return cn(
+        value === null && "border-border bg-muted text-muted-foreground hover:bg-muted",
+        value !== null && value >= 30 && "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15",
+        value !== null && value >= 20 && value < 30 && "border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        value !== null && value < 20 && "border-border bg-background text-muted-foreground hover:bg-muted",
+    )
+}
+
 export function TeamPerformanceTable({
     columns,
     data,
@@ -103,9 +120,8 @@ export function TeamPerformanceTable({
         setSortDirection("desc")
     }
 
-    const sortedData = useMemo(() => {
-        if (!data) return []
-        return data.toSorted((a, b) => {
+    const sortedData = data
+        ? data.toSorted((a, b) => {
             const aValue = getSortableValue(a, sortKey)
             const bValue = getSortableValue(b, sortKey)
             if (typeof aValue === "string" && typeof bValue === "string") {
@@ -117,36 +133,32 @@ export function TeamPerformanceTable({
                 ? Number(aValue) - Number(bValue)
                 : Number(bValue) - Number(aValue)
         })
-    }, [data, sortDirection, sortKey])
+        : []
 
-    const mobileSummaryData = useMemo<PerformanceSummaryEntry[]>(() => {
-        const entries: PerformanceSummaryEntry[] = sortedData.map((user) => ({
-            id: user.user_id,
-            name: user.user_name,
-            archivedCount: user.archived_count,
-            totalSurrogates: user.total_surrogates,
-            stageCounts: user.stage_counts,
-            conversionRate: user.conversion_rate,
-            avgDaysToMatch: user.avg_days_to_match,
-            avgDaysToConversion: user.avg_days_to_conversion,
-        }))
+    const mobileSummaryData: PerformanceSummaryEntry[] = sortedData.map((user) => ({
+        id: user.user_id,
+        name: user.user_name,
+        archivedCount: user.archived_count,
+        totalSurrogates: user.total_surrogates,
+        stageCounts: user.stage_counts,
+        conversionRate: user.conversion_rate,
+        avgDaysToMatch: user.avg_days_to_match,
+        avgDaysToConversion: user.avg_days_to_conversion,
+    }))
 
-        if (unassigned && unassigned.total_surrogates > 0) {
-            entries.push({
-                id: "unassigned",
-                name: "Unassigned",
-                archivedCount: unassigned.archived_count,
-                totalSurrogates: unassigned.total_surrogates,
-                stageCounts: unassigned.stage_counts,
-                conversionRate: null,
-                avgDaysToMatch: null,
-                avgDaysToConversion: null,
-                muted: true,
-            })
-        }
-
-        return entries
-    }, [sortedData, unassigned])
+    if (unassigned && unassigned.total_surrogates > 0) {
+        mobileSummaryData.push({
+            id: "unassigned",
+            name: "Unassigned",
+            archivedCount: unassigned.archived_count,
+            totalSurrogates: unassigned.total_surrogates,
+            stageCounts: unassigned.stage_counts,
+            conversionRate: null,
+            avgDaysToMatch: null,
+            avgDaysToConversion: null,
+            muted: true,
+        })
+    }
 
     const stageKeys = columns.map((column) => column.stage_key)
 
@@ -204,16 +216,7 @@ export function TeamPerformanceTable({
         )
     }
 
-    const formatDays = (value: number | null) => (value === null ? "-" : `${value.toFixed(1)}d`)
-    const formatPercent = (value: number | null) => (value === null ? "-" : `${value}%`)
     const asOfLabel = formatDateTime(asOf)
-    const conversionBadgeClass = (value: number | null) =>
-        cn(
-            value === null && "border-border bg-muted text-muted-foreground hover:bg-muted",
-            value !== null && value >= 30 && "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15",
-            value !== null && value >= 20 && value < 30 && "border-border bg-secondary text-secondary-foreground hover:bg-secondary/80",
-            value !== null && value < 20 && "border-border bg-background text-muted-foreground hover:bg-muted",
-        )
 
     return (
         <Card>
@@ -233,78 +236,78 @@ export function TeamPerformanceTable({
                 </div>
             </CardHeader>
             <CardContent className="p-0">
-                <div
+                <ul
                     className="space-y-3 p-4 md:hidden"
-                    role="list"
                     aria-label="Team performance mobile summary"
                 >
                     {mobileSummaryData.map((entry) => (
-                        <article
-                            key={entry.id}
-                            aria-label={`Performance summary for ${entry.name}`}
-                            className={cn(
-                                "rounded-2xl border border-border/70 bg-background p-4 shadow-sm",
-                                entry.muted && "bg-muted/30",
-                            )}
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="truncate font-semibold">{entry.name}</h3>
-                                        {entry.archivedCount > 0 ? (
-                                            <Badge variant="outline" className="text-xs">
-                                                {entry.archivedCount} archived
-                                            </Badge>
-                                        ) : null}
+                        <li key={entry.id}>
+                            <article
+                                aria-label={`Performance summary for ${entry.name}`}
+                                className={cn(
+                                    "rounded-2xl border border-border/70 bg-background p-4 shadow-sm",
+                                    entry.muted && "bg-muted/30",
+                                )}
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="truncate font-semibold">{entry.name}</h3>
+                                            {entry.archivedCount > 0 ? (
+                                                <Badge variant="outline" className="text-xs">
+                                                    {entry.archivedCount} archived
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {entry.totalSurrogates} surrogates
+                                        </p>
                                     </div>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        {entry.totalSurrogates} surrogates
-                                    </p>
+                                    <Badge variant="outline" className={conversionBadgeClass(entry.conversionRate)}>
+                                        {formatPercent(entry.conversionRate)}
+                                    </Badge>
                                 </div>
-                                <Badge variant="outline" className={conversionBadgeClass(entry.conversionRate)}>
-                                    {formatPercent(entry.conversionRate)}
-                                </Badge>
-                            </div>
 
-                            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                                {columns.map((column) => (
-                                    <div key={column.stage_key} className="rounded-xl bg-muted/40 p-3">
+                                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                    {columns.map((column) => (
+                                        <div key={column.stage_key} className="rounded-xl bg-muted/40 p-3">
+                                            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                {column.label}
+                                            </dt>
+                                            <dd className="mt-1 text-base font-semibold">
+                                                {entry.stageCounts[column.stage_key] ?? 0}
+                                            </dd>
+                                        </div>
+                                    ))}
+                                    <div className="rounded-xl bg-muted/40 p-3">
                                         <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                            {column.label}
+                                            Match conversion
                                         </dt>
                                         <dd className="mt-1 text-base font-semibold">
-                                            {entry.stageCounts[column.stage_key] ?? 0}
+                                            {formatPercent(entry.conversionRate)}
                                         </dd>
                                     </div>
-                                ))}
-                                <div className="rounded-xl bg-muted/40 p-3">
-                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                        Match conversion
-                                    </dt>
-                                    <dd className="mt-1 text-base font-semibold">
-                                        {formatPercent(entry.conversionRate)}
-                                    </dd>
-                                </div>
-                                <div className="rounded-xl bg-muted/40 p-3">
-                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                        Avg to match
-                                    </dt>
-                                    <dd className="mt-1 text-base font-semibold">
-                                        {formatDays(entry.avgDaysToMatch)}
-                                    </dd>
-                                </div>
-                                <div className="rounded-xl bg-muted/40 p-3">
-                                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                        Avg to conversion
-                                    </dt>
-                                    <dd className="mt-1 text-base font-semibold">
-                                        {formatDays(entry.avgDaysToConversion)}
-                                    </dd>
-                                </div>
-                            </dl>
-                        </article>
+                                    <div className="rounded-xl bg-muted/40 p-3">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Avg to match
+                                        </dt>
+                                        <dd className="mt-1 text-base font-semibold">
+                                            {formatDays(entry.avgDaysToMatch)}
+                                        </dd>
+                                    </div>
+                                    <div className="rounded-xl bg-muted/40 p-3">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Avg to conversion
+                                        </dt>
+                                        <dd className="mt-1 text-base font-semibold">
+                                            {formatDays(entry.avgDaysToConversion)}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </article>
+                        </li>
                     ))}
-                </div>
+                </ul>
 
                 <div className="hidden overflow-x-auto md:block">
                     <Table className="min-w-[980px]">
