@@ -734,6 +734,23 @@ describe("React regression guards (source)", () => {
         expect(functionSource).toContain("queryKey: ['analytics', 'activity-feed']")
     })
 
+    it("keeps Zoom surrogate cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-user-integrations.ts")
+
+        expect(source).not.toContain("invalidateSurrogateCrmCaches")
+
+        for (const functionName of [
+            "useCreateZoomMeeting",
+            "useSendZoomInvite",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.activity(")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.detail(")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.lists()")
+            expect(functionSource, functionName).toContain("queryKey: ['analytics', 'activity-feed']")
+        }
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")

@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api'
 import { appointmentKeys } from './use-appointments'
-import { invalidateSurrogateCrmCaches } from './use-surrogates'
+import { surrogateKeys } from './use-surrogates'
 import { taskKeys } from './use-tasks'
 import {
     listUserIntegrations,
@@ -255,7 +255,13 @@ export function useCreateZoomMeeting() {
             void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: integrationKeys.zoomMeetingsList() })
             if (variables.entity_type === 'surrogate') {
-                invalidateSurrogateCrmCaches(queryClient, variables.entity_id)
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(variables.entity_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(variables.entity_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
             }
         },
     })
@@ -271,7 +277,13 @@ export function useSendZoomInvite() {
         mutationFn: (data: SendZoomInviteRequest) => sendZoomInvite(data),
         onSuccess: (_data, variables) => {
             if (variables.surrogate_id) {
-                invalidateSurrogateCrmCaches(queryClient, variables.surrogate_id)
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(variables.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(variables.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
             }
         },
     })

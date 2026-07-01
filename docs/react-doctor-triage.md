@@ -2365,3 +2365,30 @@ Full command after Batch 106: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `534`
 - Summary: `Bugs 155 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-82136ab0-3fed-4187-81d6-d11cc1065785`
+
+## Batch 107
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-user-integrations.ts` Zoom mutations: `useCreateZoomMeeting`, `useSendZoomInvite` | Valid scanner finding with behavior already protected: these mutations already refreshed surrogate activity, detail, list, and analytics activity-feed caches through `invalidateSurrogateCrmCaches`, but React Doctor's rule only detects cache operations inside mutation options. | High | Inline the existing surrogate/activity-feed invalidations inside both Zoom mutation `onSuccess` handlers and add a source guard that fails if these hooks hide those cache operations behind the helper again. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Zoom surrogate cache invalidations"` failed on `invalidateSurrogateCrmCaches`. GREEN: the same source guard passed; `pnpm test --run tests/use-mutation-invalidations.test.ts -t "Zoom"` passed with `2` tests; changed-scope React Doctor reports no issues. Hook-scope React Doctor warnings dropped from `31` to `30`. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-user-integrations.ts` OAuth redirect mutations: `useConnectZoom`, `useConnectGmail`, `useConnectGoogleCalendar`, `useConnectGcp` | False positive: each mutation fetches an authorization URL and immediately leaves the app via `window.location.assign(...)`. The durable integration state changes on the provider callback flow, not in these mutations, so there is no local query cache to refresh before redirect. | High | Logged as invalid for this batch; no dummy invalidation added. | After Batch 107, the only remaining `use-user-integrations.ts` warnings are `use-user-integrations.ts:84`, `109`, `134`, and `211`, which are the OAuth redirect mutations. |
+
+Scoped command after Batch 107: `cd apps/web && npx -y react-doctor@latest lib/hooks --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics in scope: `30`
+- Summary: `Bugs 30 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2326971d-2730-48dd-8b59-99ef107d7536`
+
+Changed-scope command after Batch 107: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 107: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `533`
+- Summary: `Bugs 154 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a3a4cd59-141b-48c3-8300-97019fff2da0`
