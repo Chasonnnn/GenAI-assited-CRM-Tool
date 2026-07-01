@@ -1368,3 +1368,22 @@ Full command after Batch 66: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `814`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 560 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-377a428d-4d81-4717-a454-51259453f976`
+
+## Batch 67
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/intended-parents/matches/[id]/hooks/useMatchDetailTabData.ts` | Valid: the match-detail tab data hook manually memoized deterministic note, file, task, activity, and source-filter derivations. | High | Move note/file/task builders to module scope, remove `useMemo`, and return plain derived arrays so React Compiler can cache the hook work. Added a source guard that failed on the old `useMemo` import/calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/match-detail-tab-data.test.tsx tests/match-detail.test.tsx tests/match-detail-overview-tabs.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `432` to `424`. |
+
+Changed-scope command after Batch 67: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 67: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `806`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 552 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a742f16c-5d20-4dc6-b5b9-368589c97449`

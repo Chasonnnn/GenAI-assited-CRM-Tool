@@ -1,6 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
 import type { DataSource, SourceFilter } from "./useMatchDetailTabState"
 
 type SurrogateNoteInput = {
@@ -399,6 +398,129 @@ function buildMatchCombinedActivity({
     return activity
 }
 
+function buildMatchCombinedNotes({
+    surrogateNotes,
+    intendedParentNotes,
+    match,
+}: Pick<
+    UseMatchDetailTabDataParams,
+    | "surrogateNotes"
+    | "intendedParentNotes"
+    | "match"
+>): CombinedNote[] {
+    const notes: CombinedNote[] = []
+
+    for (const surrogateNote of surrogateNotes) {
+        const note: CombinedNote = {
+            id: surrogateNote.id,
+            content: surrogateNote.body,
+            created_at: surrogateNote.created_at,
+            source: "surrogate",
+        }
+        if (surrogateNote.author_name) {
+            note.author_name = surrogateNote.author_name
+        }
+        notes.push(note)
+    }
+
+    for (const intendedParentNote of intendedParentNotes) {
+        notes.push({
+            id: intendedParentNote.id,
+            content: intendedParentNote.content,
+            created_at: intendedParentNote.created_at,
+            source: "ip",
+        })
+    }
+
+    if (match?.notes) {
+        notes.push({
+            id: "match-notes",
+            content: match.notes,
+            created_at: match.updated_at || match.created_at || "",
+            source: "match",
+        })
+    }
+
+    notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    return notes
+}
+
+function buildMatchCombinedFiles({
+    surrogateFiles,
+    intendedParentFiles,
+}: Pick<
+    UseMatchDetailTabDataParams,
+    | "surrogateFiles"
+    | "intendedParentFiles"
+>): CombinedFile[] {
+    const files: CombinedFile[] = []
+
+    for (const surrogateFile of surrogateFiles) {
+        files.push({
+            id: surrogateFile.id,
+            filename: surrogateFile.filename,
+            file_size: surrogateFile.file_size,
+            created_at: surrogateFile.created_at,
+            source: "surrogate",
+        })
+    }
+
+    for (const intendedParentFile of intendedParentFiles) {
+        files.push({
+            id: intendedParentFile.id,
+            filename: intendedParentFile.filename,
+            file_size: intendedParentFile.file_size,
+            created_at: intendedParentFile.created_at,
+            source: "ip",
+        })
+    }
+
+    files.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    return files
+}
+
+function buildMatchCombinedTasks({
+    surrogateTasks,
+    intendedParentTasks,
+}: Pick<
+    UseMatchDetailTabDataParams,
+    | "surrogateTasks"
+    | "intendedParentTasks"
+>): CombinedTask[] {
+    const taskMap = new Map<string, CombinedTask>()
+
+    for (const surrogateTask of surrogateTasks?.items || []) {
+        taskMap.set(surrogateTask.id, {
+            id: surrogateTask.id,
+            title: surrogateTask.title,
+            due_date: surrogateTask.due_date,
+            is_completed: surrogateTask.is_completed,
+            source: "surrogate",
+        })
+    }
+
+    for (const intendedParentTask of intendedParentTasks?.items || []) {
+        const existingTask = taskMap.get(intendedParentTask.id)
+        if (existingTask) {
+            taskMap.set(intendedParentTask.id, {
+                ...existingTask,
+                source: "match",
+            })
+            continue
+        }
+
+        taskMap.set(intendedParentTask.id, {
+            id: intendedParentTask.id,
+            title: intendedParentTask.title,
+            due_date: intendedParentTask.due_date,
+            is_completed: intendedParentTask.is_completed,
+            source: "ip",
+        })
+    }
+
+    return Array.from(taskMap.values())
+}
+
 export function useMatchDetailTabData({
     sourceFilter,
     surrogateNotes,
@@ -411,139 +533,31 @@ export function useMatchDetailTabData({
     intendedParentHistory,
     match,
 }: UseMatchDetailTabDataParams) {
-    const combinedNotes = useMemo<CombinedNote[]>(() => {
-        const notes: CombinedNote[] = []
-
-        for (const surrogateNote of surrogateNotes) {
-            const note: CombinedNote = {
-                id: surrogateNote.id,
-                content: surrogateNote.body,
-                created_at: surrogateNote.created_at,
-                source: "surrogate",
-            }
-            if (surrogateNote.author_name) {
-                note.author_name = surrogateNote.author_name
-            }
-            notes.push(note)
-        }
-
-        for (const intendedParentNote of intendedParentNotes) {
-            notes.push({
-                id: intendedParentNote.id,
-                content: intendedParentNote.content,
-                created_at: intendedParentNote.created_at,
-                source: "ip",
-            })
-        }
-
-        if (match?.notes) {
-            notes.push({
-                id: "match-notes",
-                content: match.notes,
-                created_at: match.updated_at || match.created_at || "",
-                source: "match",
-            })
-        }
-
-        notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        return notes
-    }, [intendedParentNotes, match, surrogateNotes])
-
-    const combinedFiles = useMemo<CombinedFile[]>(() => {
-        const files: CombinedFile[] = []
-
-        for (const surrogateFile of surrogateFiles) {
-            files.push({
-                id: surrogateFile.id,
-                filename: surrogateFile.filename,
-                file_size: surrogateFile.file_size,
-                created_at: surrogateFile.created_at,
-                source: "surrogate",
-            })
-        }
-
-        for (const intendedParentFile of intendedParentFiles) {
-            files.push({
-                id: intendedParentFile.id,
-                filename: intendedParentFile.filename,
-                file_size: intendedParentFile.file_size,
-                created_at: intendedParentFile.created_at,
-                source: "ip",
-            })
-        }
-
-        files.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        return files
-    }, [intendedParentFiles, surrogateFiles])
-
-    const combinedTasks = useMemo<CombinedTask[]>(() => {
-        const taskMap = new Map<string, CombinedTask>()
-
-        for (const surrogateTask of surrogateTasks?.items || []) {
-            taskMap.set(surrogateTask.id, {
-                id: surrogateTask.id,
-                title: surrogateTask.title,
-                due_date: surrogateTask.due_date,
-                is_completed: surrogateTask.is_completed,
-                source: "surrogate",
-            })
-        }
-
-        for (const intendedParentTask of intendedParentTasks?.items || []) {
-            const existingTask = taskMap.get(intendedParentTask.id)
-            if (existingTask) {
-                taskMap.set(intendedParentTask.id, {
-                    ...existingTask,
-                    source: "match",
-                })
-                continue
-            }
-
-            taskMap.set(intendedParentTask.id, {
-                id: intendedParentTask.id,
-                title: intendedParentTask.title,
-                due_date: intendedParentTask.due_date,
-                is_completed: intendedParentTask.is_completed,
-                source: "ip",
-            })
-        }
-
-        return Array.from(taskMap.values())
-    }, [intendedParentTasks, surrogateTasks])
-
-    const combinedActivity = useMemo<CombinedActivity[]>(
-        () =>
-            buildMatchCombinedActivity({
-                surrogateActivity,
-                intendedParentNotes,
-                intendedParentFiles,
-                intendedParentHistory,
-                match,
-            }),
-        [intendedParentFiles, intendedParentHistory, intendedParentNotes, match, surrogateActivity],
-    )
-
-    const filteredNotes = useMemo(
-        () => filterBySource(combinedNotes, sourceFilter),
-        [combinedNotes, sourceFilter]
-    )
-    const filteredFiles = useMemo(
-        () => filterBySource(combinedFiles, sourceFilter),
-        [combinedFiles, sourceFilter]
-    )
-    const filteredTasks = useMemo(
-        () => filterBySource(combinedTasks, sourceFilter),
-        [combinedTasks, sourceFilter]
-    )
-    const filteredActivity = useMemo(
-        () => filterBySource(combinedActivity, sourceFilter),
-        [combinedActivity, sourceFilter]
-    )
+    const combinedNotes = buildMatchCombinedNotes({
+        surrogateNotes,
+        intendedParentNotes,
+        match,
+    })
+    const combinedFiles = buildMatchCombinedFiles({
+        surrogateFiles,
+        intendedParentFiles,
+    })
+    const combinedTasks = buildMatchCombinedTasks({
+        surrogateTasks,
+        intendedParentTasks,
+    })
+    const combinedActivity = buildMatchCombinedActivity({
+        surrogateActivity,
+        intendedParentNotes,
+        intendedParentFiles,
+        intendedParentHistory,
+        match,
+    })
 
     return {
-        filteredNotes,
-        filteredFiles,
-        filteredTasks,
-        filteredActivity,
+        filteredNotes: filterBySource(combinedNotes, sourceFilter),
+        filteredFiles: filterBySource(combinedFiles, sourceFilter),
+        filteredTasks: filterBySource(combinedTasks, sourceFilter),
+        filteredActivity: filterBySource(combinedActivity, sourceFilter),
     }
 }

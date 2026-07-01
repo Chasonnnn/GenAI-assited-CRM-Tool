@@ -1856,6 +1856,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useCallback")
     })
 
+    it("keeps match-detail tab data derivations compiler-friendly", () => {
+        const source = readSource("app/(app)/intended-parents/matches/[id]/hooks/useMatchDetailTabData.ts")
+
+        expect(source).not.toContain("useMemo")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
