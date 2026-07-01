@@ -1532,3 +1532,25 @@ Full command after Batch 74: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `785`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 531 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6d26159c-ba2d-40a5-b7db-86f8f9887793`
+
+## Batch 75
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/tasks/page.client.tsx` | Valid: the tasks page used `useCallback` around direct URL-sync, filter, selection, and bulk-complete handlers. React Compiler is enabled, and these wrappers do not guard a confirmed preserve-manual-memoization case. | High | Remove the `useCallback` import and convert the affected handlers to plain functions while preserving their existing state updates and mutation flow. Added a source guard that failed on the old `useCallback` import/calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/tasks-page.test.tsx`; changed-scope React Doctor no longer reports manual memoization for this page; full React Doctor manual memoization count dropped from `405` to `400`. |
+| `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/tasks/page.client.tsx` | Valid but out of scope: the page still contains event-handler and state-structure findings that need a separate reducer/component-structure batch with focused task workflow coverage. | Medium | Deferred to a separate tasks page structure batch. No suppression added. | Changed-scope React Doctor score is `92 / 100` with `3` remaining warnings in this page. |
+
+Changed-scope command after Batch 75: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `3`
+- Summary: `Bugs 2 warnings`, `Maintainability 1 warning`
+- Deferred: `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` in `app/(app)/tasks/page.client.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bbf0fa81-af21-4d99-8793-362218c6b9dc`
+
+Full command after Batch 75: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `780`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 526 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a4f8e1b0-7439-4789-8687-c8a3c3fcade4`

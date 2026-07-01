@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { startTransition, useState, useEffect, useCallback, useRef } from "react"
+import { startTransition, useState, useEffect, useRef } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
@@ -101,7 +101,7 @@ export default function TasksPage() {
     }, [focusTarget])
 
     // Sync state changes back to URL
-    const updateUrlParams = useCallback((filterValue: FilterType) => {
+    const updateUrlParams = (filterValue: FilterType) => {
         const newParams = new URLSearchParams(searchParams.toString())
         if (filterValue !== "my_tasks") {
             newParams.set("filter", filterValue)
@@ -115,13 +115,13 @@ export default function TasksPage() {
         const currentUrl = currentQuery ? `/tasks?${currentQuery}` : "/tasks"
         if (newUrl === currentUrl) return
         replace(newUrl as Route, { scroll: false })
-    }, [searchParams, replace])
+    }
 
     // Handle filter change
-    const handleFilterChange = useCallback((newFilter: FilterType) => {
+    const handleFilterChange = (newFilter: FilterType) => {
         setFilter(newFilter)
         updateUrlParams(newFilter)
-    }, [updateUrlParams])
+    }
 
     const handleViewChange = (newView: ViewType) => {
         setView(newView)
@@ -246,7 +246,7 @@ export default function TasksPage() {
         }
     }
 
-    const handleSelectTask = useCallback((taskId: string, selected: boolean) => {
+    const handleSelectTask = (taskId: string, selected: boolean) => {
         setSelectedTaskIds((prev) => {
             const next = new Set(prev)
             if (selected) {
@@ -256,18 +256,18 @@ export default function TasksPage() {
             }
             return next
         })
-    }, [])
+    }
 
-    const handleSelectAllTasks = useCallback((selected: boolean) => {
+    const handleSelectAllTasks = (selected: boolean) => {
         if (!selected) {
             setSelectedTaskIds(new Set())
             return
         }
         const visibleTaskIds = (incompleteTasks?.items ?? []).map((task) => task.id)
         setSelectedTaskIds(new Set(visibleTaskIds))
-    }, [incompleteTasks?.items])
+    }
 
-    const handleBulkCompleteSelected = useCallback(async () => {
+    const handleBulkCompleteSelected = async () => {
         const taskIds = Array.from(selectedTaskIds)
         if (taskIds.length === 0) return
         const result = await bulkCompleteTasks.mutateAsync(taskIds)
@@ -279,7 +279,7 @@ export default function TasksPage() {
             return
         }
         toast.success(`Completed ${result.completed} tasks.`)
-    }, [bulkCompleteTasks, selectedTaskIds])
+    }
 
     const handleAddTask = async (data: TaskFormData) => {
         const dueTime = data.due_time ? `${data.due_time}:00` : undefined

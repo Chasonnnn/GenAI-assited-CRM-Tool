@@ -2088,6 +2088,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setPendingFocus(")
     })
 
+    it("keeps Tasks page handlers compiler-friendly", () => {
+        const source = readSource("app/(app)/tasks/page.client.tsx")
+
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
+    })
+
     it("keeps task edit modal draft state compiler-friendly", () => {
         const source = readSource("components/tasks/TaskEditModal.tsx")
 
