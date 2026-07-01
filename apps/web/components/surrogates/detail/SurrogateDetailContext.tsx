@@ -18,7 +18,7 @@ export function SurrogateDetailProvider({
     surrogate,
     children,
 }: SurrogateDetailProviderProps) {
-    const value = React.useMemo(() => ({ surrogate }), [surrogate])
+    const value = { surrogate }
     return (
         <SurrogateDetailContext.Provider value={value}>
             {children}

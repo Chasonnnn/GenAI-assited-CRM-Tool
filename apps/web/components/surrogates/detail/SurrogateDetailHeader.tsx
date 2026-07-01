@@ -36,10 +36,7 @@ export function SurrogateDetailHeader({
     onBack,
     children,
 }: SurrogateDetailHeaderProps) {
-    const currentStage = React.useMemo(
-        () => ({ stage_key: currentStageKey, slug: currentStageSlug }),
-        [currentStageKey, currentStageSlug]
-    )
+    const currentStage = { stage_key: currentStageKey, slug: currentStageSlug }
     const showContactOutcome =
         latestContactOutcome && stageMatchesKey(currentStage, "contacted")
     const isInterviewScheduledStage = stageMatchesKey(currentStage, "interview_scheduled")

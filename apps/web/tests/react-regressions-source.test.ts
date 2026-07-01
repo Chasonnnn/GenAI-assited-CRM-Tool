@@ -1682,6 +1682,20 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps surrogate detail header context files free of manual React memoization", () => {
+        const sources = [
+            "components/surrogates/detail/SurrogateDetailContext.tsx",
+            "components/surrogates/detail/SurrogateDetailHeader.tsx",
+        ].map(readSource)
+
+        for (const source of sources) {
+            expect(source).not.toContain("useMemo")
+            expect(source).not.toContain("useCallback")
+            expect(source).not.toContain("React.useMemo")
+            expect(source).not.toContain("React.useCallback")
+        }
+    })
+
     it("uses immutable sorting in unified calendar derived lists", () => {
         const source = readSource("components/appointments/UnifiedCalendar.tsx")
 
