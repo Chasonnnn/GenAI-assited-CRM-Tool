@@ -1849,6 +1849,13 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const formatDate =")
     })
 
+    it("keeps match-detail tab state routing helpers compiler-friendly", () => {
+        const source = readSource("app/(app)/intended-parents/matches/[id]/hooks/useMatchDetailTabState.ts")
+
+        expect(source).toContain("function updateMatchDetailTabUrl(")
+        expect(source).not.toContain("useCallback")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

@@ -1349,3 +1349,22 @@ Full command after Batch 65: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `817`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 563 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-717899bd-bec7-4a9b-8c73-2e0ec04bad44`
+
+## Batch 66
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/intended-parents/matches/[id]/hooks/useMatchDetailTabState.ts` | Valid: the match-detail tab state hook manually memoized URL construction and tab/source handlers even though React Compiler can cache them. | High | Move match-detail tab URL construction to a module-scope helper, remove `useCallback`, and return plain tab/source change handlers. Added a source guard that failed on the old `useCallback` import/calls and missing helper. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/match-detail.test.tsx tests/match-detail-overview-tabs.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `435` to `432`. |
+
+Changed-scope command after Batch 66: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 66: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `814`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 560 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-377a428d-4d81-4717-a454-51259453f976`

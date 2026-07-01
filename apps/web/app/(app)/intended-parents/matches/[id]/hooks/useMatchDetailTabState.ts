@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -24,6 +24,45 @@ const isTabType = (value: string | null): value is TabType =>
 export const isSourceFilter = (value: string | null): value is SourceFilter =>
     value === "all" || value === "surrogate" || value === "ip" || value === "match"
 
+type RouterReplace = ReturnType<typeof useRouter>["replace"]
+type SearchParamsSnapshot = {
+    toString: () => string
+}
+
+function updateMatchDetailTabUrl(
+    replace: RouterReplace,
+    searchParams: SearchParamsSnapshot,
+    matchId: string,
+    tab: TabType,
+    source: SourceFilter
+) {
+    const nextParams = new URLSearchParams(searchParams.toString())
+    if (tab !== "notes") {
+        nextParams.set("tab", tab)
+    } else {
+        nextParams.delete("tab")
+    }
+    if (source !== "all") {
+        nextParams.set("source", source)
+    } else {
+        nextParams.delete("source")
+    }
+
+    const nextQuery = nextParams.toString()
+    const currentQuery = searchParams.toString()
+    if (nextQuery === currentQuery) return
+
+    const nextUrl = nextQuery
+        ? `/intended-parents/matches/${matchId}?${nextQuery}`
+        : `/intended-parents/matches/${matchId}`
+    const currentUrl = currentQuery
+        ? `/intended-parents/matches/${matchId}?${currentQuery}`
+        : `/intended-parents/matches/${matchId}`
+    if (nextUrl === currentUrl) return
+
+    replace(nextUrl as Route, { scroll: false })
+}
+
 export function useMatchDetailTabState(matchId: string) {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
@@ -37,56 +76,19 @@ export function useMatchDetailTabState(matchId: string) {
         return isSourceFilter(source) ? source : "all"
     })
 
-    const updateUrlParams = useCallback(
-        (tab: TabType, source: SourceFilter) => {
-            const nextParams = new URLSearchParams(searchParams.toString())
-            if (tab !== "notes") {
-                nextParams.set("tab", tab)
-            } else {
-                nextParams.delete("tab")
-            }
-            if (source !== "all") {
-                nextParams.set("source", source)
-            } else {
-                nextParams.delete("source")
-            }
+    const handleTabChange = (tab: TabType) => {
+        if (tab !== activeTab) {
+            setActiveTab(tab)
+            updateMatchDetailTabUrl(replace, searchParams, matchId, tab, sourceFilter)
+        }
+    }
 
-            const nextQuery = nextParams.toString()
-            const currentQuery = searchParams.toString()
-            if (nextQuery === currentQuery) return
-
-            const nextUrl = nextQuery
-                ? `/intended-parents/matches/${matchId}?${nextQuery}`
-                : `/intended-parents/matches/${matchId}`
-            const currentUrl = currentQuery
-                ? `/intended-parents/matches/${matchId}?${currentQuery}`
-                : `/intended-parents/matches/${matchId}`
-            if (nextUrl === currentUrl) return
-
-            replace(nextUrl as Route, { scroll: false })
-        },
-        [matchId, replace, searchParams]
-    )
-
-    const handleTabChange = useCallback(
-        (tab: TabType) => {
-            if (tab !== activeTab) {
-                setActiveTab(tab)
-                updateUrlParams(tab, sourceFilter)
-            }
-        },
-        [activeTab, sourceFilter, updateUrlParams]
-    )
-
-    const handleSourceFilterChange = useCallback(
-        (source: SourceFilter) => {
-            if (source !== sourceFilter) {
-                setSourceFilter(source)
-                updateUrlParams(activeTab, source)
-            }
-        },
-        [activeTab, sourceFilter, updateUrlParams]
-    )
+    const handleSourceFilterChange = (source: SourceFilter) => {
+        if (source !== sourceFilter) {
+            setSourceFilter(source)
+            updateMatchDetailTabUrl(replace, searchParams, matchId, activeTab, source)
+        }
+    }
 
     return {
         activeTab,
