@@ -1774,3 +1774,32 @@ Full command after Batch 84: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `662`
 - Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 429 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f1e76770-d521-4eec-9c93-825a9b36266a`
+
+## Batch 85
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/surrogates/page.client.tsx` | Valid: the surrogates list page wrapped URL-sync, filter, pagination, reset, and active-filter helpers in `useCallback`. React Compiler is enabled, and these handlers are ordinary render-local functions. | High | Remove the `useCallback` import and convert the affected helpers to plain functions. Added a source guard that failed on the old `useCallback` import/calls. | `pnpm test --run tests/react-regressions-source.test.ts tests/surrogates.test.tsx tests/surrogates-accessibility.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor no longer reports manual memoization for the surrogates page; full React Doctor manual memoization count dropped from `308` to `294`. |
+| `react-doctor/no-effect-with-fresh-deps` / `react-doctor/exhaustive-deps` | `app/(app)/surrogates/page.client.tsx` | Valid follow-up: after removing `useCallback`, the debounced-search URL-sync effect depended on the newly render-local `updateUrlParams` function, which recreated every render. | High | Extract URL construction into module-scope `buildSurrogatesFilterUrl` and make the effect depend on stable primitive inputs plus `replace`, not the render-local helper. | Scoped and changed-scope React Doctor dropped the fresh-dependency error. |
+| `react-doctor/no-cascading-set-state`, `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/surrogates/page.client.tsx` | Valid but out of scope: the remaining findings are the page's URL-to-state synchronization effect and broad state/component structure. Fixing them requires a reducer/state-model batch rather than a memoization cleanup. | Medium | Deferred to a separate surrogates state-model/component-structure batch. No suppression added. | Final scoped React Doctor reports `17` remaining warnings in this page and no manual memoization or fresh-dependency error. |
+
+Scoped command after Batch 85: `cd apps/web && npx react-doctor@latest 'app/(app)/surrogates' --verbose`
+
+- Score: `71 / 100 Needs work`
+- Total diagnostics in scope: `17`
+- Remaining: `no-cascading-set-state`, `no-event-handler` ×14, `no-giant-component`, `prefer-useReducer`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-adbd3b03-32b8-469d-a50d-7b3d4334257d`
+
+Changed-scope command after Batch 85: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `88 / 100 Great`
+- Total diagnostics in changed files: `17`
+- Remaining: same surrogates page state/component-structure warnings listed above
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1a600895-884c-4ff4-87ba-ecece29254ff`
+
+Full command after Batch 85: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `648`
+- Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 415 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3f3cab4d-c74c-403d-986e-47fec8fc94ff`

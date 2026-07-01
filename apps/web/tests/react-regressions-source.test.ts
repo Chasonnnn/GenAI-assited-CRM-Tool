@@ -2246,6 +2246,7 @@ describe("React regression guards (source)", () => {
         expect(pipelinesSource).not.toContain("current.stages\n                .filter")
 
         expect(surrogatesSource).toContain("key !== \"intelligent_any\" &&")
+        expect(surrogatesSource).not.toContain("useCallback")
         expect(surrogatesSource).not.toContain(".filter(([key]) => key !== \"intelligent_any\")\n        .filter")
 
         expect(intendedParentTimelineSource).toContain("const overdue: PendingTaskEntry[] = []")
