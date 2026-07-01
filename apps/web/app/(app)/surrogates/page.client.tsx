@@ -887,7 +887,8 @@ export function SurrogatesPageClient() {
             }
         })
 
-    }, [canFilterByAssignee, currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canFilterByAssignee, currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps
 
     // Convert date range to ISO strings
     const getDateRangeParams = () => {

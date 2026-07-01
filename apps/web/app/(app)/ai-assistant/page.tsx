@@ -393,6 +393,9 @@ export default function AIAssistantPage() {
         container.scrollTop = container.scrollHeight
     }, [messages])
 
+    // The unmount cleanup intentionally aborts the latest active stream, not the
+    // controller that existed when this effect was registered.
+    // oxlint-disable-next-line react-doctor/exhaustive-deps
     useEffect(() => {
         return () => {
             streamAbortRef.current?.abort()

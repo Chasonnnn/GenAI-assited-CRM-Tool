@@ -99,6 +99,33 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const unknownTemplateVariables = useMemo")
     })
 
+    it("documents intentional exhaustive-deps exceptions with React Doctor rule names", () => {
+        const aiAssistantSource = readSource("app/(app)/ai-assistant/page.tsx")
+        const dashboardFilterSource = readSource("app/(app)/dashboard/components/dashboard-filter-bar.tsx")
+        const intendedParentMatchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+        const intendedParentsSource = readSource("app/(app)/intended-parents/page.client.tsx")
+        const surrogatesSource = readSource("app/(app)/surrogates/page.client.tsx")
+
+        for (const source of [
+            aiAssistantSource,
+            dashboardFilterSource,
+            intendedParentMatchesSource,
+            intendedParentsSource,
+            surrogatesSource,
+        ]) {
+            expect(source).not.toContain("eslint-disable-next-line react-doctor/exhaustive-deps")
+            expect(source).not.toContain("eslint-disable-line react-doctor/exhaustive-deps")
+        }
+        expect(aiAssistantSource).toContain("oxlint-disable-next-line react-doctor/exhaustive-deps")
+        expect(dashboardFilterSource).toContain("oxlint-disable-next-line react-doctor/exhaustive-deps")
+        expect(intendedParentMatchesSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(intendedParentMatchesSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(intendedParentsSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(intendedParentsSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(surrogatesSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(surrogatesSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
+    })
+
     it("keeps automation route search param parsing in the server wrapper", () => {
         const source = readSource("app/(app)/automation/page.tsx")
 

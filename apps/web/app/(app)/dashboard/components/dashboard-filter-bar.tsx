@@ -41,6 +41,9 @@ export function DashboardFilterBar({
         }
     }, [filters.assigneeId, isAdmin, setAssigneeId, user?.user_id])
 
+    // The unmount cleanup intentionally clears the latest refresh hold timeout,
+    // not the timeout value that existed when this effect was registered.
+    // oxlint-disable-next-line react-doctor/exhaustive-deps
     useEffect(() => {
         return () => {
             if (refreshTimeoutRef.current) {

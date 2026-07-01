@@ -144,7 +144,8 @@ export default function MatchesPage() {
                 setPage(nextPage)
             }
         })
-    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps
 
     const filters = {
         page,

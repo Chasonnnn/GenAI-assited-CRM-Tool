@@ -1283,3 +1283,25 @@ Full command after Batch 62: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `833`
 - Summary: `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 574 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-df6bf46e-e504-4f47-bebd-7e976cb7b03e`
+
+## Batch 63
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/exhaustive-deps` | `app/(app)/ai-assistant/page.tsx`, `app/(app)/dashboard/components/dashboard-filter-bar.tsx` | False positive after code review: both effects intentionally clean up the latest mutable ref value on unmount. Capturing the ref value from mount time would miss the active stream controller or refresh timeout. | High | Add `oxlint-disable-next-line react-doctor/exhaustive-deps` comments with local evidence for the latest-ref cleanup behavior. Added a source guard that failed while the effects lacked React Doctor rule-name comments. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/dashboard.test.tsx tests/matches-page.test.tsx tests/intended-parents-page.test.tsx tests/surrogates.test.tsx`; changed-scope React Doctor reports no `exhaustive-deps` warnings. |
+| `react-doctor/exhaustive-deps` | `app/(app)/intended-parents/matches/page.client.tsx`, `app/(app)/intended-parents/page.client.tsx`, `app/(app)/surrogates/page.client.tsx` | Valid suppression with wrong tool target: these URL hydration effects intentionally depend on normalized `currentQuery` and compare state inside the effect to avoid URL/state feedback loops. ESLint still needs `react-hooks/exhaustive-deps`, while React Doctor needs an Oxlint suppression on the dependency-array line. | High | Keep the ESLint hook suppressions and add `oxlint-disable-line react-doctor/exhaustive-deps` on the dependency-array lines. Added a source guard that rejects invalid ESLint comments for React Doctor rules. | Changed-scope React Doctor reports no `exhaustive-deps` warnings; full React Doctor bug count dropped from `182` to `177`. |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/no-event-handler`, `react-doctor/no-cascading-set-state`, `react-doctor/prefer-module-scope-pure-function`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | Changed files from this batch | Valid but out of scope: these are pre-existing broader memoization, URL synchronization, pure-function, and component-structure findings in the touched files. | Medium | Deferred to separate focused batches because this batch only validated the five exhaustive-deps findings. No suppressions added. | Changed-scope React Doctor score is `82 / 100` with `79` remaining warnings in the touched files. |
+
+Changed-scope command after Batch 63: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `82 / 100 Needs work`
+- Total diagnostics in changed files: `79`
+- Summary: `Bugs 31 warnings`, `Maintainability 48 warnings`
+- Deferred: pre-existing memoization, URL effect, pure-function, giant-component, and reducer findings in the touched files.
+
+Full command after Batch 63: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `828`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 574 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-51fd5311-dbb6-4da1-bb4d-4c03ac0a5b19`

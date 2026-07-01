@@ -253,7 +253,8 @@ export default function IntendedParentsPage() {
                 setCustomRange({ from: undefined, to: undefined })
             }
         })
-    }, [currentQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps
 
     // Form state
     const [formData, setFormData] = useState<IntendedParentFormValues>(EMPTY_INTENDED_PARENT_FORM_VALUES)
