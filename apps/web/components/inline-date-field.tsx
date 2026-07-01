@@ -140,33 +140,32 @@ export function InlineDateField({
         }
     }
 
-    // Format display value
-    const displayValue = React.useMemo(() => {
-        if (!value) return null
+    let displayValue: string | null = null
+    if (value) {
         try {
             const parsed = parseISO(value)
             if (isValid(parsed)) {
-                return format(parsed, "MMM d, yyyy")
+                displayValue = format(parsed, "MMM d, yyyy")
             }
         } catch {
             // Fall through to null
         }
-        return null
-    }, [value])
+    }
 
-    const selectedEditDate = React.useMemo(() => {
-        if (!editValue) return undefined
+    let selectedEditDate: Date | undefined
+    if (editValue) {
         try {
             const parsed = parseISO(editValue)
-            return isValid(parsed) ? parsed : undefined
+            selectedEditDate = isValid(parsed) ? parsed : undefined
         } catch {
-            return undefined
+            selectedEditDate = undefined
         }
-    }, [editValue])
+    }
 
     if (!isEditing) {
         return (
-            <div
+            <button
+                type="button"
                 className={cn(
                     "group flex items-center gap-1 rounded px-1 -mx-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     !disabled && "cursor-pointer hover:bg-muted/50",
@@ -174,9 +173,8 @@ export function InlineDateField({
                     displayClassName
                 )}
                 onClick={handleStartEdit}
-                role="button"
-                tabIndex={disabled ? -1 : 0}
                 onKeyDown={handleDisplayKeyDown}
+                disabled={disabled}
                 aria-label={disabled ? label : `Edit ${label}`}
             >
                 <span className={cn("text-sm", !displayValue && "text-muted-foreground", className)}>
@@ -188,7 +186,7 @@ export function InlineDateField({
                         aria-hidden="true"
                     />
                 )}
-            </div>
+            </button>
         )
     }
 

@@ -2589,6 +2589,8 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("inlineDateFieldReducer")
         expect(source).toContain('type: "startEdit"')
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain('role="button"')
         expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
     })
 

@@ -2069,3 +2069,23 @@ Full command after Batch 95: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `567`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 29 warnings`, `Maintainability 343 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-94ae2bd1-3335-4bfb-ad83-92462a16fbb0`
+
+## Batch 96
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/inline-date-field.tsx` | Valid: display label formatting and selected edit date parsing were ordinary render-local derivations wrapped in `useMemo`, and React Compiler is enabled. | High | Compute both values directly during render and add a source guard that failed against the previous `React.useMemo` wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/inline-fields-accessibility.test.tsx tests/surrogates-accessibility.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `227` to `225`. |
+| `react-doctor/prefer-tag-over-role` | `components/inline-date-field.tsx` | Valid: the non-editing date display is an actionable edit trigger and was implemented as a generic element with `role="button"`. | High | Replace the display trigger with a native `<button type="button">`, preserving disabled behavior and the existing accessible name. | Focused accessibility tests pass, changed-scope React Doctor reports no issues, and full React Doctor accessibility count dropped from `29` to `28`. |
+
+Changed-scope command after Batch 96: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 96: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `564`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 28 warnings`, `Maintainability 341 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c13a626b-c887-49da-9989-9993a99b6a30`
