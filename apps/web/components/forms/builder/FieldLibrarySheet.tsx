@@ -1,7 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
-
 import { Command, CommandInput } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -38,6 +36,11 @@ type LibrarySection = {
 }
 
 const ALL_CATEGORY_ID = "all"
+const FIELD_LIBRARY_CATEGORIES: Array<{ id: BuilderLibraryCategory; label: string }> = [
+    { id: ALL_CATEGORY_ID, label: "All" },
+    ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
+    ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
+]
 
 function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -97,44 +100,33 @@ export function FieldLibrarySheet({
 }: FieldLibrarySheetProps) {
     const normalizedSearch = search.trim().toLowerCase()
 
-    const categories = useMemo(
-        () => [
-            { id: ALL_CATEGORY_ID, label: "All" },
-            ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-            ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-        ],
-        [],
-    )
+    const categories = FIELD_LIBRARY_CATEGORIES
 
-    const visibleSections = useMemo<LibrarySection[]>(() => {
-        const searchPattern = normalizedSearch ? new RegExp(escapeRegExp(normalizedSearch), "i") : null
-        const sourceGroups =
-            normalizedSearch
-                ? ALL_BUILDER_FIELD_GROUPS
-                : activeCategory === ALL_CATEGORY_ID
-                ? ALL_BUILDER_FIELD_GROUPS
-                : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
+    const searchPattern = normalizedSearch ? new RegExp(escapeRegExp(normalizedSearch), "i") : null
+    const sourceGroups =
+        normalizedSearch
+            ? ALL_BUILDER_FIELD_GROUPS
+            : activeCategory === ALL_CATEGORY_ID
+            ? ALL_BUILDER_FIELD_GROUPS
+            : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
 
-        const visibleSections: LibrarySection[] = []
+    const visibleSections: LibrarySection[] = []
 
-        for (const group of sourceGroups) {
-            const fields = group.fields.filter((field) => {
-                if (!searchPattern) return true
-                return searchPattern.test(`${field.label} ${field.key}`)
-            })
+    for (const group of sourceGroups) {
+        const fields = group.fields.filter((field) => {
+            if (!searchPattern) return true
+            return searchPattern.test(`${field.label} ${field.key}`)
+        })
 
-            if (fields.length === 0) continue
+        if (fields.length === 0) continue
 
-            visibleSections.push({
-                id: group.id,
-                label: group.label,
-                isPreset: PRESET_FIELD_GROUPS.some((presetGroup) => presetGroup.id === group.id),
-                fields,
-            })
-        }
-
-        return visibleSections
-    }, [activeCategory, normalizedSearch])
+        visibleSections.push({
+            id: group.id,
+            label: group.label,
+            isPreset: PRESET_FIELD_GROUPS.some((presetGroup) => presetGroup.id === group.id),
+            fields,
+        })
+    }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>

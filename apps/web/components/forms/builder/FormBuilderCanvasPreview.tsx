@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -128,17 +128,13 @@ export function FormBuilderCanvasPreview({
     const [answers, setAnswers] = useState<PreviewAnswers>({})
     const [datePickerOpen, setDatePickerOpen] = useState<Record<string, boolean>>({})
 
-    const previewSchema = useMemo(
-        () =>
-            buildFormSchema(pages, {
-                publicEyebrow,
-                publicTitle,
-                publicSubtitle,
-                logoUrl: resolvedLogoUrl,
-                privacyNotice,
-            }),
-        [pages, privacyNotice, publicEyebrow, publicSubtitle, publicTitle, resolvedLogoUrl],
-    )
+    const previewSchema = buildFormSchema(pages, {
+        publicEyebrow,
+        publicTitle,
+        publicSubtitle,
+        logoUrl: resolvedLogoUrl,
+        privacyNotice,
+    })
 
     const activeIndex = Math.max(0, pages.findIndex((page) => page.id === activePage))
     const previewPage = previewSchema.pages[activeIndex]
@@ -146,10 +142,7 @@ export function FormBuilderCanvasPreview({
     const canGoBack = activeIndex > 0
     const canGoForward = activeIndex < pages.length - 1
 
-    const visibleFields = useMemo(
-        () => (previewPage?.fields ?? []).filter((field) => isFieldVisible(field, answers)),
-        [answers, previewPage?.fields],
-    )
+    const visibleFields = (previewPage?.fields ?? []).filter((field) => isFieldVisible(field, answers))
 
     const previewTitle = publicTitle.trim()
     const previewEyebrow = publicEyebrow.trim()

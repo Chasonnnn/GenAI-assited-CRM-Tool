@@ -1573,3 +1573,23 @@ Full command after Batch 76: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `774`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 520 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ee762a5a-a3c7-4c4e-9a20-32216072e1a3`
+
+## Batch 77
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/email/TemplateVariablePicker.tsx`, `components/forms/FormBuilderPalette.tsx`, `components/forms/builder/FieldLibrarySheet.tsx`, `components/forms/builder/FormBuilderCanvasPreview.tsx` | Valid: form-builder palettes, preview derivations, and the template-variable picker used React `useMemo` wrappers around deterministic category, grouping, filtering, schema, and visible-field derivations. No preserve-manual-memoization case applied. | High | Move static category lists to module scope, extract template-variable grouping/filter helpers, and derive preview schema plus visible fields directly in render. Added a source guard that failed on the old wrappers. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/form-builder-page.test.tsx tests/email-templates-page.test.tsx tests/platform-system-email-template-page.test.tsx tests/platform-system-email-template-new-page.test.tsx`; changed-scope React Doctor no longer reports manual memoization; full React Doctor manual memoization count dropped from `394` to `385`. |
+| `react-doctor/prefer-tag-over-role` | `components/forms/FormBuilderPalette.tsx` | Valid: the touched field-category filter wrapper was a generic `div` with static `role="group"`. The rule's generic suggestion was not contextually right, but the element is category navigation. | High | Replace the role-bearing wrapper with native `<nav aria-label="Field categories">` and add a source guard to prevent reintroducing `role="group"`. | Changed-scope React Doctor originally reported `1` accessibility warning after the memoization edits; after the semantic fix it reports no issues. Full React Doctor accessibility warnings dropped from `40` to `39`. |
+
+Changed-scope command after Batch 77: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 77: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `764`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 39 warnings`, `Maintainability 511 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e53aa5b4-f614-4698-854f-a88b42acb9ae`

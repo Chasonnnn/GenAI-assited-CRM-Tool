@@ -2112,6 +2112,27 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps form builder and template variable display helpers compiler-friendly", () => {
+        const sources = [
+            readSource("components/email/TemplateVariablePicker.tsx"),
+            readSource("components/forms/FormBuilderPalette.tsx"),
+            readSource("components/forms/builder/FieldLibrarySheet.tsx"),
+            readSource("components/forms/builder/FormBuilderCanvasPreview.tsx"),
+        ]
+
+        for (const source of sources) {
+            expect(source).not.toContain("useMemo")
+            expect(source).not.toContain("React.useMemo")
+        }
+    })
+
+    it("uses native navigation semantics for form builder category filters", () => {
+        const source = readSource("components/forms/FormBuilderPalette.tsx")
+
+        expect(source).toContain('<nav className="space-y-1 p-2.5" aria-label="Field categories">')
+        expect(source).not.toContain('role="group"')
+    })
+
     it("keeps task edit modal draft state compiler-friendly", () => {
         const source = readSource("components/tasks/TaskEditModal.tsx")
 

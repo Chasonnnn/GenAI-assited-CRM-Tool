@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { CodeIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,48 @@ function escapeRegExp(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
+type TemplateVariableGroup = {
+    category: string
+    items: TemplateVariableRead[]
+}
+
+function groupTemplateVariables(variables: TemplateVariableRead[]): TemplateVariableGroup[] {
+    const map = new Map<string, TemplateVariableRead[]>()
+    for (const variable of variables) {
+        const key = variable.category?.trim() ? variable.category : "Other"
+        const existing = map.get(key)
+        if (existing) {
+            existing.push(variable)
+        } else {
+            map.set(key, [variable])
+        }
+    }
+
+    const entries = Array.from(map.entries()).map(([category, items]) => ({
+        category,
+        items: items.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+
+    entries.sort((a, b) => a.category.localeCompare(b.category))
+    return entries
+}
+
+function filterTemplateVariableGroups(groups: TemplateVariableGroup[], query: string) {
+    const q = query.trim().toLowerCase()
+    if (!q) return groups
+    const searchPattern = new RegExp(escapeRegExp(q), "i")
+    const nextGroups: TemplateVariableGroup[] = []
+    for (const group of groups) {
+        const items = group.items.filter((variable) => {
+            return searchPattern.test(`${variable.name} ${variable.description} ${variable.category}`)
+        })
+        if (items.length > 0) {
+            nextGroups.push({ ...group, items })
+        }
+    }
+    return nextGroups
+}
+
 export function TemplateVariablePicker({
     variables,
     onSelect,
@@ -30,47 +72,9 @@ export function TemplateVariablePicker({
     const [open, setOpen] = useState(false)
     const [query, setQuery] = useState("")
 
-    const grouped = useMemo(() => {
-        const map = new Map<string, TemplateVariableRead[]>()
-        for (const variable of variables) {
-            const key = variable.category?.trim() ? variable.category : "Other"
-            const existing = map.get(key)
-            if (existing) {
-                existing.push(variable)
-            } else {
-                map.set(key, [variable])
-            }
-        }
-
-        const entries = Array.from(map.entries()).map(([category, items]) => ({
-            category,
-            items: items.slice().sort((a, b) => a.name.localeCompare(b.name)),
-        }))
-
-        entries.sort((a, b) => a.category.localeCompare(b.category))
-        return entries
-    }, [variables])
-
-    const filteredGroups = useMemo(() => {
-        const q = query.trim().toLowerCase()
-        if (!q) return grouped
-        const searchPattern = new RegExp(escapeRegExp(q), "i")
-        const nextGroups: typeof grouped = []
-        for (const group of grouped) {
-            const items = group.items.filter((variable) => {
-                return searchPattern.test(`${variable.name} ${variable.description} ${variable.category}`)
-            })
-            if (items.length > 0) {
-                nextGroups.push({ ...group, items })
-            }
-        }
-        return nextGroups
-    }, [grouped, query])
-
-    const totalFiltered = useMemo(
-        () => filteredGroups.reduce((acc, g) => acc + g.items.length, 0),
-        [filteredGroups]
-    )
+    const grouped = groupTemplateVariables(variables)
+    const filteredGroups = filterTemplateVariableGroups(grouped, query)
+    const totalFiltered = filteredGroups.reduce((acc, g) => acc + g.items.length, 0)
 
     const handleOpenChange = (next: boolean) => {
         setOpen(next)

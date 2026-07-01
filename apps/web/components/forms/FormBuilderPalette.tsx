@@ -1,7 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
-
 import { Command, CommandInput } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -33,6 +31,11 @@ type VisibleSection = {
 
 const ALL_CATEGORY_ID = "all"
 const PRESET_FIELD_GROUP_IDS = new Set(PRESET_FIELD_GROUPS.map((group) => group.id))
+const FORM_BUILDER_PALETTE_CATEGORIES: Array<{ id: BuilderLibraryCategory; label: string }> = [
+    { id: ALL_CATEGORY_ID, label: "All" },
+    ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
+    ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
+]
 
 function buildTileTestId(field: BuilderPaletteField) {
     return `form-builder-palette-tile-${field.key}`
@@ -100,41 +103,31 @@ export function FormBuilderPalette({
 }: FormBuilderPaletteProps) {
     const normalizedSearch = search.trim().toLowerCase()
 
-    const categories = useMemo(
-        () => [
-            { id: ALL_CATEGORY_ID, label: "All" },
-            ...PRESET_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-            ...CUSTOM_FIELD_GROUPS.map((group) => ({ id: group.id, label: group.label })),
-        ],
-        [],
-    )
+    const categories = FORM_BUILDER_PALETTE_CATEGORIES
 
-    const visibleSections = useMemo<VisibleSection[]>(() => {
-        const searchPattern = normalizedSearch
-            ? new RegExp(escapeRegExp(normalizedSearch), "i")
-            : null
-        const sourceGroups =
-            normalizedSearch
-                ? ALL_BUILDER_FIELD_GROUPS
-                : activeCategory === ALL_CATEGORY_ID
-                ? ALL_BUILDER_FIELD_GROUPS
-                : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
+    const searchPattern = normalizedSearch
+        ? new RegExp(escapeRegExp(normalizedSearch), "i")
+        : null
+    const sourceGroups =
+        normalizedSearch
+            ? ALL_BUILDER_FIELD_GROUPS
+            : activeCategory === ALL_CATEGORY_ID
+            ? ALL_BUILDER_FIELD_GROUPS
+            : ALL_BUILDER_FIELD_GROUPS.filter((group) => group.id === activeCategory)
 
-        const sections: VisibleSection[] = []
-        for (const group of sourceGroups) {
-            const section = {
-                id: group.id,
-                label: group.label,
-                isPreset: PRESET_FIELD_GROUP_IDS.has(group.id),
-                fields: group.fields.filter((field) => {
-                    if (!searchPattern) return true
-                    return searchPattern.test(`${field.label} ${field.key}`)
-                }),
-            }
-            if (section.fields.length > 0) sections.push(section)
+    const visibleSections: VisibleSection[] = []
+    for (const group of sourceGroups) {
+        const section = {
+            id: group.id,
+            label: group.label,
+            isPreset: PRESET_FIELD_GROUP_IDS.has(group.id),
+            fields: group.fields.filter((field) => {
+                if (!searchPattern) return true
+                return searchPattern.test(`${field.label} ${field.key}`)
+            }),
         }
-        return sections
-    }, [activeCategory, normalizedSearch])
+        if (section.fields.length > 0) visibleSections.push(section)
+    }
 
     return (
         <aside
@@ -153,7 +146,7 @@ export function FormBuilderPalette({
                 <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[8rem_minmax(0,1fr)]">
                     <aside className="border-b border-border/70 bg-stone-50/75 xl:border-r xl:border-b-0">
                         <ScrollArea className="h-full">
-                            <div className="space-y-1 p-2.5" role="group" aria-label="Field categories">
+                            <nav className="space-y-1 p-2.5" aria-label="Field categories">
                                 {categories.map((category) => {
                                     const isActive = activeCategory === category.id
 
@@ -173,7 +166,7 @@ export function FormBuilderPalette({
                                         </button>
                                     )
                                 })}
-                            </div>
+                            </nav>
                         </ScrollArea>
                     </aside>
 
