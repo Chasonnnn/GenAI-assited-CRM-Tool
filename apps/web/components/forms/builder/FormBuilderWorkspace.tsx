@@ -238,77 +238,66 @@ function CanvasFieldSurface({
                         : "hover:border-primary/30",
                 )}
             >
-                <div
-                    role="button"
-                    tabIndex={0}
+                <button
+                    type="button"
                     draggable
                     aria-label={`Select ${fieldLabel} field`}
                     onClick={() => onSelect(field.id)}
-                    onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault()
-                            onSelect(field.id)
-                        }
-                    }}
                     onDragStart={() => onDragStart(field.id)}
                     onDragOver={(event) => onDragOver(event, field.id)}
                     onDrop={(event) => onDrop(event, field.id)}
                     onDragEnd={onDragEnd}
-                    className="rounded-[inherit] outline-none"
-                >
+                    className="absolute inset-0 z-0 rounded-[inherit] border-0 bg-transparent p-0 text-left text-inherit outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                {selected ? (
                     <div
-                        data-testid={selected ? "form-builder-selected-field-body" : undefined}
-                        className="p-3.5 pt-3.5"
+                        data-testid="form-builder-selected-field-actions"
+                        className="pointer-events-none absolute right-4 top-4 z-20 flex items-center gap-1.5"
                     >
-                        <div className="relative">
-                            {selected ? (
-                                <div
-                                    data-testid="form-builder-selected-field-actions"
-                                    className="pointer-events-none absolute right-4 top-4 z-10 flex items-center gap-1.5"
-                                >
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className={floatingActionButtonClass}
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            onDuplicate(field.id)
-                                        }}
-                                        aria-label={`Duplicate ${fieldLabel}`}
-                                    >
-                                        <CopyIcon className="size-4" />
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className={floatingActionButtonClass}
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            onDelete(field.id)
-                                        }}
-                                        aria-label={`Delete ${fieldLabel}`}
-                                    >
-                                        <XIcon className="size-4" />
-                                    </Button>
-                                </div>
-                            ) : null}
-
-                            <div className="pointer-events-none">
-                            {usesFallbackRenderer ? (
-                                <UnsupportedCanvasField field={field} />
-                            ) : (
-                                <PublicFormFieldRenderer
-                                    field={publicField}
-                                    value={undefined}
-                                    updateField={() => undefined}
-                                    datePickerOpen={datePickerOpen}
-                                    setDatePickerOpen={setDatePickerOpen}
-                                />
-                            )}
-                            </div>
-                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className={floatingActionButtonClass}
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                onDuplicate(field.id)
+                            }}
+                            aria-label={`Duplicate ${fieldLabel}`}
+                        >
+                            <CopyIcon className="size-4" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className={floatingActionButtonClass}
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                onDelete(field.id)
+                            }}
+                            aria-label={`Delete ${fieldLabel}`}
+                        >
+                            <XIcon className="size-4" />
+                        </Button>
+                    </div>
+                ) : null}
+                <div
+                    data-testid={selected ? "form-builder-selected-field-body" : undefined}
+                    className="pointer-events-none relative z-10 p-3.5 pt-3.5"
+                >
+                    <div className="relative">
+                        {usesFallbackRenderer ? (
+                            <UnsupportedCanvasField field={field} />
+                        ) : (
+                            <PublicFormFieldRenderer
+                                field={publicField}
+                                value={undefined}
+                                updateField={() => undefined}
+                                datePickerOpen={datePickerOpen}
+                                setDatePickerOpen={setDatePickerOpen}
+                            />
+                        )}
                     </div>
                 </div>
             </div>

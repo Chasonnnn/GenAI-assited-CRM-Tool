@@ -2124,3 +2124,31 @@ Full command after Batch 97: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `562`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 26 warnings`, `Maintainability 341 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-89554275-2bda-443a-802e-5f350c549063`
+
+## Batch 98
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-tag-over-role` | `components/forms/builder/FormBuilderWorkspace.tsx` | Valid: the canvas field selector used a generic element with `role="button"`, `tabIndex`, and keyboard emulation for a native button interaction. | High | Replace the generic role button with a native full-field `<button type="button">` overlay. Keep preview content and duplicate/delete actions as sibling elements so no interactive controls are nested inside the select button. Added a source guard that failed on the previous `role="button"` pattern. | `pnpm test --run tests/react-regressions-source.test.ts tests/form-builder-page.test.tsx tests/platform-form-template-page.test.tsx`; scoped React Doctor no longer reports `prefer-tag-over-role` in `components/forms/builder`; full React Doctor accessibility count dropped from `26` to `25`. |
+| `react-doctor/no-giant-component` | `components/forms/builder/FormBuilderWorkspace.tsx` | Valid but out of scope: `FieldInspector` remains a 603-line component. Splitting inspector sections is a larger component-decomposition batch. | Medium | Deferred. No suppression added. | Changed-scope React Doctor reports only this pre-existing large-component warning. |
+
+Scoped command after Batch 98: `cd apps/web && npx react-doctor@latest components/forms/builder --verbose`
+
+- Score: `93 / 100 Great`
+- Total diagnostics in scope: `4`
+- Remaining: four `no-giant-component` warnings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d532de29-2054-495e-a3a3-4622ddd98220`
+
+Changed-scope command after Batch 98: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining: `no-giant-component` in `components/forms/builder/FormBuilderWorkspace.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9917771a-3220-4fed-818c-e8d6e72dbc2e`
+
+Full command after Batch 98: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `561`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 25 warnings`, `Maintainability 341 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c9142dad-e54c-4a97-aff1-0519ce59a967`

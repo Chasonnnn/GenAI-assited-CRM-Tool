@@ -1505,6 +1505,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain('setActiveTab("general")')
     })
 
+    it("keeps form builder canvas field selection on native controls", () => {
+        const source = readSource("components/forms/builder/FormBuilderWorkspace.tsx")
+
+        expect(source).toContain('aria-label={`Select ${fieldLabel} field`}')
+        expect(source).toContain('type="button"')
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("tabIndex={0}")
+    })
+
     it("keeps self-service manage appointment timezone defaults render-derived", () => {
         const source = readSource("app/book/self-service/[orgId]/manage/[token]/page.tsx")
 
