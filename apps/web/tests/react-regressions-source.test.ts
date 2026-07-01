@@ -896,6 +896,16 @@ describe("React regression guards (source)", () => {
         expect(inputGroupSource).not.toContain("InputGroupTextarea")
     })
 
+    it("keeps the carousel root free of manual React memoization", () => {
+        const source = readSource("components/ui/carousel.tsx")
+
+        expect(source).not.toContain("React.useCallback")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain('role="region"')
+    })
+
     it("keeps input group wrappers semantic and compiler-friendly", () => {
         const source = readSource("components/ui/input-group.tsx")
 

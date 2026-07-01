@@ -2629,3 +2629,42 @@ Full command after Batch 116: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `388`
 - Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 204 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-27d722a2-af7b-4626-99f5-377bf6d5342d`
+
+## Batch 117
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/detail/SurrogateDetailContext.tsx`, `components/surrogates/detail/SurrogateDetailHeader.tsx` | Valid scanner finding: both flagged `React.useMemo` calls resolved to the React namespace import, and the React Doctor rule docs say to delete React `useMemo`/`useCallback`/`memo` wrappers when no preserve-manual-memoization case applies. | High | Replaced the context value and current-stage object memoization with plain object derivations. Added a source guard covering both files. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate detail header context"` failed on `React.useMemo`. GREEN: the same guard passed; `pnpm test --run tests/surrogate-detail.test.tsx` passed with `52` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; changed-scope React Doctor scored `100 / 100`; full diagnostics dropped from `388` to `386`; global redundant manual memoization dropped from `90` to `88`. |
+
+Changed-scope command after Batch 117: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 117: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `386`
+- Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 202 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9d1738f2-a290-4088-9942-ddb9366d66e0`
+
+## Batch 118
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/ui/carousel.tsx` | Valid scanner finding: all three flagged `React.useCallback` calls resolved to the React namespace import. Next.js docs confirm React Compiler is enabled through `reactCompiler`, and the React Doctor rule docs say to replace React `useCallback` with the bare handler when no preserve-manual-memoization case applies. | High | Replaced the carousel scroll and keyboard handlers with plain functions. Added a source guard to keep the carousel root free of manual memoization. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "carousel root free"` failed on `React.useCallback`. GREEN: the same guard passed; `pnpm test --run tests/carousel-listener-cleanup.test.tsx` passed with `4` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; changed-scope React Doctor scored `100 / 100`; full redundant manual memoization dropped from `88` to `85`. |
+| `react-doctor/prefer-tag-over-role` | `components/ui/carousel.tsx:84` | Valid scanner finding: the generic carousel root used `role="region"`, and the React Doctor rule docs say a generic `div` with a static role that maps to a native element should use the semantic tag instead. | High | Changed the carousel root to a named native `<section>` and preserved caller-provided `aria-label` / `aria-labelledby`. Added behavior coverage for the named region and existing arrow-key scrolling. | RED: `pnpm test --run tests/carousel-listener-cleanup.test.tsx -t "named native region"` failed because the root was an unnamed `div role="region"`; the source guard also failed on `role="region"`. GREEN: focused carousel tests passed; changed-scope React Doctor reported no issues; full accessibility warnings dropped from `22` to `21`. |
+
+Changed-scope command after Batch 118: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 118: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `382`
+- Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 199 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-81470991-97d0-4dce-b6a4-8e71ae53a61a`

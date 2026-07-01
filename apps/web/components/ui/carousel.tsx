@@ -26,8 +26,10 @@ function Carousel({
   plugins,
   className,
   children,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
   ...props
-}: React.ComponentProps<"div"> & CarouselProps) {
+}: React.ComponentProps<"section"> & CarouselProps) {
   const [, api] = useEmblaCarousel(
     {
       ...opts,
@@ -41,26 +43,23 @@ function Carousel({
     setApiRef.current = setApi
   }, [setApi])
 
-  const scrollPrev = React.useCallback(() => {
+  const scrollPrev = () => {
     api?.scrollPrev()
-  }, [api])
+  }
 
-  const scrollNext = React.useCallback(() => {
+  const scrollNext = () => {
     api?.scrollNext()
-  }, [api])
+  }
 
-  const handleKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault()
-        scrollPrev()
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault()
-        scrollNext()
-      }
-    },
-    [scrollPrev, scrollNext]
-  )
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault()
+      scrollPrev()
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault()
+      scrollNext()
+    }
+  }
 
   React.useEffect(() => {
     if (!api) return
@@ -81,16 +80,17 @@ function Carousel({
   }, [api])
 
   return (
-    <div
+    <section
       onKeyDownCapture={handleKeyDown}
       className={cn("relative", className)}
-      role="region"
+      aria-label={ariaLabel ?? (ariaLabelledBy ? undefined : "Carousel")}
+      aria-labelledby={ariaLabelledBy}
       aria-roledescription="carousel"
       data-slot="carousel"
       {...props}
     >
       {children}
-    </div>
+    </section>
   )
 }
 
