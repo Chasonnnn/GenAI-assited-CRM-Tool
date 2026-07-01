@@ -50,13 +50,14 @@ def test_auth_error_response_clears_account_hint_without_selected_email():
 
 
 def test_session_revocation_routes_are_rate_limit_exempt():
+    from app.routers import auth as _auth  # noqa: F401
     from app.core.rate_limit import limiter
 
     exempt_routes = getattr(limiter, "_exempt_routes", set())
 
     assert "app.routers.auth.revoke_session" in exempt_routes
     assert "app.routers.auth.revoke_all_sessions" in exempt_routes
-    assert "app.routers.auth.logout" not in exempt_routes
+    assert "app.routers.auth.logout" in exempt_routes
 
 
 def _response_cookies(response) -> SimpleCookie:
@@ -369,7 +370,7 @@ async def test_google_login_rate_limit_uses_forwarded_client_ip(
 
 
 @pytest.mark.asyncio
-async def test_logout_rate_limited(
+async def test_logout_is_not_rate_limited(
     authed_client: AsyncClient,
     test_auth,
     monkeypatch,
@@ -384,13 +385,8 @@ async def test_logout_rate_limited(
     csrf_token = generate_csrf_token()
     authed_client.headers[CSRF_HEADER] = csrf_token
 
-    for _ in range(5):
+    for _ in range(6):
         authed_client.cookies.set(test_auth.cookie_name, test_auth.token)
         authed_client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
         response = await authed_client.post("/auth/logout")
         assert response.status_code == 200, response.text
-
-    authed_client.cookies.set(test_auth.cookie_name, test_auth.token)
-    authed_client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
-    blocked = await authed_client.post("/auth/logout")
-    assert blocked.status_code == 429
