@@ -1885,3 +1885,29 @@ Full command after Batch 88: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `604`
 - Summary: `Bugs 174 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 373 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-62c5321c-60ba-4dfc-a5f7-1684c9f33a62`
+
+## Batch 89
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/templates/page.client.tsx` | Valid: the templates landing page wrapped the query result arrays in `useMemo`, but each wrapper returned the same array unchanged and React Compiler already caches these render-local derivations. | High | Remove the redundant `useMemo` import and derive the email, form, workflow, and system template rows directly. Added a source guard that failed on the previous wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/ops-templates-studio-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `255` to `251`. |
+
+Scoped command after Batch 89: `cd apps/web && npx react-doctor@latest app/ops/templates --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics in scope: `20`
+- Remaining: workflow editor manual memoization/helper warnings plus deferred system-template structural warnings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d4e51be7-3fad-456f-8da6-024ee374160e`
+
+Changed-scope command after Batch 89: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 89: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `600`
+- Summary: `Bugs 174 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 369 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fb4deda9-3c9b-4966-a41a-63810f856934`

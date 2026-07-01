@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, startTransition, useEffect, useMemo, useState } from "react"
+import { type ReactNode, startTransition, useEffect, useState } from "react"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -389,10 +389,10 @@ export default function TemplatesPage() {
         replace(`/ops/templates?tab=${value}`)
     }
 
-    const emailRows = useMemo(() => emailTemplates, [emailTemplates])
-    const formRows = useMemo(() => formTemplates, [formTemplates])
-    const workflowRows = useMemo(() => workflowTemplates, [workflowTemplates])
-    const systemRows = useMemo(() => systemTemplates, [systemTemplates])
+    const emailRows = emailTemplates
+    const formRows = formTemplates
+    const workflowRows = workflowTemplates
+    const systemRows = systemTemplates
     const canCreate = true
 
     const createLabel =

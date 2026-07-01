@@ -2025,6 +2025,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setSearch(")
     })
 
+    it("keeps ops templates landing rows compiler-derived", () => {
+        const source = readSource("app/ops/templates/page.client.tsx")
+
+        expect(source).toContain("const emailRows = emailTemplates")
+        expect(source).toContain("const formRows = formTemplates")
+        expect(source).toContain("const workflowRows = workflowTemplates")
+        expect(source).toContain("const systemRows = systemTemplates")
+        expect(source).not.toContain("useMemo")
+    })
+
     it("keeps ops alert actions compiler-compatible", () => {
         const source = readSource("app/ops/alerts/page.client.tsx")
 
