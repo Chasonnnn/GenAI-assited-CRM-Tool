@@ -1640,3 +1640,25 @@ Full command after Batch 79: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `724`
 - Summary: `Bugs 176 warnings`, `Performance 37 warnings`, `Accessibility 38 warnings`, `Maintainability 473 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-714f1b9b-74b2-4a64-ab89-03dea849ab0e`
+
+## Batch 80
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/pipelines/page.tsx` | Valid: the pipelines settings editor wrapped draft construction, draft fingerprints, change detection, preview payload construction, and preview fingerprinting in `useMemo`. The underlying helpers are module-scope pure builders and React Compiler is enabled. | High | Remove the `useMemo` import and derive the draft state, fingerprints, change flag, and preview payload directly. Extended the existing source guard so it failed on the old `useMemo` wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/pipelines-settings-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor no longer reports manual memoization in this page; full React Doctor manual memoization count dropped from `350` to `344`. |
+| `react-doctor/no-many-boolean-props` | `app/(app)/settings/pipelines/page.tsx` | Valid but out of scope: `DraftActionsCard` still takes four boolean props for saving, preview loading, validation, and blocking-issue state. Splitting that API into named variants is a separate component-shape refactor. | Medium | Deferred to a future pipelines component API batch. No suppression added. | Final changed-scope React Doctor reports only this one warning in the touched file. |
+
+Changed-scope command after Batch 80: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Deferred: `react-doctor/no-many-boolean-props` in `app/(app)/settings/pipelines/page.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-929c392b-c9d4-449e-8774-0c7314d1f705`
+
+Full command after Batch 80: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `718`
+- Summary: `Bugs 176 warnings`, `Performance 37 warnings`, `Accessibility 38 warnings`, `Maintainability 467 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-622a3907-993d-4d2c-b6ab-045b7e94a500`

@@ -2197,6 +2197,9 @@ describe("React regression guards (source)", () => {
         const surrogatesSource = readSource("app/(app)/surrogates/page.client.tsx")
         const intendedParentTimelineSource = readSource("components/intended-parents/IntendedParentActivityTimeline.tsx")
 
+        expect(pipelinesSource).not.toContain("useMemo")
+        expect(pipelinesSource).toContain("const baselineDraft = buildDraft(pipeline, entityType)")
+        expect(pipelinesSource).toContain("const baselineDraftFingerprint = baselineDraft ? stringifyDraft(baselineDraft) : null")
         expect(pipelinesSource).toContain("const remapped: string[] = []")
         expect(pipelinesSource).toContain("const neighborColors = new Set<string>()")
         expect(pipelinesSource).toContain("const mappedLabels: string[] = []")

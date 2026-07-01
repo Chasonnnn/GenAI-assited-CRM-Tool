@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -2336,7 +2336,7 @@ function usePipelineSettingsEditor() {
     const [deleteStageOverride, setDeleteStageOverride] = useState<ScopedEditorState<DeleteStageState> | null>(null)
 
     const isLoading = pipelinesLoading || pipelineLoading
-    const baselineDraft = useMemo(() => buildDraft(pipeline, entityType), [entityType, pipeline])
+    const baselineDraft = buildDraft(pipeline, entityType)
     const scopedDraft = draftOverride?.contextKey === editorContextKey ? draftOverride : null
     const debouncedScopedDraft = useDebouncedValue(scopedDraft, 1200)
     const draft = scopedDraft?.value ?? null
@@ -2344,33 +2344,21 @@ function usePipelineSettingsEditor() {
     const deleteStageState =
         deleteStageOverride?.contextKey === editorContextKey ? deleteStageOverride.value : null
     const currentDraft = draft ?? baselineDraft
-    const baselineDraftFingerprint = useMemo(
-        () => (baselineDraft ? stringifyDraft(baselineDraft) : null),
-        [baselineDraft],
-    )
-    const debouncedDraftFingerprint = useMemo(
-        () => (debouncedDraft ? stringifyDraft(debouncedDraft) : null),
-        [debouncedDraft],
-    )
+    const baselineDraftFingerprint = baselineDraft ? stringifyDraft(baselineDraft) : null
+    const debouncedDraftFingerprint = debouncedDraft ? stringifyDraft(debouncedDraft) : null
     const draftIsDebounced = scopedDraft === debouncedScopedDraft
-    const hasChanges = useMemo(() => {
-        if (!scopedDraft) return false
-        if (!draftIsDebounced) return true
-        return debouncedDraftFingerprint !== baselineDraftFingerprint
-    }, [baselineDraftFingerprint, debouncedDraftFingerprint, draftIsDebounced, scopedDraft])
-    const previewDraftPayload = useMemo(() => {
-        if (!debouncedDraft || debouncedDraftFingerprint === baselineDraftFingerprint) return null
-        return {
+    const hasChanges = scopedDraft
+        ? !draftIsDebounced || debouncedDraftFingerprint !== baselineDraftFingerprint
+        : false
+    const previewDraftPayload = !debouncedDraft || debouncedDraftFingerprint === baselineDraftFingerprint
+        ? null
+        : {
             ...buildApiDraft(debouncedDraft),
             ...(pipeline?.current_version
                 ? { expected_version: pipeline.current_version }
                 : {}),
         }
-    }, [baselineDraftFingerprint, debouncedDraft, debouncedDraftFingerprint, pipeline])
-    const previewDraftFingerprint = useMemo(
-        () => (previewDraftPayload ? JSON.stringify(previewDraftPayload) : ""),
-        [previewDraftPayload],
-    )
+    const previewDraftFingerprint = previewDraftPayload ? JSON.stringify(previewDraftPayload) : ""
     const previewQuery = usePipelineChangePreview(
         defaultPipeline?.id || null,
         previewDraftPayload,
