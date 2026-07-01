@@ -10,7 +10,7 @@
  * - Appointments shown in blue
  */
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -147,34 +147,26 @@ function MonthView({
     taskSources: Map<string, "surrogate" | "ip">
     appointments: AppointmentListItem[]
 }) {
-    const days = useMemo(() => {
-        const monthStart = startOfMonth(currentDate)
-        const monthEnd = endOfMonth(currentDate)
-        const calendarStart = startOfWeek(monthStart)
-        const calendarEnd = endOfWeek(monthEnd)
-        return eachDayOfInterval({ start: calendarStart, end: calendarEnd })
-    }, [currentDate])
+    const monthStart = startOfMonth(currentDate)
+    const monthEnd = endOfMonth(currentDate)
+    const calendarStart = startOfWeek(monthStart)
+    const calendarEnd = endOfWeek(monthEnd)
+    const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
-    const tasksByDate = useMemo(() => {
-        const map = new Map<string, TaskListItem[]>()
-        tasks.forEach((task) => {
-            if (!task.due_date) return
-            const dateStr = task.due_date
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(task)
-        })
-        return map
-    }, [tasks])
+    const tasksByDate = new Map<string, TaskListItem[]>()
+    tasks.forEach((task) => {
+        if (!task.due_date) return
+        const dateStr = task.due_date
+        if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, [])
+        tasksByDate.get(dateStr)!.push(task)
+    })
 
-    const appointmentsByDate = useMemo(() => {
-        const map = new Map<string, AppointmentListItem[]>()
-        appointments.forEach((appt) => {
-            const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(appt)
-        })
-        return map
-    }, [appointments])
+    const appointmentsByDate = new Map<string, AppointmentListItem[]>()
+    appointments.forEach((appt) => {
+        const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
+        if (!appointmentsByDate.has(dateStr)) appointmentsByDate.set(dateStr, [])
+        appointmentsByDate.get(dateStr)!.push(appt)
+    })
 
     return (
         <div className="border border-border rounded-lg overflow-hidden">
@@ -255,31 +247,23 @@ function WeekView({
     taskSources: Map<string, "surrogate" | "ip">
     appointments: AppointmentListItem[]
 }) {
-    const days = useMemo(() => {
-        const weekStart = startOfWeek(currentDate)
-        const weekEnd = endOfWeek(currentDate)
-        return eachDayOfInterval({ start: weekStart, end: weekEnd })
-    }, [currentDate])
+    const weekStart = startOfWeek(currentDate)
+    const weekEnd = endOfWeek(currentDate)
+    const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
 
-    const tasksByDate = useMemo(() => {
-        const map = new Map<string, TaskListItem[]>()
-        tasks.forEach((task) => {
-            if (!task.due_date) return
-            if (!map.has(task.due_date)) map.set(task.due_date, [])
-            map.get(task.due_date)!.push(task)
-        })
-        return map
-    }, [tasks])
+    const tasksByDate = new Map<string, TaskListItem[]>()
+    tasks.forEach((task) => {
+        if (!task.due_date) return
+        if (!tasksByDate.has(task.due_date)) tasksByDate.set(task.due_date, [])
+        tasksByDate.get(task.due_date)!.push(task)
+    })
 
-    const appointmentsByDate = useMemo(() => {
-        const map = new Map<string, AppointmentListItem[]>()
-        appointments.forEach((appt) => {
-            const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(appt)
-        })
-        return map
-    }, [appointments])
+    const appointmentsByDate = new Map<string, AppointmentListItem[]>()
+    appointments.forEach((appt) => {
+        const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
+        if (!appointmentsByDate.has(dateStr)) appointmentsByDate.set(dateStr, [])
+        appointmentsByDate.get(dateStr)!.push(appt)
+    })
 
     return (
         <div className="grid grid-cols-7 gap-2">
@@ -335,17 +319,13 @@ function DayView({
 }) {
     const dateStr = format(currentDate, "yyyy-MM-dd")
 
-    const dayTasks = useMemo(() => {
-        return tasks
-            .filter((task) => task.due_date === dateStr)
-            .sort((a, b) => (a.due_time || "").localeCompare(b.due_time || ""))
-    }, [dateStr, tasks])
+    const dayTasks = tasks
+        .filter((task) => task.due_date === dateStr)
+        .sort((a, b) => (a.due_time || "").localeCompare(b.due_time || ""))
 
-    const dayAppointments = useMemo(() => {
-        return appointments
-            .filter((appt) => format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr)
-            .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
-    }, [dateStr, appointments])
+    const dayAppointments = appointments
+        .filter((appt) => format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr)
+        .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
 
     const hasItems = dayTasks.length > 0 || dayAppointments.length > 0
 
@@ -386,29 +366,23 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
     const [filter, setFilter] = useState<FilterType>("all")
 
     // Compute date window for appointments based on view type
-    const { dateStart, dateEnd } = useMemo(() => {
-        if (viewType === "month") {
-            const monthStart = startOfMonth(currentDate)
-            const monthEnd = endOfMonth(currentDate)
-            return {
-                dateStart: format(startOfWeek(monthStart), "yyyy-MM-dd"),
-                dateEnd: format(endOfWeek(monthEnd), "yyyy-MM-dd"),
-            }
-        } else if (viewType === "week") {
-            const weekStart = startOfWeek(currentDate)
-            const weekEnd = endOfWeek(currentDate)
-            return {
-                dateStart: format(weekStart, "yyyy-MM-dd"),
-                dateEnd: format(weekEnd, "yyyy-MM-dd"),
-            }
-        } else {
-            // Day view
-            return {
-                dateStart: format(currentDate, "yyyy-MM-dd"),
-                dateEnd: format(currentDate, "yyyy-MM-dd"),
-            }
-        }
-    }, [currentDate, viewType])
+    let dateStart: string
+    let dateEnd: string
+    if (viewType === "month") {
+        const monthStart = startOfMonth(currentDate)
+        const monthEnd = endOfMonth(currentDate)
+        dateStart = format(startOfWeek(monthStart), "yyyy-MM-dd")
+        dateEnd = format(endOfWeek(monthEnd), "yyyy-MM-dd")
+    } else if (viewType === "week") {
+        const weekStart = startOfWeek(currentDate)
+        const weekEnd = endOfWeek(currentDate)
+        dateStart = format(weekStart, "yyyy-MM-dd")
+        dateEnd = format(weekEnd, "yyyy-MM-dd")
+    } else {
+        // Day view
+        dateStart = format(currentDate, "yyyy-MM-dd")
+        dateEnd = format(currentDate, "yyyy-MM-dd")
+    }
 
     // Fetch tasks for surrogate
     const { data: surrogateTasks, isLoading: loadingSurrogate } = useTasks({
@@ -445,47 +419,43 @@ export function MatchTasksCalendar({ surrogateId, ipId, onAddTask }: MatchTasksC
     })
 
     // Build combined task list and source tracking
-    const { allTasks, taskSources, allAppointments } = useMemo(() => {
-        const sources = new Map<string, "surrogate" | "ip">()
-        const tasks: TaskListItem[] = []
+    const taskSources = new Map<string, "surrogate" | "ip">()
+    const tasks: TaskListItem[] = []
 
-        // Add surrogate tasks
-        if (surrogateTasks?.items) {
-            surrogateTasks.items.forEach((task) => {
-                sources.set(task.id, "surrogate")
+    // Add surrogate tasks
+    if (surrogateTasks?.items) {
+        surrogateTasks.items.forEach((task) => {
+            taskSources.set(task.id, "surrogate")
+            tasks.push(task)
+        })
+    }
+
+    // Add IP tasks
+    if (ipTasks?.items) {
+        ipTasks.items.forEach((task) => {
+            // Avoid duplicates (a task could theoretically have both surrogate_id and intended_parent_id)
+            if (!taskSources.has(task.id)) {
+                taskSources.set(task.id, "ip")
                 tasks.push(task)
-            })
-        }
+            }
+        })
+    }
 
-        // Add IP tasks
-        if (ipTasks?.items) {
-            ipTasks.items.forEach((task) => {
-                // Avoid duplicates (a task could theoretically have both surrogate_id and intended_parent_id)
-                if (!sources.has(task.id)) {
-                    sources.set(task.id, "ip")
-                    tasks.push(task)
-                }
-            })
-        }
+    // Get appointments
+    const appointments = appointmentsData?.items || []
 
-        // Get appointments
-        const appointments = appointmentsData?.items || []
-
-        // Filter based on selection
-        let filteredTasks = tasks
-        let filteredAppointments = appointments
-        if (filter === "surrogate") {
-            filteredTasks = tasks.filter((t) => sources.get(t.id) === "surrogate")
-            filteredAppointments = [] // No appointments in surrogate filter
-        } else if (filter === "ip") {
-            filteredTasks = tasks.filter((t) => sources.get(t.id) === "ip")
-            filteredAppointments = [] // No appointments in IP filter
-        } else if (filter === "appointments") {
-            filteredTasks = [] // Only show appointments
-        }
-
-        return { allTasks: filteredTasks, taskSources: sources, allAppointments: filteredAppointments }
-    }, [surrogateTasks, ipTasks, appointmentsData, filter])
+    // Filter based on selection
+    let allTasks = tasks
+    let allAppointments = appointments
+    if (filter === "surrogate") {
+        allTasks = tasks.filter((t) => taskSources.get(t.id) === "surrogate")
+        allAppointments = [] // No appointments in surrogate filter
+    } else if (filter === "ip") {
+        allTasks = tasks.filter((t) => taskSources.get(t.id) === "ip")
+        allAppointments = [] // No appointments in IP filter
+    } else if (filter === "appointments") {
+        allTasks = [] // Only show appointments
+    }
 
     // Navigation
     const navigate = (direction: "prev" | "next") => {

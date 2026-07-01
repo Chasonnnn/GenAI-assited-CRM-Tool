@@ -1382,6 +1382,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const formatFileSize =")
     })
 
+    it("keeps match tasks calendar derivations compiler-friendly", () => {
+        const source = readSource("components/matches/MatchTasksCalendar.tsx")
+
+        expect(source).not.toContain("useMemo")
+    })
+
     it("uses reducer state for the match task form", () => {
         const source = readSource("components/matches/AddTaskDialog.tsx")
 

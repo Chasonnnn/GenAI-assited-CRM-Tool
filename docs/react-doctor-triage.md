@@ -2014,3 +2014,28 @@ Full command after Batch 93: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `584`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 31 warnings`, `Maintainability 358 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-629db53c-d7ae-4505-a550-71b1de71bf96`
+
+## Batch 94
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/matches/MatchTasksCalendar.tsx` | Valid: the month/week/day views and top-level calendar wrapped date windows, grouped task/appointment maps, day filters, and combined task lists in `useMemo`. These are render-local derivations and React Compiler is enabled. | High | Remove the `useMemo` import and compute the same date windows, grouped maps, filtered arrays, and task source map directly. Added a source guard that failed against the previous wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/match-tasks-calendar.test.tsx`; `pnpm tsc --noEmit`; scoped and changed-scope React Doctor report no issues; full React Doctor manual memoization count dropped from `241` to `231`. |
+
+Scoped command after Batch 94: `cd apps/web && npx react-doctor@latest components/matches --verbose`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in scope: `0`
+- Summary: `No issues found`
+
+Changed-scope command after Batch 94: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 94: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `574`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 31 warnings`, `Maintainability 348 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-55348d9c-56c4-473e-a787-89ddab7093aa`
