@@ -2230,3 +2230,30 @@ Full command after Batch 101: `cd apps/web && npx react-doctor@latest . --verbos
 - Total diagnostics: `550`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9fe11557-de99-4dc7-9b48-1c8d0c804223`
+
+## Batch 102
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-import.ts` lifecycle mutations: preview, submit, approve, reject, retry, run inline, cancel | Valid scanner finding with behavior already protected: these mutations already invalidated import and surrogate caches through `invalidateImportCaches`, but React Doctor's rule only detects cache operations in the mutation options tree. | High | Inline the existing import list, pending approval, detail, and surrogate cache invalidations inside each mutation `onSuccess`, and add the missing reject-import assertion to the mutation invalidation contract test. | RED: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts` failed on the new source guard. GREEN: same focused command passed with `226` tests. Hook-scope React Doctor warnings dropped from `47` to `40`; all lifecycle import warnings cleared. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-import.ts` `useAiMapImport` | False positive: AI column mapping is a one-shot preview action. It does not mutate persisted import state and has no matching cached query to refresh. | High | Logged as invalid for this batch; no dummy invalidation added. | After Batch 102, the only remaining `use-import.ts` warning is `use-import.ts:198`, which is `useAiMapImport`. |
+
+Scoped command after Batch 102: `cd apps/web && npx react-doctor@latest lib/hooks --verbose`
+
+- Score: `75 / 100 Needs work`
+- Total diagnostics in scope: `40`
+- Summary: `Bugs 40 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2b2ed03d-8494-441b-8178-dcde0a0baec4`
+
+Changed-scope command after Batch 102: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 102: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `543`
+- Summary: `Bugs 164 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d0e753ea-157a-413a-aebf-66603455e3cf`

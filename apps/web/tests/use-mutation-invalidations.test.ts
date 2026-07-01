@@ -40,6 +40,7 @@ import {
     useApproveImport,
     useCancelImport,
     usePreviewImport,
+    useRejectImport,
     useRetryImport,
     useRunImportInline,
     useSubmitImport,
@@ -324,6 +325,12 @@ describe('mutation invalidation contracts', () => {
         capturedOptions?.onSuccess?.(
             { import_id: 'import-1', status: 'cancelled' },
             'import-1'
+        )
+
+        useRejectImport()
+        capturedOptions?.onSuccess?.(
+            { import_id: 'import-1', status: 'rejected' },
+            { importId: 'import-1', reason: 'Needs mapping fixes' }
         )
 
         expect(invalidateQueries).toHaveBeenCalledWith({

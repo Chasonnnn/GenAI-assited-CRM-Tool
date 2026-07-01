@@ -638,6 +638,24 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("await import('@/lib/api/forms')")
     })
 
+    it("keeps import lifecycle cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-import.ts")
+
+        expect(source).not.toContain("function invalidateImportCaches")
+        expect(source).not.toContain("invalidateImportCaches(queryClient")
+
+        for (const queryKey of [
+            "importKeys.lists()",
+            "importKeys.pending()",
+            "importKeys.detail(importId)",
+            "surrogateKeys.lists()",
+            "surrogateKeys.stats()",
+            "surrogateKeys.intelligentSummary()",
+        ]) {
+            expect(source).toContain(`queryKey: ${queryKey}`)
+        }
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")

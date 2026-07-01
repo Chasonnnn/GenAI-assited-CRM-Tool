@@ -38,23 +38,6 @@ const importKeys = {
     detail: (id: string) => [...importKeys.details(), id] as const,
 }
 
-function invalidateImportCaches(
-    queryClient: ReturnType<typeof useQueryClient>,
-    importId?: string | null,
-    options: { refreshSurrogates?: boolean } = {}
-) {
-    void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
-    void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
-    if (importId) {
-        void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
-    }
-    if (options.refreshSurrogates) {
-        void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
-        void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
-        void queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
-    }
-}
-
 // Hooks
 export function useImports() {
     return useQuery({
@@ -94,7 +77,10 @@ export function usePreviewImport() {
             return previewImport(params.file, Object.keys(options).length > 0 ? options : undefined)
         },
         onSuccess: (preview) => {
-            invalidateImportCaches(queryClient, preview.import_id)
+            const importId = preview.import_id
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
         },
     })
 }
@@ -116,7 +102,10 @@ export function useSubmitImport() {
         }) =>
             submitImport(params.importId, params.payload),
         onSuccess: (result, variables) => {
-            invalidateImportCaches(queryClient, result.import_id || variables.importId)
+            const importId = result.import_id || variables.importId
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
         },
     })
 }
@@ -126,8 +115,14 @@ export function useApproveImport() {
 
     return useMutation({
         mutationFn: (importId: string) => approveImport(importId),
-        onSuccess: (result, importId) => {
-            invalidateImportCaches(queryClient, result.import_id || importId, { refreshSurrogates: true })
+        onSuccess: (result, requestedImportId) => {
+            const importId = result.import_id || requestedImportId
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
         },
     })
 }
@@ -139,7 +134,10 @@ export function useRejectImport() {
         mutationFn: (params: { importId: string; reason: string }) =>
             rejectImport(params.importId, params.reason),
         onSuccess: (result, variables) => {
-            invalidateImportCaches(queryClient, result.import_id || variables.importId)
+            const importId = result.import_id || variables.importId
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
         },
     })
 }
@@ -154,7 +152,13 @@ export function useRetryImport() {
                 params.validation_mode ? { validation_mode: params.validation_mode } : undefined
             ),
         onSuccess: (result, variables) => {
-            invalidateImportCaches(queryClient, result.import_id || variables.importId, { refreshSurrogates: true })
+            const importId = result.import_id || variables.importId
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
         },
     })
 }
@@ -164,8 +168,14 @@ export function useRunImportInline() {
 
     return useMutation({
         mutationFn: (importId: string) => runImportInline(importId),
-        onSuccess: (result, importId) => {
-            invalidateImportCaches(queryClient, result.import_id || importId, { refreshSurrogates: true })
+        onSuccess: (result, requestedImportId) => {
+            const importId = result.import_id || requestedImportId
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.intelligentSummary() })
         },
     })
 }
@@ -175,8 +185,11 @@ export function useCancelImport() {
 
     return useMutation({
         mutationFn: (importId: string) => cancelImport(importId),
-        onSuccess: (result, importId) => {
-            invalidateImportCaches(queryClient, result.import_id || importId)
+        onSuccess: (result, requestedImportId) => {
+            const importId = result.import_id || requestedImportId
+            void queryClient.invalidateQueries({ queryKey: importKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.pending() })
+            void queryClient.invalidateQueries({ queryKey: importKeys.detail(importId) })
         },
     })
 }
