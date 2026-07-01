@@ -1593,3 +1593,26 @@ Full command after Batch 77: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `764`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 39 warnings`, `Maintainability 511 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e53aa5b4-f614-4698-854f-a88b42acb9ae`
+
+## Batch 78
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/ai-assistant/page.tsx` | Valid: the AI assistant page used React `useCallback` and `useMemo` wrappers around reducer patch helpers, chat-history helpers, session selection, message update handlers, and current-session derivation. React Compiler is already enabled in `apps/web/next.config.js`, and no preserve-manual-memoization case applied. | High | Move stable chat-history helper logic to module scope where practical, convert remaining handlers and derived values to plain functions/values, and add a source guard that failed on the old wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/ai-assistant.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor no longer reports manual memoization for this page; full React Doctor manual memoization count dropped from `385` to `365`. |
+| React Compiler purity diagnostic | `app/(app)/ai-assistant/page.tsx` | Valid: after removing manual wrappers, changed-scope React Doctor surfaced four compiler-blocking direct `Date.now()` calls inside render-created handlers. The linked docs route did not expose a prompt markdown for this internal diagnostic, but the diagnostic text pointed to React's purity rule and the code showed timestamp IDs embedded in handlers. | High | Add module-scope `createTimestampId` and route session/message ID generation through it, including fallback IDs while parsing stored history. | Changed-scope React Doctor dropped the four compiler errors and improved from `82 / 100` to `98 / 100`. |
+| `react-doctor/no-giant-component` | `app/(app)/ai-assistant/page.tsx` | Valid but out of scope: `AIAssistantPage` is still a large component after the memoization cleanup. Splitting the chat shell/sidebar/message list is a separate structural refactor with higher review surface. | Medium | Deferred to a separate AI assistant structure batch. No suppression added. | Final changed-scope React Doctor reports only this one warning in the touched file. |
+
+Changed-scope command after Batch 78: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Deferred: `react-doctor/no-giant-component` in `app/(app)/ai-assistant/page.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-29b2176e-a695-4438-b07c-6afa48128ed6`
+
+Full command after Batch 78: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `744`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 39 warnings`, `Maintainability 491 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-32eb0ccf-0db9-4e77-b15d-856e39aa0945`

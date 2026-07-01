@@ -99,6 +99,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const unknownTemplateVariables = useMemo")
     })
 
+    it("keeps AI assistant chat helpers compiler-friendly", () => {
+        const source = readSource("app/(app)/ai-assistant/page.tsx")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+        expect(source).toContain("function createWelcomeMessage")
+        expect(source).toContain("function createTimestampId")
+        expect(source).toContain("const currentSession = chatHistory.find")
+        expect(source).not.toContain("`session-${Date.now()}`")
+        expect(source).not.toContain("`user-${Date.now()}`")
+        expect(source).not.toContain("`assistant-${Date.now()}`")
+    })
+
     it("documents intentional exhaustive-deps exceptions with React Doctor rule names", () => {
         const aiAssistantSource = readSource("app/(app)/ai-assistant/page.tsx")
         const dashboardFilterSource = readSource("app/(app)/dashboard/components/dashboard-filter-bar.tsx")

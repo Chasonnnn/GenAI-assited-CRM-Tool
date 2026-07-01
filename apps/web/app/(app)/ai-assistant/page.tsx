@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon } from "lucide-react"
-import { useState, useRef, useEffect, useMemo, useCallback, useReducer } from "react"
+import { useEffect, useReducer, useRef, useState } from "react"
 import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
@@ -52,6 +52,9 @@ type ChatState = {
 type ChatAction =
     | { type: "patch"; payload: Partial<ChatState> }
     | { type: "update_history"; updater: (prev: ChatSession[]) => ChatSession[] }
+
+type ChatDispatch = (action: ChatAction) => void
+type ChatStateRef = { current: ChatState }
 
 function createWelcomeMessage(): Message {
     return {
@@ -115,6 +118,109 @@ function normalizeMessagesForSession(messages: Message[]) {
     return normalizedMessages.slice(-SESSION_MESSAGE_LIMIT)
 }
 
+function patchChatState(
+    dispatchChat: ChatDispatch,
+    chatStateRef: ChatStateRef,
+    payload: Partial<ChatState>
+) {
+    chatStateRef.current = { ...chatStateRef.current, ...payload }
+    dispatchChat({ type: "patch", payload })
+}
+
+function setChatMessages(
+    dispatchChat: ChatDispatch,
+    chatStateRef: ChatStateRef,
+    value: Message[] | ((prev: Message[]) => Message[])
+) {
+    const next = resolveStateValue(value, chatStateRef.current.messages)
+    patchChatState(dispatchChat, chatStateRef, { messages: next })
+}
+
+function setActiveChatSessionId(
+    dispatchChat: ChatDispatch,
+    chatStateRef: ChatStateRef,
+    value: string | null
+) {
+    patchChatState(dispatchChat, chatStateRef, { activeSessionId: value })
+}
+
+function persistHistory(next: ChatSession[]) {
+    if (typeof window === "undefined") return
+    sessionStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next))
+}
+
+function updateHistory(
+    dispatchChat: ChatDispatch,
+    chatStateRef: ChatStateRef,
+    updater: (prev: ChatSession[]) => ChatSession[]
+) {
+    const next = updater(chatStateRef.current.chatHistory)
+    persistHistory(next)
+    patchChatState(dispatchChat, chatStateRef, { chatHistory: next })
+}
+
+function buildSessionLabel() {
+    return "Global Chat"
+}
+
+function derivePreview(sessionMessages: Message[]) {
+    const lastUserMessage = [...sessionMessages].reverse().find((msg) => msg.role === "user" && msg.content)
+    if (!lastUserMessage) return ""
+    return truncateText(lastUserMessage.content, SESSION_PREVIEW_LIMIT)
+}
+
+function upsertSession(
+    dispatchChat: ChatDispatch,
+    chatStateRef: ChatStateRef,
+    session: ChatSession
+) {
+    updateHistory(dispatchChat, chatStateRef, (prev) => {
+        const filtered = prev.filter((item) => item.id !== session.id)
+        const next = [session, ...filtered].slice(0, MAX_CHAT_HISTORY)
+        return next
+    })
+}
+
+function updateSessionMessages(
+    dispatchChat: ChatDispatch,
+    chatStateRef: ChatStateRef,
+    chatHistory: ChatSession[],
+    sessionId: string,
+    sessionMessages: Message[],
+    options?: { conversationId?: string | null }
+) {
+    const normalized = normalizeMessagesForSession(sessionMessages)
+    const existing = chatHistory.find((session) => session.id === sessionId)
+    const conversationId = options?.conversationId ?? existing?.conversationId ?? null
+    const session: ChatSession = {
+        id: sessionId,
+        label: buildSessionLabel(),
+        preview: derivePreview(sessionMessages),
+        updatedAt: new Date().toISOString(),
+        entityType: "global",
+        entityId: null,
+        conversationId,
+        messages: normalized,
+    }
+    upsertSession(dispatchChat, chatStateRef, session)
+}
+
+function clearChatHistory(dispatchChat: ChatDispatch, chatStateRef: ChatStateRef) {
+    patchChatState(dispatchChat, chatStateRef, {
+        chatHistory: [],
+        activeSessionId: null,
+        messages: [createWelcomeMessage()],
+    })
+    if (typeof window !== "undefined") {
+        sessionStorage.removeItem(CHAT_HISTORY_KEY)
+        sessionStorage.removeItem(CHAT_HISTORY_USER_KEY)
+    }
+}
+
+function createTimestampId(prefix: string) {
+    return `${prefix}-${Date.now()}`
+}
+
 function safeParseHistory(raw: string | null): ChatSession[] {
     if (!raw) return []
     try {
@@ -128,7 +234,7 @@ function safeParseHistory(raw: string | null): ChatSession[] {
                 record.entityType === "surrogate" || typeof record.entityId === "string"
             if (hasSurrogateContext) continue
 
-            const id = typeof record.id === "string" ? record.id : `session-${Date.now()}`
+            const id = typeof record.id === "string" ? record.id : createTimestampId("session")
             const label = typeof record.label === "string" ? record.label : "Chat"
             const preview = typeof record.preview === "string" ? record.preview : ""
             const updatedAt =
@@ -155,7 +261,7 @@ function safeParseHistory(raw: string | null): ChatSession[] {
                 const rawActions = messageRecord.proposed_actions
                 const proposed_actions = Array.isArray(rawActions) ? rawActions as ProposedAction[] : undefined
                 messages.push({
-                    id: typeof messageRecord.id === "string" ? messageRecord.id : `msg-${Date.now()}`,
+                    id: typeof messageRecord.id === "string" ? messageRecord.id : createTimestampId("msg"),
                     role: rawRole === "assistant" ? "assistant" : "user",
                     content: typeof rawContent === "string" ? rawContent : "",
                     timestamp:
@@ -204,19 +310,13 @@ export default function AIAssistantPage() {
         chatStateRef.current = chatState
     }, [chatState])
 
-    const patchChatState = useCallback((payload: Partial<ChatState>) => {
-        chatStateRef.current = { ...chatStateRef.current, ...payload }
-        dispatchChat({ type: "patch", payload })
-    }, [])
+    const setMessages = (value: Message[] | ((prev: Message[]) => Message[])) => {
+        setChatMessages(dispatchChat, chatStateRef, value)
+    }
 
-    const setMessages = useCallback((value: Message[] | ((prev: Message[]) => Message[])) => {
-        const next = resolveStateValue(value, chatStateRef.current.messages)
-        patchChatState({ messages: next })
-    }, [patchChatState])
-
-    const setActiveSessionId = useCallback((value: string | null) => {
-        patchChatState({ activeSessionId: value })
-    }, [patchChatState])
+    const setActiveSessionId = (value: string | null) => {
+        setActiveChatSessionId(dispatchChat, chatStateRef, value)
+    }
 
     const aiSettingsQuery = useAISettings()
     const {
@@ -243,83 +343,6 @@ export default function AIAssistantPage() {
     ]
     const aiSettingsErrorMessage = aiSettingsErrorData instanceof Error ? aiSettingsErrorData.message : ""
 
-    const buildWelcomeMessage = useCallback(() => ({
-        id: "welcome",
-        role: "assistant" as const,
-        content: "Hello! I'm your AI assistant. Ask me anything about your workflows.",
-        timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-        status: "done" as const,
-    }), [])
-
-    const persistHistory = useCallback((next: ChatSession[]) => {
-        if (typeof window === "undefined") return
-        sessionStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next))
-    }, [])
-
-    const updateHistory = useCallback(
-        (updater: (prev: ChatSession[]) => ChatSession[]) => {
-            const next = updater(chatStateRef.current.chatHistory)
-            persistHistory(next)
-            patchChatState({ chatHistory: next })
-        },
-        [patchChatState, persistHistory]
-    )
-
-    const buildSessionLabel = useCallback(() => "Global Chat", [])
-
-    const derivePreview = useCallback((sessionMessages: Message[]) => {
-        const lastUserMessage = [...sessionMessages].reverse().find((msg) => msg.role === "user" && msg.content)
-        if (!lastUserMessage) return ""
-        return truncateText(lastUserMessage.content, SESSION_PREVIEW_LIMIT)
-    }, [])
-
-    const upsertSession = useCallback(
-        (session: ChatSession) => {
-            updateHistory((prev) => {
-                const filtered = prev.filter((item) => item.id !== session.id)
-                const next = [session, ...filtered].slice(0, MAX_CHAT_HISTORY)
-                return next
-            })
-        },
-        [updateHistory]
-    )
-
-    const updateSessionMessages = useCallback(
-        (
-            sessionId: string,
-            sessionMessages: Message[],
-            options?: { conversationId?: string | null }
-        ) => {
-            const normalized = normalizeMessagesForSession(sessionMessages)
-            const existing = chatHistory.find((session) => session.id === sessionId)
-            const conversationId = options?.conversationId ?? existing?.conversationId ?? null
-            const session: ChatSession = {
-                id: sessionId,
-                label: buildSessionLabel(),
-                preview: derivePreview(sessionMessages),
-                updatedAt: new Date().toISOString(),
-                entityType: "global",
-                entityId: null,
-                conversationId,
-                messages: normalized,
-            }
-            upsertSession(session)
-        },
-        [buildSessionLabel, chatHistory, derivePreview, upsertSession]
-    )
-
-    const clearChatHistory = useCallback(() => {
-        patchChatState({
-            chatHistory: [],
-            activeSessionId: null,
-            messages: [buildWelcomeMessage()],
-        })
-        if (typeof window !== "undefined") {
-            sessionStorage.removeItem(CHAT_HISTORY_KEY)
-            sessionStorage.removeItem(CHAT_HISTORY_USER_KEY)
-        }
-    }, [buildWelcomeMessage, patchChatState])
-
     const historyLoadedRef = useRef(false)
     const initialSessionCreatedRef = useRef(false)
 
@@ -328,32 +351,32 @@ export default function AIAssistantPage() {
         if (!user?.user_id) {
             historyLoadedRef.current = false
             initialSessionCreatedRef.current = false
-            clearChatHistory()
+            clearChatHistory(dispatchChat, chatStateRef)
             return
         }
         const storedUserId = sessionStorage.getItem(CHAT_HISTORY_USER_KEY)
         if (storedUserId && storedUserId !== user.user_id) {
-            clearChatHistory()
+            clearChatHistory(dispatchChat, chatStateRef)
             historyLoadedRef.current = false
             initialSessionCreatedRef.current = false
         }
         if (!historyLoadedRef.current) {
             const storedHistory = safeParseHistory(sessionStorage.getItem(CHAT_HISTORY_KEY))
-            patchChatState({
+            patchChatState(dispatchChat, chatStateRef, {
                 chatHistory: storedHistory,
                 activeSessionId: null,
-                messages: [buildWelcomeMessage()],
+                messages: [createWelcomeMessage()],
             })
             historyLoadedRef.current = true
         }
         sessionStorage.setItem(CHAT_HISTORY_USER_KEY, user.user_id)
-    }, [user?.user_id, clearChatHistory, buildWelcomeMessage, patchChatState])
+    }, [user?.user_id])
 
     useEffect(() => {
         if (!user?.user_id || !historyLoadedRef.current || initialSessionCreatedRef.current) return
         initialSessionCreatedRef.current = true
-        const sessionId = `session-${Date.now()}`
-        upsertSession({
+        const sessionId = createTimestampId("session")
+        upsertSession(dispatchChat, chatStateRef, {
             id: sessionId,
             label: buildSessionLabel(),
             preview: "",
@@ -363,28 +386,25 @@ export default function AIAssistantPage() {
             conversationId: null,
             messages: [],
         })
-        patchChatState({
+        patchChatState(dispatchChat, chatStateRef, {
             activeSessionId: sessionId,
-            messages: [buildWelcomeMessage()],
+            messages: [createWelcomeMessage()],
         })
-    }, [user?.user_id, upsertSession, buildSessionLabel, buildWelcomeMessage, patchChatState])
+    }, [user?.user_id])
 
-    const currentSession = useMemo(
-        () => chatHistory.find((session) => session.id === activeSessionId) || null,
-        [chatHistory, activeSessionId]
-    )
+    const currentSession = chatHistory.find((session) => session.id === activeSessionId) || null
 
     useEffect(() => {
         if (isStreaming) return
         if (currentSession) {
             const sessionMessages = currentSession.messages.length
                 ? currentSession.messages
-                : [buildWelcomeMessage()]
-            setMessages(sessionMessages)
+                : [createWelcomeMessage()]
+            setChatMessages(dispatchChat, chatStateRef, sessionMessages)
             return
         }
-        setMessages([buildWelcomeMessage()])
-    }, [currentSession, isStreaming, buildWelcomeMessage, setMessages])
+        setChatMessages(dispatchChat, chatStateRef, [createWelcomeMessage()])
+    }, [currentSession, isStreaming])
 
     // Scroll to bottom when messages change
     useEffect(() => {
@@ -402,13 +422,13 @@ export default function AIAssistantPage() {
         }
     }, [])
 
-    const ensureSessionId = useCallback(() => {
+    const ensureSessionId = () => {
         if (activeSessionId && chatHistory.some((session) => session.id === activeSessionId)) {
             return activeSessionId
         }
 
-        const sessionId = `session-${Date.now()}`
-        upsertSession({
+        const sessionId = createTimestampId("session")
+        upsertSession(dispatchChat, chatStateRef, {
             id: sessionId,
             label: buildSessionLabel(),
             preview: "",
@@ -420,40 +440,34 @@ export default function AIAssistantPage() {
         })
         setActiveSessionId(sessionId)
         return sessionId
-    }, [activeSessionId, chatHistory, buildSessionLabel, setActiveSessionId, upsertSession])
+    }
 
-    const updateMessageById = useCallback((id: string, updater: (msg: Message) => Message) => {
+    const updateMessageById = (id: string, updater: (msg: Message) => Message) => {
         setMessages((prev) => prev.map((msg) => (msg.id === id ? updater(msg) : msg)))
-    }, [setMessages])
+    }
 
-    const updateMessageAndSession = useCallback(
-        (
-            id: string,
-            updater: (msg: Message) => Message,
-            sessionId: string,
-            options?: { conversationId?: string | null }
-        ) => {
-            setMessages((prev) => {
-                const next = prev.map((msg) => (msg.id === id ? updater(msg) : msg))
-                updateSessionMessages(sessionId, next, options)
-                return next
-            })
-        },
-        [setMessages, updateSessionMessages]
-    )
+    const updateMessageAndSession = (
+        id: string,
+        updater: (msg: Message) => Message,
+        sessionId: string,
+        options?: { conversationId?: string | null }
+    ) => {
+        setMessages((prev) => {
+            const next = prev.map((msg) => (msg.id === id ? updater(msg) : msg))
+            updateSessionMessages(dispatchChat, chatStateRef, chatHistory, sessionId, next, options)
+            return next
+        })
+    }
 
-    const handleSelectSession = useCallback(
-        (session: ChatSession) => {
-            setActiveSessionId(session.id)
-            const sessionMessages = session.messages.length ? session.messages : [buildWelcomeMessage()]
-            setMessages(sessionMessages)
-        },
-        [buildWelcomeMessage, setActiveSessionId, setMessages]
-    )
+    const handleSelectSession = (session: ChatSession) => {
+        setActiveSessionId(session.id)
+        const sessionMessages = session.messages.length ? session.messages : [createWelcomeMessage()]
+        setMessages(sessionMessages)
+    }
 
-    const handleNewChat = useCallback(() => {
-        const sessionId = `session-${Date.now()}`
-        upsertSession({
+    const handleNewChat = () => {
+        const sessionId = createTimestampId("session")
+        upsertSession(dispatchChat, chatStateRef, {
             id: sessionId,
             label: buildSessionLabel(),
             preview: "",
@@ -464,35 +478,32 @@ export default function AIAssistantPage() {
             messages: [],
         })
         setActiveSessionId(sessionId)
-        setMessages([buildWelcomeMessage()])
-    }, [buildSessionLabel, setActiveSessionId, setMessages, upsertSession, buildWelcomeMessage])
+        setMessages([createWelcomeMessage()])
+    }
 
-    const setAssistantError = useCallback(
-        (
-            assistantId: string,
-            errorText: string,
-            sessionId?: string
-        ) => {
-            if (sessionId) {
-                updateMessageAndSession(
-                    assistantId,
-                    (msg) => ({
-                        ...msg,
-                        content: errorText,
-                        status: "error",
-                    }),
-                    sessionId
-                )
-                return
-            }
-            updateMessageById(assistantId, (msg) => ({
-                ...msg,
-                content: errorText,
-                status: "error",
-            }))
-        },
-        [updateMessageAndSession, updateMessageById]
-    )
+    const setAssistantError = (
+        assistantId: string,
+        errorText: string,
+        sessionId?: string
+    ) => {
+        if (sessionId) {
+            updateMessageAndSession(
+                assistantId,
+                (msg) => ({
+                    ...msg,
+                    content: errorText,
+                    status: "error",
+                }),
+                sessionId
+            )
+            return
+        }
+        updateMessageById(assistantId, (msg) => ({
+            ...msg,
+            content: errorText,
+            status: "error",
+        }))
+    }
 
     const handleSend = async () => {
         const trimmedMessage = message.trim()
@@ -504,13 +515,13 @@ export default function AIAssistantPage() {
 
         const timestamp = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
         const userMessage: Message = {
-            id: `user-${Date.now()}`,
+            id: createTimestampId("user"),
             role: "user",
             content: trimmedMessage,
             timestamp,
             status: "done",
         }
-        const assistantId = `assistant-${Date.now()}`
+        const assistantId = createTimestampId("assistant")
         const assistantMessage: Message = {
             id: assistantId,
             role: "assistant",
@@ -521,7 +532,7 @@ export default function AIAssistantPage() {
 
         setMessages((prev) => {
             const next = [...prev, userMessage, assistantMessage]
-            updateSessionMessages(sessionId, next)
+            updateSessionMessages(dispatchChat, chatStateRef, chatHistory, sessionId, next)
             return next
         })
         setMessage("")
@@ -616,20 +627,17 @@ export default function AIAssistantPage() {
         finishStreaming()
     }
 
-    const handleStop = useCallback(() => {
+    const handleStop = () => {
         if (!isStreaming) return
         stopRequestedRef.current = true
         streamAbortRef.current?.abort()
         setIsStreaming(false)
-    }, [isStreaming])
+    }
 
-    const syncSessionFromMessages = useCallback(
-        (nextMessages: Message[]) => {
-            if (!activeSessionId) return
-            updateSessionMessages(activeSessionId, nextMessages)
-        },
-        [activeSessionId, updateSessionMessages]
-    )
+    const syncSessionFromMessages = (nextMessages: Message[]) => {
+        if (!activeSessionId) return
+        updateSessionMessages(dispatchChat, chatStateRef, chatHistory, activeSessionId, nextMessages)
+    }
 
     const handleApprove = async (approvalId: string | null) => {
         if (!approvalId) return
