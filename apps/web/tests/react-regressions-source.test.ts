@@ -1210,6 +1210,15 @@ describe("React regression guards (source)", () => {
         expect(source).toContain('aria-label="Choose email attachments to upload"')
     })
 
+    it("keeps email compose dialog derived state compiler-friendly", () => {
+        const source = readSource("components/email/EmailComposeDialog.tsx")
+
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+        expect(source).toContain('role="textbox"')
+        expect(source).toContain("contentEditable")
+    })
+
     it("keeps share dialog embed settings render-derived", () => {
         const source = readSource("components/forms/builder/ShareApplicationDialog.tsx")
 

@@ -1744,3 +1744,33 @@ Full command after Batch 83: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `680`
 - Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 447 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f2e5065c-b6b3-4719-adca-8bd19e3861fb`
+
+## Batch 84
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/email/EmailComposeDialog.tsx` | Valid: the compose dialog wrapped preview variables, unresolved-variable checks, preview HTML, footer HTML, template labels, and ordinary event handlers in `React.useMemo`/`React.useCallback`. React Compiler is enabled, and none of these wrappers matched a preserve-manual-memoization case. | High | Replace memo wrappers with plain render-local values/functions and add a source guard that failed on the old wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/email-compose-dialog.test.tsx`; `pnpm tsc --noEmit`; scoped `components/email` React Doctor no longer reports manual memoization in `EmailComposeDialog.tsx`; full React Doctor manual memoization count dropped from `326` to `308`. |
+| React Compiler purity diagnostic | `components/email/EmailComposeDialog.tsx` | Valid: after removing callback wrappers, React Doctor surfaced compiler-blocking `Date.now()` and `Math.random()` calls in the render-local send handler fallback path. | High | Move idempotency-key generation into a module-scope helper so the render-local handler does not embed non-deterministic calls. | Changed-scope React Doctor dropped the compiler purity warning after the helper extraction. |
+| `react-doctor/js-length-check-first` | `components/email/EmailComposeDialog.tsx` | Valid: the new reducer no-op guard compared selected attachment arrays without the scanner-preferred explicit length check first. | High | Compare lengths before the element-wise equality check. | Changed-scope React Doctor dropped the array-comparison warning after the guard rewrite. |
+| `react-doctor/prefer-tag-over-role` | `components/email/EmailComposeDialog.tsx` | Low-confidence/likely invalid for this flow: `MessagePreview` is a content-editable rich HTML preview editor with `role="textbox"`, `aria-label`, `aria-labelledby`, and `aria-multiline`. Replacing it with `<input>` would break HTML preview editing, and `<textarea>` would show markup rather than the editable preview. | Medium | Kept the role-bearing contentEditable editor and documented the rationale. No suppression added. | Changed-scope React Doctor still reports this one warning; existing compose-dialog tests cover preview editing and sending edited preview content. |
+
+Scoped command after Batch 84: `cd apps/web && npx react-doctor@latest components/email --verbose`
+
+- Score: `91 / 100 Great`
+- Total diagnostics in scope: `1`
+- Remaining: `prefer-tag-over-role` in `EmailComposeDialog.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5867f2fc-42a2-4a3d-a5bf-47d7df7df0ab`
+
+Changed-scope command after Batch 84: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining: `prefer-tag-over-role` in `EmailComposeDialog.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9dcb13e1-3f69-4ab1-91e0-32a92d1e3faa`
+
+Full command after Batch 84: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `662`
+- Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 429 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f1e76770-d521-4eec-9c93-825a9b36266a`

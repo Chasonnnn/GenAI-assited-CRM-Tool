@@ -119,6 +119,24 @@ function createInitialComposeFormState(): ComposeFormState {
     }
 }
 
+function areAttachmentSelectionsEqual(
+    current: EmailAttachmentSelectionState,
+    next: EmailAttachmentSelectionState
+): boolean {
+    if (
+        current.hasBlockingAttachments !== next.hasBlockingAttachments ||
+        current.totalBytes !== next.totalBytes ||
+        current.errorMessage !== next.errorMessage
+    ) {
+        return false
+    }
+
+    return (
+        current.selectedAttachmentIds.length === next.selectedAttachmentIds.length &&
+        current.selectedAttachmentIds.every((id, index) => id === next.selectedAttachmentIds[index])
+    )
+}
+
 function composeFormReducer(state: ComposeFormState, action: ComposeFormAction): ComposeFormState {
     switch (action.type) {
         case "selectTemplate":
@@ -140,7 +158,9 @@ function composeFormReducer(state: ComposeFormState, action: ComposeFormAction):
                 isPreview: !state.isPreview,
             }
         case "setAttachmentSelection":
-            return { ...state, attachmentSelection: action.selection }
+            return areAttachmentSelectionsEqual(state.attachmentSelection, action.selection)
+                ? state
+                : { ...state, attachmentSelection: action.selection }
         case "setBodyDropActive":
             return state.isBodyDropActive === action.isActive
                 ? state
@@ -347,6 +367,12 @@ function resolveTemplateLabel(
     )
 }
 
+function createEmailIdempotencyKey(): string {
+    return typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export function EmailComposeDialog({
     open,
     onOpenChange,
@@ -404,25 +430,19 @@ export function EmailComposeDialog({
         dispatch({ type: "reset" })
     }, [open])
 
-    const previewVariableValues = React.useMemo(
-        () => buildPreviewVariableValues(surrogateData, resolvedTemplateVariables),
-        [resolvedTemplateVariables, surrogateData]
-    )
-    const unresolvedTemplateVariables = React.useMemo(
-        () => findUnresolvedTemplateVariables([subject, body], previewVariableValues),
-        [body, previewVariableValues, subject]
-    )
+    const previewVariableValues = buildPreviewVariableValues(surrogateData, resolvedTemplateVariables)
+    const unresolvedTemplateVariables = findUnresolvedTemplateVariables([subject, body], previewVariableValues)
 
-    const readSanitizedPreviewEditorHtml = React.useCallback(() => {
+    const readSanitizedPreviewEditorHtml = () => {
         const editor = previewEditorRef.current
         if (!editor || !isPreview) return null
 
         const editedHtml = editor.innerHTML.trim()
         const normalizedHtml = editedHtml ? normalizeTemplateHtml(editedHtml) : ""
         return normalizedHtml ? sanitizePreviewHtml(normalizedHtml) : ""
-    }, [isPreview])
+    }
 
-    const syncPreviewEditorToBody = React.useCallback(() => {
+    const syncPreviewEditorToBody = () => {
         const sanitizedEditedHtml = readSanitizedPreviewEditorHtml()
         if (sanitizedEditedHtml === null) return body
 
@@ -431,7 +451,7 @@ export function EmailComposeDialog({
         }
 
         return sanitizedEditedHtml
-    }, [body, readSanitizedPreviewEditorHtml])
+    }
 
     const handleSend = async () => {
         try {
@@ -440,10 +460,7 @@ export function EmailComposeDialog({
                 return
             }
             if (!idempotencyKeyRef.current) {
-                idempotencyKeyRef.current =
-                    typeof crypto !== "undefined" && "randomUUID" in crypto
-                        ? crypto.randomUUID()
-                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+                idempotencyKeyRef.current = createEmailIdempotencyKey()
             }
             await sendEmailMutation.mutateAsync({
                 surrogateId: surrogateData.id,
@@ -462,76 +479,67 @@ export function EmailComposeDialog({
         }
     }
 
-    const handleSelectTemplate = React.useCallback((templateId: string) => {
+    const handleSelectTemplate = (templateId: string) => {
         dispatch({ type: "selectTemplate", templateId })
-    }, [])
+    }
 
-    const handleSubjectChange = React.useCallback((nextSubject: string) => {
+    const handleSubjectChange = (nextSubject: string) => {
         dispatch({ type: "setSubject", subject: nextSubject })
-    }, [])
+    }
 
-    const handleBodyChange = React.useCallback((nextBody: string) => {
+    const handleBodyChange = (nextBody: string) => {
         dispatch({ type: "setBody", body: nextBody })
-    }, [])
+    }
 
-    const handleAttachmentSelectionChange = React.useCallback((selection: EmailAttachmentSelectionState) => {
+    const handleAttachmentSelectionChange = (selection: EmailAttachmentSelectionState) => {
         dispatch({ type: "setAttachmentSelection", selection })
-    }, [])
+    }
 
-    const handleCancel = React.useCallback(() => {
+    const handleCancel = () => {
         onOpenChange(false)
-    }, [onOpenChange])
+    }
 
-    const handlePreviewToggle = React.useCallback(() => {
+    const handlePreviewToggle = () => {
         const bodyFromPreview = readSanitizedPreviewEditorHtml()
         dispatch(
             bodyFromPreview === null
                 ? { type: "togglePreview" }
                 : { type: "togglePreview", body: bodyFromPreview }
         )
-    }, [readSanitizedPreviewEditorHtml])
+    }
 
-    const previewSubject = React.useMemo(
-        () => replaceTemplateVariables(subject, previewVariableValues),
-        [previewVariableValues, subject]
-    )
+    const previewSubject = replaceTemplateVariables(subject, previewVariableValues)
 
-    const previewMessageHtml = React.useMemo(
-        () => buildPreviewMessageHtml(body, previewVariableValues),
-        [body, previewVariableValues]
-    )
+    const previewMessageHtml = buildPreviewMessageHtml(body, previewVariableValues)
 
-    const previewFooterHtml = React.useMemo(
-        () => buildPreviewFooterHtml(personalSignaturePreview?.html || ""),
-        [personalSignaturePreview?.html]
-    )
+    const previewFooterHtml = buildPreviewFooterHtml(personalSignaturePreview?.html || "")
 
-    const handleBodyDragEnter = React.useCallback((event: React.DragEvent<HTMLElement>) => {
+    const handleBodyDragEnter = (event: React.DragEvent<HTMLElement>) => {
         if (!dataTransferHasFiles(event.dataTransfer)) return
         event.preventDefault()
         dragDepthRef.current += 1
         dispatch({ type: "setBodyDropActive", isActive: true })
-    }, [])
+    }
 
-    const handleBodyDragOver = React.useCallback((event: React.DragEvent<HTMLElement>) => {
+    const handleBodyDragOver = (event: React.DragEvent<HTMLElement>) => {
         if (!dataTransferHasFiles(event.dataTransfer)) return
         event.preventDefault()
         event.dataTransfer.dropEffect = "copy"
         if (!isBodyDropActive) {
             dispatch({ type: "setBodyDropActive", isActive: true })
         }
-    }, [isBodyDropActive])
+    }
 
-    const handleBodyDragLeave = React.useCallback((event: React.DragEvent<HTMLElement>) => {
+    const handleBodyDragLeave = (event: React.DragEvent<HTMLElement>) => {
         if (!dataTransferHasFiles(event.dataTransfer)) return
         event.preventDefault()
         dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
         if (dragDepthRef.current === 0) {
             dispatch({ type: "setBodyDropActive", isActive: false })
         }
-    }, [])
+    }
 
-    const handleBodyDrop = React.useCallback(async (event: React.DragEvent<HTMLElement>) => {
+    const handleBodyDrop = async (event: React.DragEvent<HTMLElement>) => {
         if (!dataTransferHasFiles(event.dataTransfer)) return
         event.preventDefault()
         dragDepthRef.current = 0
@@ -541,7 +549,7 @@ export function EmailComposeDialog({
         if (files.length === 0) return
 
         await attachmentsPanelRef.current?.uploadFiles(files)
-    }, [])
+    }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -627,10 +635,8 @@ function TemplateSelector({
     fullTemplate,
     onSelectTemplate,
 }: TemplateSelectorProps) {
-    const getTemplateLabel = React.useCallback(
-        (templateId: string | null) => resolveTemplateLabel(templateId, templates, fullTemplate),
-        [fullTemplate, templates]
-    )
+    const getTemplateLabel = (templateId: string | null) =>
+        resolveTemplateLabel(templateId, templates, fullTemplate)
 
     return (
         <div className="grid gap-2">
