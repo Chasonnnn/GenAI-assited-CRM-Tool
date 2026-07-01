@@ -1682,3 +1682,37 @@ Full command after Batch 81: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `713`
 - Summary: `Bugs 175 warnings`, `Performance 37 warnings`, `Accessibility 38 warnings`, `Maintainability 463 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-12fb686e-138b-4b21-9068-fae4aa21f88c`
+
+## Batch 82
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/intake/[slug]/page.client.tsx` | Valid: the hosted intake client wrapped draft autosave and resume handlers in `React.useCallback`, and kept validation/visibility helpers inside the component. React Compiler is enabled, and none of these wrappers matched a preserve-manual-memoization case. | High | Move draft emptiness, visibility, validation, persistence, and save helpers to module scope; replace callback wrappers with plain handlers; and extend the source guard so it failed on the old wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/forms-shared-intake.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor no longer reports manual memoization in this page; full React Doctor manual memoization count dropped from `340` to `335`. |
+| `react-doctor/control-has-associated-label` | `app/intake/[slug]/page.client.tsx` | Valid: the hidden file input had no accessible name, even though the visible upload trigger was named. | High | Add `aria-label="Select files to upload"` to the hidden input and assert the file input is label-queryable in the hosted intake test. | Scoped React Doctor dropped the file-input label warning. |
+| `react-doctor/prefer-tag-over-role` | `app/intake/[slug]/page.client.tsx` | Valid: the progress indicator used `role="progressbar"` instead of a native tag, and the upload drop zone used a `div` with button role and keyboard handling. | High | Replace the custom progress role with native `<progress>` and replace the upload drop zone with a native `button`. Updated the test to assert the native progress element, value, and max. | Scoped React Doctor dropped both `prefer-tag-over-role` warnings. |
+| `react-doctor/rerender-lazy-ref-init` | `app/intake/[slug]/page.client.tsx` | Valid: resume lookup refs were initialized with `new Set()` and `new Map()` during render. A first fix introduced render-time ref reads, which React Doctor correctly flagged. | High | Initialize those refs with `null` and lazily create the `Set`/`Map` only inside effects and event handlers. Added a source guard against render-time `new Set()`/`new Map()` ref initialization. | Scoped React Doctor no longer reports lazy ref init or ref-access-during-render findings. |
+| `react-doctor/js-set-map-lookups` | `app/intake/[slug]/page.client.tsx` | Low-impact rule-shape finding: the reported lines were string identity heuristics using `.includes`, not repeated `Set`/`Map` membership checks. | Medium | Extract the identity heuristics into named module-scope helpers, which made the scanner warning disappear and improved readability without changing matching semantics. No suppression added. | Scoped React Doctor no longer reports these lookup warnings. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/intake/[slug]/page.client.tsx` | Valid: draft save and validation helpers did not require component-local closures once their inputs were explicit. | High | Move pure helpers to module scope with explicit parameters. | Scoped React Doctor dropped the pure-function warnings from this page. |
+| `react-doctor/no-event-handler`, `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `app/intake/[slug]/page.client.tsx` | Valid but out of scope: the remaining hosted-intake warnings are tied to the initial draft-session state shape, many related `useState` calls, and the large page component. | Medium | Deferred to a separate intake state-machine/component split batch. This batch partially reduced the draft-session issue by removing setter-driven render state writes, but did not change the whole page state model. No suppression added. | Final scoped and changed-scope React Doctor still report these remaining hosted-intake warnings. |
+| `react-doctor/async-defer-await` | `app/intake/[slug]/page.client.tsx` | Low-confidence/likely invalid for this flow: the stale response guard intentionally runs after the awaited lookup so older async responses cannot update the current prompt. Moving that check before `await` would not protect against stale responses. | Medium | Kept the post-await sequence guard and documented the rationale. No suppression added. | Scoped React Doctor still reports this warning; behavior tests continue to pass. |
+
+Scoped command after Batch 82: `cd apps/web && npx react-doctor@latest 'app/intake/[slug]' --verbose`
+
+- Score: `79 / 100 Needs work`
+- Total diagnostics in scope: `5`
+- Remaining: `react-doctor/no-event-handler` ×2, `react-doctor/async-defer-await`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b7c439f-0fcf-4c5a-8b09-0d69571fcf30`
+
+Changed-scope command after Batch 82: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `5`
+- Remaining: same hosted-intake warnings listed above
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a4c51428-3aa0-4061-aa10-553b528e7bed`
+
+Full command after Batch 82: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `690`
+- Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 35 warnings`, `Maintainability 456 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0eda7c3e-f3ad-4f9e-85b8-5d17d0916e37`

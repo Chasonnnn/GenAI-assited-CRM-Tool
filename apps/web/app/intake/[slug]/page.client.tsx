@@ -196,6 +196,22 @@ function buildIdentityFingerprint(args: {
     ].join("|")
 }
 
+function isFullNameIdentityField(key: string, label: string): boolean {
+    return key === "full_name" || key.includes("full_name") || label.includes("full name")
+}
+
+function isDateOfBirthIdentityField(key: string, label: string): boolean {
+    return key === "date_of_birth" || key.includes("dob") || label.includes("date of birth") || label === "dob"
+}
+
+function isEmailIdentityField(key: string, label: string): boolean {
+    return key === "email" || key.includes("email") || label.includes("email")
+}
+
+function isPhoneIdentityField(key: string, label: string): boolean {
+    return key === "phone" || key.includes("phone") || key.includes("mobile") || label.includes("phone") || label.includes("mobile")
+}
+
 function resolveIdentityFieldKeys(schema: FormSchema): {
     fullNameKey: string | null
     dateOfBirthKey: string | null
@@ -221,16 +237,16 @@ function resolveIdentityFieldKeys(schema: FormSchema): {
         const key = field.key.toLowerCase()
         const label = (field.label || "").toLowerCase()
 
-        if (!fullNameKey && (key === "full_name" || key.includes("full_name") || label.includes("full name"))) {
+        if (!fullNameKey && isFullNameIdentityField(key, label)) {
             fullNameKey = field.key
         }
-        if (!dateOfBirthKey && (key === "date_of_birth" || key.includes("dob") || label.includes("date of birth") || label === "dob")) {
+        if (!dateOfBirthKey && isDateOfBirthIdentityField(key, label)) {
             dateOfBirthKey = field.key
         }
-        if (!emailKey && (key === "email" || key.includes("email") || label.includes("email"))) {
+        if (!emailKey && isEmailIdentityField(key, label)) {
             emailKey = field.key
         }
-        if (!phoneKey && (key === "phone" || key.includes("phone") || key.includes("mobile") || label.includes("phone") || label.includes("mobile"))) {
+        if (!phoneKey && isPhoneIdentityField(key, label)) {
             phoneKey = field.key
         }
     }
@@ -297,19 +313,14 @@ function ProgressStepper({
                 </div>
                 <div className="mt-1 text-sm font-semibold text-stone-950">{currentLabel}</div>
             </div>
-            <div
-                role="progressbar"
+            <progress
                 aria-label="Application progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressValue}
-                className="h-1.5 w-full overflow-hidden rounded-full bg-stone-200"
+                value={progressValue}
+                max={100}
+                className="h-1.5 w-full overflow-hidden rounded-full accent-blue-500"
             >
-                <div
-                    className="h-full rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-violet-600 transition-[width] duration-300 ease-out"
-                    style={{ width: `${progressValue}%` }}
-                />
-            </div>
+                {progressValue}%
+            </progress>
             <div className="flex items-center justify-between gap-2 text-xs text-stone-500">
                 {start > 0 && <span className="shrink-0 px-1">…</span>}
                 {visibleSteps.map((step) => (
@@ -407,20 +418,11 @@ function FileUploadZone({
         onFilesChange(newFiles)
     }
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault()
-            inputRef.current?.click()
-        }
-    }
-
     return (
         <div className="space-y-3">
-            <div
+            <button
+                type="button"
                 onClick={() => inputRef.current?.click()}
-                onKeyDown={handleKeyDown}
-                role="button"
-                tabIndex={0}
                 aria-label="Upload files"
                 onDrop={handleDrop}
                 onDragOver={(e) => {
@@ -429,7 +431,7 @@ function FileUploadZone({
                 }}
                 onDragLeave={() => setIsDragging(false)}
                 className={cn(
-                    "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 transition-all",
+                    "flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 transition-all",
                     "hover:border-blue-300 hover:bg-sky-50",
                     "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
                     isDragging
@@ -452,17 +454,18 @@ function FileUploadZone({
                 <p className="text-xs text-stone-400">
                     Up to {maxFiles} files for this field, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
                 </p>
-                <input
-                    id={inputId}
-                    name="public_form_file_upload"
-                    ref={inputRef}
-                    type="file"
-                    multiple
-                    accept={acceptedTypes ? acceptedTypes.join(",") : undefined}
-                    onChange={handleFileSelect}
-                    className="hidden"
-                />
-            </div>
+            </button>
+            <input
+                id={inputId}
+                name="public_form_file_upload"
+                ref={inputRef}
+                type="file"
+                multiple
+                aria-label="Select files to upload"
+                accept={acceptedTypes ? acceptedTypes.join(",") : undefined}
+                onChange={handleFileSelect}
+                className="hidden"
+            />
 
             {/* File List */}
             {files.length > 0 && (
@@ -537,6 +540,7 @@ type DraftSessionState = {
     id: string | null
     exists: boolean
 }
+type DraftSaveState = "idle" | "saving" | "saved" | "error"
 
 type SharedResumePrompt = {
     sourceDraftId: string
@@ -566,6 +570,203 @@ function createDraftSessionState(slug: string): DraftSessionState {
         return { slug, id: existing, exists: true }
     }
     return { slug, id: createDraftSessionId(), exists: false }
+}
+
+function isDraftValueEmpty(value: AnswerValue): boolean {
+    if (value === null || value === undefined) return true
+    if (typeof value === "string") return value.trim() === ""
+    if (typeof value === "number" || typeof value === "boolean") return false
+    if (Array.isArray(value)) return value.length === 0
+    if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length === 0
+    return false
+}
+
+function hasAnyDraftAnswer(data: Answers): boolean {
+    return Object.values(data).some((value) => !isDraftValueEmpty(value))
+}
+
+function isEmptyValue(value: AnswerValue): boolean {
+    if (value === null || value === undefined) return true
+    if (typeof value === "string") return value.trim() === ""
+    if (Array.isArray(value)) return value.length === 0
+    return false
+}
+
+function evaluatePublicCondition(
+    condition: FormSchema["pages"][number]["fields"][number]["show_if"],
+    value: AnswerValue,
+): boolean {
+    if (!condition) return true
+    const expected = condition.value
+    switch (condition.operator) {
+        case "is_empty":
+            return isEmptyValue(value)
+        case "is_not_empty":
+            return !isEmptyValue(value)
+        case "equals":
+            if (expected !== undefined && expected !== null && typeof expected === "string") {
+                return value !== null && value !== undefined
+                    ? String(value) === expected
+                    : false
+            }
+            return value === expected
+        case "not_equals":
+            if (expected !== undefined && expected !== null && typeof expected === "string") {
+                return value !== null && value !== undefined
+                    ? String(value) !== expected
+                    : true
+            }
+            return value !== expected
+        case "contains":
+            if (Array.isArray(value)) {
+                const list = value.filter((item): item is string => typeof item === "string")
+                return expected ? list.includes(String(expected)) : false
+            }
+            if (typeof value === "string" && typeof expected === "string") {
+                return value.includes(expected)
+            }
+            return false
+        case "not_contains":
+            if (Array.isArray(value)) {
+                const list = value.filter((item): item is string => typeof item === "string")
+                return expected ? !list.includes(String(expected)) : true
+            }
+            if (typeof value === "string" && typeof expected === "string") {
+                return !value.includes(expected)
+            }
+            return true
+        default:
+            return true
+    }
+}
+
+function isPublicFieldVisible(field: FormField, values: Answers): boolean {
+    if (!field.show_if) return true
+    const controllingValue = values[field.show_if.field_key] ?? null
+    return evaluatePublicCondition(field.show_if, controllingValue)
+}
+
+function getFieldValidationError(field: FormField, value: AnswerValue): string | null {
+    if (field.type === "file") return null
+    if (field.required && isEmptyValue(value)) {
+        return `Please complete: ${field.label}`
+    }
+    if (isEmptyValue(value)) return null
+
+    if (field.type === "repeatable_table") {
+        if (!Array.isArray(value)) {
+            return `Please add at least one row for ${field.label}`
+        }
+        const minRows = field.min_rows ?? null
+        const maxRows = field.max_rows ?? null
+        if (minRows !== null && value.length < minRows) {
+            return `Please add at least ${minRows} rows for ${field.label}`
+        }
+        if (maxRows !== null && value.length > maxRows) {
+            return `Please limit ${field.label} to ${maxRows} rows`
+        }
+        const columns = field.columns || []
+        for (const row of value) {
+            if (!row || typeof row !== "object") {
+                return `Please complete ${field.label}`
+            }
+            for (const column of columns) {
+                if (!column.required) continue
+                const rowValue = (row as Record<string, unknown>)[column.key]
+                if (rowValue === null || rowValue === undefined || rowValue === "") {
+                    return `Please complete: ${column.label}`
+                }
+            }
+        }
+        return null
+    }
+
+    if (field.type === "table") {
+        if (!Array.isArray(value)) {
+            return `Please complete: ${field.label}`
+        }
+        const configuredRows = field.rows || []
+        const columns = field.columns || []
+        const submittedRows = new Map<string, TableRow>()
+
+        value.forEach((row) => {
+            if (!row || typeof row !== "object") {
+                return
+            }
+            const rowKey = (row as TableRow).row_key
+            if (typeof rowKey === "string" && rowKey) {
+                submittedRows.set(rowKey, row as TableRow)
+            }
+        })
+
+        for (const row of configuredRows) {
+            const submittedRow = submittedRows.get(row.key)
+            if (!submittedRow) {
+                return `Please complete: ${row.label}`
+            }
+            for (const column of columns) {
+                if (!column.required) continue
+                const rowValue = submittedRow[column.key]
+                if (rowValue === null || rowValue === undefined || rowValue === "") {
+                    return `Please complete: ${row.label} / ${column.label}`
+                }
+            }
+        }
+        return null
+    }
+
+    return getPublicFieldValidationError(field, value)
+}
+
+function getSuppressedIdentityFingerprints(ref: { current: Set<string> | null }): Set<string> {
+    if (ref.current === null) {
+        ref.current = new Set()
+    }
+    return ref.current
+}
+
+function getLookupCache(
+    ref: { current: Map<string, "no_match" | "match_found"> | null },
+): Map<string, "no_match" | "match_found"> {
+    if (ref.current === null) {
+        ref.current = new Map()
+    }
+    return ref.current
+}
+
+function persistDraftSessionForToken(
+    token: string,
+    sessionId: string,
+): void {
+    window.localStorage.setItem(`intake-draft-session:${token}`, sessionId)
+}
+
+async function saveDraftSessionNow({
+    token,
+    draftSessionId,
+    answers,
+    setDraftUpdatedAt,
+    setDraftSaveState,
+}: {
+    token: string
+    draftSessionId: string
+    answers: Answers
+    setDraftUpdatedAt: (value: string | null) => void
+    setDraftSaveState: (state: DraftSaveState) => void
+}): Promise<void> {
+    setDraftSaveState("saving")
+    try {
+        const res = await saveSharedPublicFormDraft(token, draftSessionId, answers)
+        persistDraftSessionForToken(token, draftSessionId)
+        setDraftUpdatedAt(res.updated_at)
+        setDraftSaveState("saved")
+    } catch (error) {
+        if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+            setDraftSaveState("idle")
+            return
+        }
+        setDraftSaveState("error")
+    }
 }
 
 function resolveResumeIdentity(schema: FormSchema, answers: Answers): ResumeIdentity | null {
@@ -622,21 +823,17 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const [agreed, setAgreed] = React.useState(false)
     const [logoError, setLogoError] = React.useState(false)
     const [draftRestored, setDraftRestored] = React.useState(false)
-    const [draftSaveState, setDraftSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
+    const [draftSaveState, setDraftSaveState] = React.useState<DraftSaveState>("idle")
     const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
-    const [draftSession, setDraftSession] = React.useState<DraftSessionState>(() => createDraftSessionState(slug))
+    const [draftSession] = React.useState<DraftSessionState>(() => createDraftSessionState(slug))
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const autosaveTimerRef = React.useRef<number | null>(null)
     const resumeLookupTimerRef = React.useRef<number | null>(null)
     const skipNextAutosaveRef = React.useRef(true)
-    const suppressedIdentityFingerprintsRef = React.useRef<Set<string>>(new Set())
-    const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found">>(new Map())
+    const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
+    const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
     const lookupSeqRef = React.useRef(0)
-
-    if (draftSession.slug !== slug) {
-        setDraftSession(createDraftSessionState(slug))
-    }
 
     const draftSessionId = draftSession.slug === slug ? draftSession.id : null
     const draftSessionExists = draftSession.slug === slug && draftSession.exists
@@ -678,9 +875,6 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     } catch (error) {
                         if (error instanceof ApiError && error.status === 404) {
                             window.localStorage.removeItem(`intake-draft-session:${token}`)
-                            setDraftSession((current) =>
-                                current.slug === token ? { ...current, exists: false } : current,
-                            )
                         } else {
                             setDraftSaveState("error")
                         }
@@ -706,12 +900,14 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
 
         const identity = resolveResumeIdentity(formConfig.form_schema, answers)
         if (!identity) return
+        const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(suppressedIdentityFingerprintsRef)
+        const lookupCache = getLookupCache(lookupCacheRef)
         const { fingerprint, lookupAnswers } = identity
-        if (suppressedIdentityFingerprintsRef.current.has(fingerprint)) {
+        if (suppressedIdentityFingerprints.has(fingerprint)) {
             return
         }
 
-        const cached = lookupCacheRef.current.get(fingerprint)
+        const cached = lookupCache.get(fingerprint)
         if (cached === "no_match") {
             return
         }
@@ -738,9 +934,9 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                     if (
                         result.status === "match_found" &&
                         result.source_draft_id &&
-                        !suppressedIdentityFingerprintsRef.current.has(fingerprint)
+                        !suppressedIdentityFingerprints.has(fingerprint)
                     ) {
-                        lookupCacheRef.current.set(fingerprint, "match_found")
+                        lookupCache.set(fingerprint, "match_found")
                         setResumePrompt({
                             sourceDraftId: result.source_draft_id,
                             updatedAt: result.updated_at ?? null,
@@ -749,7 +945,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                         return
                     }
 
-                    lookupCacheRef.current.set(fingerprint, "no_match")
+                    lookupCache.set(fingerprint, "no_match")
                     setResumePrompt((current) =>
                         current?.fingerprint === fingerprint ? null : current,
                     )
@@ -776,46 +972,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         token,
     ])
 
-    const isDraftValueEmpty = (value: AnswerValue): boolean => {
-        if (value === null || value === undefined) return true
-        if (typeof value === "string") return value.trim() === ""
-        if (typeof value === "number" || typeof value === "boolean") return false
-        if (Array.isArray(value)) return value.length === 0
-        if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length === 0
-        return false
-    }
-
-    const hasAnyDraftAnswer = React.useCallback(
-        (data: Answers) => Object.values(data).some((value) => !isDraftValueEmpty(value)),
-        [],
-    )
-
-    const persistDraftSession = React.useCallback((sessionId: string) => {
-        if (!token) return
-        window.localStorage.setItem(`intake-draft-session:${token}`, sessionId)
-        setDraftSession({ slug: token, id: sessionId, exists: true })
-    }, [token])
-
-    const saveDraftNow = React.useCallback(async () => {
-        if (!token || !formConfig || !draftSessionId) return
-        if (!hasAnyDraftAnswer(answers)) return
-
-        setDraftSaveState("saving")
-        try {
-            const res = await saveSharedPublicFormDraft(token, draftSessionId, answers)
-            persistDraftSession(draftSessionId)
-            setDraftUpdatedAt(res.updated_at)
-            setDraftSaveState("saved")
-        } catch (error) {
-            if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
-                setDraftSaveState("idle")
-                return
-            }
-            setDraftSaveState("error")
-        }
-    }, [answers, draftSessionId, formConfig, hasAnyDraftAnswer, persistDraftSession, token])
-
-    const handleContinuePreviousApplication = React.useCallback(async () => {
+    const handleContinuePreviousApplication = async () => {
         if (!activeResumePrompt || !draftSessionId || !formConfig) return
         setIsRestoringResume(true)
         const finishRestoring = () => setIsRestoringResume(false)
@@ -828,11 +985,12 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             const nextAnswers = filterDraftAnswersForSchema(formConfig.form_schema, restored.answers)
             skipNextAutosaveRef.current = true
             setAnswers(nextAnswers)
-            persistDraftSession(draftSessionId)
+            persistDraftSessionForToken(token, draftSessionId)
             setDraftUpdatedAt(restored.updated_at)
             setDraftSaveState("saved")
             setDraftRestored(true)
-            suppressedIdentityFingerprintsRef.current.add(activeResumePrompt.fingerprint)
+            const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(suppressedIdentityFingerprintsRef)
+            suppressedIdentityFingerprints.add(activeResumePrompt.fingerprint)
             setResumePrompt(null)
             toast.success("Restored your previous application")
             finishRestoring()
@@ -840,13 +998,14 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             toast.error("Unable to restore previous application")
             finishRestoring()
         }
-    }, [activeResumePrompt, draftSessionId, formConfig, persistDraftSession, token])
+    }
 
-    const handleStartNewApplication = React.useCallback(() => {
+    const handleStartNewApplication = () => {
         if (!activeResumePrompt) return
-        suppressedIdentityFingerprintsRef.current.add(activeResumePrompt.fingerprint)
+        const suppressedIdentityFingerprints = getSuppressedIdentityFingerprints(suppressedIdentityFingerprintsRef)
+        suppressedIdentityFingerprints.add(activeResumePrompt.fingerprint)
         setResumePrompt(null)
-    }, [activeResumePrompt])
+    }
 
     // Autosave drafts (answers only, not file uploads)
     React.useEffect(() => {
@@ -863,7 +1022,13 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             window.clearTimeout(autosaveTimerRef.current)
         }
         autosaveTimerRef.current = window.setTimeout(() => {
-            void saveDraftNow()
+            void saveDraftSessionNow({
+                token,
+                draftSessionId,
+                answers,
+                setDraftUpdatedAt,
+                setDraftSaveState,
+            })
         }, 1500)
 
         return () => {
@@ -872,7 +1037,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 autosaveTimerRef.current = null
             }
         }
-    }, [answers, draftSessionId, formConfig, hasAnyDraftAnswer, isSubmitted, saveDraftNow, token])
+    }, [answers, draftSessionId, formConfig, isSubmitted, token])
 
     const pages = formConfig?.form_schema.pages || []
     const hasAnyFileFields = pages.some((page) => page.fields.some((field) => field.type === "file"))
@@ -934,152 +1099,13 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         setAnswers((prev) => ({ ...prev, [field]: value }))
     }
 
-    const isEmptyValue = (value: AnswerValue) => {
-        if (value === null || value === undefined) return true
-        if (typeof value === "string") return value.trim() === ""
-        if (Array.isArray(value)) return value.length === 0
-        return false
-    }
-
-    const evaluateCondition = (
-        condition: FormSchema["pages"][number]["fields"][number]["show_if"],
-        value: AnswerValue,
-    ) => {
-        if (!condition) return true
-        const expected = condition.value
-        switch (condition.operator) {
-            case "is_empty":
-                return isEmptyValue(value)
-            case "is_not_empty":
-                return !isEmptyValue(value)
-            case "equals":
-                if (expected !== undefined && expected !== null && typeof expected === "string") {
-                    return value !== null && value !== undefined
-                        ? String(value) === expected
-                        : false
-                }
-                return value === expected
-            case "not_equals":
-                if (expected !== undefined && expected !== null && typeof expected === "string") {
-                    return value !== null && value !== undefined
-                        ? String(value) !== expected
-                        : true
-                }
-                return value !== expected
-            case "contains":
-                if (Array.isArray(value)) {
-                    const list = value.filter((item): item is string => typeof item === "string")
-                    return expected ? list.includes(String(expected)) : false
-                }
-                if (typeof value === "string" && typeof expected === "string") {
-                    return value.includes(expected)
-                }
-                return false
-            case "not_contains":
-                if (Array.isArray(value)) {
-                    const list = value.filter((item): item is string => typeof item === "string")
-                    return expected ? !list.includes(String(expected)) : true
-                }
-                if (typeof value === "string" && typeof expected === "string") {
-                    return !value.includes(expected)
-                }
-                return true
-            default:
-                return true
-        }
-    }
-
-    const isFieldVisible = (
-        field: FormSchema["pages"][number]["fields"][number],
-        values: Answers,
-    ) => {
-        if (!field.show_if) return true
-        const controllingValue = values[field.show_if.field_key] ?? null
-        return evaluateCondition(field.show_if, controllingValue)
-    }
-
     const visibleReviewPages = pages.map((page) => ({
         page,
-        fieldGroups: getVisibleFieldGroups(page.fields, answers, isFieldVisible),
+        fieldGroups: getVisibleFieldGroups(page.fields, answers, isPublicFieldVisible),
     }))
     const fileFields: FormField[] = []
     for (const reviewPage of visibleReviewPages) {
         fileFields.push(...reviewPage.fieldGroups.fileFields)
-    }
-
-    const getFieldValidationError = (
-        field: FormSchema["pages"][number]["fields"][number],
-        value: AnswerValue,
-    ): string | null => {
-        if (field.type === "file") return null
-        if (field.required && isEmptyValue(value)) {
-            return `Please complete: ${field.label}`
-        }
-        if (isEmptyValue(value)) return null
-
-        if (field.type === "repeatable_table") {
-            if (!Array.isArray(value)) {
-                return `Please add at least one row for ${field.label}`
-            }
-            const minRows = field.min_rows ?? null
-            const maxRows = field.max_rows ?? null
-            if (minRows !== null && value.length < minRows) {
-                return `Please add at least ${minRows} rows for ${field.label}`
-            }
-            if (maxRows !== null && value.length > maxRows) {
-                return `Please limit ${field.label} to ${maxRows} rows`
-            }
-            const columns = field.columns || []
-            for (const row of value) {
-                if (!row || typeof row !== "object") {
-                    return `Please complete ${field.label}`
-                }
-                for (const column of columns) {
-                    if (!column.required) continue
-                    const rowValue = (row as Record<string, unknown>)[column.key]
-                    if (rowValue === null || rowValue === undefined || rowValue === "") {
-                        return `Please complete: ${column.label}`
-                    }
-                }
-            }
-            return null
-        }
-
-        if (field.type === "table") {
-            if (!Array.isArray(value)) {
-                return `Please complete: ${field.label}`
-            }
-            const configuredRows = field.rows || []
-            const columns = field.columns || []
-            const submittedRows = new Map<string, TableRow>()
-
-            value.forEach((row) => {
-                if (!row || typeof row !== "object") {
-                    return
-                }
-                const rowKey = (row as TableRow).row_key
-                if (typeof rowKey === "string" && rowKey) {
-                    submittedRows.set(rowKey, row as TableRow)
-                }
-            })
-
-            for (const row of configuredRows) {
-                const submittedRow = submittedRows.get(row.key)
-                if (!submittedRow) {
-                    return `Please complete: ${row.label}`
-                }
-                for (const column of columns) {
-                    if (!column.required) continue
-                    const rowValue = submittedRow[column.key]
-                    if (rowValue === null || rowValue === undefined || rowValue === "") {
-                        return `Please complete: ${row.label} / ${column.label}`
-                    }
-                }
-            }
-            return null
-        }
-
-        return getPublicFieldValidationError(field, value)
     }
 
     const validateStep = (step: number): boolean => {
@@ -1089,7 +1115,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         const page = pages[step - 1]
         if (!page) return false
         for (const field of page.fields) {
-            if (!isFieldVisible(field, answers)) continue
+            if (!isPublicFieldVisible(field, answers)) continue
             const error = getFieldValidationError(field, answers[field.key] ?? null)
             if (error) {
                 toast.error(error)
@@ -1100,9 +1126,21 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
         return true
     }
 
+    const saveCurrentDraft = () => {
+        if (!token || !formConfig || !draftSessionId) return
+        if (!hasAnyDraftAnswer(answers)) return
+        return saveDraftSessionNow({
+            token,
+            draftSessionId,
+            answers,
+            setDraftUpdatedAt,
+            setDraftSaveState,
+        })
+    }
+
     const handleNext = () => {
         if (!validateStep(boundedCurrentStep)) return
-        if (!isPreview) void saveDraftNow()
+        if (!isPreview) void saveCurrentDraft()
         if (boundedCurrentStep < steps.length) {
             setCurrentStep(Math.min(boundedCurrentStep + 1, steps.length))
             window.scrollTo({ top: 0, behavior: "smooth" })
@@ -1111,7 +1149,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
 
     const handleBack = () => {
         if (boundedCurrentStep > 1) {
-            if (!isPreview) void saveDraftNow()
+            if (!isPreview) void saveCurrentDraft()
             setCurrentStep(Math.max(boundedCurrentStep - 1, 1))
             window.scrollTo({ top: 0, behavior: "smooth" })
         }
@@ -1127,7 +1165,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             const page = pages[index]
             if (!page) continue
             for (const field of page.fields) {
-                if (!isFieldVisible(field, answers)) continue
+                if (!isPublicFieldVisible(field, answers)) continue
                 const error = getFieldValidationError(field, answers[field.key] ?? null)
                 if (error) {
                     toast.error(error)
@@ -1177,7 +1215,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
     const isReviewStep = boundedCurrentStep === steps.length
     const currentPage = pages[boundedCurrentStep - 1]
     const currentVisibleFields = currentPage
-        ? getVisibleFieldGroups(currentPage.fields, answers, isFieldVisible)
+        ? getVisibleFieldGroups(currentPage.fields, answers, isPublicFieldVisible)
         : { standardFields: [], fileFields: [] }
 
     const renderFieldInput = (field: FormSchema["pages"][number]["fields"][number]) => {

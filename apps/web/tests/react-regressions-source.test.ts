@@ -1153,7 +1153,17 @@ describe("React regression guards (source)", () => {
     it("keeps hosted intake draft and resume state compiler-friendly", () => {
         const source = readSource("app/intake/[slug]/page.client.tsx")
 
+        expect(source).not.toContain("React.useCallback")
+        expect(source).toContain("function isDraftValueEmpty")
+        expect(source).toContain("function isEmptyValue")
+        expect(source).toContain("function isFullNameIdentityField")
+        expect(source).toContain("React.useRef<Set<string> | null>(null)")
+        expect(source).toContain('React.useRef<Map<string, "no_match" | "match_found"> | null>(null)')
+        expect(source).not.toContain("React.useRef<Set<string>>(new Set())")
+        expect(source).not.toContain('React.useRef<Map<string, "no_match" | "match_found">>(new Map())')
+        expect(source).not.toContain('role="progressbar"')
         expect(source).toContain("type DraftSessionState")
+        expect(source).not.toContain("setDraftSession")
         expect(source).not.toContain("setDraftSessionId")
         expect(source).not.toContain("setDraftSessionExists")
         expect(source).not.toContain('throw new Error("Invalid form payload")')

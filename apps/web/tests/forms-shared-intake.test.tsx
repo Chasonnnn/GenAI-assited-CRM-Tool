@@ -188,10 +188,10 @@ describe('Shared Intake Public Page', () => {
         render(<PublicIntakeFormClient slug="event-abc" />)
 
         expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
-        expect(screen.getByRole('progressbar', { name: /application progress/i })).toHaveAttribute(
-            'aria-valuenow',
-            '33',
-        )
+        const progress = screen.getByRole('progressbar', { name: /application progress/i })
+        expect(progress.tagName).toBe('PROGRESS')
+        expect(progress).toHaveAttribute('value', '33')
+        expect(progress).toHaveAttribute('max', '100')
     })
 
     it('treats unsaved uploads as an informational note', async () => {
@@ -215,6 +215,7 @@ describe('Shared Intake Public Page', () => {
 
         const uploadNote = await screen.findByText("Uploads aren't saved yet")
         expect(uploadNote.closest('[data-slot="public-upload-note"]')).toHaveClass('border-sky-200')
+        expect(screen.getByLabelText(/select files to upload/i)).toHaveAttribute('type', 'file')
     })
 
     it('uses example placeholders instead of repeating field labels', async () => {
