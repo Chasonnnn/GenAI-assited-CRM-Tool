@@ -42,6 +42,12 @@ const INTERVIEW_OUTCOMES: { value: InterviewOutcome; label: string; description:
     { value: "cancelled", label: "Cancelled", description: "Interview was cancelled" },
 ]
 
+function getMaxLocalDateTime(): string {
+    const now = new Date()
+    const offsetMs = now.getTimezoneOffset() * 60 * 1000
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
 export function LogInterviewOutcomeDialog({
     open,
     onOpenChange,
@@ -56,11 +62,7 @@ export function LogInterviewOutcomeDialog({
 
     const logInterviewOutcome = useLogInterviewOutcome()
 
-    const maxLocalDateTime = React.useMemo(() => {
-        const now = new Date()
-        const offsetMs = now.getTimezoneOffset() * 60 * 1000
-        return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16)
-    }, [])
+    const maxLocalDateTime = getMaxLocalDateTime()
 
     const isAppointmentUnlinked = !!appointmentId && !surrogateId
 

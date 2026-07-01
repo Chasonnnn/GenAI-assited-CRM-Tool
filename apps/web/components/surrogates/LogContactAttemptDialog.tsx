@@ -49,6 +49,12 @@ const CONTACT_OUTCOMES: { value: ContactOutcome; label: string; description: str
     { value: "email_bounced", label: "Email Bounced", description: "Email delivery failed" },
 ]
 
+function getMaxLocalDateTime(): string {
+    const now = new Date()
+    const offsetMs = now.getTimezoneOffset() * 60 * 1000
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
 export function LogContactAttemptDialog({
     open,
     onOpenChange,
@@ -62,11 +68,7 @@ export function LogContactAttemptDialog({
     const [isBackdating, setIsBackdating] = useState(false)
 
     const createContactAttempt = useCreateContactAttempt()
-    const maxLocalDateTime = React.useMemo(() => {
-        const now = new Date()
-        const offsetMs = now.getTimezoneOffset() * 60 * 1000
-        return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16)
-    }, [])
+    const maxLocalDateTime = getMaxLocalDateTime()
 
     const handleMethodToggle = (method: ContactMethod) => {
         setSelectedMethods(prev =>

@@ -2607,3 +2607,25 @@ Full command after Batch 115: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `391`
 - Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 207 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-51cd5e13-29be-4280-9883-a64d117108e6`
+
+## Batch 116
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/BulkChangeStageModal.tsx`, `components/surrogates/LogContactAttemptDialog.tsx`, `components/surrogates/LogInterviewOutcomeDialog.tsx` | Valid scanner finding: each flagged `React.useMemo` resolved to the React namespace import, and the React Doctor rule docs say to delete React `useMemo`/`useCallback`/`memo` wrappers when no preserve-manual-memoization case applies. | High | Replaced the bulk stage list `useMemo` with the plain filtered/sorted value and moved local max-datetime derivation into module-scope helpers for the contact and interview dialogs. Added a source guard covering all three dialogs. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "small surrogate stage dialogs"` failed on `BulkChangeStageModal` `React.useMemo`. GREEN: the same guard passed; `pnpm test --run tests/bulk-change-stage-modal.test.tsx tests/log-interview-outcome-dialog.test.tsx` passed with `6` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; changed-scope React Doctor scored `97 / 100`; full diagnostics dropped from `391` to `388`; global redundant manual memoization dropped from `93` to `90`. |
+| `react-doctor/prefer-useReducer` | `components/surrogates/LogContactAttemptDialog.tsx:63` | Valid but outside this batch: the dialog still has five related state fields. Consolidating them into a reducer is a broader state-shape refactor and should be handled as a separate behavior-preserving slice. | High | Logged for a later focused batch; no suppression added. | Changed-scope React Doctor reports this as the only remaining changed-file issue. |
+
+Changed-scope command after Batch 116: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Bugs 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3a7e813b-5741-4704-b71b-3f83c12f11db`
+- Note: remaining changed-file diagnostic is the valid `prefer-useReducer` state refactor for `LogContactAttemptDialog`.
+
+Full command after Batch 116: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `388`
+- Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 204 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-27d722a2-af7b-4626-99f5-377bf6d5342d`

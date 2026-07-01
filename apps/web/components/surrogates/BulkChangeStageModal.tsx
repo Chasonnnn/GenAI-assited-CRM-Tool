@@ -41,18 +41,14 @@ export function BulkChangeStageModal({
 }) {
     const [targetStageId, setTargetStageId] = React.useState("")
 
-    const immediateStages = React.useMemo(
-        () =>
-            stages
-                .filter(
-                    (stage) =>
-                        stage.is_active &&
-                        !stageUsesPauseBehavior(stage) &&
-                        !stageHasCapability(stage, "requires_delivery_details"),
-                )
-                .toSorted((a, b) => a.order - b.order),
-        [stages],
-    )
+    const immediateStages = stages
+        .filter(
+            (stage) =>
+                stage.is_active &&
+                !stageUsesPauseBehavior(stage) &&
+                !stageHasCapability(stage, "requires_delivery_details"),
+        )
+        .toSorted((a, b) => a.order - b.order)
 
     const handleOpenChange = (nextOpen: boolean) => {
         if (!nextOpen) {

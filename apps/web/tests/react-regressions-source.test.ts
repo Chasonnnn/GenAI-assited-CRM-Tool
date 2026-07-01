@@ -1666,6 +1666,22 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("React.useEffect")
     })
 
+    it("keeps small surrogate stage dialogs free of manual React memoization", () => {
+        const sources = [
+            "components/surrogates/BulkChangeStageModal.tsx",
+            "components/surrogates/LogContactAttemptDialog.tsx",
+            "components/surrogates/LogInterviewOutcomeDialog.tsx",
+        ].map(readSource)
+
+        for (const source of sources) {
+            expect(source).not.toContain("useMemo")
+            expect(source).not.toContain("useCallback")
+            expect(source).not.toContain("React.useMemo")
+            expect(source).not.toContain("React.useCallback")
+            expect(source).not.toContain("memo(")
+        }
+    })
+
     it("uses immutable sorting in unified calendar derived lists", () => {
         const source = readSource("components/appointments/UnifiedCalendar.tsx")
 
