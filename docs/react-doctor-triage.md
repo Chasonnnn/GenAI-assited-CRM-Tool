@@ -2419,3 +2419,30 @@ Full command after Batch 108: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `531`
 - Summary: `Bugs 152 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6ea854f3-0fcc-44cb-90bb-44961189366a`
+
+## Batch 109
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-forms.ts` form intake/submission mutations: `useSendFormIntakeLink`, `useApproveFormSubmission`, `useRejectFormSubmission`, `useUpdateSubmissionAnswers`, `useUploadSubmissionFile`, `useDeleteSubmissionFile` | Valid scanner finding with behavior already protected: these mutations already refreshed surrogate CRM, submission-list, surrogate-submission, and intake-lead caches through form-specific helper functions, but React Doctor's rule only detects cache operations inside mutation options. | High | Inline the existing cache invalidations inside each mutation `onSuccess` handler and add a source guard that fails if these hooks hide those cache operations behind helper wrappers again. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "form mutation cache invalidations"` failed on `invalidateFormSubmissionMutationCaches`. GREEN: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts` passed with `233` tests; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. Hook-scope React Doctor warnings dropped from `28` to `22`. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-forms.ts` `useUploadFormLogo` | False positive: form logo upload returns uploaded asset data for the caller to place into a draft or form update. It does not itself persist a form record or update a cached form collection. | High | Logged as invalid for this batch; no dummy invalidation added. | After Batch 109, the only remaining `use-forms.ts` warning is `use-forms.ts:519`, which is `useUploadFormLogo`. |
+
+Scoped command after Batch 109: `cd apps/web && npx -y react-doctor@latest lib/hooks --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics in scope: `22`
+- Summary: `Bugs 22 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-be43ad62-02ad-4670-b0ea-1de80b76567c`
+
+Changed-scope command after Batch 109: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 109: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `525`
+- Summary: `Bugs 146 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-51ea9c4b-0f7e-431e-aea4-05f261bc6d12`

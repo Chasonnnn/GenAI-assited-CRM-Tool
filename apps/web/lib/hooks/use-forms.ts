@@ -2,7 +2,7 @@
  * React Query hooks for forms and submissions.
  */
 
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     listForms,
     getForm,
@@ -49,13 +49,12 @@ import {
     type FormDeliverySettings,
     type ResolveSubmissionMatchPayload,
     type RetrySubmissionMatchPayload,
-    type FormSubmissionRead,
     type PromoteIntakeLeadPayload,
     type SubmissionAnswersUpdateResponse,
     type ListFormSubmissionsParams,
 } from '@/lib/api/forms'
 import { ApiError } from '@/lib/api'
-import { invalidateSurrogateCrmCaches } from './use-surrogates'
+import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates'
 
 export const formKeys = {
     all: ['forms'] as const,
@@ -79,46 +78,6 @@ export const formKeys = {
         [...formKeys.detail(formId), 'surrogate-draft', surrogateId] as const,
     templates: () => [...formKeys.all, 'templates'] as const,
     templateDetail: (id: string) => [...formKeys.templates(), id] as const,
-}
-
-function invalidateFormSubmissionMutationCaches(
-    queryClient: QueryClient,
-    submission: Pick<FormSubmissionRead, 'id' | 'form_id' | 'surrogate_id' | 'intake_lead_id'>
-) {
-    void queryClient.invalidateQueries({
-        queryKey: formKeys.submissionLists(submission.form_id),
-        exact: false,
-    })
-
-    if (submission.surrogate_id) {
-        void queryClient.invalidateQueries({
-            queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
-        })
-        invalidateSurrogateCrmCaches(queryClient, submission.surrogate_id)
-    }
-
-    if (submission.intake_lead_id) {
-        void queryClient.invalidateQueries({
-            queryKey: formKeys.intakeLead(submission.intake_lead_id),
-        })
-    }
-}
-
-function invalidateFormSubmissionFileMutationCaches(
-    queryClient: QueryClient,
-    formId: string,
-    surrogateId?: string | null
-) {
-    void queryClient.invalidateQueries({
-        queryKey: formKeys.submissionLists(formId),
-        exact: false,
-    })
-
-    if (surrogateId) {
-        void queryClient.invalidateQueries({
-            queryKey: formKeys.surrogateSubmission(formId, surrogateId),
-        })
-    }
 }
 
 export function useForms() {
@@ -341,7 +300,13 @@ export function useSendFormIntakeLink() {
             templateId?: string | null
         }) => sendFormIntakeLink(formId, linkId, surrogateId, templateId),
         onSuccess: (_data, { surrogateId }) => {
-            invalidateSurrogateCrmCaches(queryClient, surrogateId)
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) })
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+            void queryClient.invalidateQueries({
+                queryKey: ['analytics', 'activity-feed'],
+                exact: false,
+            })
         },
     })
 }
@@ -371,7 +336,29 @@ export function useApproveFormSubmission() {
         mutationFn: ({ submissionId, reviewNotes }: { submissionId: string; reviewNotes?: string | null }) =>
             approveSubmission(submissionId, reviewNotes),
         onSuccess: (submission) => {
-            invalidateFormSubmissionMutationCaches(queryClient, submission)
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(submission.form_id),
+                exact: false,
+            })
+
+            if (submission.surrogate_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
+            }
+
+            if (submission.intake_lead_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
+                })
+            }
         },
     })
 }
@@ -383,7 +370,29 @@ export function useRejectFormSubmission() {
         mutationFn: ({ submissionId, reviewNotes }: { submissionId: string; reviewNotes?: string | null }) =>
             rejectSubmission(submissionId, reviewNotes),
         onSuccess: (submission) => {
-            invalidateFormSubmissionMutationCaches(queryClient, submission)
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(submission.form_id),
+                exact: false,
+            })
+
+            if (submission.surrogate_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
+            }
+
+            if (submission.intake_lead_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
+                })
+            }
         },
     })
 }
@@ -409,7 +418,30 @@ export function useResolveSubmissionMatch() {
         }) => resolveSubmissionMatch(submissionId, payload),
         onSuccess: (result) => {
             const submission = result.submission
-            invalidateFormSubmissionMutationCaches(queryClient, submission)
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(submission.form_id),
+                exact: false,
+            })
+
+            if (submission.surrogate_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
+            }
+
+            if (submission.intake_lead_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
+                })
+            }
+
             void queryClient.invalidateQueries({
                 queryKey: formKeys.submissionMatchCandidates(submission.id),
             })
@@ -430,7 +462,30 @@ export function useRetrySubmissionMatch() {
         }) => retrySubmissionMatch(submissionId, payload),
         onSuccess: (result) => {
             const submission = result.submission
-            invalidateFormSubmissionMutationCaches(queryClient, submission)
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(submission.form_id),
+                exact: false,
+            })
+
+            if (submission.surrogate_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
+            }
+
+            if (submission.intake_lead_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
+                })
+            }
+
             void queryClient.invalidateQueries({
                 queryKey: formKeys.submissionMatchCandidates(submission.id),
             })
@@ -479,7 +534,30 @@ export function useUpdateSubmissionAnswers() {
             return updateSubmissionAnswers(submissionId, updates)
         },
         onSuccess: (result: SubmissionAnswersUpdateResponse) => {
-            invalidateFormSubmissionMutationCaches(queryClient, result.submission)
+            const submission = result.submission
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(submission.form_id),
+                exact: false,
+            })
+
+            if (submission.surrogate_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+                })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
+            }
+
+            if (submission.intake_lead_id) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
+                })
+            }
         },
     })
 }
@@ -504,7 +582,16 @@ export function useUploadSubmissionFile() {
             return { result: await uploadSubmissionFile(submissionId, file, fieldKey), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
-            invalidateFormSubmissionFileMutationCaches(queryClient, formId, surrogateId)
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(formId),
+                exact: false,
+            })
+
+            if (surrogateId) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(formId, surrogateId),
+                })
+            }
         },
     })
 }
@@ -571,7 +658,16 @@ export function useDeleteSubmissionFile() {
             return { result: await deleteSubmissionFile(submissionId, fileId), formId, surrogateId }
         },
         onSuccess: ({ formId, surrogateId }) => {
-            invalidateFormSubmissionFileMutationCaches(queryClient, formId, surrogateId)
+            void queryClient.invalidateQueries({
+                queryKey: formKeys.submissionLists(formId),
+                exact: false,
+            })
+
+            if (surrogateId) {
+                void queryClient.invalidateQueries({
+                    queryKey: formKeys.surrogateSubmission(formId, surrogateId),
+                })
+            }
         },
     })
 }

@@ -771,6 +771,48 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps form mutation cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-forms.ts")
+
+        expect(source).not.toContain("function invalidateFormSubmissionMutationCaches")
+        expect(source).not.toContain("function invalidateFormSubmissionFileMutationCaches")
+
+        const sendIntakeLinkSource = readExportedFunctionSource(source, "useSendFormIntakeLink")
+        expect(sendIntakeLinkSource).not.toContain("invalidateSurrogateCrmCaches(queryClient")
+        expect(sendIntakeLinkSource).toContain("queryKey: surrogateKeys.activity(surrogateId)")
+        expect(sendIntakeLinkSource).toContain("queryKey: surrogateKeys.detail(surrogateId)")
+        expect(sendIntakeLinkSource).toContain("queryKey: surrogateKeys.lists()")
+        expect(sendIntakeLinkSource).toContain("queryKey: ['analytics', 'activity-feed']")
+
+        for (const functionName of [
+            "useApproveFormSubmission",
+            "useRejectFormSubmission",
+            "useResolveSubmissionMatch",
+            "useRetrySubmissionMatch",
+            "useUpdateSubmissionAnswers",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("invalidateFormSubmissionMutationCaches(queryClient")
+            expect(functionSource, functionName).toContain("queryKey: formKeys.submissionLists(submission.form_id)")
+            expect(functionSource, functionName).toContain("queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id)")
+            expect(functionSource, functionName).toContain("queryKey: formKeys.intakeLead(submission.intake_lead_id)")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.activity(submission.surrogate_id)")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.detail(submission.surrogate_id)")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.lists()")
+            expect(functionSource, functionName).toContain("queryKey: ['analytics', 'activity-feed']")
+        }
+
+        for (const functionName of [
+            "useUploadSubmissionFile",
+            "useDeleteSubmissionFile",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("invalidateFormSubmissionFileMutationCaches(queryClient")
+            expect(functionSource, functionName).toContain("queryKey: formKeys.submissionLists(formId)")
+            expect(functionSource, functionName).toContain("queryKey: formKeys.surrogateSubmission(formId, surrogateId)")
+        }
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")
