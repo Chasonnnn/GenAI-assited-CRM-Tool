@@ -248,6 +248,7 @@ class Appointment(Base):
     __table_args__ = (
         Index("idx_appointments_user_date", "user_id", "scheduled_start"),
         Index("idx_appointments_org_status", "organization_id", "status"),
+        Index("idx_appointments_org_status_surrogate", "organization_id", "status", "surrogate_id"),
         Index("idx_appointments_org_user", "organization_id", "user_id"),
         Index("idx_appointments_org_created", "organization_id", "created_at"),
         Index("idx_appointments_org_updated", "organization_id", "updated_at"),

@@ -529,6 +529,19 @@ class SurrogateActivityLog(Base):
     __table_args__ = (
         Index("idx_surrogate_activity_surrogate_time", "surrogate_id", "created_at"),
         Index("idx_surrogate_activity_org_time", "organization_id", "created_at"),
+        Index(
+            "idx_surrogate_activity_org_surrogate_time",
+            "organization_id",
+            "surrogate_id",
+            "created_at",
+        ),
+        Index(
+            "idx_surrogate_activity_org_type_surrogate_time",
+            "organization_id",
+            "activity_type",
+            "surrogate_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

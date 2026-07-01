@@ -263,6 +263,29 @@ def _business_days_elapsed(
     return days
 
 
+def _business_day_cutoff_exclusive_utc(
+    *,
+    end_at_utc: datetime,
+    threshold_business_days: int,
+    timezone_name: str,
+) -> datetime:
+    """Return the UTC instant before which a row has reached the business-day threshold."""
+    if threshold_business_days <= 0:
+        return end_at_utc
+
+    tz = ZoneInfo(timezone_name)
+    cursor_date = end_at_utc.astimezone(tz).date()
+    remaining = threshold_business_days
+
+    while True:
+        local_dt = datetime.combine(cursor_date, time.min, tzinfo=tz)
+        if is_business_day(local_dt):
+            remaining -= 1
+            if remaining <= 0:
+                return local_dt.astimezone(timezone.utc)
+        cursor_date -= timedelta(days=1)
+
+
 def get_or_create_settings(
     db: Session,
     organization_id: UUID,
@@ -639,20 +662,17 @@ def _stage_inactivity_ids(
     else:
         return set()
 
-    matched: set[UUID] = set()
-    for surrogate_id, last_activity_at in query.all():
-        if last_activity_at is None:
-            continue
-        if (
-            _business_days_elapsed(
-                start_at_utc=last_activity_at,
-                end_at_utc=now_utc,
-                timezone_name=org_tz,
-            )
-            >= threshold_business_days
-        ):
-            matched.add(surrogate_id)
-    return matched
+    cutoff_exclusive_utc = _business_day_cutoff_exclusive_utc(
+        end_at_utc=now_utc,
+        threshold_business_days=threshold_business_days,
+        timezone_name=org_tz,
+    )
+    return {
+        surrogate_id
+        for surrogate_id, _last_activity_at in query.filter(
+            last_activity_col < cutoff_exclusive_utc
+        ).all()
+    }
 
 
 def _meeting_outcome_missing_ids(
@@ -731,20 +751,17 @@ def _meeting_outcome_missing_ids(
         )
     )
 
-    matched: set[UUID] = set()
-    for surrogate_id, latest_meeting_at, _latest_outcome_at in query.all():
-        if latest_meeting_at is None:
-            continue
-        if (
-            _business_days_elapsed(
-                start_at_utc=latest_meeting_at,
-                end_at_utc=now_utc,
-                timezone_name=org_tz,
-            )
-            >= threshold_business_days
-        ):
-            matched.add(surrogate_id)
-    return matched
+    cutoff_exclusive_utc = _business_day_cutoff_exclusive_utc(
+        end_at_utc=now_utc,
+        threshold_business_days=threshold_business_days,
+        timezone_name=org_tz,
+    )
+    return {
+        surrogate_id
+        for surrogate_id, _latest_meeting_at, _latest_outcome_at in query.filter(
+            latest_meeting_subquery.c.latest_meeting_at < cutoff_exclusive_utc
+        ).all()
+    }
 
 
 def _attention_owner_filters(

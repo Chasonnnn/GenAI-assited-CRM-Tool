@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.encryption import hash_email
 from app.db.enums import OwnerType, SurrogateSource
 from app.db.models import PipelineStage, Surrogate, SurrogateActivityLog
-from app.services import pipeline_service
+from app.services import intelligent_suggestions_service, pipeline_service
 
 
 def _ensure_intelligent_schema(db) -> None:
@@ -456,6 +456,77 @@ async def test_surrogates_dynamic_filter_invalid(authed_client):
     )
     assert response.status_code == 400
     assert "Invalid dynamic_filter" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_intelligent_suggestions_summary_filters_by_cutoff_without_row_loop(
+    authed_client,
+    db,
+    test_org,
+    default_stage,
+    test_user,
+    monkeypatch,
+):
+    _ensure_intelligent_schema(db)
+    now = datetime.now(timezone.utc)
+    stale = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91008",
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Summary Cutoff Stale",
+        email="summary-cutoff-stale@example.com",
+        email_hash=hash_email("summary-cutoff-stale@example.com"),
+        created_at=now - timedelta(days=10),
+        updated_at=now - timedelta(days=10),
+    )
+    fresh = Surrogate(
+        id=uuid.uuid4(),
+        surrogate_number="S91009",
+        organization_id=test_org.id,
+        stage_id=default_stage.id,
+        status_label=default_stage.label,
+        source=SurrogateSource.MANUAL.value,
+        owner_type=OwnerType.USER.value,
+        owner_id=test_user.id,
+        full_name="Summary Cutoff Fresh",
+        email="summary-cutoff-fresh@example.com",
+        email_hash=hash_email("summary-cutoff-fresh@example.com"),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add_all([stale, fresh])
+    db.flush()
+
+    def fail_business_days_elapsed(**_kwargs):
+        raise AssertionError("summary should use a cutoff filter, not per-row day counting")
+
+    monkeypatch.setattr(
+        intelligent_suggestions_service,
+        "_business_days_elapsed",
+        fail_business_days_elapsed,
+    )
+
+    response = await authed_client.get("/surrogates/intelligent-suggestions/summary")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["counts"]["intelligent_new_unread_stale"] >= 1
+
+    matched_ids = intelligent_suggestions_service.get_intelligent_rule_ids(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        user_role="developer",
+        rule_key=intelligent_suggestions_service.FILTER_INTELLIGENT_NEW_UNREAD,
+        now_utc=now + timedelta(minutes=1),
+    )
+    assert stale.id in matched_ids
+    assert fresh.id not in matched_ids
 
 
 @pytest.mark.asyncio
