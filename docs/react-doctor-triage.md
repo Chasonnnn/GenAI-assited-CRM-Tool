@@ -2567,3 +2567,22 @@ Full command after Batch 113: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `417`
 - Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 233 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-eeb84b42-019b-41d0-b8ab-69b65ce86671`
+
+## Batch 114
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/ActivityTimeline.tsx`, `components/intended-parents/IntendedParentActivityTimeline.tsx` | Valid scanner finding: every flagged `memo` and `useMemo` resolved to the React import. React Compiler is enabled for this app, and the React Doctor rule docs confirm these wrappers are redundant when no `preserve-manual-memoization` case applies. | High | Removed `memo` wrappers around timeline row components and replaced stage/task derivation `useMemo` calls with plain derivations. Added a source regression guard for both activity timeline files. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "activity timelines free of manual React memoization"` failed on `useMemo`. GREEN: the same guard passed; `pnpm test --run tests/activity-timeline.test.tsx tests/intended-parent-activity-timeline.test.tsx` passed with `20` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Changed-scope React Doctor reports no issues and scores `100 / 100`. Full manual memoization warnings dropped from `118` to `104`; full diagnostics dropped from `417` to `402`. |
+
+Changed-scope command after Batch 114: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 114: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `402`
+- Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 218 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-34288bce-07c6-4ebf-a1a5-c5c679734c98`

@@ -1833,6 +1833,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/upcoming\.sort\(sortByDueDate\)\.map/)
     })
 
+    it("keeps activity timelines free of manual React memoization", () => {
+        const surrogateTimelineSource = readSource("components/surrogates/ActivityTimeline.tsx")
+        const intendedParentTimelineSource = readSource("components/intended-parents/IntendedParentActivityTimeline.tsx")
+
+        for (const source of [surrogateTimelineSource, intendedParentTimelineSource]) {
+            expect(source).not.toContain("useMemo")
+            expect(source).not.toContain("memo(")
+            expect(source).not.toContain("React.useMemo")
+            expect(source).not.toContain("React.memo")
+        }
+    })
+
     it("uses single-pass intended-parent clinic section derivation", () => {
         const source = readSource("components/intended-parents/IntendedParentClinicCard.tsx")
 

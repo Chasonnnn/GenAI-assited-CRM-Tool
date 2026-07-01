@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, startTransition, useEffect, useMemo, useRef, useState } from "react"
+import { startTransition, useEffect, useRef, useState } from "react"
 import Link from "@/components/app-link"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
@@ -515,7 +515,7 @@ function buildTimelineData(
 // Activity Row Component
 // ============================================================================
 
-const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item }: { item: ActivityItem }) {
     const baseConfig = getActivityConfig(item.type)
     const outcomePresentation =
         item.outcomeKind && item.outcomeValue
@@ -555,14 +555,14 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) 
             <div className="text-xs text-muted-foreground shrink-0">{item.relativeDate}</div>
         </div>
     )
-})
+}
 
 const STAGE_ROW_CLASS =
     "grid w-full grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)] items-center gap-x-2 rounded py-2 text-left"
 const STAGE_ROW_LABEL_CLASS = "flex min-w-0 items-center gap-2"
 const STAGE_ROW_META_CLASS = "justify-self-end text-right text-xs text-muted-foreground"
 
-const StageEntryRow = memo(function StageEntryRow({
+function StageEntryRow({
     entryTitle,
     entryLabel,
     isBackdated,
@@ -590,13 +590,13 @@ const StageEntryRow = memo(function StageEntryRow({
             )}
         </div>
     )
-})
+}
 
 // ============================================================================
 // Task Row Component
 // ============================================================================
 
-const TaskRow = memo(function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: boolean }) {
+function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: boolean }) {
     const dueDate = task.due_date ? parseISO(task.due_date) : null
 
     let dueLabel = ""
@@ -624,7 +624,7 @@ const TaskRow = memo(function TaskRow({ task, isOverdue = false }: { task: TaskL
             </span>
         </div>
     )
-})
+}
 
 // ============================================================================
 // Main Component
@@ -654,25 +654,11 @@ export function ActivityTimeline({
     const [openStageIds, setOpenStageIds] = useState<Set<string>>(() => new Set())
     const lastSyncedOpenStageId = useRef<string | null | undefined>(undefined)
 
-    // Fetch stage history
     const { data: stageHistory = [] } = useSurrogateHistory(surrogateId)
 
-    // Memoize timeline building
-    const { stageGroups } = useMemo(
-        () => buildTimelineData(stages, stageHistory, activities, currentStageId, effectiveStageId),
-        [stages, stageHistory, activities, currentStageId, effectiveStageId]
-    )
-
-    // Apply windowing
-    const visibleStages = useMemo(
-        () => getVisibleStages(stageGroups, showFullJourney, effectiveStageId, currentStageId),
-        [stageGroups, showFullJourney, effectiveStageId, currentStageId]
-    )
-
-    const defaultOpenStageId = useMemo(
-        () => stageGroups.find((stage) => stage.id === currentStageId)?.id ?? null,
-        [stageGroups, currentStageId]
-    )
+    const { stageGroups } = buildTimelineData(stages, stageHistory, activities, currentStageId, effectiveStageId)
+    const visibleStages = getVisibleStages(stageGroups, showFullJourney, effectiveStageId, currentStageId)
+    const defaultOpenStageId = stageGroups.find((stage) => stage.id === currentStageId)?.id ?? null
 
     useEffect(() => {
         if (lastSyncedOpenStageId.current === defaultOpenStageId) {
@@ -684,8 +670,7 @@ export function ActivityTimeline({
         })
     }, [defaultOpenStageId])
 
-    // Task categorization
-    const { overdueTasks, upcomingTasks } = useMemo(() => {
+    const { overdueTasks, upcomingTasks } = (() => {
         const today = startOfToday()
         const overdueEntries: Array<{ task: TaskListItem; dueDate: Date }> = []
         const upcomingEntries: Array<{ task: TaskListItem; dueDate: Date }> = []
@@ -725,7 +710,7 @@ export function ActivityTimeline({
             overdueTasks,
             upcomingTasks,
         }
-    }, [tasks])
+    })()
 
     function handleStageToggle(stageId: string, isOpen: boolean) {
         setOpenStageIds((prev) => {

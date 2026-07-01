@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, startTransition, useEffect, useMemo, useRef, useState } from "react"
+import { startTransition, useEffect, useRef, useState } from "react"
 import { formatDistanceToNow, isBefore, parseISO, startOfToday } from "date-fns"
 import {
     ActivityIcon,
@@ -230,7 +230,7 @@ function buildTimelineData(
     })
 }
 
-const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item }: { item: ActivityItem }) {
     const config = ACTIVITY_TYPE_CONFIG[item.type]
     const Icon = config.icon
 
@@ -254,14 +254,14 @@ const ActivityRow = memo(function ActivityRow({ item }: { item: ActivityItem }) 
             <div className="shrink-0 text-xs text-muted-foreground">{item.relativeDate}</div>
         </div>
     )
-})
+}
 
 const STAGE_ROW_CLASS =
     "grid w-full grid-cols-[1rem_0.625rem_minmax(0,1fr)_minmax(6.5rem,max-content)] items-center gap-x-2 rounded py-2 text-left"
 const STAGE_ROW_LABEL_CLASS = "flex min-w-0 items-center gap-2"
 const STAGE_ROW_META_CLASS = "justify-self-end text-right text-xs text-muted-foreground"
 
-const StageEntryRow = memo(function StageEntryRow({
+function StageEntryRow({
     entryTitle,
     entryLabel,
     isBackdated,
@@ -285,9 +285,9 @@ const StageEntryRow = memo(function StageEntryRow({
             {entryLabel ? <div className="shrink-0 text-xs text-muted-foreground">{entryLabel}</div> : null}
         </div>
     )
-})
+}
 
-const TaskRow = memo(function TaskRow({
+function TaskRow({
     task,
     isOverdue = false,
 }: {
@@ -310,7 +310,7 @@ const TaskRow = memo(function TaskRow({
             </span>
         </div>
     )
-})
+}
 
 interface IntendedParentActivityTimelineProps {
     currentStageId: string
@@ -337,20 +337,9 @@ export function IntendedParentActivityTimeline({
     const [openStageIds, setOpenStageIds] = useState<Set<string>>(() => new Set())
     const lastDefaultStageKey = useRef<string | null>(null)
 
-    const stageGroups = useMemo(
-        () => buildTimelineData(stages, history, notes, attachments, currentStageId),
-        [stages, history, notes, attachments, currentStageId],
-    )
-
-    const visibleStages = useMemo(
-        () => getVisibleStages(stageGroups, showFullJourney, currentStageId),
-        [stageGroups, showFullJourney, currentStageId],
-    )
-
-    const hasCurrentStage = useMemo(
-        () => stageGroups.some((stage) => stage.id === currentStageId),
-        [stageGroups, currentStageId],
-    )
+    const stageGroups = buildTimelineData(stages, history, notes, attachments, currentStageId)
+    const visibleStages = getVisibleStages(stageGroups, showFullJourney, currentStageId)
+    const hasCurrentStage = stageGroups.some((stage) => stage.id === currentStageId)
 
     useEffect(() => {
         const defaultStageKey = hasCurrentStage ? currentStageId : `missing:${currentStageId}`
@@ -361,7 +350,7 @@ export function IntendedParentActivityTimeline({
         })
     }, [currentStageId, hasCurrentStage])
 
-    const { overdueTasks, upcomingTasks } = useMemo(() => {
+    const { overdueTasks, upcomingTasks } = (() => {
         const today = startOfToday()
         const overdue: PendingTaskEntry[] = []
         const upcoming: PendingTaskEntry[] = []
@@ -385,7 +374,7 @@ export function IntendedParentActivityTimeline({
             overdueTasks: overdue.sort(sortByDueDate).map((entry) => entry.task).slice(0, 3),
             upcomingTasks: upcoming.sort(sortByDueDate).map((entry) => entry.task).slice(0, 3),
         }
-    }, [tasks])
+    })()
 
     function handleStageToggle(stageId: string, isOpen: boolean) {
         setOpenStageIds((previous) => {
