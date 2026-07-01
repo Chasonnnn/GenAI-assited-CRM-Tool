@@ -2199,3 +2199,34 @@ Full command after Batch 100: `cd apps/web && npx react-doctor@latest . --verbos
 - Total diagnostics: `556`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 339 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8137139e-1718-45ac-9af6-b1ed7183f48a`
+
+## Batch 101
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/hooks/use-ai.ts`, `lib/hooks/use-browser-notifications.ts`, `lib/hooks/use-dashboard-socket.ts`, `lib/hooks/use-notification-socket.ts` | Valid with caveat: the `useCallback` wrappers were redundant under React Compiler, but the socket hooks could not be converted to raw render-scope callbacks because that introduced `exhaustive-deps` warnings and React Compiler errors. | High | Remove the remaining hook-level `useCallback` wrappers. Keep simple returned helpers as plain functions, move socket connector recursion into the owning effect, and combine notification socket connection state with `useReducer` so the changed files stay compiler-clean. Added a source guard that failed against the previous wrappers. | RED: `pnpm test --run tests/react-regressions-source.test.ts` failed on `useCallback`. GREEN: `pnpm test --run tests/react-regressions-source.test.ts tests/dashboard-socket.test.tsx tests/notification-socket-hook.test.tsx tests/notification-bell.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; hook-scope React Doctor manual memoization count dropped from `6` to `0`; changed-scope React Doctor reports no issues. |
+
+Invalid implementation shapes rejected during Batch 101:
+
+- Render-scope raw socket functions fixed manual memoization but introduced `react-hooks/exhaustive-deps` warnings and React Doctor compiler errors for hoisted function references.
+- Ref-backed socket functions fixed dependencies but wrote `ref.current` during render, which React Compiler rejects.
+
+Scoped command after Batch 101: `cd apps/web && npx react-doctor@latest lib/hooks --verbose`
+
+- Score: `75 / 100 Needs work`
+- Total diagnostics in scope: `47`
+- Summary: `Bugs 47 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d13c6dbb-f967-4d31-82f3-28454e74c5e3`
+
+Changed-scope command after Batch 101: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 101: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `550`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9fe11557-de99-4dc7-9b48-1c8d0c804223`

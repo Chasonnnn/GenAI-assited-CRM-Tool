@@ -8,7 +8,7 @@
  * Call showNotification(title, options) to show a notification
  */
 
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import type { Route } from 'next'
 import { useRouter } from 'next/navigation'
 import { getNotificationHref } from '@/lib/utils/notification-routing'
@@ -30,7 +30,7 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
     )
 
     // Request notification permission
-    const requestPermission = useCallback(async (): Promise<NotificationPermission> => {
+    async function requestPermission(): Promise<NotificationPermission> {
         if (!isSupported) return 'denied'
 
         try {
@@ -41,10 +41,10 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
             console.error('[Notifications] Failed to request permission:', error)
             return 'denied'
         }
-    }, [isSupported])
+    }
 
     // Show a notification
-    const showNotification = useCallback((
+    function showNotification(
         title: string,
         options?: {
             body?: string
@@ -54,7 +54,7 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
             entityId?: string
             notificationType?: string
         }
-    ) => {
+    ) {
         if (!isSupported || permission !== 'granted') {
             return null
         }
@@ -92,7 +92,7 @@ export function useBrowserNotifications(hookOptions: UseBrowserNotificationsOpti
             console.error('[Notifications] Failed to show notification:', error)
             return null
         }
-    }, [hookOptions, isSupported, permission, router])
+    }
 
     return {
         isSupported,

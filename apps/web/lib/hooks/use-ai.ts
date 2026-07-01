@@ -3,7 +3,6 @@
  */
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
 import * as aiApi from '../api/ai';
 import type { AISettingsUpdate, ChatRequest } from '../api/ai';
 
@@ -135,35 +134,32 @@ export function useSendMessage() {
 export function useStreamChatMessage() {
     const queryClient = useQueryClient();
 
-    return useCallback(
-        async (
-            request: ChatRequest,
-            onEvent: (event: aiApi.ChatStreamEvent) => void,
-            signal?: AbortSignal
-        ) => {
-            const response = await aiApi.streamChatMessage(
-                request,
-                onEvent,
-                signal ? { signal } : undefined
-            );
+    return async function streamChatMessage(
+        request: ChatRequest,
+        onEvent: (event: aiApi.ChatStreamEvent) => void,
+        signal?: AbortSignal
+    ) {
+        const response = await aiApi.streamChatMessage(
+            request,
+            onEvent,
+            signal ? { signal } : undefined
+        );
 
-            const isGlobal =
-                !request.entity_type || !request.entity_id || request.entity_type === 'global';
-            if (isGlobal) {
-                void queryClient.invalidateQueries({
-                    queryKey: [...aiKeys.all, 'conversation', 'global'],
-                });
-            } else {
-                void queryClient.invalidateQueries({
-                    queryKey: aiKeys.conversation(request.entity_type!, request.entity_id!),
-                });
-            }
-            invalidateAIUsageCaches(queryClient);
+        const isGlobal =
+            !request.entity_type || !request.entity_id || request.entity_type === 'global';
+        if (isGlobal) {
+            void queryClient.invalidateQueries({
+                queryKey: [...aiKeys.all, 'conversation', 'global'],
+            });
+        } else {
+            void queryClient.invalidateQueries({
+                queryKey: aiKeys.conversation(request.entity_type!, request.entity_id!),
+            });
+        }
+        invalidateAIUsageCaches(queryClient);
 
-            return response;
-        },
-        [queryClient]
-    );
+        return response;
+    };
 }
 
 // ============================================================================

@@ -395,6 +395,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps hook-level socket and stream callbacks compiler-friendly", () => {
+        const hookSources = [
+            readSource("lib/hooks/use-ai.ts"),
+            readSource("lib/hooks/use-browser-notifications.ts"),
+            readSource("lib/hooks/use-dashboard-socket.ts"),
+            readSource("lib/hooks/use-notification-socket.ts"),
+        ]
+
+        for (const source of hookSources) {
+            expect(source).not.toContain("useCallback")
+        }
+    })
+
     it("uses Next Image for journey, AI studio, and platform branding images", () => {
         const sources = [
             readSource("components/surrogates/journey/JourneyPrintView.tsx"),

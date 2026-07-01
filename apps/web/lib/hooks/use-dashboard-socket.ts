@@ -6,7 +6,7 @@
  * Includes auto-reconnect with exponential backoff.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { surrogateKeys } from './use-surrogates';
 import { useAuth } from '@/lib/auth-context';
@@ -45,125 +45,6 @@ export function useDashboardSocket(enabled: boolean = true) {
     const errorLoggedRef = useRef(false);
     const [isConnected, setIsConnected] = useState(false);
 
-    const connect = useCallback(function connectSocket() {
-        if (!enabled || !user) {
-            return;
-        }
-        if (Date.now() < handshakeRetrySuppressedUntil) {
-            return;
-        }
-        const existing = wsRef.current
-        if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
-            return
-        }
-
-        try {
-            const ws = new WebSocket(getWebSocketUrl('/ws/notifications'));
-            let hasOpened = false;
-
-            ws.onopen = () => {
-                hasOpened = true;
-                handshakeRetrySuppressedUntil = 0;
-                if (!isActiveRef.current || !enabled || !user) {
-                    ws.close(1000, "Inactive");
-                    return;
-                }
-                setIsConnected(true);
-                reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connect
-                errorLoggedRef.current = false;
-            };
-
-            ws.onmessage = (event) => {
-                if (event.data === 'pong') {
-                    return;
-                }
-
-                if (typeof event.data !== 'string') {
-                    return;
-                }
-
-                const trimmed = event.data.trim();
-                if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
-                    return;
-                }
-
-                let parsed: unknown
-                try {
-                    parsed = JSON.parse(trimmed)
-                } catch {
-                    return
-                }
-
-                if (!parsed || typeof parsed !== 'object') {
-                    return
-                }
-
-                const message = parsed as WebSocketMessage
-                if (message.type === 'stats_update') {
-                    // Stats payloads are org-wide; invalidate all keyed variants so
-                    // owner/date filtered queries refetch with their own params.
-                    void queryClient.invalidateQueries({
-                        queryKey: surrogateKeys.stats(),
-                        refetchType: 'active',
-                    })
-                }
-            };
-
-            ws.onerror = () => {
-                if (!isActiveRef.current || manualCloseRef.current) {
-                    return;
-                }
-                errorLoggedRef.current = true;
-            };
-
-            ws.onclose = (event) => {
-                setIsConnected(false);
-                wsRef.current = null;
-
-                if (!isActiveRef.current || !enabled || !user) {
-                    return;
-                }
-
-                if (manualCloseRef.current) {
-                    manualCloseRef.current = false;
-                    connectSocket();
-                    return;
-                }
-
-                if (AUTH_CLOSE_CODES.has(event.code)) {
-                    reconnectDelayRef.current = MAX_RECONNECT_DELAY;
-                    return;
-                }
-
-                if (!hasOpened && event.code === ABNORMAL_CLOSE_CODE) {
-                    reconnectDelayRef.current = MAX_RECONNECT_DELAY;
-                    handshakeRetrySuppressedUntil = Date.now() + HANDSHAKE_RETRY_SUPPRESSION_MS;
-                    return;
-                }
-
-                // Don't reconnect if explicitly closed or disabled
-                if (!enabled || event.code === 1000) {
-                    return;
-                }
-
-                // Reconnect with exponential backoff
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    connectSocket();
-                }, reconnectDelayRef.current);
-
-                // Double the delay for next attempt (up to max)
-                reconnectDelayRef.current = Math.min(
-                    reconnectDelayRef.current * 2,
-                    MAX_RECONNECT_DELAY
-                );
-            };
-
-            wsRef.current = ws;
-        } catch (e) {
-            console.error('[Dashboard WS] Failed to connect:', e);
-        }
-    }, [enabled, user, queryClient]);
-
     // Keep connection alive with periodic pings
     useEffect(() => {
         if (!enabled) return;
@@ -179,9 +60,128 @@ export function useDashboardSocket(enabled: boolean = true) {
 
     // Connect on mount, disconnect on unmount
     useEffect(() => {
+        function connectSocket() {
+            if (!enabled || !user) {
+                return;
+            }
+            if (Date.now() < handshakeRetrySuppressedUntil) {
+                return;
+            }
+            const existing = wsRef.current
+            if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+                return
+            }
+
+            try {
+                const ws = new WebSocket(getWebSocketUrl('/ws/notifications'));
+                let hasOpened = false;
+
+                ws.onopen = () => {
+                    hasOpened = true;
+                    handshakeRetrySuppressedUntil = 0;
+                    if (!isActiveRef.current || !enabled || !user) {
+                        ws.close(1000, "Inactive");
+                        return;
+                    }
+                    setIsConnected(true);
+                    reconnectDelayRef.current = INITIAL_RECONNECT_DELAY; // Reset delay on successful connect
+                    errorLoggedRef.current = false;
+                };
+
+                ws.onmessage = (event) => {
+                    if (event.data === 'pong') {
+                        return;
+                    }
+
+                    if (typeof event.data !== 'string') {
+                        return;
+                    }
+
+                    const trimmed = event.data.trim();
+                    if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+                        return;
+                    }
+
+                    let parsed: unknown
+                    try {
+                        parsed = JSON.parse(trimmed)
+                    } catch {
+                        return
+                    }
+
+                    if (!parsed || typeof parsed !== 'object') {
+                        return
+                    }
+
+                    const message = parsed as WebSocketMessage
+                    if (message.type === 'stats_update') {
+                        // Stats payloads are org-wide; invalidate all keyed variants so
+                        // owner/date filtered queries refetch with their own params.
+                        void queryClient.invalidateQueries({
+                            queryKey: surrogateKeys.stats(),
+                            refetchType: 'active',
+                        })
+                    }
+                };
+
+                ws.onerror = () => {
+                    if (!isActiveRef.current || manualCloseRef.current) {
+                        return;
+                    }
+                    errorLoggedRef.current = true;
+                };
+
+                ws.onclose = (event) => {
+                    setIsConnected(false);
+                    wsRef.current = null;
+
+                    if (!isActiveRef.current || !enabled || !user) {
+                        return;
+                    }
+
+                    if (manualCloseRef.current) {
+                        manualCloseRef.current = false;
+                        connectSocket();
+                        return;
+                    }
+
+                    if (AUTH_CLOSE_CODES.has(event.code)) {
+                        reconnectDelayRef.current = MAX_RECONNECT_DELAY;
+                        return;
+                    }
+
+                    if (!hasOpened && event.code === ABNORMAL_CLOSE_CODE) {
+                        reconnectDelayRef.current = MAX_RECONNECT_DELAY;
+                        handshakeRetrySuppressedUntil = Date.now() + HANDSHAKE_RETRY_SUPPRESSION_MS;
+                        return;
+                    }
+
+                    // Don't reconnect if explicitly closed or disabled
+                    if (!enabled || event.code === 1000) {
+                        return;
+                    }
+
+                    // Reconnect with exponential backoff
+                    reconnectTimeoutRef.current = setTimeout(() => {
+                        connectSocket();
+                    }, reconnectDelayRef.current);
+
+                    // Double the delay for next attempt (up to max)
+                    reconnectDelayRef.current = Math.min(
+                        reconnectDelayRef.current * 2,
+                        MAX_RECONNECT_DELAY
+                    );
+                };
+
+                wsRef.current = ws;
+            } catch (e) {
+                console.error('[Dashboard WS] Failed to connect:', e);
+            }
+        }
+
         isActiveRef.current = true;
         if (enabled && user) {
-            connect();
+            connectSocket();
         }
 
         return () => {
@@ -195,7 +195,7 @@ export function useDashboardSocket(enabled: boolean = true) {
                 wsRef.current = null;
             }
         };
-    }, [enabled, user, connect]);
+    }, [enabled, queryClient, user]);
 
     return {
         isConnected,
