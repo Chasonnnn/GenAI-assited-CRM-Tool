@@ -1662,3 +1662,23 @@ Full command after Batch 80: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `718`
 - Summary: `Bugs 176 warnings`, `Performance 37 warnings`, `Accessibility 38 warnings`, `Maintainability 467 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-622a3907-993d-4d2c-b6ab-045b7e94a500`
+
+## Batch 81
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/embed/forms/[slug]/page.client.tsx` | Valid: the public embed client wrapped parent messaging, session creation, visible-field derivation, and renderable-field derivation in `React.useCallback`/`React.useMemo`. React Compiler is enabled, and these wrappers were not protecting a preserve-manual-memoization case. | High | Move parent postMessage and embed-session creation helpers to module scope, derive visible and renderable fields directly in render, and extend the source guard so it failed on the old manual memoization. | `pnpm test --run tests/react-regressions-source.test.ts tests/forms-embed.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor for `app/embed/forms/[slug]` no longer reports manual memoization; full React Doctor manual memoization count dropped from `344` to `340`. |
+| `react-doctor/prefer-useReducer` | `app/embed/forms/[slug]/page.client.tsx` | Valid: form load state, session state, answers, date-picker state, submit state, submitted state, and errors were maintained through several related `useState` calls in one workflow. | High | Group the embed form state in `embedFormReducer`, keep duplicate-session guards in refs, and pass a reducer-backed date-picker setter to `PublicFormFieldRenderer`. Added a source guard that failed before the reducer and existing embed behavior tests cover load, session creation, sanitized attribution, validation, submit, lifecycle messages, and duplicate-session prevention. | Scoped React Doctor for `app/embed/forms/[slug]` reports `100 / 100` with no issues; changed-scope React Doctor reports `100 / 100` with no issues. |
+
+Changed-scope command after Batch 81: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 81: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `713`
+- Summary: `Bugs 175 warnings`, `Performance 37 warnings`, `Accessibility 38 warnings`, `Maintainability 463 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-12fb686e-138b-4b21-9068-fae4aa21f88c`

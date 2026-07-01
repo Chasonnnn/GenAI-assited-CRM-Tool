@@ -27,14 +27,40 @@ type Props = {
 type Answers = Record<string, PublicFormAnswerValue>
 type ParentMessage =
     | { type: string; attribution?: Record<string, unknown> }
-type EmbedBootstrapState = {
-    parentOrigin: string | null
-    isLoading: boolean
-    error: string | null
-}
 type EmbedSessionState = {
     key: string
     token: string
+}
+type EmbedFormState = {
+    parentOrigin: string | null
+    formConfig: FormEmbedPublicRead | null
+    sessionState: EmbedSessionState | null
+    answers: Answers
+    datePickerOpen: Record<string, boolean>
+    isLoading: boolean
+    isSubmitting: boolean
+    isSubmitted: boolean
+    error: string | null
+}
+type EmbedFormAction =
+    | { type: "formLoadSucceeded"; formConfig: FormEmbedPublicRead }
+    | { type: "formLoadFailed" }
+    | { type: "sessionCreated"; sessionState: EmbedSessionState }
+    | { type: "sessionFailed" }
+    | { type: "answerChanged"; fieldKey: string; value: PublicFormAnswerValue }
+    | { type: "datePickerOpenChanged"; update: React.SetStateAction<Record<string, boolean>> }
+    | { type: "validationFailed"; error: string }
+    | { type: "submissionStarted" }
+    | { type: "submissionSucceeded" }
+    | { type: "submissionFailed" }
+type EnsureEmbedSessionArgs = {
+    slug: string
+    origin: string
+    attribution: Record<string, unknown>
+    sessionStateRef: { current: EmbedSessionState | null }
+    sessionRequestKeyRef: { current: string | null }
+    onSessionCreated: (sessionState: EmbedSessionState) => void
+    onSessionFailed: () => void
 }
 
 const pageClassName = "public-form-light min-h-screen bg-transparent text-stone-900"
@@ -68,11 +94,17 @@ function getInitialParentOrigin(): string | null {
     return null
 }
 
-function createEmbedBootstrapState(initialParentOrigin: string | null | undefined): EmbedBootstrapState {
+function createInitialEmbedFormState(initialParentOrigin: string | null | undefined): EmbedFormState {
     const parentOrigin = initialParentOrigin ?? getInitialParentOrigin()
     return {
         parentOrigin,
+        formConfig: null,
+        sessionState: null,
+        answers: {},
+        datePickerOpen: {},
         isLoading: Boolean(parentOrigin),
+        isSubmitting: false,
+        isSubmitted: false,
         error: parentOrigin ? null : "This form is not available for this website.",
     }
 }
@@ -132,69 +164,143 @@ function asJsonObject(answers: Answers): JsonObject {
     return answers as unknown as JsonObject
 }
 
+function embedFormReducer(state: EmbedFormState, action: EmbedFormAction): EmbedFormState {
+    switch (action.type) {
+        case "formLoadSucceeded":
+            return {
+                ...state,
+                formConfig: action.formConfig,
+                isLoading: false,
+                error: null,
+            }
+        case "formLoadFailed":
+            return {
+                ...state,
+                isLoading: false,
+                error: "This form is not available for this website.",
+            }
+        case "sessionCreated":
+            return {
+                ...state,
+                sessionState: action.sessionState,
+            }
+        case "sessionFailed":
+            return {
+                ...state,
+                error: "This form is not available for this website.",
+            }
+        case "answerChanged":
+            return {
+                ...state,
+                answers: {
+                    ...state.answers,
+                    [action.fieldKey]: action.value,
+                },
+            }
+        case "datePickerOpenChanged": {
+            const datePickerOpen =
+                typeof action.update === "function" ? action.update(state.datePickerOpen) : action.update
+            return {
+                ...state,
+                datePickerOpen,
+            }
+        }
+        case "validationFailed":
+            return {
+                ...state,
+                error: action.error,
+            }
+        case "submissionStarted":
+            return {
+                ...state,
+                isSubmitting: true,
+                error: null,
+            }
+        case "submissionSucceeded":
+            return {
+                ...state,
+                isSubmitting: false,
+                isSubmitted: true,
+            }
+        case "submissionFailed":
+            return {
+                ...state,
+                isSubmitting: false,
+                error: "Unable to submit the form. Please try again.",
+            }
+    }
+}
+
+function postEmbedMessageToParent(parentOrigin: string | null, message: Record<string, unknown>): void {
+    if (!parentOrigin || window.parent === window) return
+    window.parent.postMessage(message, parentOrigin)
+}
+
+function ensureEmbedSession({
+    slug,
+    origin,
+    attribution,
+    sessionStateRef,
+    sessionRequestKeyRef,
+    onSessionCreated,
+    onSessionFailed,
+}: EnsureEmbedSessionArgs): void {
+    const sessionKey = getEmbedSessionKey(slug, origin)
+    if (sessionStateRef.current?.key === sessionKey || sessionRequestKeyRef.current === sessionKey) return
+    sessionRequestKeyRef.current = sessionKey
+    void (async () => {
+        try {
+            const session = await createEmbedFormSession(slug, origin, attribution)
+            const nextSession = {
+                key: sessionKey,
+                token: session.session_token,
+            }
+            sessionStateRef.current = nextSession
+            onSessionCreated(nextSession)
+        } catch {
+            onSessionFailed()
+        }
+        if (sessionRequestKeyRef.current === sessionKey) {
+            sessionRequestKeyRef.current = null
+        }
+    })()
+}
+
 export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props) {
     const containerRef = React.useRef<HTMLDivElement | null>(null)
     const sessionStateRef = React.useRef<EmbedSessionState | null>(null)
     const sessionRequestKeyRef = React.useRef<string | null>(null)
-    const [bootstrapState] = React.useState<EmbedBootstrapState>(() =>
-        createEmbedBootstrapState(initialParentOrigin),
+    const [state, dispatch] = React.useReducer(
+        embedFormReducer,
+        initialParentOrigin,
+        createInitialEmbedFormState,
     )
-    const parentOrigin = bootstrapState.parentOrigin
-    const [formConfig, setFormConfig] = React.useState<FormEmbedPublicRead | null>(null)
-    const [sessionState, setSessionState] = React.useState<EmbedSessionState | null>(null)
-    const [answers, setAnswers] = React.useState<Answers>({})
-    const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
-    const [isLoading, setIsLoading] = React.useState(bootstrapState.isLoading)
-    const [isSubmitting, setIsSubmitting] = React.useState(false)
-    const [isSubmitted, setIsSubmitted] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(bootstrapState.error)
+    const {
+        parentOrigin,
+        formConfig,
+        sessionState,
+        answers,
+        datePickerOpen,
+        isLoading,
+        isSubmitting,
+        isSubmitted,
+        error,
+    } = state
     const activeSessionKey = parentOrigin ? getEmbedSessionKey(slug, parentOrigin) : null
     const sessionToken = sessionState?.key === activeSessionKey ? sessionState.token : null
-
-    const postToParent = React.useCallback(
-        (message: Record<string, unknown>) => {
-            if (!parentOrigin || window.parent === window) return
-            window.parent.postMessage(message, parentOrigin)
-        },
-        [parentOrigin],
-    )
-
-    const ensureSession = React.useCallback(
-        (origin: string, attribution: Record<string, unknown>) => {
-            const sessionKey = getEmbedSessionKey(slug, origin)
-            if (sessionStateRef.current?.key === sessionKey || sessionRequestKeyRef.current === sessionKey) return
-            sessionRequestKeyRef.current = sessionKey
-            void (async () => {
-                try {
-                    const session = await createEmbedFormSession(slug, origin, attribution)
-                    const nextSession = {
-                        key: sessionKey,
-                        token: session.session_token,
-                    }
-                    sessionStateRef.current = nextSession
-                    setSessionState(nextSession)
-                } catch {
-                    setError("This form is not available for this website.")
-                }
-                if (sessionRequestKeyRef.current === sessionKey) {
-                    sessionRequestKeyRef.current = null
-                }
-            })()
-        },
-        [slug],
-    )
+    const setDatePickerOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>> = (update) => {
+        dispatch({ type: "datePickerOpenChanged", update })
+    }
 
     React.useEffect(() => {
         if (!parentOrigin) return
         const loadForm = async () => {
             try {
                 const form = await getEmbedPublicForm(slug, parentOrigin)
-                setFormConfig(form)
-                setError(null)
+                dispatch({ type: "formLoadSucceeded", formConfig: form })
             } catch {
-                setError("This form is not available for this website.")
+                dispatch({ type: "formLoadFailed" })
             }
-            setIsLoading(false)
         }
         void loadForm()
     }, [parentOrigin, slug])
@@ -204,26 +310,42 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
         const onMessage = (event: MessageEvent<ParentMessage>) => {
             if (event.origin !== parentOrigin) return
             if (!event.data || event.data.type !== "sf:form:init") return
-            ensureSession(event.origin, sanitizeAttribution(event.data.attribution))
+            ensureEmbedSession({
+                slug,
+                origin: event.origin,
+                attribution: sanitizeAttribution(event.data.attribution),
+                sessionStateRef,
+                sessionRequestKeyRef,
+                onSessionCreated: (nextSession) => dispatch({ type: "sessionCreated", sessionState: nextSession }),
+                onSessionFailed: () => dispatch({ type: "sessionFailed" }),
+            })
         }
         window.addEventListener("message", onMessage)
-        postToParent({ type: "sf:form:ready" })
+        postEmbedMessageToParent(parentOrigin, { type: "sf:form:ready" })
 
         const fallback = window.setTimeout(() => {
-            ensureSession(parentOrigin, {})
+            ensureEmbedSession({
+                slug,
+                origin: parentOrigin,
+                attribution: {},
+                sessionStateRef,
+                sessionRequestKeyRef,
+                onSessionCreated: (nextSession) => dispatch({ type: "sessionCreated", sessionState: nextSession }),
+                onSessionFailed: () => dispatch({ type: "sessionFailed" }),
+            })
         }, 1000)
 
         return () => {
             window.removeEventListener("message", onMessage)
             window.clearTimeout(fallback)
         }
-    }, [ensureSession, formConfig, parentOrigin, postToParent])
+    }, [formConfig, parentOrigin, slug])
 
     React.useEffect(() => {
         if (!containerRef.current) return
         const element = containerRef.current
         const sendHeight = () => {
-            postToParent({
+            postEmbedMessageToParent(parentOrigin, {
                 type: "sf:form:resize",
                 height: Math.ceil(element.getBoundingClientRect().height),
             })
@@ -232,30 +354,24 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
         observer.observe(element)
         sendHeight()
         return () => observer.disconnect()
-    }, [postToParent, formConfig, error, isLoading, isSubmitted])
+    }, [parentOrigin, formConfig, error, isLoading, isSubmitted])
 
-    const visibleFields = React.useMemo(() => {
-        const pages = formConfig?.form_schema.pages || []
-        const fields: FormField[] = []
-        for (const page of pages) {
-            for (const field of page.fields) {
-                if (evaluateCondition(field, answers)) fields.push(field)
-            }
+    const pages = formConfig?.form_schema.pages || []
+    const visibleFields: FormField[] = []
+    for (const page of pages) {
+        for (const field of page.fields) {
+            if (evaluateCondition(field, answers)) visibleFields.push(field)
         }
-        return fields
-    }, [answers, formConfig])
+    }
 
-    const renderableFields = React.useMemo(() => {
-        const fields: FormField[] = []
-        for (const field of visibleFields) {
-            if (field.type !== "file") fields.push(field)
-        }
-        return fields
-    }, [visibleFields])
+    const renderableFields: FormField[] = []
+    for (const field of visibleFields) {
+        if (field.type !== "file") renderableFields.push(field)
+    }
 
     const updateField = (fieldKey: string, value: PublicFormAnswerValue) => {
-        setAnswers((current) => ({ ...current, [fieldKey]: value }))
-        postToParent({ type: "sf:form:started" })
+        dispatch({ type: "answerChanged", fieldKey, value })
+        postEmbedMessageToParent(parentOrigin, { type: "sf:form:started" })
     }
 
     const validate = (): string | null => {
@@ -275,14 +391,13 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
     const handleSubmit = async () => {
         const validationError = validate()
         if (validationError) {
-            setError(validationError)
-            postToParent({ type: "sf:form:error", reason: "validation" })
+            dispatch({ type: "validationFailed", error: validationError })
+            postEmbedMessageToParent(parentOrigin, { type: "sf:form:error", reason: "validation" })
             return
         }
         if (!formConfig || !sessionToken) return
 
-        setIsSubmitting(true)
-        setError(null)
+        dispatch({ type: "submissionStarted" })
         try {
             const response = await submitEmbedPublicForm(slug, {
                 embed_session_token: sessionToken,
@@ -291,16 +406,15 @@ export default function EmbedFormPageClient({ slug, initialParentOrigin }: Props
                 answers: asJsonObject(answers),
                 attribution: {},
             })
-            setIsSubmitted(true)
-            postToParent({
+            postEmbedMessageToParent(parentOrigin, {
                 type: "sf:form:submitted",
                 submissionRef: response.id,
             })
+            dispatch({ type: "submissionSucceeded" })
         } catch {
-            setError("Unable to submit the form. Please try again.")
-            postToParent({ type: "sf:form:error", reason: "submit" })
+            dispatch({ type: "submissionFailed" })
+            postEmbedMessageToParent(parentOrigin, { type: "sf:form:error", reason: "submit" })
         }
-        setIsSubmitting(false)
     }
 
     return (

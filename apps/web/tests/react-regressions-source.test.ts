@@ -1093,7 +1093,10 @@ describe("React regression guards (source)", () => {
     it("keeps public embed field visibility filtering single pass", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
 
-        expect(source).toContain("const renderableFields = React.useMemo")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+        expect(source).toContain("const visibleFields: FormField[] = []")
+        expect(source).toContain("const renderableFields: FormField[] = []")
         expect(source).not.toContain("pages.flatMap((page) => page.fields).filter")
         expect(source).not.toMatch(/visibleFields\s*\.filter\(\(field\) => field\.type !== "file"\)\s*\.map/)
     })
@@ -1101,7 +1104,12 @@ describe("React regression guards (source)", () => {
     it("keeps public embed origin and session state compiler-friendly", () => {
         const source = readSource("app/embed/forms/[slug]/page.client.tsx")
 
-        expect(source).toContain("type EmbedBootstrapState")
+        expect(source).toContain("function embedFormReducer")
+        expect(source).toContain("const [state, dispatch] = React.useReducer(")
+        expect(source).not.toContain("React.useState<FormEmbedPublicRead")
+        expect(source).not.toContain("React.useState<EmbedSessionState")
+        expect(source).not.toContain("React.useState<Answers>")
+        expect(source).not.toContain("React.useState<Record<string, boolean>>")
         expect(source).toContain("type EmbedSessionState")
         expect(source).not.toContain("setParentOrigin")
         expect(source).not.toContain("setSessionToken")
