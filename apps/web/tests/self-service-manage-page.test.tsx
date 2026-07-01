@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import * as React from "react"
 
@@ -59,6 +59,8 @@ async function renderManagePage(searchParams: Record<string, string> = {}) {
 
 describe("Self-service manage appointment page", () => {
     beforeEach(() => {
+        vi.useFakeTimers({ shouldAdvanceTime: true })
+        vi.setSystemTime(new Date("2026-06-01T12:00:00.000Z"))
         vi.clearAllMocks()
         getAppointmentForManageMock.mockResolvedValue(APPOINTMENT)
         getRescheduleSlotsByTokenMock.mockResolvedValue({
@@ -72,6 +74,10 @@ describe("Self-service manage appointment page", () => {
         })
         rescheduleByManageTokenMock.mockResolvedValue(APPOINTMENT)
         cancelByManageTokenMock.mockResolvedValue({ ...APPOINTMENT, status: "cancelled" })
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
     })
 
     it("renders invalid/expired token error state", async () => {
