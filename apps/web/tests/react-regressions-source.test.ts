@@ -1884,6 +1884,16 @@ describe("React regression guards (source)", () => {
         expect(roleDetailSource).not.toContain("useMemo")
     })
 
+    it("keeps audit settings export derivations compiler-friendly", () => {
+        const source = readSource("app/(app)/settings/audit/page.tsx")
+
+        expect(source).toContain("function isExportFormat(")
+        expect(source).toContain("function isRedactMode(")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("const isExportFormat =")
+        expect(source).not.toContain("const isRedactMode =")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

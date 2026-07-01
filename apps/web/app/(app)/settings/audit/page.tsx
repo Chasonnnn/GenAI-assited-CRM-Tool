@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { formatDateTime, formatRelativeTime } from "@/lib/formatters"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -47,6 +47,25 @@ const AI_EVENT_LABELS: Record<string, { label: string; icon: React.ElementType; 
     ai_action_denied: { label: "Denied", icon: AlertTriangle, tone: "text-amber-600" },
 }
 
+type ExportFormat = "csv" | "json"
+
+function isExportFormat(value: string | null): value is ExportFormat {
+    return value === "csv" || value === "json"
+}
+
+type RedactMode = "redacted" | "full"
+
+function isRedactMode(value: string | null): value is RedactMode {
+    return value === "redacted" || value === "full"
+}
+
+const AI_ACTIVITY_HOURS = [24, 168, 720] as const
+type AiActivityHours = (typeof AI_ACTIVITY_HOURS)[number]
+
+function isAiActivityHours(value: number): value is AiActivityHours {
+    return AI_ACTIVITY_HOURS.includes(value as AiActivityHours)
+}
+
 function getEventConfig(eventType: string) {
     return EVENT_CONFIG[eventType] || {
         icon: FileText,
@@ -63,19 +82,6 @@ export default function AuditLogPage() {
     const [eventTypeFilter, setEventTypeFilter] = useState<string>("all")
     const perPage = 20
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
-
-    type ExportFormat = "csv" | "json"
-    const isExportFormat = (value: string | null): value is ExportFormat =>
-        value === "csv" || value === "json"
-
-    type RedactMode = "redacted" | "full"
-    const isRedactMode = (value: string | null): value is RedactMode =>
-        value === "redacted" || value === "full"
-
-    const AI_ACTIVITY_HOURS = [24, 168, 720] as const
-    type AiActivityHours = (typeof AI_ACTIVITY_HOURS)[number]
-    const isAiActivityHours = (value: number): value is AiActivityHours =>
-        AI_ACTIVITY_HOURS.includes(value as AiActivityHours)
 
     const [exportFormat, setExportFormat] = useState<ExportFormat>("csv")
     const [redactMode, setRedactMode] = useState<RedactMode>("redacted")
@@ -103,16 +109,11 @@ export default function AuditLogPage() {
 
     const totalPages = auditData ? Math.ceil(auditData.total / perPage) : 0
 
-    const visibleExportJobs = useMemo(() => {
-        const items = exportJobs?.items ?? []
-        if (isDeveloper) return items
-        return items.filter(job => job.redact_mode !== "full")
-    }, [exportJobs, isDeveloper])
-
-    const hasPendingExports = useMemo(
-        () => visibleExportJobs.some(job => ["pending", "processing"].includes(job.status)),
-        [visibleExportJobs]
-    )
+    const exportJobItems = exportJobs?.items ?? []
+    const visibleExportJobs = isDeveloper
+        ? exportJobItems
+        : exportJobItems.filter(job => job.redact_mode !== "full")
+    const hasPendingExports = visibleExportJobs.some(job => ["pending", "processing"].includes(job.status))
 
     useEffect(() => {
         if (!hasPendingExports) return

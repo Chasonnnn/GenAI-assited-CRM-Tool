@@ -1447,3 +1447,25 @@ Full command after Batch 70: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `800`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 546 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1f087f8c-301a-40fe-8593-4ab84c944531`
+
+## Batch 71
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/prefer-module-scope-pure-function` | `app/(app)/settings/audit/page.tsx` | Valid: the audit settings page manually memoized deterministic export-job derivations and rebuilt pure export/redaction type guards inside the component. | High | Move the export/redaction/AI activity type guards and constants to module scope, remove `useMemo`, and derive visible export jobs plus pending status directly during render. Added a source guard that failed on the old local helpers and `useMemo` import/calls, while the audit page behavior test covers rendered audit/export behavior. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/audit-log-page.test.tsx`; changed-scope React Doctor no longer reports manual memoization or pure-function warnings for this page; full React Doctor manual memoization count dropped from `418` to `416`, pure-function count dropped from `29` to `27`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/settings/audit/page.tsx` | Valid but out of scope: the page remains a large component with several related UI state fields. Fixing that safely should be a separate component-split/reducer batch with behavior coverage for export filters, AI activity filtering, and pagination. | Medium | Deferred to a separate audit page structure batch. No suppression added. | Changed-scope React Doctor score is `92 / 100` with `2` remaining warnings in this page. |
+
+Changed-scope command after Batch 71: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Deferred: `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` in `app/(app)/settings/audit/page.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7cdb9767-4006-44a6-8c77-cd6111556f01`
+
+Full command after Batch 71: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `796`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 542 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2d89d73a-a91b-4561-ba28-0d7f4fef59be`
