@@ -2095,6 +2095,23 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps shared display and navigation components compiler-friendly", () => {
+        const sources = [
+            readSource("components/FileUploadZone.tsx"),
+            readSource("components/ai/AssistantRichText.tsx"),
+            readSource("components/app-link.tsx"),
+            readSource("components/charts/funnel-chart.tsx"),
+            readSource("components/charts/us-map-chart.tsx"),
+        ]
+
+        for (const source of sources) {
+            expect(source).not.toContain("useCallback")
+            expect(source).not.toContain("React.useCallback")
+            expect(source).not.toContain("useMemo")
+            expect(source).not.toContain("React.useMemo")
+        }
+    })
+
     it("keeps task edit modal draft state compiler-friendly", () => {
         const source = readSource("components/tasks/TaskEditModal.tsx")
 

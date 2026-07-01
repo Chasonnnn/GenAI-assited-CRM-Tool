@@ -1,6 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2Icon } from "lucide-react"
 
@@ -27,10 +26,7 @@ export function FunnelChart({
     isError = false,
     title = "Conversion Funnel",
 }: FunnelChartProps) {
-    const maxCount = useMemo(() => {
-        if (!data || data.length === 0) return 0
-        return Math.max(...data.map(d => d.count))
-    }, [data])
+    const maxCount = data && data.length > 0 ? Math.max(...data.map(d => d.count)) : 0
 
     if (isLoading) {
         return (

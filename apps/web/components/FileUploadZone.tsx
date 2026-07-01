@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useId, useState } from "react"
+import { useId, useState } from "react"
 import { useDropzone } from "react-dropzone"
 import { Upload, File, Loader2, X, Download, Trash2, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -101,45 +101,42 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
     const downloadMutation = useDownloadAttachment()
     const deleteMutation = useDeleteAttachment()
 
-    const onDrop = useCallback(
-        (acceptedFiles: File[]) => {
-            setError(null)
+    const onDrop = (acceptedFiles: File[]) => {
+        setError(null)
 
-            void uploadAcceptedFilesSequentially(acceptedFiles, async (file) => {
-                // Validate extension
-                const ext = file.name.split(".").pop()?.toLowerCase()
-                if (!ext || !ALLOWED_EXTENSION_SET.has(ext)) {
-                    const message = `File type .${ext} not allowed`
-                    setError(message)
-                    setLiveMessage(message)
-                    return
-                }
+        void uploadAcceptedFilesSequentially(acceptedFiles, async (file) => {
+            // Validate extension
+            const ext = file.name.split(".").pop()?.toLowerCase()
+            if (!ext || !ALLOWED_EXTENSION_SET.has(ext)) {
+                const message = `File type .${ext} not allowed`
+                setError(message)
+                setLiveMessage(message)
+                return
+            }
 
-                // Validate size
-                if (file.size > MAX_FILE_SIZE) {
-                    const message = "File exceeds 25 MB limit"
-                    setError(message)
-                    setLiveMessage(message)
-                    return
-                }
+            // Validate size
+            if (file.size > MAX_FILE_SIZE) {
+                const message = "File exceeds 25 MB limit"
+                setError(message)
+                setLiveMessage(message)
+                return
+            }
 
-                try {
-                    setLiveMessage(`Uploading ${file.name}`)
-                    setUploadProgress(0)
-                    await uploadMutation.mutateAsync({ surrogateId, file })
-                    setUploadProgress(100)
-                    setLiveMessage(`Uploaded ${file.name}`)
-                    setTimeout(() => setUploadProgress(null), 1000)
-                } catch (err) {
-                    const message = err instanceof Error ? err.message : "Upload failed"
-                    setError(message)
-                    setLiveMessage(message)
-                    setUploadProgress(null)
-                }
-            })
-        },
-        [surrogateId, uploadMutation]
-    )
+            try {
+                setLiveMessage(`Uploading ${file.name}`)
+                setUploadProgress(0)
+                await uploadMutation.mutateAsync({ surrogateId, file })
+                setUploadProgress(100)
+                setLiveMessage(`Uploaded ${file.name}`)
+                setTimeout(() => setUploadProgress(null), 1000)
+            } catch (err) {
+                const message = err instanceof Error ? err.message : "Upload failed"
+                setError(message)
+                setLiveMessage(message)
+                setUploadProgress(null)
+            }
+        })
+    }
 
     const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
         onDrop,

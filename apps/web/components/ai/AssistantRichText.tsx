@@ -42,11 +42,8 @@ function useHasMounted() {
 
 export function AssistantRichText({ content, className }: AssistantRichTextProps) {
     const hasMounted = useHasMounted()
-    const markdownHtml = React.useMemo(() => markdown.render(content), [content])
-    const html = React.useMemo(
-        () => (hasMounted ? sanitizeHtml(markdownHtml) : markdownHtml),
-        [hasMounted, markdownHtml],
-    )
+    const markdownHtml = markdown.render(content)
+    const html = hasMounted ? sanitizeHtml(markdownHtml) : markdownHtml
 
     return (
         <TrustedSanitizedHtmlContent

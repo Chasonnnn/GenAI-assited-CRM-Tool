@@ -1,6 +1,5 @@
 "use client"
 
-import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2Icon } from "lucide-react"
 import { ComposableMap, Geographies, Geography } from "react-simple-maps"
@@ -42,13 +41,10 @@ export function USMapChart({
     title = "Surrogates by State",
 }: USMapChartProps) {
     // Create a lookup map for quick access
-    const stateCounts = useMemo(() => {
-        const map = new Map<string, number>()
-        if (data) {
-            data.forEach(d => map.set(d.state, d.count))
-        }
-        return map
-    }, [data])
+    const stateCounts = new Map<string, number>()
+    if (data) {
+        data.forEach(d => stateCounts.set(d.state, d.count))
+    }
 
     // Calculate color scale
     const colorScale = (() => {

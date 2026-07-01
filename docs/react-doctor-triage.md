@@ -1554,3 +1554,22 @@ Full command after Batch 75: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `780`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 526 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a4f8e1b0-7439-4789-8687-c8a3c3fcade4`
+
+## Batch 76
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/FileUploadZone.tsx`, `components/ai/AssistantRichText.tsx`, `components/app-link.tsx`, `components/charts/funnel-chart.tsx`, `components/charts/us-map-chart.tsx` | Valid: these shared display/navigation components resolved to React `useCallback`, `React.useCallback`, `useMemo`, or `React.useMemo` wrappers. The current rule docs say to use the plain value, function, or component after confirming no preserve-manual-memoization case applies. | High | Convert the upload drop handler, app-link click handler, assistant markdown derivations, funnel max-count derivation, and US state count map derivation to plain render-local values/functions. Added a source guard that failed on the old wrappers. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/file-upload-zone-accessibility.test.tsx tests/app-link.test.tsx tests/assistant-rich-text.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `400` to `394`. |
+
+Changed-scope command after Batch 76: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 76: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `774`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 520 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ee762a5a-a3c7-4c4e-9a20-32216072e1a3`

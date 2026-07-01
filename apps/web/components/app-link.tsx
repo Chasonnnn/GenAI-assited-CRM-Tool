@@ -72,55 +72,52 @@ function AppLink({
   ...props
 }: AppLinkProps) {
   const { push, replace: replaceRoute } = useRouter()
-  const handleClick = React.useCallback(
-    (event: React.MouseEvent<HTMLAnchorElement>) => {
-      onClick?.(event)
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(event)
 
-      const ariaDisabled = event.currentTarget.getAttribute("aria-disabled")
-      if (ariaDisabled === "true" || event.currentTarget.hasAttribute("disabled")) {
-        return
-      }
+    const ariaDisabled = event.currentTarget.getAttribute("aria-disabled")
+    if (ariaDisabled === "true" || event.currentTarget.hasAttribute("disabled")) {
+      return
+    }
 
-      if (event.button !== 0) return
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      if (target && target !== "_self") return
-      if (download) return
+    if (event.button !== 0) return
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (target && target !== "_self") return
+    if (download) return
 
-      const hrefString = resolveHref(href)
-      if (!hrefString) return
+    const hrefString = resolveHref(href)
+    if (!hrefString) return
 
-      const currentUrl = window.location.href
-      const targetUrl = new URL(hrefString, currentUrl)
+    const currentUrl = window.location.href
+    const targetUrl = new URL(hrefString, currentUrl)
 
-      if (currentUrl === targetUrl.toString()) return
+    if (currentUrl === targetUrl.toString()) return
 
-      if (fallbackMode === "none") return
+    if (fallbackMode === "none") return
 
-      const targetHref =
-        targetUrl.origin === window.location.origin
-          ? `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
-          : targetUrl.toString()
+    const targetHref =
+      targetUrl.origin === window.location.origin
+        ? `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
+        : targetUrl.toString()
 
-      if (fallbackMode === "reload") {
-        event.preventDefault()
-        window.location.assign(targetHref)
-        return
-      }
-
-      // Default: client-side navigation via router for same-origin routes.
+    if (fallbackMode === "reload") {
       event.preventDefault()
-      if (targetUrl.origin === window.location.origin) {
-        if (replace) {
-          replaceRoute(targetHref as Route, scroll === undefined ? undefined : { scroll })
-        } else {
-          push(targetHref as Route, scroll === undefined ? undefined : { scroll })
-        }
+      window.location.assign(targetHref)
+      return
+    }
+
+    // Default: client-side navigation via router for same-origin routes.
+    event.preventDefault()
+    if (targetUrl.origin === window.location.origin) {
+      if (replace) {
+        replaceRoute(targetHref as Route, scroll === undefined ? undefined : { scroll })
       } else {
-        window.location.assign(targetHref)
+        push(targetHref as Route, scroll === undefined ? undefined : { scroll })
       }
-    },
-    [onClick, href, target, download, fallbackMode, replace, replaceRoute, push, scroll]
-  )
+    } else {
+      window.location.assign(targetHref)
+    }
+  }
 
   const linkProps = {
     href: href as Route | UrlObject,
