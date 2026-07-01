@@ -1406,3 +1406,22 @@ Full command after Batch 68: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `804`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 550 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8f002223-581b-4e12-aa0f-1ee93b421521`
+
+## Batch 69
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/search/page.tsx` | Valid: the search page manually memoized an Escape key handler that only clears local query state. | High | Remove `useCallback` and use the same plain key handler directly. Added a source guard that failed on the old `useCallback` import/call, while the existing search debounce test covers the page query behavior. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/search-debounce.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `422` to `421`. |
+
+Changed-scope command after Batch 69: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 69: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `803`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 549 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-119478a5-3948-4e8b-85f9-bcdc83c102c1`

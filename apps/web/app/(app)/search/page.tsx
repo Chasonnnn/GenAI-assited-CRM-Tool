@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import Link from "@/components/app-link"
 import { useQuery } from "@tanstack/react-query"
 import { Input } from "@/components/ui/input"
@@ -71,11 +71,11 @@ export default function SearchPage() {
             previousData ?? createEmptySearchResponse(debouncedQuery),
     })
 
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Escape") {
             setQuery("")
         }
-    }, [])
+    }
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">

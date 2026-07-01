@@ -1868,6 +1868,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps search page key handling compiler-friendly", () => {
+        const source = readSource("app/(app)/search/page.tsx")
+
+        expect(source).not.toContain("useCallback")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
