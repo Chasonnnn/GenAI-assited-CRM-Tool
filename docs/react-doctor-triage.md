@@ -1469,3 +1469,25 @@ Full command after Batch 71: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `796`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 542 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2d89d73a-a91b-4561-ba28-0d7f4fef59be`
+
+## Batch 72
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/integrations/meta/page.client.tsx` | Valid: Meta asset selection manually memoized a deterministic flattening of paginated ad account/page assets from query data. | High | Remove the lone `useMemo` import/call and derive the flattened asset lists directly during render. Added a source guard that failed on the old `useMemo`, while the Meta integrations page test covers asset rendering and conflicting asset overwrite behavior. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/meta-integrations-page.test.tsx`; changed-scope React Doctor no longer reports manual memoization for this page; full React Doctor manual memoization count dropped from `416` to `415`. |
+| `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `app/(app)/settings/integrations/meta/page.client.tsx` | Valid but out of scope: the touched Meta integration page still has reducer-worthy local state in asset selection and the top-level page, plus a large page component. Fixing this safely should be a separate state-model/component split batch. | Medium | Deferred to separate Meta integration structure work. No suppression added. | Changed-scope React Doctor score is `92 / 100` with `3` remaining warnings in this page. |
+
+Changed-scope command after Batch 72: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `3`
+- Summary: `Bugs 2 warnings`, `Maintainability 1 warning`
+- Deferred: `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` in `app/(app)/settings/integrations/meta/page.client.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-237d4788-e7ce-4d8b-8761-d426e735bff4`
+
+Full command after Batch 72: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `795`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 541 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-13249db6-a5a7-4e71-868d-20f473a5e179`

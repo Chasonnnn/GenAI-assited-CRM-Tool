@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -168,13 +168,12 @@ function MetaAssetSelection({
 
     const connectMutation = useConnectMetaAssets(connectionId)
 
-    const allAssets = useMemo(() => {
-        if (!data?.pages) return { ad_accounts: [], pages: [] }
-        return {
+    const allAssets = data?.pages
+        ? {
             ad_accounts: data.pages.flatMap((p) => p.ad_accounts),
             pages: data.pages.flatMap((p) => p.pages),
         }
-    }, [data])
+        : { ad_accounts: [], pages: [] }
 
     const toggleAdAccount = (id: string, checked: boolean) => {
         if (checked) {
