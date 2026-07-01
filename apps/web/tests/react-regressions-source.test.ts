@@ -697,6 +697,14 @@ describe("React regression guards (source)", () => {
         expect(inputGroupSource).not.toContain("InputGroupTextarea")
     })
 
+    it("keeps input group wrappers semantic and compiler-friendly", () => {
+        const source = readSource("components/ui/input-group.tsx")
+
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("tabIndex={0}")
+        expect(source).not.toContain("React.useCallback")
+    })
+
     it("keeps workflow editor field sets and multiselect private", () => {
         const source = readSource("components/automation/workflow-editor/shared.tsx")
 

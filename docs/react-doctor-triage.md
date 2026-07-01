@@ -2152,3 +2152,24 @@ Full command after Batch 98: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `561`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 25 warnings`, `Maintainability 341 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c9142dad-e54c-4a97-aff1-0519ce59a967`
+
+## Batch 99
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-tag-over-role` | `components/ui/input-group.tsx` | Valid: `InputGroup` is a visual input wrapper, not an actionable button, but it exposed `role="button"` to assistive technology. | High | Remove the fake button role and add a regression test that asserts the shared primitive does not create a button landmark. | The new test failed before the fix and passed after it: `pnpm test --run tests/input-group-accessibility.test.tsx tests/react-regressions-source.test.ts`; changed-scope React Doctor reports no issues. |
+| `react-doctor/no-noninteractive-tabindex` | `components/ui/input-group.tsx` | Valid: `InputGroupAddon` was only a decorative/focus-forwarding area but added `tabIndex={0}`, creating an extra keyboard stop that did not perform its own action. | High | Remove `tabIndex`, keep pointer/touch focus forwarding via `onPointerDown`, and skip forwarding when the event starts from a nested interactive control. | Focused accessibility test verifies the addon is not tabbable and still focuses the real input on pointer interaction; full React Doctor accessibility count dropped from `25` to `22`. |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/ui/input-group.tsx` | Valid: the input-focus helper was wrapped in `React.useCallback` even though React Compiler is enabled and the helper does not need manual memoization. | High | Move the helper to module scope and call it from the pointer handler. | Source guard verifies `React.useCallback` is absent; full React Doctor manual memoization count dropped from `225` to `224`. |
+
+Changed-scope command after Batch 99: `cd apps/web && npx react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 99: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `557`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 340 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a8dc3da3-f71d-4dc2-bb71-70173d1d4c66`
