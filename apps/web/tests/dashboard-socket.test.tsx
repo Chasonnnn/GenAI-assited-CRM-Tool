@@ -36,6 +36,12 @@ class MockWebSocket {
         this.onclose?.({ code, reason })
     }
 
+    failHandshake() {
+        this.readyState = MockWebSocket.CLOSED
+        this.onerror?.()
+        this.onclose?.({ code: 1006, reason: '' })
+    }
+
     emitMessage(data: string) {
         this.onmessage?.({ data })
     }
@@ -124,6 +130,23 @@ describe('useDashboardSocket', () => {
 
         act(() => {
             ws.close(4003, 'MFA required')
+            vi.advanceTimersByTime(1000)
+        })
+
+        expect(MockWebSocket.instances).toHaveLength(1)
+    })
+
+    it('does not reconnect after a rejected websocket handshake', () => {
+        vi.useFakeTimers()
+        render(<DashboardSocketHarness />)
+
+        const ws = MockWebSocket.instances[0]
+        if (!ws) {
+            throw new Error('WebSocket instance was not created')
+        }
+
+        act(() => {
+            ws.failHandshake()
             vi.advanceTimersByTime(1000)
         })
 

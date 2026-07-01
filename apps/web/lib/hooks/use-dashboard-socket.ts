@@ -15,6 +15,10 @@ import { getWebSocketUrl } from '@/lib/websocket-url';
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
 const INITIAL_RECONNECT_DELAY = 1000; // Start with 1 second
 const AUTH_CLOSE_CODES = new Set([4001, 4003]);
+const ABNORMAL_CLOSE_CODE = 1006;
+const HANDSHAKE_RETRY_SUPPRESSION_MS = 5 * 60 * 1000;
+
+let handshakeRetrySuppressedUntil = 0;
 
 interface WebSocketMessage {
     type: 'notification' | 'count_update' | 'stats_update';
@@ -45,6 +49,9 @@ export function useDashboardSocket(enabled: boolean = true) {
         if (!enabled || !user) {
             return;
         }
+        if (Date.now() < handshakeRetrySuppressedUntil) {
+            return;
+        }
         const existing = wsRef.current
         if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
             return
@@ -52,8 +59,11 @@ export function useDashboardSocket(enabled: boolean = true) {
 
         try {
             const ws = new WebSocket(getWebSocketUrl('/ws/notifications'));
+            let hasOpened = false;
 
             ws.onopen = () => {
+                hasOpened = true;
+                handshakeRetrySuppressedUntil = 0;
                 if (!isActiveRef.current || !enabled || !user) {
                     ws.close(1000, "Inactive");
                     return;
@@ -122,6 +132,12 @@ export function useDashboardSocket(enabled: boolean = true) {
 
                 if (AUTH_CLOSE_CODES.has(event.code)) {
                     reconnectDelayRef.current = MAX_RECONNECT_DELAY;
+                    return;
+                }
+
+                if (!hasOpened && event.code === ABNORMAL_CLOSE_CODE) {
+                    reconnectDelayRef.current = MAX_RECONNECT_DELAY;
+                    handshakeRetrySuppressedUntil = Date.now() + HANDSHAKE_RETRY_SUPPRESSION_MS;
                     return;
                 }
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render } from "@testing-library/react"
+import { act, render } from "@testing-library/react"
 
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
 import { getWebSocketUrl } from "@/lib/websocket-url"
@@ -35,6 +35,12 @@ class MockWebSocket {
     close(code = 1000, reason = "closed") {
         this.readyState = MockWebSocket.CLOSED
         this.onclose?.({ code, reason })
+    }
+
+    failHandshake() {
+        this.readyState = MockWebSocket.CLOSED
+        this.onerror?.()
+        this.onclose?.({ code: 1006, reason: "" })
     }
 }
 
@@ -77,6 +83,23 @@ describe("useNotificationSocket", () => {
 
         ws.close(4001, "Authentication required")
         vi.advanceTimersByTime(3000)
+
+        expect(MockWebSocket.instances).toHaveLength(1)
+    })
+
+    it("does not reconnect after a rejected websocket handshake", () => {
+        vi.useFakeTimers()
+        render(<NotificationSocketHarness />)
+
+        const ws = MockWebSocket.instances[0]
+        if (!ws) {
+            throw new Error("WebSocket instance was not created")
+        }
+
+        act(() => {
+            ws.failHandshake()
+            vi.advanceTimersByTime(3000)
+        })
 
         expect(MockWebSocket.instances).toHaveLength(1)
     })

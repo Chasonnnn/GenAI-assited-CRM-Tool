@@ -9,6 +9,7 @@ Provides a WebSocket endpoint that:
 
 import asyncio
 import time
+from urllib.parse import urlparse
 from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.core.config import settings
 from app.core.websocket import manager, send_ws_to_user, send_ws_to_org
 from app.core.security import decode_session_token
 from app.core.deps import COOKIE_NAME
+from app.core.structured_logging import log_structured_event
 from app.db.session import SessionLocal
 from app.services import session_service
 
@@ -27,6 +29,41 @@ SESSION_RECHECK_SECONDS = 60
 
 def _normalize_origin(origin: str) -> str:
     return origin.rstrip("/")
+
+
+def _origin_host(origin: str | None) -> str | None:
+    if not origin:
+        return None
+    parsed = urlparse(_normalize_origin(origin))
+    return (parsed.hostname or "").lower() or None
+
+
+def _websocket_error_code(reason: str) -> str:
+    return "websocket_" + reason.lower().replace(" ", "_")
+
+
+async def _reject_websocket(
+    websocket: WebSocket,
+    *,
+    code: int,
+    reason: str,
+    origin: str | None,
+    user_id: UUID | None = None,
+    org_id: UUID | None = None,
+) -> None:
+    log_structured_event(
+        "websocket_connection_rejected",
+        route="/ws/notifications",
+        path="/ws/notifications",
+        status=403,
+        error_code=_websocket_error_code(reason),
+        websocket_close_code=code,
+        websocket_close_reason=reason,
+        origin_host=_origin_host(origin),
+        user_id=str(user_id) if user_id else None,
+        org_id=str(org_id) if org_id else None,
+    )
+    await websocket.close(code=code, reason=reason)
 
 
 def _allowed_origins() -> set[str]:
@@ -124,19 +161,29 @@ async def websocket_notifications(
     - dashboard stats (type: 'stats_update')
     """
     origin = websocket.headers.get("origin")
-    if not origin and not settings.is_dev:
-        await websocket.close(code=4003, reason="Origin required")
-        return
-    allowed = _allowed_origins()
-    if origin and not _origin_is_allowed(origin, allowed=allowed, is_dev=settings.is_dev):
-        await websocket.close(code=4003, reason="Origin not allowed")
-        return
-
-    # Authenticate
     user_id = None
     org_id = None
     token_hash = None
 
+    if not origin and not settings.is_dev:
+        await _reject_websocket(
+            websocket,
+            code=4003,
+            reason="Origin required",
+            origin=origin,
+        )
+        return
+    allowed = _allowed_origins()
+    if origin and not _origin_is_allowed(origin, allowed=allowed, is_dev=settings.is_dev):
+        await _reject_websocket(
+            websocket,
+            code=4003,
+            reason="Origin not allowed",
+            origin=origin,
+        )
+        return
+
+    # Authenticate
     def _mfa_verified(payload: dict) -> bool:
         if payload.get("mfa_required", True) and not payload.get("mfa_verified", False):
             return False
@@ -144,17 +191,32 @@ async def websocket_notifications(
 
     cookie = websocket.cookies.get(COOKIE_NAME)
     if not cookie:
-        await websocket.close(code=4001, reason="Authentication required")
+        await _reject_websocket(
+            websocket,
+            code=4001,
+            reason="Authentication required",
+            origin=origin,
+        )
         return
 
     try:
         payload = decode_session_token(cookie)
     except Exception:
-        await websocket.close(code=4001, reason="Invalid token")
+        await _reject_websocket(
+            websocket,
+            code=4001,
+            reason="Invalid token",
+            origin=origin,
+        )
         return
 
     if not _mfa_verified(payload):
-        await websocket.close(code=4003, reason="MFA required")
+        await _reject_websocket(
+            websocket,
+            code=4003,
+            reason="MFA required",
+            origin=origin,
+        )
         return
 
     user_id = UUID(payload["sub"])
@@ -164,28 +226,47 @@ async def websocket_notifications(
 
     # Enforce session revocation for WebSocket connections
     if not token_hash:
-        await websocket.close(code=4001, reason="Authentication required")
+        await _reject_websocket(
+            websocket,
+            code=4001,
+            reason="Authentication required",
+            origin=origin,
+            user_id=user_id,
+            org_id=org_id,
+        )
         return
     with SessionLocal() as db:
         from app.services import membership_service, org_service
 
         db_session = session_service.get_session_by_token_hash(db, token_hash)
         if not db_session:
-            await websocket.close(code=4001, reason="Session revoked")
+            await _reject_websocket(
+                websocket,
+                code=4001,
+                reason="Session revoked",
+                origin=origin,
+                user_id=user_id,
+                org_id=org_id,
+            )
             return
         if not org_id:
             org_id = db_session.organization_id
         membership = membership_service.get_membership_for_org(db, org_id, user_id)
         if not membership:
-            await websocket.close(code=4001, reason="Membership inactive")
+            await _reject_websocket(
+                websocket,
+                code=4001,
+                reason="Membership inactive",
+                origin=origin,
+                user_id=user_id,
+                org_id=org_id,
+            )
             return
 
         # Validate origin matches org's subdomain (cross-tenant protection)
         if origin and not settings.is_dev:
             org = org_service.get_org_by_id(db, org_id, include_deleted=True)
             if org:
-                from urllib.parse import urlparse
-
                 parsed = urlparse(origin)
                 origin_host = (parsed.hostname or "").lower()
                 expected_host = f"{org.slug}.{settings.PLATFORM_BASE_DOMAIN}"
@@ -194,7 +275,14 @@ async def websocket_notifications(
                     origin_host != expected_host
                     and _normalize_origin(origin) not in _allowed_origins()
                 ):
-                    await websocket.close(code=4003, reason="Origin invalid for organization")
+                    await _reject_websocket(
+                        websocket,
+                        code=4003,
+                        reason="Origin invalid for organization",
+                        origin=origin,
+                        user_id=user_id,
+                        org_id=org_id,
+                    )
                     return
 
     # Register connection with org tracking

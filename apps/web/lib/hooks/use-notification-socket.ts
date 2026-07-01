@@ -37,6 +37,10 @@ interface UseNotificationSocketOptions {
 }
 
 const AUTH_CLOSE_CODES = new Set([4001, 4003])
+const ABNORMAL_CLOSE_CODE = 1006
+const HANDSHAKE_RETRY_SUPPRESSION_MS = 5 * 60 * 1000
+
+let handshakeRetrySuppressedUntil = 0
 
 export function useNotificationSocket(options: UseNotificationSocketOptions = {}) {
     const {
@@ -61,6 +65,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
     const connect = useCallback(function connectSocket() {
         if (!user || !enabled) return
+        if (Date.now() < handshakeRetrySuppressedUntil) return
 
         const existing = wsRef.current
         if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
@@ -71,9 +76,12 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
         try {
             const ws = new WebSocket(wsUrl)
+            let hasOpened = false
             wsRef.current = ws
 
             ws.onopen = () => {
+                hasOpened = true
+                handshakeRetrySuppressedUntil = 0
                 if (!isActiveRef.current || !enabled || !user) {
                     ws.close(1000, 'Inactive')
                     return
@@ -123,6 +131,13 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
                 if (AUTH_CLOSE_CODES.has(event.code)) {
                     reconnectAttempts.current = maxReconnectAttempts
+                    return
+                }
+
+                if (!hasOpened && event.code === ABNORMAL_CLOSE_CODE) {
+                    reconnectAttempts.current = maxReconnectAttempts
+                    handshakeRetrySuppressedUntil = Date.now() + HANDSHAKE_RETRY_SUPPRESSION_MS
+                    console.warn('[WS] Handshake rejected - notifications will use polling fallback')
                     return
                 }
 
@@ -181,6 +196,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
     // Manual reconnect function
     const reconnect = useCallback(() => {
+        handshakeRetrySuppressedUntil = 0
         reconnectAttempts.current = 0
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             manualCloseRef.current = true
