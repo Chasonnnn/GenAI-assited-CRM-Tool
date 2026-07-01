@@ -1840,6 +1840,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const formatDate =")
     })
 
+    it("keeps intended-parents list routing helpers compiler-friendly", () => {
+        const source = readSource("app/(app)/intended-parents/page.client.tsx")
+
+        expect(source).toContain("function updateIntendedParentListUrl(")
+        expect(source).toContain("function formatIntendedParentCreatedDate(")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("const formatDate =")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

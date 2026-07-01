@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useCallback, useEffect, useRef } from "react"
+import { startTransition, useState, useEffect, useRef } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -65,7 +65,14 @@ import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { PermissionDeniedState } from "@/components/error-state"
 import { isPermissionError } from "@/lib/error-utils"
 import { toast } from "sonner"
+
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
+type DateRangeSelection = { from: Date | undefined; to: Date | undefined }
+type RouterReplace = ReturnType<typeof useRouter>["replace"]
+type SearchParamsSnapshot = {
+    toString: () => string
+}
+
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
     value !== null && VALID_DATE_RANGES.includes(value as DateRangePreset)
 
@@ -82,6 +89,72 @@ const parseDateParam = (value: string | null): Date | undefined => {
 
 const datesEqual = (left?: Date, right?: Date) => {
     return (left?.getTime() ?? null) === (right?.getTime() ?? null)
+}
+
+function updateIntendedParentListUrl(
+    replace: RouterReplace,
+    searchParams: SearchParamsSnapshot,
+    status: string,
+    searchValue: string,
+    currentPage: number,
+    range: DateRangePreset,
+    rangeDates: DateRangeSelection
+) {
+    const newParams = new URLSearchParams(searchParams.toString())
+    if (status !== "all") {
+        newParams.set("status", status)
+    } else {
+        newParams.delete("status")
+    }
+    if (searchValue) {
+        newParams.set("q", searchValue)
+    } else {
+        newParams.delete("q")
+    }
+    if (currentPage > 1) {
+        newParams.set("page", String(currentPage))
+    } else {
+        newParams.delete("page")
+    }
+    if (range !== "all") {
+        newParams.set("range", range)
+        if (range === "custom") {
+            if (rangeDates.from) {
+                newParams.set("from", formatLocalDate(rangeDates.from))
+            } else {
+                newParams.delete("from")
+            }
+            if (rangeDates.to) {
+                newParams.set("to", formatLocalDate(rangeDates.to))
+            } else {
+                newParams.delete("to")
+            }
+        } else {
+            newParams.delete("from")
+            newParams.delete("to")
+        }
+    } else {
+        newParams.delete("range")
+        newParams.delete("from")
+        newParams.delete("to")
+    }
+    const nextQuery = newParams.toString()
+    const currentQuery = searchParams.toString()
+    if (nextQuery === currentQuery) return
+    const newUrl = nextQuery ? `/intended-parents?${nextQuery}` : "/intended-parents"
+    const currentUrl = currentQuery ? `/intended-parents?${currentQuery}` : "/intended-parents"
+    if (newUrl === currentUrl) return
+    replace(newUrl as Route, { scroll: false })
+}
+
+function formatIntendedParentCreatedDate(dateStr: string) {
+    const parsed = parseDateInput(dateStr)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return parsed.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    })
 }
 
 export default function IntendedParentsPage() {
@@ -101,104 +174,66 @@ export default function IntendedParentsPage() {
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const [statusFilter, setStatusFilter] = useState<string>(urlStatus || "all")
     const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
-    const initialCustomRange = initialRange === "custom"
+    const initialCustomRange: DateRangeSelection = initialRange === "custom"
         ? {
             from: parseDateParam(urlFrom),
             to: parseDateParam(urlTo),
         }
         : { from: undefined, to: undefined }
     const [dateRange, setDateRange] = useState<DateRangePreset>(initialRange)
-    const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>(initialCustomRange)
+    const [customRange, setCustomRange] = useState<DateRangeSelection>(initialCustomRange)
     const [page, setPage] = useState(() => parsePageParam(urlPage))
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
     const hasSyncedSearchRef = useRef(false)
 
-    // Sync state changes back to URL
-    const updateUrlParams = useCallback((
-        status: string,
-        searchValue: string,
-        currentPage: number,
-        range: DateRangePreset,
-        rangeDates: { from: Date | undefined; to: Date | undefined }
-    ) => {
-        const newParams = new URLSearchParams(searchParams.toString())
-        if (status !== "all") {
-            newParams.set("status", status)
-        } else {
-            newParams.delete("status")
-        }
-        if (searchValue) {
-            newParams.set("q", searchValue)
-        } else {
-            newParams.delete("q")
-        }
-        if (currentPage > 1) {
-            newParams.set("page", String(currentPage))
-        } else {
-            newParams.delete("page")
-        }
-        if (range !== "all") {
-            newParams.set("range", range)
-            if (range === "custom") {
-                if (rangeDates.from) {
-                    newParams.set("from", formatLocalDate(rangeDates.from))
-                } else {
-                    newParams.delete("from")
-                }
-                if (rangeDates.to) {
-                    newParams.set("to", formatLocalDate(rangeDates.to))
-                } else {
-                    newParams.delete("to")
-                }
-            } else {
-                newParams.delete("from")
-                newParams.delete("to")
-            }
-        } else {
-            newParams.delete("range")
-            newParams.delete("from")
-            newParams.delete("to")
-        }
-        const nextQuery = newParams.toString()
-        const currentQuery = searchParams.toString()
-        if (nextQuery === currentQuery) return
-        const newUrl = nextQuery ? `/intended-parents?${nextQuery}` : "/intended-parents"
-        const currentUrl = currentQuery ? `/intended-parents?${currentQuery}` : "/intended-parents"
-        if (newUrl === currentUrl) return
-        replace(newUrl as Route, { scroll: false })
-    }, [replace, searchParams])
-
     // Handle status filter change
-    const handleStatusChange = useCallback((status: string) => {
+    const handleStatusChange = (status: string) => {
         setStatusFilter(status)
         setPage(1)
-        updateUrlParams(status, debouncedSearch, 1, dateRange, customRange)
-    }, [debouncedSearch, updateUrlParams, dateRange, customRange, setStatusFilter])
+        updateIntendedParentListUrl(replace, searchParams, status, debouncedSearch, 1, dateRange, customRange)
+    }
 
-    const handlePageChange = useCallback((nextPage: number) => {
+    const handlePageChange = (nextPage: number) => {
         setPage(nextPage)
-        updateUrlParams(statusFilter, debouncedSearch, nextPage, dateRange, customRange)
-    }, [statusFilter, debouncedSearch, updateUrlParams, dateRange, customRange])
+        updateIntendedParentListUrl(
+            replace,
+            searchParams,
+            statusFilter,
+            debouncedSearch,
+            nextPage,
+            dateRange,
+            customRange,
+        )
+    }
 
-    const handlePresetChange = useCallback((preset: DateRangePreset) => {
+    const handlePresetChange = (preset: DateRangePreset) => {
         setDateRange(preset)
+        const nextCustomRange = preset === "custom" ? customRange : { from: undefined, to: undefined }
         if (preset !== "custom") {
-            setCustomRange({ from: undefined, to: undefined })
+            setCustomRange(nextCustomRange)
         }
         setPage(1)
-        updateUrlParams(statusFilter, debouncedSearch, 1, preset, preset === "custom" ? customRange : { from: undefined, to: undefined })
-    }, [statusFilter, debouncedSearch, updateUrlParams, customRange])
+        updateIntendedParentListUrl(
+            replace,
+            searchParams,
+            statusFilter,
+            debouncedSearch,
+            1,
+            preset,
+            nextCustomRange,
+        )
+    }
 
-    const handleCustomRangeChange = useCallback((range: { from: Date | undefined; to: Date | undefined }) => {
+    const handleCustomRangeChange = (range: DateRangeSelection) => {
         setCustomRange(range)
         if (dateRange !== "custom") {
             setDateRange("custom")
         }
         setPage(1)
-        updateUrlParams(statusFilter, debouncedSearch, 1, "custom", range)
-    }, [statusFilter, debouncedSearch, updateUrlParams, dateRange])
+        updateIntendedParentListUrl(replace, searchParams, statusFilter, debouncedSearch, 1, "custom", range)
+    }
 
     // Debounce search input
     useEffect(() => {
@@ -216,10 +251,18 @@ export default function IntendedParentsPage() {
         if (debouncedSearch !== urlSearchValue) {
             startTransition(() => {
                 setPage(1)
-                updateUrlParams(statusFilter, debouncedSearch, 1, dateRange, customRange)
+                updateIntendedParentListUrl(
+                    replace,
+                    searchParams,
+                    statusFilter,
+                    debouncedSearch,
+                    1,
+                    dateRange,
+                    customRange,
+                )
             })
         }
-    }, [debouncedSearch, searchParams, statusFilter, updateUrlParams, dateRange, customRange])
+    }, [debouncedSearch, replace, searchParams, statusFilter, dateRange, customRange])
 
     // Sync state when URL changes (back/forward)
     useEffect(() => {
@@ -328,16 +371,6 @@ export default function IntendedParentsPage() {
         value: IntendedParentFormValues[K],
     ) => {
         setFormData((previous) => ({ ...previous, [field]: value }))
-    }
-
-    const formatDate = (dateStr: string) => {
-        const parsed = parseDateInput(dateStr)
-        if (Number.isNaN(parsed.getTime())) return "—"
-        return parsed.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        })
     }
 
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
@@ -509,7 +542,7 @@ export default function IntendedParentsPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
-                                                {formatDate(ip.created_at)}
+                                                {formatIntendedParentCreatedDate(ip.created_at)}
                                             </TableCell>
                                         </TableRow>
                                     ))}
