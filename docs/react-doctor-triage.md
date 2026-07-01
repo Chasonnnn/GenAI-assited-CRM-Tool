@@ -1491,3 +1491,25 @@ Full command after Batch 72: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `795`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 541 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-13249db6-a5a7-4e71-868d-20f473a5e179`
+
+## Batch 73
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/tickets/page.tsx` | Valid: the tickets list manually memoized deterministic filter params derived from local status, priority, and query state. | High | Remove `useMemo` and derive `TicketListParams` directly during render. Added a source guard that failed on the old `useMemo` import/call. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts`; changed-scope React Doctor no longer reports manual memoization for this page; full React Doctor manual memoization count dropped from `415` to `414`. |
+| `react-doctor/prefer-useReducer` | `app/(app)/tickets/page.tsx` | Valid but out of scope: the page still has related status, priority, query, compose-open, compose-subject, and compose-body state fields that React Doctor flags as reducer-worthy. | Medium | Deferred to a separate tickets state-model batch. No suppression added. | Changed-scope React Doctor score is `97 / 100` with `1` remaining warning in this page. |
+
+Changed-scope command after Batch 73: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Bugs 1 warning`
+- Deferred: `react-doctor/prefer-useReducer` in `app/(app)/tickets/page.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bbfa41e8-1ae9-4ca5-a50e-a2284398b71f`
+
+Full command after Batch 73: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `794`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 540 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9ff9e33a-1507-4610-b4a8-3ff5440eb4d8`

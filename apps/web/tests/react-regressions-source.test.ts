@@ -1900,6 +1900,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps tickets list filters compiler-friendly", () => {
+        const source = readSource("app/(app)/tickets/page.tsx")
+
+        expect(source).not.toContain("useMemo")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

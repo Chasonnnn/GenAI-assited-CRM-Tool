@@ -1,7 +1,7 @@
 "use client"
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { ShieldAlertIcon } from 'lucide-react'
@@ -60,20 +60,17 @@ export default function TicketsPage() {
     const [composeSubject, setComposeSubject] = useState('')
     const [composeBody, setComposeBody] = useState('')
 
-    const filters = useMemo(() => {
-        const next: TicketListParams = { limit: 50 }
-        if (statusFilter !== 'all') {
-            next.status = statusFilter
-        }
-        if (priorityFilter !== 'all') {
-            next.priority = priorityFilter
-        }
-        const trimmedQuery = query.trim()
-        if (trimmedQuery) {
-            next.q = trimmedQuery
-        }
-        return next
-    }, [statusFilter, priorityFilter, query])
+    const filters: TicketListParams = { limit: 50 }
+    if (statusFilter !== 'all') {
+        filters.status = statusFilter
+    }
+    if (priorityFilter !== 'all') {
+        filters.priority = priorityFilter
+    }
+    const trimmedQuery = query.trim()
+    if (trimmedQuery) {
+        filters.q = trimmedQuery
+    }
 
     const { data, isLoading } = useTickets(filters)
     const composeMutation = useComposeTicket()
