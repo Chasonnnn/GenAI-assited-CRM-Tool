@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useReducer, useCallback, type DragEvent, type KeyboardEvent } from "react"
+import { useEffect, useState, useReducer, type DragEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -93,11 +93,17 @@ function openFilePicker() {
     document.getElementById("file-upload")?.click()
 }
 
-function handleDropzoneKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault()
-        openFilePicker()
+function resolveErrorDetail(error: unknown, fallback: string) {
+    if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail === "string"
+    ) {
+        return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
     }
+    if (error instanceof Error && error.message) return error.message
+    return fallback
 }
 
 /** Get badge info based on suggestion reason */
@@ -332,30 +338,17 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         })
     }, [hasCreatedAtMapping])
 
-    const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    const handleDragOver = (e: DragEvent<HTMLButtonElement>) => {
         e.preventDefault()
         setIsDragging(true)
-    }, [])
-
-    const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
-        e.preventDefault()
-        setIsDragging(false)
-    }, [])
-
-    const resolveErrorDetail = (error: unknown, fallback: string) => {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "response" in error &&
-            typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail === "string"
-        ) {
-            return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || fallback
-        }
-        if (error instanceof Error && error.message) return error.message
-        return fallback
     }
 
-    const handleFileSelect = useCallback(async (selectedFile: File) => {
+    const handleDragLeave = (e: DragEvent<HTMLButtonElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+    }
+
+    const handleFileSelect = async (selectedFile: File) => {
         if (!selectedFile.name.endsWith(".csv") && !selectedFile.name.endsWith(".tsv")) {
             dispatch({ type: "patch", patch: { error: "Please upload a CSV or TSV file" } })
             return
@@ -397,9 +390,9 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 },
             })
         }
-    }, [previewMutation, unknownColumnBehavior])
+    }
 
-    const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    const handleDrop = (e: DragEvent<HTMLButtonElement>) => {
         e.preventDefault()
         setIsDragging(false)
 
@@ -407,7 +400,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         if (droppedFile) {
             void handleFileSelect(droppedFile)
         }
-    }, [handleFileSelect])
+    }
 
     const handleRemoveFile = () => {
         dispatch({ type: "reset_for_removed_file" })
@@ -564,9 +557,21 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         <div className="space-y-6">
             {!preview && (
                 <Card>
-                    <div
+                    <input
+                        id="file-upload"
+                        type="file"
+                        accept=".csv,.tsv"
+                        className="hidden"
+                        aria-label="Upload CSV or TSV file"
+                        onChange={(e) => {
+                            const selectedFile = e.target.files?.[0]
+                            if (selectedFile) void handleFileSelect(selectedFile)
+                        }}
+                    />
+                    <button
+                        type="button"
                         className={cn(
-                            "relative flex min-h-[300px] cursor-pointer flex-col items-center justify-center border-2 border-dashed p-12 transition-colors",
+                            "relative flex min-h-[300px] w-full cursor-pointer flex-col items-center justify-center border-2 border-dashed bg-transparent p-12 text-center transition-colors",
                             isDragging && "border-primary bg-primary/5",
                             !isDragging && "border-border hover:border-primary/50 hover:bg-muted/50",
                             error && "border-destructive",
@@ -575,21 +580,7 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         onClick={openFilePicker}
-                        onKeyDown={handleDropzoneKeyDown}
-                        role="button"
-                        tabIndex={0}
                     >
-                        <input
-                            id="file-upload"
-                            type="file"
-                            accept=".csv,.tsv"
-                            className="hidden"
-                            onChange={(e) => {
-                                const selectedFile = e.target.files?.[0]
-                                if (selectedFile) void handleFileSelect(selectedFile)
-                            }}
-                        />
-
                         {previewMutation.isPending ? (
                             <>
                                 <Loader2Icon className="mb-4 size-12 animate-spin text-muted-foreground" />
@@ -602,20 +593,21 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                                 <h3 className="mb-2 text-lg font-semibold">
                                     {isDragging ? "Drop CSV file here" : "Drag CSV here or click to browse"}
                                 </h3>
-                        <p className="text-sm text-muted-foreground">Upload a CSV file to import surrogates</p>
-                    </>
-                )}
+                                <p className="text-sm text-muted-foreground">
+                                    Upload a CSV file to import surrogates
+                                </p>
+                            </>
+                        )}
 
-                {error && (
+                        {error && (
                             <div className="mt-4 flex items-center gap-2 text-sm text-destructive">
                                 <XCircleIcon className="size-4" />
                                 {error}
-                        </div>
-                    )}
-
-                </div>
-            </Card>
-        )}
+                            </div>
+                        )}
+                    </button>
+                </Card>
+            )}
 
             {preview && (
                 <>

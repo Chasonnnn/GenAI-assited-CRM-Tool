@@ -2039,3 +2039,33 @@ Full command after Batch 94: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `574`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 31 warnings`, `Maintainability 348 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-55348d9c-56c4-473e-a787-89ddab7093aa`
+
+## Batch 95
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/import/CSVUpload.tsx` | Valid: drag/file/drop handlers were wrapped in `useCallback`, but React Compiler is enabled and no downstream API depends on their stable identity. | High | Remove `useCallback` and keep the handlers as plain render-local functions. Added a source guard that failed on the previous import/wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/import-page.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor no longer reports manual memoization in `components/import`; full React Doctor manual memoization count dropped from `231` to `227`. |
+| `react-doctor/prefer-module-scope-pure-function` | `components/import/CSVUpload.tsx` | Valid: `resolveErrorDetail` uses only its arguments and was rebuilt on every render. | High | Move `resolveErrorDetail` to module scope. | Scoped React Doctor no longer reports the helper warning; full React Doctor pure-function count dropped from `18` to `17`. |
+| `react-doctor/prefer-tag-over-role`, `react-doctor/control-has-associated-label` | `components/import/CSVUpload.tsx` | Valid: the dropzone was a clickable generic container with `role="button"` and the hidden file input was flagged as unlabeled. | High | Use a native `<button type="button">` for the dropzone, move the hidden file input to a sibling, and add an explicit `aria-label` to the input. | Scoped React Doctor no longer reports the tag/label warnings; full React Doctor accessibility count dropped from `31` to `29`. |
+| `react-doctor/no-giant-component` | `components/import/CSVUpload.tsx` | Valid but out of scope: `CSVUpload` remains a 934-line import workflow component, and splitting it into upload, mapping, preview, and approval sections is a larger refactor than this compiler/accessibility cleanup. | Medium | Deferred. No suppression added. | Final scoped React Doctor reports only the large-component warning. |
+
+Scoped command after Batch 95: `cd apps/web && npx react-doctor@latest components/import --verbose`
+
+- Score: `96 / 100 Great`
+- Total diagnostics in scope: `1`
+- Remaining: `no-giant-component` in `CSVUpload`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7e298ee1-397f-4684-8b69-a0d8da4d8397`
+
+Changed-scope command after Batch 95: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining: `no-giant-component` in `components/import/CSVUpload.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-586eccb5-9df1-404f-b958-88c83cab239c`
+
+Full command after Batch 95: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `567`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 29 warnings`, `Maintainability 343 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-94ae2bd1-3335-4bfb-ad83-92462a16fbb0`

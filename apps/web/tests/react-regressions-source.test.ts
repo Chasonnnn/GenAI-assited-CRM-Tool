@@ -1573,6 +1573,16 @@ describe("React regression guards (source)", () => {
         expect(metaMappingSource).not.toMatch(/new Set\(\s*mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)
     })
 
+    it("keeps CSV upload handlers and dropzone compiler-friendly", () => {
+        const source = readSource("components/import/CSVUpload.tsx")
+
+        expect(source).toContain("function resolveErrorDetail(error: unknown, fallback: string)")
+        expect(source).toContain('aria-label="Upload CSV or TSV file"')
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("const resolveErrorDetail =")
+    })
+
     it("uses single-pass activity timeline list derivation", () => {
         const source = readSource("components/surrogates/ActivityTimeline.tsx")
 
