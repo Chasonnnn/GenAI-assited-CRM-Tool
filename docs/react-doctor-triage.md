@@ -1987,3 +1987,30 @@ Full command after Batch 92: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `586`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 32 warnings`, `Maintainability 359 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-48a80e39-dbe2-47a6-811a-430b24fbb866`
+
+## Batch 93
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-module-scope-pure-function` | `components/matches/UploadFileDialog.tsx` | Valid: `formatFileSize` does not depend on component-local state or props and was rebuilt on every render. | High | Move `formatFileSize` to module scope and add a source guard that failed while it was render-local. | `pnpm test --run tests/react-regressions-source.test.ts tests/upload-file-dialog.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor no longer reports the helper warning; full React Doctor pure-function count dropped from `19` to `18`. |
+| `react-doctor/control-has-associated-label` | `components/matches/UploadFileDialog.tsx` | Valid scanner finding: the hidden file input was associated with a visible `Label`, but React Doctor still reported the control as unlabeled. | Medium | Add an explicit `aria-label` to the file input while preserving the visible `Label`/`htmlFor` link. | Scoped React Doctor no longer reports the upload dialog label warning; full React Doctor accessibility count dropped from `32` to `31`. |
+
+Scoped command after Batch 93: `cd apps/web && npx react-doctor@latest components/matches --verbose`
+
+- Score: `83 / 100 Needs work`
+- Total diagnostics in scope: `10`
+- Remaining: `10` `MatchTasksCalendar` manual memoization warnings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b418e6e9-f8a7-4539-8cea-8f30db19db52`
+
+Changed-scope command after Batch 93: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 93: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `584`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 31 warnings`, `Maintainability 358 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-629db53c-d7ae-4505-a550-71b1de71bf96`

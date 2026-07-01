@@ -1374,6 +1374,14 @@ describe("React regression guards (source)", () => {
         expect(uploadFileSource).toContain("flex items-center gap-2")
     })
 
+    it("keeps match upload file helpers and controls scanner-friendly", () => {
+        const source = readSource("components/matches/UploadFileDialog.tsx")
+
+        expect(source).toContain("function formatFileSize(bytes: number)")
+        expect(source).toContain('aria-label="Upload match file"')
+        expect(source).not.toContain("const formatFileSize =")
+    })
+
     it("uses reducer state for the match task form", () => {
         const source = readSource("components/matches/AddTaskDialog.tsx")
 

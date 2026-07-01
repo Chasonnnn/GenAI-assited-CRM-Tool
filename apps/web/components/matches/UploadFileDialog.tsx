@@ -27,6 +27,12 @@ interface UploadFileDialogProps {
     ipName: string
 }
 
+function formatFileSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function UploadFileDialog({
     open,
     onOpenChange,
@@ -71,12 +77,6 @@ export function UploadFileDialog({
         onOpenChange(isOpen)
     }
 
-    const formatFileSize = (bytes: number) => {
-        if (bytes < 1024) return `${bytes} B`
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    }
-
     return (
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-md">
@@ -118,6 +118,7 @@ export function UploadFileDialog({
                             id={fileInputId}
                             name="match_upload_file"
                             type="file"
+                            aria-label="Upload match file"
                             ref={fileInputRef}
                             onChange={handleFileSelect}
                             className="hidden"
