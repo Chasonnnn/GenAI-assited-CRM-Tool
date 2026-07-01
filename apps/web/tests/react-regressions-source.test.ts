@@ -1637,6 +1637,24 @@ describe("React regression guards (source)", () => {
         expect(changeStageSource).not.toContain(".sort((a, b) => a.order - b.order)")
     })
 
+    it("keeps the change stage modal free of manual React memoization", () => {
+        const source = readSource("components/surrogates/ChangeStageModal.tsx")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+    })
+
+    it("keeps change stage modal reset logic out of effects", () => {
+        const source = readSource("components/surrogates/ChangeStageModal.tsx")
+
+        expect(source).toContain("function ChangeStageModalContent")
+        expect(source).toContain("const resetInterviewFields =")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("setCalendarToday(new Date())")
+    })
+
     it("keeps bulk stage change reset logic in event handlers", () => {
         const source = readSource("components/surrogates/BulkChangeStageModal.tsx")
 

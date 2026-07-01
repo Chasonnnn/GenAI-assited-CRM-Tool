@@ -2536,3 +2536,34 @@ Full command after Batch 112: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `430`
 - Summary: `Bugs 141 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 243 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0982ba45-0bf4-4c1d-bae0-2e83862d9e6d`
+
+## Batch 113
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/ChangeStageModal.tsx` | Valid scanner finding: every flagged `useMemo` resolved to the React import. React Compiler is enabled for this app, so these local derivation wrappers are redundant. | High | Removed the `useMemo` import and replaced stage/date/validation derivations with plain values. Added a source regression guard so the modal does not reintroduce manual `useMemo` or `useCallback`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "change stage modal free of manual React memoization"` failed on `useMemo`. GREEN: the same test passed; `pnpm test --run tests/change-stage-modal.test.tsx` passed with `10` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Full manual memoization warnings dropped from `128` to `118`. |
+| `react-doctor/no-cascading-set-state`, `react-doctor/no-event-handler` | `components/surrogates/ChangeStageModal.tsx` modal-open reset effect and interview-stage reset effect | Valid scanner finding: the modal reset was replayed through effects after the parent opened the controlled dialog, and interview field resets were driven by selected-stage state instead of the stage-selection event. | High | Split the controlled wrapper from mounted dialog content, initialized modal state on mount, and moved interview field reset into the stage selection handler. Added a source guard to keep reset logic out of effects. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "change stage modal reset logic out of effects"` failed on missing mounted content split and existing `useEffect`. GREEN: the same test passed; `pnpm test --run tests/change-stage-modal.test.tsx tests/react-regressions-source.test.ts` passed with `220` tests. Changed-scope React Doctor no longer reports `no-cascading-set-state` or `no-event-handler` for this file. |
+| `react-doctor/prefer-useReducer` | `components/surrogates/ChangeStageModal.tsx:112` | Valid but outside this batch: the modal still has many related state fields. Consolidating them into a reducer is a larger state-shape refactor and should be handled as its own behavior-preserving slice. | High | Logged for a later focused batch; no suppression added. | Changed-scope React Doctor reports this as one of two remaining changed-file issues. |
+| `react-doctor/no-giant-component` | `components/surrogates/ChangeStageModal.tsx:97` | Valid but outside this batch: splitting the 613-line mounted modal content into subcomponents is a broader component-boundary refactor. | High | Logged for a later focused batch; no suppression added. | Changed-scope React Doctor reports this as one of two remaining changed-file issues. |
+
+Scoped command after Batch 113: `cd apps/web && npx -y react-doctor@latest components/surrogates --verbose`
+
+- Score: `56 / 100 Critical`
+- Total diagnostics in scope: `90`
+- Summary: `Bugs 24 warnings`, `Performance 5 warnings`, `Accessibility 3 warnings`, `Maintainability 58 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a5ebaa5d-9f65-4d76-9c25-e161f3fe8e5a`
+
+Changed-scope command after Batch 113: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-be09fb5a-52ed-40fe-a21e-486e52f79730`
+- Note: remaining changed-file diagnostics are the valid `prefer-useReducer` and `no-giant-component` structural refactors.
+
+Full command after Batch 113: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `417`
+- Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 233 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-eeb84b42-019b-41d0-b8ab-69b65ce86671`

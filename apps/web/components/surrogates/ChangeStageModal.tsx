@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useMemo, useEffect } from "react"
+import { useState } from "react"
 import { format, startOfDay, isBefore } from "date-fns"
 import {
     AlertCircleIcon,
@@ -87,6 +87,15 @@ interface ChangeStageModalProps {
 
 export function ChangeStageModal({
     open,
+    ...props
+}: ChangeStageModalProps) {
+    if (!open) return null
+
+    return <ChangeStageModalContent open={open} {...props} />
+}
+
+function ChangeStageModalContent({
+    open,
     onOpenChange,
     stages,
     currentStageId,
@@ -109,58 +118,25 @@ export function ChangeStageModal({
     const [reason, setReason] = useState("")
     const [datePickerOpen, setDatePickerOpen] = useState(false)
     const [interviewDatePickerOpen, setInterviewDatePickerOpen] = useState(false)
-    const [deliveryBabyGender, setDeliveryBabyGender] = useState("")
-    const [deliveryBabyWeight, setDeliveryBabyWeight] = useState("")
+    const [deliveryBabyGender, setDeliveryBabyGender] = useState(initialDeliveryBabyGender ?? "")
+    const [deliveryBabyWeight, setDeliveryBabyWeight] = useState(initialDeliveryBabyWeight ?? "")
     const [onHoldFollowUpMonths, setOnHoldFollowUpMonths] = useState<"none" | "1" | "3" | "6">("none")
     const [interviewDate, setInterviewDate] = useState<Date | undefined>(undefined)
     const [interviewHourInput, setInterviewHourInput] = useState("")
     const [interviewMinuteInput, setInterviewMinuteInput] = useState("")
     const [interviewMeridiem, setInterviewMeridiem] = useState<InterviewMeridiem>("PM")
-    const [calendarToday, setCalendarToday] = useState<Date | undefined>(undefined)
-
-    // Reset state when modal opens
-    useEffect(() => {
-        if (open) {
-            startTransition(() => {
-                setCalendarToday(new Date())
-                setSelectedStageId(null)
-                setEffectiveNow(true)
-                setSelectedDate(undefined)
-                setSelectedTime("")
-                setReason("")
-                setDeliveryBabyGender(initialDeliveryBabyGender ?? "")
-                setDeliveryBabyWeight(initialDeliveryBabyWeight ?? "")
-                setOnHoldFollowUpMonths("none")
-                setInterviewDate(undefined)
-                setInterviewHourInput("")
-                setInterviewMinuteInput("")
-                setInterviewMeridiem("PM")
-                setInterviewDatePickerOpen(false)
-            })
-        }
-    }, [open, initialDeliveryBabyGender, initialDeliveryBabyWeight])
-    const calendarStartOfToday = useMemo(
-        () => calendarToday ? startOfDay(calendarToday) : undefined,
-        [calendarToday]
-    )
+    const [calendarToday] = useState(() => new Date())
+    const calendarStartOfToday = calendarToday ? startOfDay(calendarToday) : undefined
     const selectedDateDefaultMonth = selectedDate ?? calendarToday
     const interviewDateDefaultMonth = interviewDate ?? calendarToday
 
     // Get the current stage order
-    const currentStage = useMemo(
-        () => stages.find(s => s.id === currentStageId),
-        [stages, currentStageId]
-    )
-    const comparisonStage = useMemo(
-        () => stages.find((stage) => stage.id === (comparisonStageId ?? currentStageId)) ?? currentStage,
-        [stages, comparisonStageId, currentStageId, currentStage]
-    )
+    const currentStage = stages.find(s => s.id === currentStageId)
+    const comparisonStage =
+        stages.find((stage) => stage.id === (comparisonStageId ?? currentStageId)) ?? currentStage
 
     // Get selected stage
-    const selectedStage = useMemo(
-        () => stages.find(s => s.id === selectedStageId),
-        [stages, selectedStageId]
-    )
+    const selectedStage = stages.find(s => s.id === selectedStageId)
     const isDeliveredStage = stageHasCapability(selectedStage, "requires_delivery_details")
     const isOnHoldStage = stageUsesPauseBehavior(selectedStage)
     const isInterviewScheduledStage = stageMatchesKey(selectedStage, "interview_scheduled")
@@ -172,40 +148,29 @@ export function ChangeStageModal({
         ? `${format(interviewDate, "yyyy-MM-dd")}T${interviewTime}:00`
         : null
 
-    useEffect(() => {
-        if (!isInterviewScheduledStage) return
-        startTransition(() => {
-            setInterviewDate(undefined)
-            setInterviewHourInput("")
-            setInterviewMinuteInput("")
-            setInterviewMeridiem("PM")
-            setInterviewDatePickerOpen(false)
-        })
-    }, [isInterviewScheduledStage])
-
-    const isResumeSelection = useMemo(() => {
+    const isResumeSelection = (() => {
         if (!selectedStage || !currentStage || !comparisonStage) return false
         return stageUsesPauseBehavior(currentStage) && selectedStage.id === comparisonStage.id
-    }, [selectedStage, currentStage, comparisonStage])
+    })()
 
     // Calculate if this is a regression (moving to earlier stage)
-    const isRegression = useMemo(() => {
+    const isRegression = (() => {
         if (!selectedStage || !comparisonStage) return false
         return !isResumeSelection && selectedStage.order < comparisonStage.order
-    }, [selectedStage, comparisonStage, isResumeSelection])
+    })()
     const requiresApproval = isRegression && !canSelfApproveRegression
 
     const hasTime = selectedTime.trim().length > 0
-    const effectiveDateTime = useMemo(() => {
+    const effectiveDateTime = (() => {
         if (effectiveNow || !selectedDate || !hasTime) return null
         const dateWithTime = new Date(selectedDate)
         const [hours, minutes] = selectedTime.split(":").map(Number)
         dateWithTime.setHours(hours || 0, minutes || 0, 0, 0)
         return dateWithTime
-    }, [effectiveNow, selectedDate, selectedTime, hasTime])
+    })()
 
     // Calculate if this is backdated (past date/time)
-    const isBackdated = useMemo(() => {
+    const isBackdated = (() => {
         if (effectiveNow) return false
         if (!selectedDate) return false
         if (!hasTime) {
@@ -216,21 +181,19 @@ export function ChangeStageModal({
         if (!effectiveDateTime) return false
         if (!calendarToday) return false
         return isBefore(effectiveDateTime, calendarToday)
-    }, [calendarStartOfToday, calendarToday, effectiveNow, selectedDate, hasTime, effectiveDateTime])
+    })()
 
     // Check if reason is required
     const reasonRequired =
         isRegression || isBackdated || stageRequiresReasonOnEnter(selectedStage)
 
     // Validation
-    const canSubmit = useMemo(() => {
-        if (!selectedStageId) return false
-        if (selectedStageId === currentStageId) return false
-        if (!effectiveNow && !selectedDate) return false
-        if (isInterviewScheduledStage && !interviewDateTime) return false
-        if (reasonRequired && !reason.trim()) return false
-        return true
-    }, [selectedStageId, currentStageId, effectiveNow, selectedDate, isInterviewScheduledStage, interviewDateTime, reasonRequired, reason])
+    const canSubmit =
+        Boolean(selectedStageId) &&
+        selectedStageId !== currentStageId &&
+        (effectiveNow || Boolean(selectedDate)) &&
+        (!isInterviewScheduledStage || Boolean(interviewDateTime)) &&
+        (!reasonRequired || reason.trim().length > 0)
 
     // Build effective_at ISO string
     const buildEffectiveAt = (): string | undefined => {
@@ -286,6 +249,19 @@ export function ChangeStageModal({
     }
 
     const label = entityLabel ?? "Stage"
+    const resetInterviewFields = () => {
+        setInterviewDate(undefined)
+        setInterviewHourInput("")
+        setInterviewMinuteInput("")
+        setInterviewMeridiem("PM")
+        setInterviewDatePickerOpen(false)
+    }
+    const handleStageSelect = (stage: PipelineStage) => {
+        setSelectedStageId(stage.id)
+        if (stageMatchesKey(stage, "interview_scheduled")) {
+            resetInterviewFields()
+        }
+    }
     const updateInterviewHourInput = (value: string) => {
         const digitGroups = value.match(/\d+/g) ?? []
         setInterviewHourInput((digitGroups[0] ?? "").slice(0, 2))
@@ -325,10 +301,7 @@ export function ChangeStageModal({
             : "Saving..."
 
     // Filter active stages and sort by order
-    const sortedStages = useMemo(
-        () => stages.filter(s => s.is_active).toSorted((a, b) => a.order - b.order),
-        [stages]
-    )
+    const sortedStages = stages.filter(s => s.is_active).toSorted((a, b) => a.order - b.order)
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
@@ -360,7 +333,7 @@ export function ChangeStageModal({
                                         key={stage.id}
                                         type="button"
                                         disabled={isCurrent}
-                                        onClick={() => setSelectedStageId(stage.id)}
+                                        onClick={() => handleStageSelect(stage)}
                                         className={cn(
                                             "flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors",
                                             "hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
