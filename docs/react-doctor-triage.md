@@ -2586,3 +2586,24 @@ Full command after Batch 114: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `402`
 - Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 218 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-34288bce-07c6-4ebf-a1a5-c5c679734c98`
+
+## Batch 115
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/MassEditStageModal.tsx` | Valid scanner finding: every flagged `React.useMemo` resolved to the React namespace import. React Compiler is enabled for this app, and the React Doctor rule docs say to delete React `useMemo`/`useCallback`/`memo` wrappers when no preserve-manual-memoization case applies. | High | Replaced the modal's stage, filter, validation, preview-signature, and selected-stage `useMemo` derivations with plain values. Updated the existing source guard to keep this modal free of manual React memoization while preserving the late-stage-load guard. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "MassEditStageModal"` failed on `React.useMemo`. GREEN: the same guard passed; `pnpm test --run tests/mass-edit-stage-modal.test.tsx` passed with `5` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Changed-scope React Doctor scored `98 / 100` with only the pre-existing `no-giant-component` warning for `MassEditStageModal`. Full diagnostics dropped from `402` to `391`; global redundant manual memoization dropped from `104` to `93`. |
+| `react-doctor/no-giant-component` | `components/surrogates/MassEditStageModal.tsx:185` | Valid but outside this batch: the modal is still a large component. Splitting it into sections is a broader component-boundary refactor and should be handled separately with behavior coverage. | High | Logged for a later focused batch; no suppression added. | Changed-scope React Doctor reports this as the only remaining changed-file issue. |
+
+Changed-scope command after Batch 115: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-463ab610-1bfe-4dfd-b682-2e879a1ee747`
+
+Full command after Batch 115: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `391`
+- Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 207 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-51cd5e13-29be-4280-9883-a64d117108e6`

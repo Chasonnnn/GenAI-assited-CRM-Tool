@@ -225,14 +225,8 @@ export function MassEditStageModal({
         previewState,
     } = state
 
-    const activeStages = React.useMemo(
-        () => stages.filter((s) => s.is_active).toSorted((a, b) => a.order - b.order),
-        [stages]
-    )
-    const defaultTargetStageId = React.useMemo(
-        () => activeStages.find((s) => s.slug === "disqualified")?.id ?? "",
-        [activeStages]
-    )
+    const activeStages = stages.filter((s) => s.is_active).toSorted((a, b) => a.order - b.order)
+    const defaultTargetStageId = activeStages.find((s) => s.slug === "disqualified")?.id ?? ""
     const hasInitializedOpenRef = React.useRef(false)
 
     // Reset only once per open cycle.
@@ -253,15 +247,15 @@ export function MassEditStageModal({
         dispatch({ type: "set", patch: { targetStageId: defaultTargetStageId } })
     }, [open, targetStageId, defaultTargetStageId])
 
-    const { states, error: statesError } = React.useMemo(() => parseStates(statesInput), [statesInput])
+    const { states, error: statesError } = parseStates(statesInput)
     const races = selectedRaces.length ? selectedRaces : undefined
-    const createdDateError = React.useMemo(() => {
+    const createdDateError = (() => {
         if (!createdFrom || !createdTo) return null
         if (createdFrom <= createdTo) return null
         return "Created From must be on or before Created To."
-    }, [createdFrom, createdTo])
+    })()
 
-    const { age_min, age_max, ageError } = React.useMemo(() => {
+    const { age_min, age_max, ageError } = (() => {
         const raw = ageValue.trim()
         if (!raw) return { age_min: undefined, age_max: undefined, ageError: null as string | null }
 
@@ -284,9 +278,9 @@ export function MassEditStageModal({
             case "=":
                 return { age_min: value, age_max: value, ageError: null }
         }
-    }, [ageOp, ageValue])
+    })()
 
-    const { bmi_min, bmi_max, bmiError } = React.useMemo(() => {
+    const { bmi_min, bmi_max, bmiError } = (() => {
         const raw = bmiValue.trim()
         if (!raw) return { bmi_min: undefined, bmi_max: undefined, bmiError: null as string | null }
 
@@ -316,9 +310,9 @@ export function MassEditStageModal({
                     bmiError: null,
                 }
         }
-    }, [bmiOp, bmiValue])
+    })()
 
-    const derivedFilters = React.useMemo<SurrogateMassEditStageFilters>(() => {
+    const derivedFilters: SurrogateMassEditStageFilters = (() => {
         const is_age_eligible = triStateToBool(isAgeEligible)
         const is_citizen_or_pr = triStateToBool(isCitizenOrPr)
         const has_child = triStateToBool(hasChild)
@@ -340,23 +334,9 @@ export function MassEditStageModal({
             ...(is_non_smoker !== undefined ? { is_non_smoker } : {}),
             ...(has_surrogate_experience !== undefined ? { has_surrogate_experience } : {}),
         }
-    }, [
-        states,
-        races,
-        age_min,
-        age_max,
-        bmi_min,
-        bmi_max,
-        isAgeEligible,
-        isCitizenOrPr,
-        hasChild,
-        isNonSmoker,
-        hasSurrogateExperience,
-        createdFrom,
-        createdTo,
-    ])
+    })()
 
-    const mergedFilters: SurrogateMassEditStageFilters = React.useMemo(() => {
+    const mergedFilters: SurrogateMassEditStageFilters = (() => {
         const merged: SurrogateMassEditStageFilters = { ...baseFilters, ...derivedFilters }
         const hasModalCreatedOverride = Boolean(createdFrom || createdTo)
 
@@ -370,31 +350,24 @@ export function MassEditStageModal({
             ...(createdFrom ? { created_from: createdFrom } : {}),
             ...(createdTo ? { created_to: createdTo } : {}),
         }
-    }, [baseFilters, derivedFilters, createdFrom, createdTo])
-    const previewSignature = React.useMemo(
-        () =>
-            JSON.stringify({
-                filters: mergedFilters,
-                targetStageId,
-                actionMode,
-                triggerWorkflows,
-                reason,
-            }),
-        [mergedFilters, targetStageId, actionMode, triggerWorkflows, reason]
-    )
+    })()
+    const previewSignature = JSON.stringify({
+        filters: mergedFilters,
+        targetStageId,
+        actionMode,
+        triggerWorkflows,
+        reason,
+    })
     const preview =
         previewState?.signature === previewSignature ? previewState.result : null
 
     const hasCreatedOverride = Boolean((baseFilters.created_from || baseFilters.created_to) && (createdFrom || createdTo))
-    const effectiveCreatedRange = React.useMemo(() => {
+    const effectiveCreatedRange = (() => {
         if (!mergedFilters.created_from && !mergedFilters.created_to) return null
         return `${mergedFilters.created_from ?? "…"} to ${mergedFilters.created_to ?? "…"}`
-    }, [mergedFilters.created_from, mergedFilters.created_to])
+    })()
 
-    const selectedStage = React.useMemo(
-        () => activeStages.find((s) => s.id === targetStageId),
-        [activeStages, targetStageId]
-    )
+    const selectedStage = activeStages.find((s) => s.id === targetStageId)
 
     const isApplying = applyStageMutation.isPending || applyArchiveMutation.isPending
     const canPreview = !statesError && !ageError && !bmiError && !createdDateError
