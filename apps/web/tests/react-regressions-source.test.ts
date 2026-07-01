@@ -2385,10 +2385,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useSearchParams")
         expect(source).not.toContain("const activeTab = readCurrentTabParam()")
         expect(source).not.toContain("renderNavLink")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useState")
         expect(source).not.toContain("setAutomationOpen(true)")
         expect(source).not.toContain("setSettingsOpen(true)")
         expect(source).not.toContain("setTasksOpen(true)")
+    })
+
+    it("keeps search command handlers compiler-friendly", () => {
+        const source = readSource("components/search-command.tsx")
+
+        expect(source).toContain('key={open ? "open" : "closed"}')
+        expect(source).toContain("useEffectEvent")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("startTransition")
     })
 
     it("keeps pending interview comment quote styling subtle", () => {

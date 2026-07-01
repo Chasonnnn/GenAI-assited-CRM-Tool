@@ -1911,3 +1911,23 @@ Full command after Batch 89: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `600`
 - Summary: `Bugs 174 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 369 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fb4deda9-3c9b-4966-a41a-63810f856934`
+
+## Batch 90
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/app-sidebar.tsx`, `components/search-command.tsx` | Valid: the sidebar wrapped permission/navigation derivations and dispatch handlers in `useMemo`/`useCallback`, and the search dialog wrapped its select handler in `useCallback`. React Compiler is enabled and these values do not provide an identity-sensitive API contract. | High | Remove the redundant wrappers and keep the sidebar/search handlers as plain render-local functions. Added source guards that failed on the previous wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/app-sidebar-permissions.test.tsx tests/search-debounce.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `251` to `244`. |
+| `react-doctor/prefer-use-effect-event`, `react-doctor/no-reset-all-state-on-prop-change`, `react-doctor/no-event-handler` | `components/search-command.tsx` | Valid follow-up: once the sidebar passed a plain hotkey callback, the hotkey listener needed to stop depending on callback identity, and the dialog query reset was still effect-driven from `open`. | High | Use `useEffectEvent` inside `useSearchHotkey`, and key an inner search dialog component on `open` so close/open resets local query state without an effect. | Changed-scope React Doctor improved from `91 / 100` with two search-command warnings to `100 / 100` with no issues. |
+
+Changed-scope command after Batch 90: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 90: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `591`
+- Summary: `Bugs 172 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 362 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7d0c5afd-e720-4275-80ca-dbb6f291d1e0`

@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useCallback, useEffect, useState } from "react"
+import { useEffect, useEffectEvent, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
@@ -53,6 +53,16 @@ interface SearchCommandDialogProps {
 }
 
 export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogProps) {
+    return (
+        <SearchCommandDialogContent
+            key={open ? "open" : "closed"}
+            open={open}
+            onOpenChange={onOpenChange}
+        />
+    )
+}
+
+function SearchCommandDialogContent({ open, onOpenChange }: SearchCommandDialogProps) {
     const { push } = useRouter()
     const [query, setQuery] = useState("")
     const debouncedQuery = useDebouncedValue(query, 400)
@@ -69,21 +79,12 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
             previousData ?? createEmptySearchResponse(debouncedQuery),
     })
 
-    // Reset query when dialog closes
-    useEffect(() => {
-        if (!open) {
-            startTransition(() => {
-                setQuery("")
-            })
-        }
-    }, [open])
-
-    const handleSelect = useCallback((result: SearchResult) => {
+    const handleSelect = (result: SearchResult) => {
         const config = ENTITY_CONFIG[result.entity_type]
         const url = config.getUrl(result)
         onOpenChange(false)
         push(url as Route)
-    }, [onOpenChange, push])
+    }
 
     return (
         <CommandDialog
@@ -153,15 +154,17 @@ export function SearchCommandDialog({ open, onOpenChange }: SearchCommandDialogP
  * Hook to register ⌘K / Ctrl+K keyboard shortcut for search
  */
 export function useSearchHotkey(callback: () => void) {
+    const onSearchHotkey = useEffectEvent(callback)
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "k") {
                 e.preventDefault()
-                callback()
+                onSearchHotkey()
             }
         }
 
         document.addEventListener("keydown", handleKeyDown)
         return () => document.removeEventListener("keydown", handleKeyDown)
-    }, [callback])
+    }, [])
 }

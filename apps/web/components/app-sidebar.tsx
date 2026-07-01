@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useCallback, useEffect, useReducer } from "react"
+import { useEffect, useReducer } from "react"
 import type { Route } from "next"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -552,10 +552,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
-    const permissionSet = React.useMemo(
-        () => new Set(effectivePermissions?.permissions ?? []),
-        [effectivePermissions?.permissions]
-    )
+    const permissionSet = new Set(effectivePermissions?.permissions ?? [])
     const canViewTeam = isDeveloper || permissionSet.has("manage_team")
     const canViewTickets = isDeveloper
     const canViewPipelines = isDeveloper || permissionSet.has("manage_pipelines")
@@ -572,17 +569,15 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const canViewReports = isDeveloper || permissionSet.has("view_reports")
 
-    const navigationItems = React.useMemo(() => {
-        return navigation.filter((item) => {
-            if (item.url === "/tickets") return canViewTickets
-            if ("requiredPermission" in item) {
-                return isDeveloper || permissionSet.has(item.requiredPermission)
-            }
-            return true
-        })
-    }, [canViewTickets, isDeveloper, permissionSet])
+    const navigationItems = navigation.filter((item) => {
+        if (item.url === "/tickets") return canViewTickets
+        if ("requiredPermission" in item) {
+            return isDeveloper || permissionSet.has(item.requiredPermission)
+        }
+        return true
+    })
 
-    const activeNavUrl = React.useMemo(() => {
+    const activeNavUrl = (() => {
         if (!pathname) return null
         const matches = navigationItems.filter(
             (item) => pathname === item.url || pathname.startsWith(item.url + "/")
@@ -590,7 +585,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         if (matches.length === 0) return null
         matches.sort((a, b) => b.url.length - a.url.length)
         return matches[0]!.url
-    }, [pathname, navigationItems])
+    })()
 
     const [state, dispatch] = useReducer(appSidebarReducer, undefined, createInitialAppSidebarState)
     const {
@@ -607,18 +602,18 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const isCollapsed = !isExpanded && !isMobile
 
-    const setExpanded = useCallback((open: boolean) => {
+    const setExpanded = (open: boolean) => {
         dispatch({ type: "setExpanded", isExpanded: open })
         document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
-    }, [])
+    }
 
-    const toggleSidebar = useCallback(() => {
+    const toggleSidebar = () => {
         if (isMobile) {
             dispatch({ type: "toggleMobileOpen" })
             return
         }
         setExpanded(!isExpanded)
-    }, [isMobile, isExpanded, setExpanded])
+    }
 
     // Sync cookie on mount when switching between mobile/desktop
     useEffect(() => {
@@ -701,7 +696,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         window.location.href = "/login"
     }
 
-    const openSearch = useCallback(() => dispatch({ type: "setSearchOpen", searchOpen: true }), [])
+    const openSearch = () => dispatch({ type: "setSearchOpen", searchOpen: true })
     useSearchHotkey(openSearch)
 
     const isNavItemActive = (item: NavLinkItem) => activeNavUrl === item.url
