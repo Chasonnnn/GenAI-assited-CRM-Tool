@@ -1,6 +1,5 @@
 "use client"
 
-import { useCallback } from "react"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { cn } from "@/lib/utils"
 import { SelectionPopover } from "../SelectionPopover"
@@ -28,41 +27,41 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
     useInteractionClasses(transcriptRef, interaction)
 
     // Handle hover on transcript highlights (event delegation)
-    const handleMouseOver = useCallback((e: React.MouseEvent) => {
+    const handleMouseOver = (e: React.MouseEvent) => {
         if (isSelectingRef.current) return
         const target = e.target instanceof HTMLElement ? e.target : null
         const commentSpan = target?.closest("[data-comment-id]")
         if (commentSpan) {
             setHoveredCommentId(commentSpan.getAttribute("data-comment-id"))
         }
-    }, [isSelectingRef, setHoveredCommentId])
+    }
 
-    const handleMouseOut = useCallback((e: React.MouseEvent) => {
+    const handleMouseOut = (e: React.MouseEvent) => {
         if (isSelectingRef.current) return
         const related = e.relatedTarget instanceof HTMLElement ? e.relatedTarget : null
         if (!related?.closest("[data-comment-id]")) {
             setHoveredCommentId(null)
         }
-    }, [isSelectingRef, setHoveredCommentId])
+    }
 
-    const handleMouseLeave = useCallback(() => {
+    const handleMouseLeave = () => {
         setHoveredCommentId(null)
-    }, [setHoveredCommentId])
+    }
 
-    const focusCommentFromTarget = useCallback((target: HTMLElement | null) => {
+    const focusCommentFromTarget = (target: HTMLElement | null) => {
         const commentSpan = target?.closest("[data-comment-id]")
         if (commentSpan) {
             const commentId = commentSpan.getAttribute("data-comment-id")
             setFocusedCommentId(commentId)
         }
-    }, [setFocusedCommentId])
+    }
 
     // Handle click on transcript highlights
-    const focusCommentFromClick = useCallback((e: React.MouseEvent) => {
+    const focusCommentFromClick = (e: React.MouseEvent) => {
         if (isSelectingRef.current) return
         const target = e.target instanceof HTMLElement ? e.target : null
         focusCommentFromTarget(target)
-    }, [focusCommentFromTarget, isSelectingRef])
+    }
 
     return (
         <>

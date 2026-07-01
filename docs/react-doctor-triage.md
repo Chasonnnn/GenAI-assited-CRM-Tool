@@ -2446,3 +2446,32 @@ Full command after Batch 109: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `525`
 - Summary: `Bugs 146 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-51ea9c4b-0f7e-431e-aea4-05f261bc6d12`
+
+## Batch 110
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/interviews/**`: `CommentCard.tsx`, `TranscriptViewer.tsx`, `SelectionPopover.tsx`, `TranscriptEditor.tsx`, `InterviewComments/TranscriptPane.tsx`, `InterviewComments/MobileLayout.tsx`, `InterviewComments/hooks/useInteractionClasses.ts`, `InterviewComments/index.tsx` | Valid scanner finding: every flagged `memo`, `useMemo`, and `useCallback` resolved to the React package. `apps/web/next.config.js` has `reactCompiler: true`, `babel-plugin-react-compiler` is installed, and the local Next 16 docs confirm this setup reduces the need for manual `useMemo`/`useCallback`. | High | Removed redundant manual memoization wrappers in the interviews feature. Replaced the listener-ref update pattern introduced by plain handlers with React 19 `useEffectEvent`, and moved a pure keydown helper to module scope so the cleanup did not create fresh-dependency React Doctor errors. | Baseline and GREEN: `pnpm test --run tests/transcript-viewer.test.tsx tests/selection-popover-listeners.test.tsx tests/surrogate-interview-accessibility.test.tsx tests/interview-tab.test.tsx` passed with `14` tests; `pnpm test --run tests/react-regressions-source.test.ts -t "interview"` passed with `6` selected tests; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. Focused interviews React Doctor manual memoization warnings dropped from `29` to `0`; focused total diagnostics dropped from `55` to `22`; full diagnostics dropped from `525` to `492`; global redundant manual memoization dropped from `217` to `188`. |
+| `react-doctor/no-effect-with-fresh-deps` | `SelectionPopover.tsx`, `TranscriptViewer.tsx` | Valid secondary finding after removing `useCallback`: ref-sync effects depended on newly allocated plain handlers. | High | Used `useEffectEvent` for document/listener callbacks that need current props/state and removed a no-op `mousedown` listener in `TranscriptViewer`. | Changed-scope React Doctor no longer reports `no-effect-with-fresh-deps` errors. |
+
+Scoped command after Batch 110: `cd apps/web && npx -y react-doctor@latest components/surrogates/interviews --verbose`
+
+- Score: `62 / 100 Needs work`
+- Total diagnostics in scope: `22`
+- Summary: `Bugs 12 warnings`, `Performance 3 warnings`, `Accessibility 3 warnings`, `Maintainability 4 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-471f43a7-05c5-4ea0-95c8-15e45e144f27`
+
+Changed-scope command after Batch 110: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `85 / 100 Great`
+- Total diagnostics in changed files: `17`
+- Summary: `Bugs 9 warnings`, `Performance 2 warnings`, `Accessibility 3 warnings`, `Maintainability 3 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8193265a-a049-4cee-a020-335b7d98ef7f`
+- Note: remaining changed-file diagnostics are non-manual-memoization findings that require separate behavior validation.
+
+Full command after Batch 110: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `492`
+- Summary: `Bugs 142 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 304 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d4b28ba2-f9f3-432d-aae6-753535ffa36a`

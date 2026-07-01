@@ -15,7 +15,6 @@
  * - Reply threads
  */
 
-import { useMemo } from "react"
 import { useMediaQuery } from "@/lib/hooks/use-media-query"
 import { Loader2Icon, FileTextIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -286,11 +285,8 @@ export function InterviewWithComments({
     const isMobile = useMediaQuery("(max-width: 768px)")
 
     // Build comment-to-note mapping and render transcript
-    const commentNoteMap = useMemo(() => buildCommentNoteMap(notes), [notes])
-    const transcriptHtml = useMemo(
-        () => renderTranscript(interview.transcript_json, notes, commentNoteMap),
-        [interview.transcript_json, notes, commentNoteMap]
-    )
+    const commentNoteMap = buildCommentNoteMap(notes)
+    const transcriptHtml = renderTranscript(interview.transcript_json, notes, commentNoteMap)
 
     // Loading state
     if (isLoading) {

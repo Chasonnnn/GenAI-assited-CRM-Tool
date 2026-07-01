@@ -35,7 +35,7 @@ import {
     MessageSquareIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useCallback, useEffect } from 'react'
+import { useEffect } from 'react'
 import type { TipTapDoc } from '@/lib/api/interviews'
 
 const isTipTapDoc = (value: JSONContent): value is TipTapDoc => value?.type === 'doc'
@@ -196,7 +196,7 @@ export function TranscriptEditor({
         }
     }, [content, editor])
 
-    const addLink = useCallback(() => {
+    const addLink = () => {
         if (!editor) return
         const previousUrl = editor.getAttributes('link').href || ''
         const url = window.prompt('Enter URL:', previousUrl)
@@ -208,9 +208,9 @@ export function TranscriptEditor({
         }
 
         editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-    }, [editor])
+    }
 
-    const addComment = useCallback(() => {
+    const addComment = () => {
         if (!editor || !onAddComment) return
 
         const { from, to } = editor.state.selection
@@ -230,7 +230,7 @@ export function TranscriptEditor({
 
         // Notify parent component (which can then create the note)
         onAddComment(selectedText, commentId)
-    }, [editor, onAddComment])
+    }
 
     // Check if user has selected text
     const hasSelection = editor?.state.selection && !editor.state.selection.empty

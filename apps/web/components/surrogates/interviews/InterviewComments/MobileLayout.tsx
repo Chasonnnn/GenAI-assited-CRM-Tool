@@ -1,6 +1,5 @@
 "use client"
 
-import { useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FileTextIcon, MessageSquareIcon } from "lucide-react"
@@ -34,15 +33,15 @@ export function MobileLayout({ className }: MobileLayoutProps) {
     } = useInterviewComments()
 
     // Handle comment card hover
-    const handleCardHover = useCallback((commentId: string | null, hover: boolean) => {
+    const handleCardHover = (commentId: string | null, hover: boolean) => {
         if (isSelectingRef.current) return
         setHoveredCommentId(hover ? commentId : null)
-    }, [isSelectingRef, setHoveredCommentId])
+    }
 
     // Handle comment card click
-    const handleCardClick = useCallback((commentId: string | null) => {
+    const handleCardClick = (commentId: string | null) => {
         setFocusedCommentId(commentId)
-    }, [setFocusedCommentId])
+    }
 
     return (
         <Tabs defaultValue="transcript" className={cn("h-full flex flex-col", className)}>

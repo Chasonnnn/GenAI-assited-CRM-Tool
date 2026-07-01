@@ -8,7 +8,7 @@
  * the comment creation flow.
  */
 
-import { useCallback, useEffect, useState, useRef } from "react"
+import { useEffect, useEffectEvent, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { MessageSquarePlusIcon } from "lucide-react"
@@ -50,14 +50,14 @@ export function SelectionPopover({
         onSelectionStateChangeRef.current = onSelectionStateChange
     }, [containerRef, disabled, onSelectionStateChange])
 
-    const setSelectionActive = useCallback((active: boolean) => {
+    const setSelectionActive = (active: boolean) => {
         if (selectionActiveRef.current === active) return
         selectionActiveRef.current = active
         onSelectionStateChangeRef.current?.(active)
-    }, [])
+    }
 
     // Handle text selection within the container
-    const handleSelectionChange = useCallback(() => {
+    const handleSelectionChange = useEffectEvent(() => {
         // Don't update if we're clicking the popover or dragging selection
         if (isClickingPopover.current || isMouseDownRef.current) return
 
@@ -128,17 +128,12 @@ export function SelectionPopover({
         setSelectedText(text)
         setSelectedRange(range.cloneRange())
         setSelectionActive(true)
-    }, [setSelectionActive])
-
-    const handleSelectionChangeRef = useRef(handleSelectionChange)
-    useEffect(() => {
-        handleSelectionChangeRef.current = handleSelectionChange
-    }, [handleSelectionChange])
+    })
 
     // Listen for selection changes
     useEffect(() => {
         const handleDocumentSelectionChange = () => {
-            handleSelectionChangeRef.current()
+            handleSelectionChange()
         }
 
         document.addEventListener("selectionchange", handleDocumentSelectionChange)
@@ -178,7 +173,7 @@ export function SelectionPopover({
 
         const handleMouseUp = () => {
             isMouseDownRef.current = false
-            handleSelectionChangeRef.current()
+            handleSelectionChange()
             // Reset after a short delay
             setTimeout(() => {
                 isClickingPopover.current = false
@@ -193,7 +188,7 @@ export function SelectionPopover({
         }
     }, [])
 
-    const handleAddComment = useCallback(() => {
+    const handleAddComment = () => {
         if (!selectedText || !selectedRange) return
 
         onAddComment({
@@ -207,7 +202,7 @@ export function SelectionPopover({
         setSelectedRange(null)
         window.getSelection()?.removeAllRanges()
         setSelectionActive(false)
-    }, [selectedText, selectedRange, onAddComment, setSelectionActive])
+    }
 
     // Don't render if not visible or disabled
     if (!position.visible || disabled) return null

@@ -9,7 +9,7 @@
  * - Inline editing support
  */
 
-import { memo, useState, useCallback, useRef, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -41,10 +41,24 @@ interface CommentCardProps {
     canEdit: boolean
 }
 
+function handleCommentCardKeyDown(
+    e: React.KeyboardEvent,
+    onSubmit: () => void,
+    onCancel: () => void
+) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        onSubmit()
+    } else if (e.key === "Escape") {
+        e.preventDefault()
+        onCancel()
+    }
+}
+
 /**
  * Single reply item within a thread
  */
-const ReplyItem = memo(function ReplyItem({
+function ReplyItem({
     reply,
     canEdit,
     onDelete,
@@ -67,11 +81,11 @@ const ReplyItem = memo(function ReplyItem({
         }
     }, [isEditing])
 
-    const handleEditSubmit = useCallback(() => {
+    const handleEditSubmit = () => {
         if (!editContent.trim() || !onEdit) return
         onEdit(reply.id, editContent.trim())
         setIsEditing(false)
-    }, [editContent, onEdit, reply.id])
+    }
 
     return (
         <div className="group relative pl-2 border-l-2 border-stone-200 dark:border-stone-700 ml-1 mt-2">
@@ -164,9 +178,9 @@ const ReplyItem = memo(function ReplyItem({
             )}
         </div>
     )
-})
+}
 
-export const CommentCard = memo(function CommentCard({
+export function CommentCard({
     note,
     isHovered,
     isFocused,
@@ -203,40 +217,26 @@ export const CommentCard = memo(function CommentCard({
         }
     }, [isEditing])
 
-    const handleReplySubmit = useCallback(() => {
+    const handleReplySubmit = () => {
         if (!replyContent.trim()) return
         onReply(replyContent.trim())
         setReplyContent("")
         setIsReplying(false)
-    }, [replyContent, onReply])
+    }
 
-    const handleEditSubmit = useCallback(() => {
+    const handleEditSubmit = () => {
         if (!editContent.trim() || !onEdit) return
         onEdit(editContent.trim())
         setIsEditing(false)
-    }, [editContent, onEdit])
+    }
 
-    const handleCardClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const handleCardClick = (event: React.MouseEvent<HTMLElement>) => {
         const target = event.target
         if (target instanceof Element && target.closest('[data-comment-card-interaction="true"]')) {
             return
         }
         onClick()
-    }, [onClick])
-
-    const handleKeyDown = useCallback((
-        e: React.KeyboardEvent,
-        onSubmit: () => void,
-        onCancel: () => void
-    ) => {
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault()
-            onSubmit()
-        } else if (e.key === "Escape") {
-            e.preventDefault()
-            onCancel()
-        }
-    }, [])
+    }
 
     return (
         <Card
@@ -284,7 +284,7 @@ export const CommentCard = memo(function CommentCard({
                             ref={editInputRef}
                             value={editContent}
                             onChange={(e) => setEditContent(e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, handleEditSubmit, () => {
+                            onKeyDown={(e) => handleCommentCardKeyDown(e, handleEditSubmit, () => {
                                 setIsEditing(false)
                                 setEditContent(note.content)
                             })}
@@ -356,7 +356,7 @@ export const CommentCard = memo(function CommentCard({
                                 ref={replyInputRef}
                                 value={replyContent}
                                 onChange={(e) => setReplyContent(e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, handleReplySubmit, () => {
+                                onKeyDown={(e) => handleCommentCardKeyDown(e, handleReplySubmit, () => {
                                     setIsReplying(false)
                                     setReplyContent("")
                                 })}
@@ -437,4 +437,4 @@ export const CommentCard = memo(function CommentCard({
             </div>
         </Card>
     )
-})
+}
