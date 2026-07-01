@@ -2016,6 +2016,15 @@ describe("React regression guards (source)", () => {
         expect(publishDialogSource).not.toContain("Loading organizations...")
     })
 
+    it("keeps publish dialog state reset and derivations compiler-friendly", () => {
+        const source = readSource("components/ops/templates/PublishDialog.tsx")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("setMode(")
+        expect(source).not.toContain("setSelectedOrgIds(")
+        expect(source).not.toContain("setSearch(")
+    })
+
     it("keeps ops alert actions compiler-compatible", () => {
         const source = readSource("app/ops/alerts/page.client.tsx")
 

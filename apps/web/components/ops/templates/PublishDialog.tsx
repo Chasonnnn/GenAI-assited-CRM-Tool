@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { listOrganizations, type OrganizationSummary } from "@/lib/api/platform"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -29,6 +29,20 @@ const MODE_ALL_ID = "publish-dialog-mode-all"
 const MODE_SELECTED_ID = "publish-dialog-mode-selected"
 const SELECT_ALL_ID = "publish-dialog-select-all"
 
+type PublishDialogState = {
+    mode: "all" | "selected"
+    search: string
+    selectedOrgIds: string[]
+}
+
+function createPublishDialogState(defaultPublishAll: boolean, initialOrgIds: string[]): PublishDialogState {
+    return {
+        mode: defaultPublishAll ? "all" : "selected",
+        search: "",
+        selectedOrgIds: [...initialOrgIds],
+    }
+}
+
 export function PublishDialog({
     open,
     onOpenChange,
@@ -39,16 +53,12 @@ export function PublishDialog({
     defaultPublishAll = true,
     initialOrgIds = EMPTY_ORG_IDS,
 }: PublishDialogProps) {
-    const [mode, setMode] = useState<"all" | "selected">(defaultPublishAll ? "all" : "selected")
-    const [search, setSearch] = useState("")
-    const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([])
+    const [state, setDialogState] = useState(() => createPublishDialogState(defaultPublishAll, initialOrgIds))
 
     useEffect(() => {
         if (!open) return
         startTransition(() => {
-            setMode(defaultPublishAll ? "all" : "selected")
-            setSelectedOrgIds(initialOrgIds)
-            setSearch("")
+            setDialogState(createPublishDialogState(defaultPublishAll, initialOrgIds))
         })
     }, [open, defaultPublishAll, initialOrgIds])
 
@@ -58,42 +68,40 @@ export function PublishDialog({
         enabled: open,
     })
 
-    const organizations = useMemo(
-        () => (data?.items ?? []).filter((org) => !org.deleted_at),
-        [data?.items]
-    )
+    const organizations = (data?.items ?? []).filter((org) => !org.deleted_at)
+    const query = state.search.trim().toLowerCase()
+    const filteredOrgs = query
+        ? organizations.filter((org) =>
+              org.name.toLowerCase().includes(query) || org.slug.toLowerCase().includes(query)
+          )
+        : organizations
 
-    const filteredOrgs = useMemo(() => {
-        const query = search.trim().toLowerCase()
-        if (!query) return organizations
-        return organizations.filter((org) =>
-            org.name.toLowerCase().includes(query) || org.slug.toLowerCase().includes(query)
-        )
-    }, [organizations, search])
-
-    const selectedSet = useMemo(() => new Set(selectedOrgIds), [selectedOrgIds])
+    const selectedSet = new Set(state.selectedOrgIds)
     const allFilteredSelected =
         filteredOrgs.length > 0 && filteredOrgs.every((org) => selectedSet.has(org.id))
 
     const toggleSelectAll = () => {
-        if (allFilteredSelected) {
-            const remaining = selectedOrgIds.filter((id) => !filteredOrgs.some((org) => org.id === id))
-            setSelectedOrgIds(remaining)
-        } else {
-            const merged = new Set(selectedOrgIds)
+        setDialogState((current) => {
+            if (allFilteredSelected) {
+                const remaining = current.selectedOrgIds.filter((id) => !filteredOrgs.some((org) => org.id === id))
+                return { ...current, selectedOrgIds: remaining }
+            }
+            const merged = new Set(current.selectedOrgIds)
             filteredOrgs.forEach((org) => merged.add(org.id))
-            setSelectedOrgIds(Array.from(merged))
-        }
-    }
-
-    const toggleOrg = (orgId: string, checked: boolean) => {
-        setSelectedOrgIds((prev) => {
-            if (checked) return Array.from(new Set([...prev, orgId]))
-            return prev.filter((id) => id !== orgId)
+            return { ...current, selectedOrgIds: Array.from(merged) }
         })
     }
 
-    const canPublish = mode === "all" || selectedOrgIds.length > 0
+    const toggleOrg = (orgId: string, checked: boolean) => {
+        setDialogState((current) => {
+            if (checked) {
+                return { ...current, selectedOrgIds: Array.from(new Set([...current.selectedOrgIds, orgId])) }
+            }
+            return { ...current, selectedOrgIds: current.selectedOrgIds.filter((id) => id !== orgId) }
+        })
+    }
+
+    const canPublish = state.mode === "all" || state.selectedOrgIds.length > 0
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -105,8 +113,13 @@ export function PublishDialog({
 
                 <div className="space-y-4">
                     <RadioGroup
-                        value={mode}
-                        onValueChange={(value) => setMode(value as "all" | "selected")}
+                        value={state.mode}
+                        onValueChange={(value) =>
+                            setDialogState((current) => ({
+                                ...current,
+                                mode: value as "all" | "selected",
+                            }))
+                        }
                         className="space-y-3"
                     >
                         <label htmlFor={MODE_ALL_ID} className="flex items-start gap-3 rounded-lg border p-3">
@@ -136,14 +149,19 @@ export function PublishDialog({
                         </label>
                     </RadioGroup>
 
-                    {mode === "selected" && (
+                    {state.mode === "selected" && (
                         <div className="space-y-3">
                             <div className="relative">
                                 <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     placeholder="Search organizations…"
-                                    value={search}
-                                    onChange={(event) => setSearch(event.target.value)}
+                                    value={state.search}
+                                    onChange={(event) =>
+                                        setDialogState((current) => ({
+                                            ...current,
+                                            search: event.target.value,
+                                        }))
+                                    }
                                     className="pl-9"
                                 />
                             </div>
@@ -157,7 +175,7 @@ export function PublishDialog({
                                     Select all
                                 </Label>
                                 <span className="text-muted-foreground">
-                                    {selectedOrgIds.length} selected
+                                    {state.selectedOrgIds.length} selected
                                 </span>
                             </div>
 
@@ -215,7 +233,7 @@ export function PublishDialog({
                 </div>
 
                 <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-                    {mode === "selected" && !canPublish && (
+                    {state.mode === "selected" && !canPublish && (
                         <span className="text-xs text-amber-600">
                             Select at least one organization to continue.
                         </span>
@@ -225,7 +243,7 @@ export function PublishDialog({
                             Cancel
                         </Button>
                         <Button
-                            onClick={() => onPublish(mode === "all", selectedOrgIds)}
+                            onClick={() => onPublish(state.mode === "all", state.selectedOrgIds)}
                             disabled={!canPublish || isLoading}
                         >
                             {isLoading && <Loader2Icon className="mr-2 size-4 animate-spin" />}

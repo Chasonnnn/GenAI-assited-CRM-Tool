@@ -1859,3 +1859,29 @@ Full command after Batch 87: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `608`
 - Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 376 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-718293b5-ac7b-45b2-a728-7e017d501a36`
+
+## Batch 88
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/ops/templates/PublishDialog.tsx` | Valid: the publish dialog wrapped filtered org lists and selected-id lookup state in `useMemo`, but React Compiler is enabled and these are ordinary render-local derivations. | High | Remove `useMemo` and compute organizations, filtered organizations, and selected IDs as plain derived values. Added a source guard that failed on the old wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/publish-dialog.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor reports no issues; full React Doctor manual memoization count dropped from `258` to `255`. |
+| `react-doctor/no-cascading-set-state` | `components/ops/templates/PublishDialog.tsx` | Valid: the open-reset effect set mode, selected org IDs, and search through three separate state setters. | High | Consolidate publish dialog state into one state object and reset it with a single transition update. Added a component test covering reopen reset behavior for mode, search, and selected org IDs. | Scoped and changed-scope React Doctor no longer report the cascading state warning; full React Doctor `Multiple setState calls in one effect` count dropped from `14` to `13`. |
+
+Scoped command after Batch 88: `cd apps/web && npx react-doctor@latest components/ops/templates --verbose`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in scope: `0`
+- Summary: `No issues found`
+
+Changed-scope command after Batch 88: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 88: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `604`
+- Summary: `Bugs 174 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 373 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-62c5321c-60ba-4dfc-a5f7-1684c9f33a62`
