@@ -125,7 +125,10 @@ describe("EmailAttachmentsPanel", () => {
         const onSelectionChange = vi.fn()
         render(<EmailAttachmentsPanel surrogateId="sur-1" onSelectionChange={onSelectionChange} />)
 
-        fireEvent.change(screen.getByLabelText("Attachments"), {
+        const fileInput = screen.getByLabelText("Choose email attachments to upload")
+        expect(fileInput).toHaveAttribute("type", "file")
+
+        fireEvent.change(fileInput, {
             target: {
                 files: [
                     new File(["one"], "one.pdf", { type: "application/pdf" }),

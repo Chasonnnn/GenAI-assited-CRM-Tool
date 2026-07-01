@@ -1716,3 +1716,31 @@ Full command after Batch 82: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `690`
 - Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 35 warnings`, `Maintainability 456 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0eda7c3e-f3ad-4f9e-85b8-5d17d0916e37`
+
+## Batch 83
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/email/EmailAttachmentsPanel.tsx` | Valid: the panel wrapped selected attachment IDs, filtered attachments, totals, blocking state, constraint errors, selection toggling, upload, file-picker, and input-change handlers in `React.useMemo`/`React.useCallback`. React Compiler is enabled, and these wrappers were deterministic render-local derivations or ordinary handlers. | High | Replace memo wrappers with plain render-local values/functions and add a source guard that failed on the old wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/email-attachments-panel.test.tsx`; `pnpm tsc --noEmit`; scoped `components/email` React Doctor no longer reports any `EmailAttachmentsPanel` manual memoization findings; full React Doctor manual memoization count dropped from `335` to `326`. |
+| `react-doctor/control-has-associated-label` | `components/email/EmailAttachmentsPanel.tsx` | Valid: the visually hidden email attachment file input used only the generic section label, which did not describe the upload control clearly. | High | Add `aria-label="Choose email attachments to upload"` to the file input and update the upload behavior test to query that label before firing the change event. | Scoped `components/email` React Doctor dropped this accessibility warning; full React Doctor accessibility warnings dropped from `35` to `34`. |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/prefer-tag-over-role` | `components/email/EmailComposeDialog.tsx` | Valid but out of scope: the remaining email-component findings are in the compose dialog, not the attachments panel. | High | Deferred to a separate compose-dialog batch to keep this commit focused and easy to review. No suppression added. | Final `components/email` React Doctor reports `19` remaining warnings, all in `EmailComposeDialog.tsx`. |
+
+Scoped command after Batch 83: `cd apps/web && npx react-doctor@latest components/email --verbose`
+
+- Score: `83 / 100 Needs work`
+- Total diagnostics in scope: `19`
+- Remaining: `EmailComposeDialog.tsx` manual memoization ×18 and `prefer-tag-over-role` ×1
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e56e924e-bd0d-425b-9711-594caba36de4`
+
+Changed-scope command after Batch 83: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 83: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `680`
+- Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 447 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f2e5065c-b6b3-4719-adca-8bd19e3861fb`

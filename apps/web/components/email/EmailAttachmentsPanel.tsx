@@ -96,45 +96,27 @@ export function EmailAttachmentsPanel({
         onSelectionChangeRef.current = onSelectionChange
     }, [onSelectionChange])
 
-    const selectedAttachmentIdSet = React.useMemo(
-        () => new Set(selectedAttachmentIds),
-        [selectedAttachmentIds],
+    const selectedAttachmentIdSet = new Set(selectedAttachmentIds)
+    const selectedAttachments = attachments.filter((attachment) =>
+        selectedAttachmentIdSet.has(attachment.id)
     )
-
-    const selectedAttachments = React.useMemo(
-        () => attachments.filter((attachment) => selectedAttachmentIdSet.has(attachment.id)),
-        [attachments, selectedAttachmentIdSet]
-    )
-
-    const totalBytes = React.useMemo(
-        () => selectedAttachments.reduce((sum, attachment) => sum + attachment.file_size, 0),
-        [selectedAttachments]
-    )
-
-    const hasPendingOrUnsafeSelection = React.useMemo(
-        () =>
-            selectedAttachments.some(
-                (attachment) => attachment.quarantined || attachment.scan_status !== "clean"
-            ),
-        [selectedAttachments]
+    const totalBytes = selectedAttachments.reduce((sum, attachment) => sum + attachment.file_size, 0)
+    const hasPendingOrUnsafeSelection = selectedAttachments.some(
+        (attachment) => attachment.quarantined || attachment.scan_status !== "clean"
     )
 
     const overCountLimit = selectedAttachmentIds.length > EMAIL_ATTACHMENTS_MAX_COUNT
     const overSizeLimit = totalBytes > EMAIL_ATTACHMENTS_MAX_TOTAL_BYTES
     const hasBlockingAttachments = hasPendingOrUnsafeSelection || overCountLimit || overSizeLimit
 
-    const constraintError = React.useMemo(() => {
-        if (overCountLimit) {
-            return `You can attach at most ${EMAIL_ATTACHMENTS_MAX_COUNT} files.`
-        }
-        if (overSizeLimit) {
-            return `Total attachment size exceeds ${(EMAIL_ATTACHMENTS_MAX_TOTAL_BYTES / (1024 * 1024)).toFixed(0)} MiB.`
-        }
-        if (hasPendingOrUnsafeSelection) {
-            return "All selected attachments must be clean before sending."
-        }
-        return null
-    }, [hasPendingOrUnsafeSelection, overCountLimit, overSizeLimit])
+    let constraintError: string | null = null
+    if (overCountLimit) {
+        constraintError = `You can attach at most ${EMAIL_ATTACHMENTS_MAX_COUNT} files.`
+    } else if (overSizeLimit) {
+        constraintError = `Total attachment size exceeds ${(EMAIL_ATTACHMENTS_MAX_TOTAL_BYTES / (1024 * 1024)).toFixed(0)} MiB.`
+    } else if (hasPendingOrUnsafeSelection) {
+        constraintError = "All selected attachments must be clean before sending."
+    }
 
     const visibleError = uploadError || constraintError
 
@@ -147,92 +129,85 @@ export function EmailAttachmentsPanel({
         })
     }, [selectedAttachmentIds, hasBlockingAttachments, totalBytes, visibleError])
 
-    const toggleSelection = React.useCallback((attachmentId: string, checked: boolean) => {
+    const toggleSelection = (attachmentId: string, checked: boolean) => {
         setSelectedAttachmentIds((current) => {
             if (checked) {
                 return Array.from(new Set([...current, attachmentId]))
             }
             return current.filter((id) => id !== attachmentId)
         })
-    }, [])
+    }
 
-    const uploadFiles = React.useCallback(
-        async (incomingFiles: File[]) => {
-            setUploadError(null)
-            const validFiles: File[] = []
-            const validationErrors: string[] = []
+    const uploadFiles = async (incomingFiles: File[]) => {
+        setUploadError(null)
+        const validFiles: File[] = []
+        const validationErrors: string[] = []
 
-            for (const file of incomingFiles) {
-                const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-                if (!ALLOWED_EXTENSIONS.has(ext)) {
-                    validationErrors.push(`File type .${ext || "unknown"} is not allowed.`)
-                    continue
-                }
-                if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-                    validationErrors.push("File exceeds 25 MB limit.")
-                    continue
-                }
-
-                validFiles.push(file)
+        for (const file of incomingFiles) {
+            const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+            if (!ALLOWED_EXTENSIONS.has(ext)) {
+                validationErrors.push(`File type .${ext || "unknown"} is not allowed.`)
+                continue
+            }
+            if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+                validationErrors.push("File exceeds 25 MB limit.")
+                continue
             }
 
-            if (validationErrors.length > 0) {
-                setUploadError(validationErrors[0] ?? "One or more files could not be uploaded.")
-            }
+            validFiles.push(file)
+        }
 
-            const uploadResults = await Promise.all(
-                validFiles.map(async (file) => {
-                    try {
-                        const uploaded = await uploadMutation.mutateAsync({ surrogateId, file })
-                        return { id: uploaded.id, error: null }
-                    } catch (error) {
-                        return {
-                            id: null,
-                            error: error instanceof Error ? error.message : "Upload failed.",
-                        }
+        if (validationErrors.length > 0) {
+            setUploadError(validationErrors[0] ?? "One or more files could not be uploaded.")
+        }
+
+        const uploadResults = await Promise.all(
+            validFiles.map(async (file) => {
+                try {
+                    const uploaded = await uploadMutation.mutateAsync({ surrogateId, file })
+                    return { id: uploaded.id, error: null }
+                } catch (error) {
+                    return {
+                        id: null,
+                        error: error instanceof Error ? error.message : "Upload failed.",
                     }
-                }),
-            )
+                }
+            }),
+        )
 
-            const uploadedIds: string[] = []
-            for (const result of uploadResults) {
-                if (result.id) uploadedIds.push(result.id)
-            }
-            const firstUploadError = uploadResults.find((result) => result.error)?.error
+        const uploadedIds: string[] = []
+        for (const result of uploadResults) {
+            if (result.id) uploadedIds.push(result.id)
+        }
+        const firstUploadError = uploadResults.find((result) => result.error)?.error
 
-            if (firstUploadError) {
-                setUploadError(firstUploadError)
-            }
+        if (firstUploadError) {
+            setUploadError(firstUploadError)
+        }
 
-            if (uploadedIds.length > 0) {
-                setSelectedAttachmentIds((current) => Array.from(new Set([...current, ...uploadedIds])))
-            }
-        },
-        [surrogateId, uploadMutation]
-    )
+        if (uploadedIds.length > 0) {
+            setSelectedAttachmentIds((current) => Array.from(new Set([...current, ...uploadedIds])))
+        }
+    }
 
     React.useImperativeHandle(
         ref,
         () => ({
             uploadFiles,
         }),
-        [uploadFiles]
     )
 
-    const handlePickFiles = React.useCallback(() => {
+    const handlePickFiles = () => {
         fileInputRef.current?.click()
-    }, [])
+    }
 
-    const handleInputChange = React.useCallback(
-        (event: React.ChangeEvent<HTMLInputElement>) => {
-            const files = event.target.files ? Array.from(event.target.files) : []
-            if (files.length > 0) {
-                void uploadFiles(files)
-            }
-            event.target.value = ""
-        },
-        [uploadFiles]
-    )
+    const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files ? Array.from(event.target.files) : []
+        if (files.length > 0) {
+            void uploadFiles(files)
+        }
+        event.target.value = ""
+    }
 
     if (hideUI) {
         return null
@@ -262,6 +237,7 @@ export function EmailAttachmentsPanel({
                     ref={fileInputRef}
                     type="file"
                     multiple
+                    aria-label="Choose email attachments to upload"
                     className="sr-only"
                     onChange={handleInputChange}
                     accept={Object.values(ACCEPTED_FILE_TYPES)
