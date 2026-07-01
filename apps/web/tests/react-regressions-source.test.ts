@@ -1938,6 +1938,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps intended-parent match proposal derivations compiler-friendly", () => {
+        const source = readSource("components/matches/ProposeMatchFromIPDialog.tsx")
+
+        expect(source).not.toContain("useMemo")
+    })
+
     it("keeps search page key handling compiler-friendly", () => {
         const source = readSource("app/(app)/search/page.tsx")
 

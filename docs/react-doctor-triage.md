@@ -1961,3 +1961,29 @@ Full command after Batch 91: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `588`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 32 warnings`, `Maintainability 361 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ac26defc-c7b4-4377-89c0-554e910ba699`
+
+## Batch 92
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/matches/ProposeMatchFromIPDialog.tsx` | Valid: `eligibleStageLabel` and `eligibleSurrogates` were ordinary render-local derivations wrapped in `useMemo`, and React Compiler is enabled. | High | Remove the `useMemo` import and compute the label and filtered surrogate list directly. Added a source guard that failed on the previous wrappers. | `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `243` to `241`. |
+
+Scoped command after Batch 92: `cd apps/web && npx react-doctor@latest components/matches --verbose`
+
+- Score: `81 / 100 Needs work`
+- Total diagnostics in scope: `12`
+- Remaining: `10` `MatchTasksCalendar` manual memoization warnings plus `UploadFileDialog` label/helper warnings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-70f19dbe-80c1-4052-bd71-308447afd23f`
+
+Changed-scope command after Batch 92: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 92: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `586`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 32 warnings`, `Maintainability 359 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-48a80e39-dbe2-47a6-811a-430b24fbb866`

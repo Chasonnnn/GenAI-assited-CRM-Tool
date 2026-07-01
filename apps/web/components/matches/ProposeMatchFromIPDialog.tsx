@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -42,16 +42,12 @@ export function ProposeMatchFromIPDialog({
     const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
     const createMatch = useCreateMatch()
 
-    const eligibleStageLabel = useMemo(
-        () => getEligibleForMatchingStageLabel(surrogatePipeline?.stages),
-        [surrogatePipeline?.stages],
-    )
-    const eligibleSurrogates = useMemo(() => {
-        if (!surrogatesData?.items) return []
-        return surrogatesData.items.filter((surrogate) =>
+    const eligibleStageLabel = getEligibleForMatchingStageLabel(surrogatePipeline?.stages)
+    const eligibleSurrogates = surrogatesData?.items
+        ? surrogatesData.items.filter((surrogate) =>
             isEligibleForMatchingCandidate(surrogate, surrogatePipeline?.stages),
         )
-    }, [surrogatesData, surrogatePipeline?.stages])
+        : []
 
     const handleSubmit = async () => {
         if (!selectedSurrogateId) return
