@@ -5,7 +5,6 @@
  * for the calendar views.
  */
 
-import { useMemo } from "react"
 import { useAppointments, useGoogleCalendarEvents } from "@/lib/hooks/use-appointments"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
@@ -32,6 +31,10 @@ export type UnifiedCalendarData = {
     userTimezone: string
 }
 
+function getBrowserTimezone(): string {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles"
+}
+
 export function useUnifiedCalendarData({
     dateRange,
     includeAppointments = true,
@@ -54,10 +57,7 @@ export function useUnifiedCalendarData({
     const appointments = includeAppointments ? data?.items || [] : []
     const appointmentsLoading = includeAppointments ? appointmentsLoadingRaw : false
 
-    const userTimezone = useMemo(
-        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
-        []
-    )
+    const userTimezone = getBrowserTimezone()
 
     const { data: googleEventsData } = useGoogleCalendarEvents(
         dateRange.date_start,

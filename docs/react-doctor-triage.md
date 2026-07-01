@@ -2173,3 +2173,29 @@ Full command after Batch 99: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `557`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 340 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a8dc3da3-f71d-4dc2-bb71-70173d1d4c66`
+
+## Batch 100
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/hooks/use-unified-calendar-data.ts` | Valid: `userTimezone` was a pure browser capability fallback wrapped in `useMemo`, but React Compiler is enabled and this derivation does not need manual memoization. | High | Move the timezone lookup to a module-scope helper and call it directly during render. Added a source guard that failed against the previous `useMemo` wrapper. | `pnpm test --run tests/react-regressions-source.test.ts tests/unified-calendar-reschedule-dnd.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; hooks-scope React Doctor manual memoization count dropped from `7` to `6`; changed-scope React Doctor reports no issues. |
+
+Scoped command after Batch 100: `cd apps/web && npx react-doctor@latest lib/hooks --verbose`
+
+- Score: `72 / 100 Needs work`
+- Total diagnostics in scope: `53`
+- Summary: `Bugs 47 warnings`, `Maintainability 6 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-75336268-7c21-42f6-b023-f3dbbc606faf`
+
+Changed-scope command after Batch 100: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 100: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `556`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 339 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8137139e-1718-45ac-9af6-b1ed7183f48a`

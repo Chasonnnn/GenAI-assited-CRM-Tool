@@ -387,6 +387,14 @@ describe("React regression guards (source)", () => {
         expect(teamTableSource).not.toContain('role="list"')
     })
 
+    it("keeps unified calendar data timezone derivation compiler-friendly", () => {
+        const source = readSource("lib/hooks/use-unified-calendar-data.ts")
+
+        expect(source).toContain("function getBrowserTimezone")
+        expect(source).toContain("const userTimezone = getBrowserTimezone()")
+        expect(source).not.toContain("useMemo")
+    })
+
     it("uses Next Image for journey, AI studio, and platform branding images", () => {
         const sources = [
             readSource("components/surrogates/journey/JourneyPrintView.tsx"),
