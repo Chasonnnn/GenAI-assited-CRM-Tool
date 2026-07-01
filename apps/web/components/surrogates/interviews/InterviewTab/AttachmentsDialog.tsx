@@ -47,6 +47,7 @@ function AttachmentsSection({
                             name="interview_attachments_upload"
                             ref={uploadInputRef}
                             type="file"
+                            aria-label="Upload interview attachments"
                             className="hidden"
                             multiple
                             onChange={(event) => onUploadFiles(event.target.files)}

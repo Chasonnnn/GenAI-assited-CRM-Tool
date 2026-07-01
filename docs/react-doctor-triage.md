@@ -2089,3 +2089,38 @@ Full command after Batch 96: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `564`
 - Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 28 warnings`, `Maintainability 341 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c13a626b-c887-49da-9989-9993a99b6a30`
+
+## Batch 97
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/control-has-associated-label` | `components/forms/builder/AutomationFormSettingsPanel.tsx`, `components/surrogates/interviews/InterviewTab/AttachmentsDialog.tsx` | Valid: both hidden file inputs were activated by visible upload buttons but had no accessible name of their own. | High | Add explicit `aria-label` values to the form logo upload and interview attachment upload inputs. Added focused accessibility tests that failed before the labels were added. | `pnpm test --run tests/automation-form-settings-panel-accessibility.test.tsx tests/surrogate-interview-accessibility.test.tsx`; scoped React Doctor no longer reports missing labels in `components/forms/builder` or `components/surrogates/interviews/InterviewTab`; full React Doctor accessibility count dropped from `28` to `26`. |
+| `react-doctor/no-giant-component` | `components/forms/builder/AutomationFormSettingsPanel.tsx` | Valid but out of scope: the settings panel remains a 411-line component. Splitting identity, delivery, public-copy, and upload-rule sections should be a separate component decomposition batch. | Medium | Deferred. No suppression added. | Changed-scope React Doctor reports only this pre-existing large-component warning. |
+
+Scoped command after Batch 97: `cd apps/web && npx react-doctor@latest components/forms/builder --verbose`
+
+- Score: `86 / 100 Great`
+- Total diagnostics in scope: `5`
+- Remaining: `prefer-tag-over-role` in `FormBuilderWorkspace` plus four `no-giant-component` warnings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-87055461-0d88-4400-97c3-2f805de02ddc`
+
+Scoped command after Batch 97: `cd apps/web && npx react-doctor@latest components/surrogates/interviews/InterviewTab --verbose`
+
+- Score: `86 / 100 Great`
+- Total diagnostics in scope: `2`
+- Remaining: `async-await-in-loop` and `no-giant-component` in `context.tsx`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e743e405-65e8-4b0a-8c71-6b41d789c4b5`
+
+Changed-scope command after Batch 97: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Remaining: `no-giant-component` in `components/forms/builder/AutomationFormSettingsPanel.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ab1179b6-d405-42e1-a530-8dc371b8c9bc`
+
+Full command after Batch 97: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `562`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 26 warnings`, `Maintainability 341 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-89554275-2bda-443a-802e-5f350c549063`

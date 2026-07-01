@@ -7,6 +7,7 @@ import { ListItem } from "@/components/surrogates/interviews/InterviewTab/ListIt
 import { LatestUpdatesCard } from "@/components/surrogates/LatestUpdatesCard"
 import { TranscriptEditor } from "@/components/surrogates/interviews/TranscriptEditor"
 import { CommentCard } from "@/components/surrogates/interviews/CommentCard"
+import { AttachmentsDialog } from "@/components/surrogates/interviews/InterviewTab/AttachmentsDialog"
 
 const mockUseInterviewComments = vi.fn()
 
@@ -212,5 +213,27 @@ describe("Surrogate interview accessibility labels", () => {
         const deleteReplyButton = screen.getByRole("button", { name: "Delete reply from Reviewer" })
         expect(deleteReplyButton).toBeInTheDocument()
         expect(deleteReplyButton).toHaveClass("focus-visible:opacity-100")
+    })
+
+    it("labels the interview attachment upload input", () => {
+        render(
+            <AttachmentsDialog
+                open
+                onOpenChange={() => undefined}
+                attachments={[]}
+                canUpload
+                onUploadFiles={() => undefined}
+                uploadError={null}
+                uploadInputRef={React.createRef<HTMLInputElement>()}
+                isUploading={false}
+                onRequestTranscription={() => undefined}
+                transcribingAttachmentId={null}
+            />,
+        )
+
+        expect(screen.getByLabelText("Upload interview attachments")).toHaveAttribute(
+            "name",
+            "interview_attachments_upload",
+        )
     })
 })

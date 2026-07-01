@@ -205,6 +205,7 @@ export function AutomationFormSettingsPanel({
                                 ref={logoInputRef}
                                 type="file"
                                 accept="image/png,image/jpeg"
+                                aria-label="Upload form logo"
                                 className="hidden"
                                 onChange={onLogoFileChange}
                             />
