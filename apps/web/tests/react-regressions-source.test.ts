@@ -6,6 +6,14 @@ function readSource(pathFromWebRoot: string): string {
     return readFileSync(join(process.cwd(), pathFromWebRoot), "utf8")
 }
 
+function readExportedFunctionSource(source: string, functionName: string): string {
+    const start = source.indexOf(`export function ${functionName}`)
+    expect(start, functionName).toBeGreaterThanOrEqual(0)
+
+    const nextExport = source.indexOf("\nexport function ", start + 1)
+    return nextExport === -1 ? source.slice(start) : source.slice(start, nextExport)
+}
+
 function sourceExists(pathFromWebRoot: string): boolean {
     return existsSync(join(process.cwd(), pathFromWebRoot))
 }
@@ -653,6 +661,20 @@ describe("React regression guards (source)", () => {
             "surrogateKeys.intelligentSummary()",
         ]) {
             expect(source).toContain(`queryKey: ${queryKey}`)
+        }
+    })
+
+    it("keeps focused AI usage cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-ai.ts")
+
+        for (const functionName of [
+            "useSummarizeSurrogate",
+            "useDraftEmail",
+            "useAnalyzeDashboard",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("invalidateAIUsageCaches(queryClient)")
+            expect(functionSource, functionName).toContain("queryKey: aiKeys.usageSummary()")
         }
     })
 

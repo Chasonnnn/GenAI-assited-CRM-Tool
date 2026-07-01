@@ -199,7 +199,10 @@ export function useSummarizeSurrogate() {
     return useMutation({
         mutationFn: (surrogateId: string) => aiApi.summarizeSurrogate(surrogateId),
         onSuccess: () => {
-            invalidateAIUsageCaches(queryClient);
+            void queryClient.invalidateQueries({
+                queryKey: aiKeys.usageSummary(),
+                exact: false,
+            });
         },
     });
 }
@@ -210,7 +213,10 @@ export function useDraftEmail() {
     return useMutation({
         mutationFn: (request: aiApi.DraftEmailRequest) => aiApi.draftEmail(request),
         onSuccess: () => {
-            invalidateAIUsageCaches(queryClient);
+            void queryClient.invalidateQueries({
+                queryKey: aiKeys.usageSummary(),
+                exact: false,
+            });
         },
     });
 }
@@ -221,7 +227,10 @@ export function useAnalyzeDashboard() {
     return useMutation({
         mutationFn: () => aiApi.analyzeDashboard(),
         onSuccess: () => {
-            invalidateAIUsageCaches(queryClient);
+            void queryClient.invalidateQueries({
+                queryKey: aiKeys.usageSummary(),
+                exact: false,
+            });
         },
     });
 }

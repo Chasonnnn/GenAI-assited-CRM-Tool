@@ -2257,3 +2257,30 @@ Full command after Batch 102: `cd apps/web && npx react-doctor@latest . --verbos
 - Total diagnostics: `543`
 - Summary: `Bugs 164 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d0e753ea-157a-413a-aebf-66603455e3cf`
+
+## Batch 103
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-ai.ts` focused AI generation mutations: `useSummarizeSurrogate`, `useDraftEmail`, `useAnalyzeDashboard` | Valid scanner finding with behavior already protected: these mutations already refreshed AI usage summary caches through `invalidateAIUsageCaches`, but React Doctor's rule only detects cache operations inside the mutation options tree. | High | Inline the existing usage-summary invalidations directly in each mutation `onSuccess`, preserving `queryKey: aiKeys.usageSummary()` and `exact: false`. Added a source guard that fails if these focused hooks hide the invalidation behind the helper again. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "focused AI usage"` failed on `useSummarizeSurrogate`. GREEN: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts` passed with `227` tests; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. Hook-scope React Doctor warnings dropped from `40` to `37`. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-ai.ts` `useTestAPIKey` | False positive: API-key testing validates supplied credentials and returns an immediate test result. It does not mutate a persisted cached AI resource and has no matching query cache to refresh. | High | Logged as invalid for this batch; no dummy invalidation added. | After Batch 103, the only remaining `use-ai.ts` warning is `use-ai.ts:51`, which is `useTestAPIKey`. |
+
+Scoped command after Batch 103: `cd apps/web && npx -y react-doctor@latest lib/hooks --verbose`
+
+- Score: `75 / 100 Needs work`
+- Total diagnostics in scope: `37`
+- Summary: `Bugs 37 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-70e7a874-aafd-45ad-9108-2a30ac6d3619`
+
+Changed-scope command after Batch 103: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 103: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `540`
+- Summary: `Bugs 161 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ae64e736-0e33-48e8-ad42-3aecc4d69079`
