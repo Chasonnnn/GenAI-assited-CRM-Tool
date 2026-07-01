@@ -1931,3 +1931,33 @@ Full command after Batch 90: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `591`
 - Summary: `Bugs 172 warnings`, `Performance 24 warnings`, `Accessibility 33 warnings`, `Maintainability 362 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7d0c5afd-e720-4275-80ca-dbb6f291d1e0`
+
+## Batch 91
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/automation/workflow-templates-panel.tsx` | Valid: `publishedForms` was a simple filtered render-local derivation wrapped in `useMemo`, and React Compiler is enabled for this app. | High | Replace the memo wrapper with a plain derived array and add a source guard that failed against the previous wrapper/import. | `pnpm test --run tests/react-regressions-source.test.ts tests/templates-page.test.tsx`; `pnpm tsc --noEmit`; scoped React Doctor no longer reports manual memoization in `components/automation`; full React Doctor manual memoization count dropped from `244` to `243`. |
+| `react-doctor/no-event-handler` | `components/automation/workflow-templates-panel.tsx` | Valid: a `useEffect` corrected non-admin workflow scope back to `personal`, creating an effect-driven event path for state that can be derived from current permissions. | High | Keep the admin-selectable value in `selectedWorkflowScope`, derive the effective `workflowScope` as `personal` for non-admin users, and remove the effect and transition import. | Scoped and changed-scope React Doctor no longer report the event-handler warning. |
+| `react-doctor/control-has-associated-label` | `components/automation/workflow-templates-panel.tsx` | Valid scanner finding: the checkbox had a neighboring visible `Label`, but the rule still reported no accessible label for the native control. | Medium | Add an explicit `aria-label` matching the visible label while preserving the visible `Label`/`htmlFor` association. | Scoped React Doctor no longer reports the checkbox label warning; full React Doctor accessibility count dropped from `33` to `32`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `components/automation/workflow-templates-panel.tsx` | Valid but out of scope: the panel remains a 453-line component with five related state hooks. Splitting the dialog/card sections and consolidating workflow form state should be handled as a dedicated component-decomposition batch. | Medium | Deferred. No suppression added. | Final scoped React Doctor reports only these two remaining warnings. |
+
+Scoped command after Batch 91: `cd apps/web && npx react-doctor@latest components/automation --verbose`
+
+- Score: `86 / 100 Great`
+- Total diagnostics in scope: `2`
+- Remaining: `no-giant-component` and `prefer-useReducer` in `WorkflowTemplatesPanel`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3a182bb7-382b-49e5-9acb-8c2b76323a88`
+
+Changed-scope command after Batch 91: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Remaining: `no-giant-component` and `prefer-useReducer` in `components/automation/workflow-templates-panel.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0df68c22-3c63-423b-81cd-a452111fcf46`
+
+Full command after Batch 91: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `67 / 100 Needs work`
+- Total diagnostics: `588`
+- Summary: `Bugs 171 warnings`, `Performance 24 warnings`, `Accessibility 32 warnings`, `Maintainability 361 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ac26defc-c7b4-4377-89c0-554e910ba699`

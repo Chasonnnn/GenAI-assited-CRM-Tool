@@ -2402,6 +2402,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("startTransition")
     })
 
+    it("keeps workflow templates panel derivations and controls compiler-friendly", () => {
+        const source = readSource("components/automation/workflow-templates-panel.tsx")
+
+        expect(source).toContain("const [selectedWorkflowScope, setSelectedWorkflowScope]")
+        expect(source).toContain('aria-label="Enable workflow immediately"')
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useEffect")
+        expect(source).not.toContain("startTransition")
+    })
+
     it("keeps pending interview comment quote styling subtle", () => {
         const source = readSource("components/surrogates/interviews/InterviewComments/PendingCommentInput.tsx")
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -171,7 +171,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
 
     const [categoryFilter, setCategoryFilter] = useState("all")
     const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplateListItem | null>(null)
-    const [workflowScope, setWorkflowScope] = useState<WorkflowScope>("personal")
+    const [selectedWorkflowScope, setSelectedWorkflowScope] = useState<WorkflowScope>("personal")
     const [formData, setFormData] = useState<UseTemplateFormData>({
         name: "",
         description: "",
@@ -180,13 +180,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
     })
     const [selectedTriggerFormId, setSelectedTriggerFormId] = useState("")
 
-    useEffect(() => {
-        if (!isAdmin && workflowScope !== "personal") {
-            startTransition(() => {
-                setWorkflowScope("personal")
-            })
-        }
-    }, [isAdmin, workflowScope])
+    const workflowScope: WorkflowScope = isAdmin ? selectedWorkflowScope : "personal"
 
     const { data: emailTemplates = [], isLoading: isLoadingEmailTemplates } = useEmailTemplates({
         activeOnly: true,
@@ -240,10 +234,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
         (selectedTemplateDetail.trigger_type === "form_started" ||
             !!triggerFormName ||
             !!triggerFormId)
-    const publishedForms = useMemo(
-        () => forms.filter((form: FormSummary) => form.status === "published"),
-        [forms]
-    )
+    const publishedForms = forms.filter((form: FormSummary) => form.status === "published")
     const autoSelectedForm =
         (triggerFormId ? publishedForms.find((form) => form.id === triggerFormId) : undefined) ??
         (triggerFormName
@@ -423,8 +414,8 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                             <div className="space-y-2">
                                 <Label htmlFor="workflow-scope">Workflow Scope</Label>
                                 <Select
-                                    value={workflowScope}
-                                    onValueChange={(value) => setWorkflowScope(value as WorkflowScope)}
+                                    value={selectedWorkflowScope}
+                                    onValueChange={(value) => setSelectedWorkflowScope(value as WorkflowScope)}
                                 >
                                     <SelectTrigger id="workflow-scope">
                                         <SelectValue placeholder="Select scope" />
@@ -595,6 +586,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
                             <input
                                 type="checkbox"
                                 id="is_enabled"
+                                aria-label="Enable workflow immediately"
                                 checked={formData.is_enabled}
                                 onChange={(e) => setFormData((f) => ({ ...f, is_enabled: e.target.checked }))}
                                 className="size-4 rounded border-zinc-300"
