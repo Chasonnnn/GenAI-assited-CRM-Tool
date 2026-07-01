@@ -1616,3 +1616,27 @@ Full command after Batch 78: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `744`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 39 warnings`, `Maintainability 491 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-32eb0ccf-0db9-4e77-b15d-856e39aa0945`
+
+## Batch 79
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/automation/email-templates/page.tsx` | Valid: the email-template page used `React.useMemo` and `useCallback` around deterministic template validation, preview, test-send, signature dirty-state, and insertion helpers. React Compiler is enabled in `apps/web/next.config.js`, and none of these wrappers matched a preserve-manual-memoization case. | High | Move reusable pure helpers to module scope, derive render-local values directly, and remove the `useCallback` import. Added a source guard that failed on the old wrappers and now rejects `useMemo`/`useCallback` in this page. | `pnpm test --run tests/react-regressions-source.test.ts tests/email-templates-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor no longer reports manual memoization in this page; full React Doctor manual memoization count dropped from `365` to `350`. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/(app)/automation/email-templates/page.tsx` | Valid: `handleCopySignatureHtml` did not read component state or props and was rebuilt on every render. | High | Move the clipboard helper to module scope and add a source guard to prevent reintroducing the render-local async helper. | Changed-scope React Doctor dropped this warning after the helper move. |
+| `react-doctor/control-has-associated-label` | `app/(app)/automation/email-templates/page.tsx` | Valid: the hidden signature photo file input had no accessible name, even though the visible trigger button was named. | High | Add `aria-label="Upload signature photo"` to the file input and extend the existing email-template accessibility test to assert it. | Changed-scope React Doctor dropped the accessibility warning; full React Doctor accessibility warnings dropped from `39` to `38`. |
+| `react-doctor/no-cascading-set-state`, `react-doctor/rerender-state-only-in-handlers`, `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-explicit-variants`, `react-doctor/no-many-boolean-props`, `react-doctor/prefer-useReducer` | `app/(app)/automation/email-templates/page.tsx` | Valid but out of scope: the remaining email-template findings are state-model and component-structure refactors around modal open/reset flow, signature hydration, `templateBodyModeTouched`, and boolean-heavy component APIs. | Medium | Deferred to a separate email-template state/component-structure batch. No suppression added. | Final changed-scope React Doctor reports `15` remaining warnings in this page and no manual memoization, pure-helper, or accessibility finding from this batch. |
+
+Changed-scope command after Batch 79: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `86 / 100 Great`
+- Total diagnostics in changed files: `15`
+- Summary: `Bugs 7 warnings`, `Performance 5 warnings`, `Maintainability 3 warnings`
+- Deferred: state-model and component-structure warnings in `app/(app)/automation/email-templates/page.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d328f106-6e75-4b42-9287-f4e93212aa92`
+
+Full command after Batch 79: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `724`
+- Summary: `Bugs 176 warnings`, `Performance 37 warnings`, `Accessibility 38 warnings`, `Maintainability 473 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-714f1b9b-74b2-4a64-ab89-03dea849ab0e`

@@ -257,13 +257,17 @@ describe("EmailTemplatesPage", () => {
     })
 
     it("adds an accessible name to the signature photo upload button", async () => {
-        render(<EmailTemplatesPage />)
+        const { container } = render(<EmailTemplatesPage />)
 
         fireEvent.click(screen.getByRole("tab", { name: "My Signature" }))
 
         expect(
             await screen.findByRole("button", { name: "Upload signature photo" }),
         ).toBeInTheDocument()
+        expect(container.querySelector("#signature-photo-upload")).toHaveAttribute(
+            "aria-label",
+            "Upload signature photo",
+        )
     })
 
     it("clamps long subjects on template cards", () => {

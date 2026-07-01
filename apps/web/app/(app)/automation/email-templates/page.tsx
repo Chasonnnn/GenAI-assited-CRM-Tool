@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import NextImage from "next/image"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -237,6 +237,7 @@ function SignaturePhotoField({
                         ref={fileInputRef}
                         onChange={handleFileChange}
                         accept="image/png,image/jpeg,image/webp"
+                        aria-label="Upload signature photo"
                         className="hidden"
                     />
                     <button
@@ -371,6 +372,7 @@ function OrgSignaturePreviewComponent() {
 
 type EditorMode = "visual" | "html"
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+type TextSelectionRef = React.MutableRefObject<{ start: number; end: number } | null>
 const PREVIEW_FONT_STACK =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
 
@@ -379,6 +381,245 @@ function extractTemplateVariables(text: string): string[] {
     const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
     const variables = matches.map((match) => match.replace(/{{\s*|\s*}}/g, ""))
     return Array.from(new Set(variables))
+}
+
+function sanitizeTemplateHtml(html: string) {
+    return DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true },
+        ADD_TAGS: [
+            "table",
+            "thead",
+            "tbody",
+            "tfoot",
+            "tr",
+            "td",
+            "th",
+            "colgroup",
+            "col",
+            "img",
+            "hr",
+            "div",
+            "span",
+            "center",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+        ],
+        ADD_ATTR: [
+            "style",
+            "class",
+            "align",
+            "valign",
+            "width",
+            "height",
+            "cellpadding",
+            "cellspacing",
+            "border",
+            "bgcolor",
+            "colspan",
+            "rowspan",
+            "role",
+            "target",
+            "rel",
+            "href",
+            "src",
+            "alt",
+            "title",
+        ],
+    })
+}
+
+function buildTestVariableSample(
+    variableName: string,
+    context: {
+        toEmail: string
+        ownerName: string | null | undefined
+        orgName: string | null | undefined
+    }
+): string {
+    switch (variableName) {
+        case "first_name":
+            return "Jordan"
+        case "full_name":
+            return "Jordan Smith"
+        case "email":
+            return context.toEmail
+        case "phone":
+            return "(555) 555-5555"
+        case "surrogate_number":
+            return "S10001"
+        case "intended_parent_number":
+            return "I10001"
+        case "status_label":
+            return "Pre-Qualified"
+        case "state":
+            return "CA"
+        case "owner_name":
+            return context.ownerName || "Case Manager"
+        case "form_link":
+            return "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG"
+        case "appointment_link":
+            return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
+        case "appointment_manage_url":
+            return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+        case "appointment_reschedule_url":
+            return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+        case "appointment_cancel_url":
+            return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
+        case "appointment_date":
+            return "2026-01-01"
+        case "appointment_time":
+            return "09:00"
+        case "appointment_location":
+            return "Zoom"
+        case "org_name":
+            return context.orgName || ""
+        case "org_logo_url":
+            return ""
+        default:
+            return `TEST_${variableName.toUpperCase()}`
+    }
+}
+
+function recordSelection(el: HTMLInputElement | HTMLTextAreaElement, ref: TextSelectionRef) {
+    ref.current = {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+}
+
+function insertIntoTextControl(
+    el: HTMLInputElement | HTMLTextAreaElement | null,
+    selectionRef: TextSelectionRef,
+    setValue: React.Dispatch<React.SetStateAction<string>>,
+    token: string
+) {
+    if (!el) {
+        setValue((prev) => `${prev}${token}`)
+        return
+    }
+    const selection = selectionRef.current ?? {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+    }
+    const result = insertAtCursor(el.value, token, selection.start, selection.end)
+    setValue(result.nextValue)
+    requestAnimationFrame(() => {
+        el.focus()
+        el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+        selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
+    })
+}
+
+function buildPreviewHtml(
+    rawHtml: string,
+    options: {
+        orgSignatureCompanyName: string | null | undefined
+        previewScope: EmailTemplateScope
+        personalSignatureHtml: string | null | undefined
+        orgSignatureHtml: string | null | undefined
+    }
+) {
+    let html = rawHtml
+        .replace(/\{\{full_name\}\}/g, "John Smith")
+        .replace(/\{\{email\}\}/g, "john@example.com")
+        .replace(/\{\{phone\}\}/g, "(555) 123-4567")
+        .replace(/\{\{surrogate_number\}\}/g, "S10001")
+        .replace(/\{\{status_label\}\}/g, "Pre-Qualified")
+        .replace(/\{\{owner_name\}\}/g, "Sara Manager")
+        .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG")
+        .replace(/\{\{appointment_link\}\}/g, "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG")
+        .replace(
+            /\{\{appointment_manage_url\}\}/g,
+            "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
+        )
+        .replace(
+            /\{\{appointment_reschedule_url\}\}/g,
+            "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
+        )
+        .replace(
+            /\{\{appointment_cancel_url\}\}/g,
+            "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
+        )
+        .replace(/\{\{org_name\}\}/g, options.orgSignatureCompanyName || "ABC Surrogacy")
+        .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
+        .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
+        .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
+        .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, "")
+
+    html = html.replace(
+        /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
+        ""
+    )
+
+    const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
+    if (!hasHtmlTags) {
+        const lines = html.split(/\n/)
+        html = lines
+            .map((line) => {
+                if (!line.trim()) {
+                    return `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
+                }
+                return `<p style="margin: 0 0 1em 0;">${line}</p>`
+            })
+            .join("")
+    } else {
+        html = normalizeTemplateHtml(html)
+    }
+
+    if (!/<html\b|<body\b/i.test(html)) {
+        html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
+    }
+
+    const signatureHtml = options.previewScope === "personal"
+        ? options.personalSignatureHtml || ""
+        : options.orgSignatureHtml || ""
+    const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
+    const includeDivider = !signatureHtml
+    const unsubscribeFooterHtml = `
+        <div style="margin-top: 14px; font-size: 12px; color: #6b7280; ${includeDivider ? "padding-top: 16px; border-top: 1px solid #e5e7eb;" : ""}">
+            <p style="margin: 0;">
+                Manage email preferences:
+                <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
+            </p>
+        </div>
+    `.trim()
+
+    const insertion = `${signatureHtml}${unsubscribeFooterHtml}`
+    if (/<\/body\s*>/i.test(html)) {
+        html = html.replace(/<\/body\s*>/i, `${insertion}</body>`)
+    } else if (/<\/html\s*>/i.test(html)) {
+        html = html.replace(/<\/html\s*>/i, `${insertion}</html>`)
+    } else {
+        html = `${html}${insertion}`
+    }
+
+    return sanitizeTemplateHtml(html)
+}
+
+async function handleCopySignatureHtml() {
+    try {
+        const data = await getSignaturePreview()
+        const html = data.html || ""
+
+        try {
+            await navigator.clipboard.writeText(html)
+            toast.success("Signature HTML copied to clipboard!")
+        } catch {
+            const textarea = document.createElement("textarea")
+            textarea.value = html
+            document.body.appendChild(textarea)
+            textarea.select()
+            document.execCommand("copy")
+            document.body.removeChild(textarea)
+            toast.success("Signature HTML copied to clipboard!")
+        }
+    } catch (error) {
+        console.error("Failed to copy signature:", error)
+    }
 }
 
 // =============================================================================
@@ -590,10 +831,7 @@ export default function EmailTemplatesPage() {
     const [signatureTwitter, setSignatureTwitter] = useState("")
     const [signatureInstagram, setSignatureInstagram] = useState("")
 
-    const hasComplexHtml = React.useMemo(
-        () => /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody),
-        [templateBody]
-    )
+    const hasComplexHtml = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody)
 
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
@@ -625,9 +863,9 @@ export default function EmailTemplatesPage() {
     const { data: personalSignaturePreview } = useSignaturePreview()
     const { data: orgSignaturePreview } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
 
-    const hasChanges = React.useMemo(() => {
-        if (!signatureData) return false
-        return (
+    const hasChanges = Boolean(
+        signatureData &&
+        (
             signatureName !== (signatureData.signature_name || "") ||
             signatureTitle !== (signatureData.signature_title || "") ||
             signaturePhone !== (signatureData.signature_phone || "") ||
@@ -635,15 +873,7 @@ export default function EmailTemplatesPage() {
             signatureTwitter !== (signatureData.signature_twitter || "") ||
             signatureInstagram !== (signatureData.signature_instagram || "")
         )
-    }, [
-        signatureData,
-        signatureName,
-        signatureTitle,
-        signaturePhone,
-        signatureLinkedin,
-        signatureTwitter,
-        signatureInstagram,
-    ])
+    )
 
     // Get full template details when editing
     const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
@@ -660,116 +890,13 @@ export default function EmailTemplatesPage() {
         }
     }, [showPreview])
 
-    const sanitizeHtml = useCallback((html: string) => {
-        return DOMPurify.sanitize(html, {
-            USE_PROFILES: { html: true },
-            ADD_TAGS: [
-                "table",
-                "thead",
-                "tbody",
-                "tfoot",
-                "tr",
-                "td",
-                "th",
-                "colgroup",
-                "col",
-                "img",
-                "hr",
-                "div",
-                "span",
-                "center",
-                "h1",
-                "h2",
-                "h3",
-                "h4",
-                "h5",
-                "h6",
-            ],
-            ADD_ATTR: [
-                "style",
-                "class",
-                "align",
-                "valign",
-                "width",
-                "height",
-                "cellpadding",
-                "cellspacing",
-                "border",
-                "bgcolor",
-                "colspan",
-                "rowspan",
-                "role",
-                "target",
-                "rel",
-                "href",
-                "src",
-                "alt",
-                "title",
-            ],
-        })
-    }, [])
-
-    const buildTestVariableSample = useCallback(
-        (variableName: string): string => {
-            const toEmail = testSendToEmail.trim() || user?.email || ""
-            switch (variableName) {
-                case "first_name":
-                    return "Jordan"
-                case "full_name":
-                    return "Jordan Smith"
-                case "email":
-                    return toEmail
-                case "phone":
-                    return "(555) 555-5555"
-                case "surrogate_number":
-                    return "S10001"
-                case "intended_parent_number":
-                    return "I10001"
-                case "status_label":
-                    return "Pre-Qualified"
-                case "state":
-                    return "CA"
-                case "owner_name":
-                    return user?.display_name || "Case Manager"
-                case "form_link":
-                    return "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG"
-                case "appointment_link":
-                    return "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG"
-                case "appointment_manage_url":
-                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
-                case "appointment_reschedule_url":
-                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
-                case "appointment_cancel_url":
-                    return "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
-                case "appointment_date":
-                    return "2026-01-01"
-                case "appointment_time":
-                    return "09:00"
-                case "appointment_location":
-                    return "Zoom"
-                case "org_name":
-                    return user?.org_name || ""
-                case "org_logo_url":
-                    return ""
-                default:
-                    return `TEST_${variableName.toUpperCase()}`
-            }
-        },
-        [testSendToEmail, user?.display_name, user?.email, user?.org_name]
-    )
-
-    const testSendUsedVariables = React.useMemo(() => {
-        if (!testSendTemplateDetail) return []
-        return extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
+    const testSendUsedVariables = testSendTemplateDetail
+        ? extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
             .slice()
             .sort((a, b) => a.localeCompare(b))
-    }, [testSendTemplateDetail])
-
+        : []
     const testSendHasUnsubscribeUrl = testSendUsedVariables.includes("unsubscribe_url")
-    const testSendEditableVariables = React.useMemo(
-        () => testSendUsedVariables.filter((name) => name !== "unsubscribe_url"),
-        [testSendUsedVariables]
-    )
+    const testSendEditableVariables = testSendUsedVariables.filter((name) => name !== "unsubscribe_url")
 
     useEffect(() => {
         if (!testSendOpen) return
@@ -783,80 +910,44 @@ export default function EmailTemplatesPage() {
     useEffect(() => {
         if (!testSendOpen) return
         if (!testSendTemplateDetail) return
-        if (testSendEditableVariables.length === 0) return
+        const editableVariables = extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
+            .slice()
+            .sort((a, b) => a.localeCompare(b))
+            .filter((name) => name !== "unsubscribe_url")
+        if (editableVariables.length === 0) return
 
-        // Initialize defaults once per dialog open.
         React.startTransition(() => {
             setTestSendVariables((prev) => {
                 if (Object.keys(prev).length > 0) return prev
+                const toEmail = testSendToEmail.trim() || user?.email || ""
                 const next: Record<string, string> = {}
-                for (const variableName of testSendEditableVariables) {
-                    next[variableName] = buildTestVariableSample(variableName)
+                for (const variableName of editableVariables) {
+                    next[variableName] = buildTestVariableSample(variableName, {
+                        toEmail,
+                        ownerName: user?.display_name,
+                        orgName: user?.org_name,
+                    })
                 }
                 return next
             })
         })
-    }, [buildTestVariableSample, testSendEditableVariables, testSendOpen, testSendTemplateDetail])
+    }, [testSendOpen, testSendTemplateDetail, testSendToEmail, user?.display_name, user?.email, user?.org_name])
 
     const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
-    const allowedVariableNames = React.useMemo(
-        () => new Set(templateVariables.map((variable) => variable.name)),
-        [templateVariables]
-    )
-    const requiredVariableNames = React.useMemo(() => {
-        const names: string[] = []
-        for (const variable of templateVariables) {
-            if (variable.required) {
-                names.push(variable.name)
-            }
-        }
-        return names
-    }, [templateVariables])
-    const usedVariableNames = React.useMemo(
-        () => extractTemplateVariables(`${templateSubject}\n${templateBody}`),
-        [templateSubject, templateBody]
-    )
-    const unknownVariables = React.useMemo(() => {
-        if (!canValidateVariables) return []
-        return usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
-    }, [allowedVariableNames, canValidateVariables, usedVariableNames])
-    const missingRequiredVariables = React.useMemo(() => {
-        if (!canValidateVariables) return []
-        return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
-    }, [canValidateVariables, requiredVariableNames, usedVariableNames])
-
-    const recordSelection = (
-        el: HTMLInputElement | HTMLTextAreaElement,
-        ref: React.MutableRefObject<{ start: number; end: number } | null>
-    ) => {
-        ref.current = {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
+    const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
+    const requiredVariableNames: string[] = []
+    for (const variable of templateVariables) {
+        if (variable.required) {
+            requiredVariableNames.push(variable.name)
         }
     }
-
-    const insertIntoTextControl = (
-        el: HTMLInputElement | HTMLTextAreaElement | null,
-        selectionRef: React.MutableRefObject<{ start: number; end: number } | null>,
-        setValue: React.Dispatch<React.SetStateAction<string>>,
-        token: string
-    ) => {
-        if (!el) {
-            setValue((prev) => `${prev}${token}`)
-            return
-        }
-        const selection = selectionRef.current ?? {
-            start: el.selectionStart ?? el.value.length,
-            end: el.selectionEnd ?? el.value.length,
-        }
-        const result = insertAtCursor(el.value, token, selection.start, selection.end)
-        setValue(result.nextValue)
-        requestAnimationFrame(() => {
-            el.focus()
-            el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
-            selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
-        })
-    }
+    const usedVariableNames = extractTemplateVariables(`${templateSubject}\n${templateBody}`)
+    const unknownVariables = canValidateVariables
+        ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
+        : []
+    const missingRequiredVariables = canValidateVariables
+        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        : []
 
     // Load signature data on mount
     useEffect(() => {
@@ -1029,136 +1120,49 @@ export default function EmailTemplatesPage() {
         )
     }
 
-    const previewScope: EmailTemplateScope = React.useMemo(() => {
-        if (libraryPreviewId) return "org"
-        if (editingTemplate?.scope === "personal" || editingTemplate?.scope === "org") {
-            return editingTemplate.scope
-        }
-        return templateScope
-    }, [editingTemplate, libraryPreviewId, templateScope])
-
-    const previewSubjectTemplate = React.useMemo(() => {
-        if (libraryPreviewId && libraryTemplateDetail?.subject) return libraryTemplateDetail.subject
-        return templateSubject
-    }, [libraryPreviewId, libraryTemplateDetail, templateSubject])
-
-    const previewSubject = React.useMemo(
-        () =>
-            previewSubjectTemplate
-                .replace(/\{\{full_name\}\}/g, "John Smith")
-                .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy"),
-        [previewSubjectTemplate, signatureData?.org_signature_company_name]
-    )
-
-    const buildPreviewHtml = useCallback(
-        (rawHtml: string) => {
-            let html = rawHtml
-                .replace(/\{\{full_name\}\}/g, "John Smith")
-                .replace(/\{\{email\}\}/g, "john@example.com")
-                .replace(/\{\{phone\}\}/g, "(555) 123-4567")
-                .replace(/\{\{surrogate_number\}\}/g, "S10001")
-                .replace(/\{\{status_label\}\}/g, "Pre-Qualified")
-                .replace(/\{\{owner_name\}\}/g, "Sara Manager")
-                .replace(/\{\{form_link\}\}/g, "https://app.surrogacyforce.com/intake/EXAMPLE_SLUG")
-                .replace(/\{\{appointment_link\}\}/g, "https://app.surrogacyforce.com/book/EXAMPLE_APPOINTMENT_SLUG")
-                .replace(
-                    /\{\{appointment_manage_url\}\}/g,
-                    "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/manage/EXAMPLE_TOKEN"
-                )
-                .replace(
-                    /\{\{appointment_reschedule_url\}\}/g,
-                    "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/reschedule/EXAMPLE_TOKEN"
-                )
-                .replace(
-                    /\{\{appointment_cancel_url\}\}/g,
-                    "https://app.surrogacyforce.com/book/self-service/EXAMPLE_ORG/cancel/EXAMPLE_TOKEN"
-                )
-                .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
-                .replace(/\{\{appointment_date\}\}/g, "January 15, 2025")
-                .replace(/\{\{appointment_time\}\}/g, "2:00 PM PST")
-                .replace(/\{\{appointment_location\}\}/g, "Virtual Appointment")
-                // Unsubscribe is appended automatically at send time; don't show raw tokens in preview.
-                .replace(/\{\{\s*unsubscribe_url\s*\}\}/g, "")
-
-            // Remove legacy unsubscribe anchors (if users pasted them into templates)
-            html = html.replace(
-                /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
-                ""
-            )
-
-            const hasHtmlTags = /<[a-z][\s\S]*>/i.test(html)
-            if (!hasHtmlTags) {
-                const lines = html.split(/\n/)
-                html = lines
-                    .map((line) => {
-                        if (!line.trim()) {
-                            return `<p style="margin: 0 0 1em 0;">&nbsp;</p>`
-                        }
-                        return `<p style="margin: 0 0 1em 0;">${line}</p>`
-                    })
-                    .join("")
-            } else {
-                html = normalizeTemplateHtml(html)
-            }
-
-            if (!/<html\b|<body\b/i.test(html)) {
-                html = `<div style="font-family: ${PREVIEW_FONT_STACK}; font-size: 16px; line-height: 24px; color: #111827;">${html}</div>`
-            }
-
-            const signatureHtml =
-                previewScope === "personal"
-                    ? (personalSignaturePreview?.html || "")
-                    : (orgSignaturePreview?.html || "")
-
-            const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
-            const includeDivider = !signatureHtml
-            const unsubscribeFooterHtml = `
-                <div style="margin-top: 14px; font-size: 12px; color: #6b7280; ${includeDivider ? "padding-top: 16px; border-top: 1px solid #e5e7eb;" : ""}">
-                    <p style="margin: 0;">
-                        Manage email preferences:
-                        <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
-                    </p>
-                </div>
-            `.trim()
-
-            const insertion = `${signatureHtml}${unsubscribeFooterHtml}`
-            if (/<\/body\s*>/i.test(html)) {
-                html = html.replace(/<\/body\s*>/i, `${insertion}</body>`)
-            } else if (/<\/html\s*>/i.test(html)) {
-                html = html.replace(/<\/html\s*>/i, `${insertion}</html>`)
-            } else {
-                html = `${html}${insertion}`
-            }
-
-            return sanitizeHtml(html)
-        },
-        [
-            orgSignaturePreview?.html,
-            personalSignaturePreview?.html,
-            previewScope,
-            sanitizeHtml,
-            signatureData?.org_signature_company_name,
-        ]
-    )
-
+    const previewScope: EmailTemplateScope = libraryPreviewId
+        ? "org"
+        : editingTemplate?.scope === "personal" || editingTemplate?.scope === "org"
+          ? editingTemplate.scope
+          : templateScope
+    const previewSubjectTemplate = libraryPreviewId && libraryTemplateDetail?.subject
+        ? libraryTemplateDetail.subject
+        : templateSubject
+    const previewSubject = previewSubjectTemplate
+        .replace(/\{\{full_name\}\}/g, "John Smith")
+        .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
     useEffect(() => {
         if (!showPreview) return
 
-        if (libraryPreviewId) {
-            if (!libraryTemplateDetail) return
-            React.startTransition(() => {
-                setPreviewHtml(buildPreviewHtml(libraryTemplateDetail.body))
-            })
-            return
-        }
+        const rawHtml = libraryPreviewId ? libraryTemplateDetail?.body : templateBody
+        if (libraryPreviewId && !rawHtml) return
 
         React.startTransition(() => {
-            setPreviewHtml(buildPreviewHtml(templateBody))
+            setPreviewHtml(buildPreviewHtml(rawHtml || "", {
+                orgSignatureCompanyName: signatureData?.org_signature_company_name,
+                previewScope,
+                personalSignatureHtml: personalSignaturePreview?.html,
+                orgSignatureHtml: orgSignaturePreview?.html,
+            }))
         })
-    }, [buildPreviewHtml, libraryPreviewId, libraryTemplateDetail, showPreview, templateBody])
+    }, [
+        libraryPreviewId,
+        libraryTemplateDetail?.body,
+        orgSignaturePreview?.html,
+        personalSignaturePreview?.html,
+        previewScope,
+        showPreview,
+        signatureData?.org_signature_company_name,
+        templateBody,
+    ])
 
     const handlePreview = () => {
-        setPreviewHtml(buildPreviewHtml(templateBody))
+        setPreviewHtml(buildPreviewHtml(templateBody, {
+            orgSignatureCompanyName: signatureData?.org_signature_company_name,
+            previewScope,
+            personalSignatureHtml: personalSignaturePreview?.html,
+            orgSignatureHtml: orgSignaturePreview?.html,
+        }))
         setShowPreview(true)
     }
 
@@ -1252,28 +1256,6 @@ export default function EmailTemplatesPage() {
                     void refetchSignature()
                 },
             })
-        }
-    }
-
-    const handleCopySignatureHtml = async () => {
-        try {
-            const data = await getSignaturePreview()
-            const html = data.html || ""
-
-            try {
-                await navigator.clipboard.writeText(html)
-                toast.success("Signature HTML copied to clipboard!")
-            } catch {
-                const textarea = document.createElement("textarea")
-                textarea.value = html
-                document.body.appendChild(textarea)
-                textarea.select()
-                document.execCommand("copy")
-                document.body.removeChild(textarea)
-                toast.success("Signature HTML copied to clipboard!")
-            }
-        } catch (error) {
-            console.error("Failed to copy signature:", error)
         }
     }
 

@@ -2168,8 +2168,16 @@ describe("React regression guards (source)", () => {
         const aiBuilderSource = readSource("app/(app)/automation/ai-builder/page.client.tsx")
         const aiAssistantSource = readSource("app/(app)/ai-assistant/page.tsx")
 
-        expect(emailTemplatesSource).toContain("const requiredVariableNames = React.useMemo(() => {")
+        expect(emailTemplatesSource).not.toContain("useMemo")
+        expect(emailTemplatesSource).not.toContain("useCallback")
+        expect(emailTemplatesSource).not.toContain("React.useMemo")
+        expect(emailTemplatesSource).not.toContain("React.useCallback")
+        expect(emailTemplatesSource).toContain("const requiredVariableNames: string[] = []")
         expect(emailTemplatesSource).toContain("for (const variable of templateVariables) {")
+        expect(emailTemplatesSource).toContain("function recordSelection")
+        expect(emailTemplatesSource).toContain("function insertIntoTextControl")
+        expect(emailTemplatesSource).toContain("async function handleCopySignatureHtml")
+        expect(emailTemplatesSource).not.toContain("const handleCopySignatureHtml = async")
         expect(emailTemplatesSource).not.toContain("templateVariables.filter((variable) => variable.required).map")
 
         expect(aiBuilderSource).toContain("const requiredTemplateVariableNames: string[] = []")
