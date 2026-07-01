@@ -16,7 +16,7 @@ const aiKeys = {
         [...aiKeys.all, 'conversation', entityType, entityId] as const,
 };
 
-export function invalidateAIUsageCaches(queryClient: QueryClient) {
+function invalidateAIUsageCaches(queryClient: QueryClient) {
     void queryClient.invalidateQueries({
         queryKey: aiKeys.usageSummary(),
         exact: false,

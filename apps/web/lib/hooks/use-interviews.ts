@@ -4,7 +4,6 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as interviewsApi from '../api/interviews';
-import { invalidateAIUsageCaches } from './use-ai';
 import type {
     InterviewCreatePayload,
     InterviewUpdatePayload,
@@ -375,7 +374,10 @@ export function useSummarizeInterview() {
     return useMutation({
         mutationFn: (interviewId: string) => interviewsApi.summarizeInterview(interviewId),
         onSuccess: () => {
-            invalidateAIUsageCaches(queryClient);
+            void queryClient.invalidateQueries({
+                queryKey: ['ai', 'usage', 'summary'],
+                exact: false,
+            });
         },
     });
 }
@@ -389,7 +391,10 @@ export function useSummarizeAllInterviews() {
     return useMutation({
         mutationFn: (surrogateId: string) => interviewsApi.summarizeAllInterviews(surrogateId),
         onSuccess: () => {
-            invalidateAIUsageCaches(queryClient);
+            void queryClient.invalidateQueries({
+                queryKey: ['ai', 'usage', 'summary'],
+                exact: false,
+            });
         },
     });
 }

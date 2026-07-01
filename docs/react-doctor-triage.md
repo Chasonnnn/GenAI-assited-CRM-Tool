@@ -2284,3 +2284,29 @@ Full command after Batch 103: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `540`
 - Summary: `Bugs 161 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ae64e736-0e33-48e8-ad42-3aecc4d69079`
+
+## Batch 104
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-interviews.ts` AI summary mutations: `useSummarizeInterview`, `useSummarizeAllInterviews` | Valid scanner finding with behavior already protected: interview AI summary mutations already refreshed the AI usage summary through `invalidateAIUsageCaches`, but React Doctor's rule only detects cache operations inside mutation options. | High | Inline the existing AI usage-summary invalidation inside each interview summary mutation. Kept `aiKeys` private because the existing source guard requires hook key factories to stay private; used the same literal usage-summary key already asserted by the mutation contract test. Made `invalidateAIUsageCaches` private after removing its last external import. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "interview AI usage"` failed on `useSummarizeInterview`. Rejected shape: exporting `aiKeys` failed the existing private-key-factory source guard. GREEN: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts` passed with `228` tests; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. Hook-scope React Doctor warnings dropped from `37` to `35`, and hook score moved from `75` to `76`. |
+
+Scoped command after Batch 104: `cd apps/web && npx -y react-doctor@latest lib/hooks --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics in scope: `35`
+- Summary: `Bugs 35 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f82b6d07-193e-4a02-a474-619d690efd8b`
+
+Changed-scope command after Batch 104: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 104: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `538`
+- Summary: `Bugs 159 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-80c0e0fb-d9bd-4c9a-91db-da736005c7e2`

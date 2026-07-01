@@ -678,6 +678,19 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps interview AI usage cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-interviews.ts")
+
+        for (const functionName of [
+            "useSummarizeInterview",
+            "useSummarizeAllInterviews",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("invalidateAIUsageCaches(queryClient)")
+            expect(functionSource, functionName).toContain("queryKey: ['ai', 'usage', 'summary']")
+        }
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")
