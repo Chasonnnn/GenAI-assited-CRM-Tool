@@ -2310,3 +2310,30 @@ Full command after Batch 104: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `538`
 - Summary: `Bugs 159 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-80c0e0fb-d9bd-4c9a-91db-da736005c7e2`
+
+## Batch 105
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-workflows.ts` workflow lifecycle mutations: `useUpdateWorkflow`, `useDeleteWorkflow`, `useToggleWorkflow`, `useDuplicateWorkflow` | Valid scanner finding with behavior already protected: these mutations already refreshed workflow list, stats, and detail caches through helper functions, but React Doctor's rule only detects cache operations inside mutation options. | High | Inline the existing list, stats, detail set, detail invalidate, and detail remove cache operations inside each mutation `onSuccess`. Added a source guard that fails if these mutations hide cache operations behind helper wrappers again. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "workflow mutation cache invalidations"` failed on `invalidateWorkflowCollectionCaches`. GREEN: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts` passed with `229` tests; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reports no issues. Hook-scope React Doctor warnings dropped from `35` to `32`. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-workflows.ts` `useTestWorkflow` | False positive: workflow testing runs a one-shot test against a selected entity and returns the immediate test result. It does not mutate persisted workflow configuration or a cached workflow collection, and there is no matching query cache to refresh. | High | Logged as invalid for this batch; no dummy invalidation added. | After Batch 105, the only remaining `use-workflows.ts` warning is `use-workflows.ts:185`, which is `useTestWorkflow`. |
+
+Scoped command after Batch 105: `cd apps/web && npx -y react-doctor@latest lib/hooks --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics in scope: `32`
+- Summary: `Bugs 32 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8f2dc845-60ca-46b0-a9e2-eccc47bad276`
+
+Changed-scope command after Batch 105: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 105: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `535`
+- Summary: `Bugs 156 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-dc89ed51-6423-4dfe-acbb-539a28182ee6`

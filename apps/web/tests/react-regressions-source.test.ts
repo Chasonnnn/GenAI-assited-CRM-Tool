@@ -691,6 +691,38 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps workflow mutation cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-workflows.ts")
+
+        expect(source).not.toContain("function invalidateWorkflowCollectionCaches")
+        expect(source).not.toContain("function refreshWorkflowDetailCache")
+
+        for (const functionName of [
+            "useUpdateWorkflow",
+            "useDeleteWorkflow",
+            "useToggleWorkflow",
+            "useDuplicateWorkflow",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("invalidateWorkflowCollectionCaches(queryClient)")
+            expect(functionSource, functionName).toContain("queryKey: workflowKeys.lists()")
+            expect(functionSource, functionName).toContain("queryKey: workflowKeys.stats()")
+        }
+
+        for (const [functionName, idExpression] of [
+            ["useUpdateWorkflow", "updated.id"],
+            ["useToggleWorkflow", "updated.id"],
+            ["useDuplicateWorkflow", "created.id"],
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("refreshWorkflowDetailCache(queryClient")
+            expect(functionSource, functionName).toContain(`queryClient.setQueryData(workflowKeys.detail(${idExpression})`)
+            expect(functionSource, functionName).toContain(`queryKey: workflowKeys.detail(${idExpression})`)
+        }
+
+        expect(readExportedFunctionSource(source, "useDeleteWorkflow")).toContain("queryKey: workflowKeys.detail(id)")
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")

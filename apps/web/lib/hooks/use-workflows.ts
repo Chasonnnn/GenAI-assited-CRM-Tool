@@ -41,19 +41,6 @@ const workflowKeys = {
     preferences: () => [...workflowKeys.all, "preferences"] as const,
 }
 
-function invalidateWorkflowCollectionCaches(queryClient: ReturnType<typeof useQueryClient>) {
-    void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
-    void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
-}
-
-function refreshWorkflowDetailCache(
-    queryClient: ReturnType<typeof useQueryClient>,
-    workflow: { id: string },
-) {
-    queryClient.setQueryData(workflowKeys.detail(workflow.id), workflow)
-    void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(workflow.id) })
-}
-
 // =============================================================================
 // List Hooks
 // =============================================================================
@@ -145,8 +132,10 @@ export function useUpdateWorkflow() {
         mutationFn: ({ id, data }: { id: string; data: WorkflowUpdate }) =>
             updateWorkflow(id, data),
         onSuccess: (updated) => {
-            invalidateWorkflowCollectionCaches(queryClient)
-            refreshWorkflowDetailCache(queryClient, updated)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+            queryClient.setQueryData(workflowKeys.detail(updated.id), updated)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(updated.id) })
         },
     })
 }
@@ -157,7 +146,8 @@ export function useDeleteWorkflow() {
     return useMutation({
         mutationFn: (id: string) => deleteWorkflow(id),
         onSuccess: (_result, id) => {
-            invalidateWorkflowCollectionCaches(queryClient)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
             queryClient.removeQueries({ queryKey: workflowKeys.detail(id) })
         },
     })
@@ -169,8 +159,10 @@ export function useToggleWorkflow() {
     return useMutation({
         mutationFn: (id: string) => toggleWorkflow(id),
         onSuccess: (updated) => {
-            invalidateWorkflowCollectionCaches(queryClient)
-            refreshWorkflowDetailCache(queryClient, updated)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+            queryClient.setQueryData(workflowKeys.detail(updated.id), updated)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(updated.id) })
         },
     })
 }
@@ -181,8 +173,10 @@ export function useDuplicateWorkflow() {
     return useMutation({
         mutationFn: (id: string) => duplicateWorkflow(id),
         onSuccess: (created) => {
-            invalidateWorkflowCollectionCaches(queryClient)
-            refreshWorkflowDetailCache(queryClient, created)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.stats() })
+            queryClient.setQueryData(workflowKeys.detail(created.id), created)
+            void queryClient.invalidateQueries({ queryKey: workflowKeys.detail(created.id) })
         },
     })
 }
