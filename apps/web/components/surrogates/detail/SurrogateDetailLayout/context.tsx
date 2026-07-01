@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import type { Route } from "next"
-import { createContext, use, useState, useCallback, useMemo, useRef, useEffect } from "react"
+import { createContext, use, useState, useRef, useEffect, useEffectEvent } from "react"
 import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -184,6 +184,16 @@ const appendSearchToPath = (path: string, search: string) => {
     return search ? `${path}?${search}` : path
 }
 
+const EMPTY_STAGES: PipelineStage[] = []
+
+function getLocalTimezoneName() {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+    } catch {
+        return "UTC"
+    }
+}
+
 // ============================================================================
 // Context
 // ============================================================================
@@ -259,36 +269,33 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         ? ["case_manager", "admin", "developer"].includes(user.role)
         : false
 
-    const allowedTabs = useMemo<TabValue[]>(
-        () => (canViewProfile ? [...TAB_VALUES] : TAB_VALUES.filter((tab) => tab !== "profile")),
-        [canViewProfile]
-    )
+    const allowedTabs: TabValue[] = canViewProfile
+        ? [...TAB_VALUES]
+        : TAB_VALUES.filter((tab) => tab !== "profile")
 
-    const isTabValue = useCallback(
-        (value: string | null): value is TabValue =>
-            !!value && allowedTabs.includes(value as TabValue),
-        [allowedTabs]
-    )
+    const isTabValue = (value: string | null): value is TabValue =>
+        !!value && allowedTabs.includes(value as TabValue)
 
     const resolvedTab: TabValue = isTabValue(segment) ? segment : "overview"
     const currentTab: TabValue = resolvedTab
 
-    const handleTabChange = useCallback(
-        (value: string) => {
-            const nextTab: TabValue = isTabValue(value) ? value : "overview"
-            const basePath = `/surrogates/${surrogateId}`
-            const nextPath = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
-            const nextUrl = appendSearchToPath(nextPath, detailSearch)
-            replace(nextUrl as Route, { scroll: false })
-        },
-        [detailSearch, surrogateId, replace, isTabValue]
-    )
+    const handleTabChange = (value: string) => {
+        const nextTab: TabValue = isTabValue(value) ? value : "overview"
+        const basePath = `/surrogates/${surrogateId}`
+        const nextPath = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
+        const nextUrl = appendSearchToPath(nextPath, detailSearch)
+        replace(nextUrl as Route, { scroll: false })
+    }
 
-    useEffect(() => {
-        if (segment === "overview" || (segment && !isTabValue(segment))) {
+    const normalizeInvalidTab = useEffectEvent((value: string | null) => {
+        if (value === "overview" || (value && !isTabValue(value))) {
             handleTabChange("overview")
         }
-    }, [segment, isTabValue, handleTabChange])
+    })
+
+    useEffect(() => {
+        normalizeInvalidTab(segment)
+    }, [segment])
 
     // Dialog state - consolidated from 7+ booleans
     const [activeDialog, setActiveDialog] = useState<ActiveDialog>({ type: "none" })
@@ -303,19 +310,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     })
     const zoomIdempotencyKeyRef = useRef<string | null>(null)
 
-    useEffect(() => {
-        if (activeDialog.type !== "zoom_meeting") {
-            zoomIdempotencyKeyRef.current = null
-        }
-    }, [activeDialog])
-
-    const timezoneName = useMemo(() => {
-        try {
-            return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-        } catch {
-            return "UTC"
-        }
-    }, [])
+    const timezoneName = getLocalTimezoneName()
 
     // Data fetching
     const { data: surrogateData, isLoading, error } = useSurrogate(surrogateId)
@@ -329,26 +324,20 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     const { data: zoomStatus } = useZoomStatus()
 
     // Derived data
-    const stageOptions = useMemo(() => defaultPipeline?.stages || [], [defaultPipeline])
-    const stageById = useMemo(
-        () => new Map(stageOptions.map((stage) => [stage.id, stage])),
-        [stageOptions]
-    )
-    const visibleStageOptions = useMemo(() => {
+    const stageOptions = defaultPipeline?.stages ?? EMPTY_STAGES
+    const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
+    const visibleStageOptions = (() => {
         if (!user?.role) return stageOptions
         return stageOptions.filter((stage) =>
             canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)
         )
-    }, [defaultPipeline?.feature_config, stageOptions, user])
-    const stageContext = useMemo(
-        () => getSurrogateStageContext(surrogateData ?? null, stageById),
-        [surrogateData, stageById]
-    )
+    })()
+    const stageContext = getSurrogateStageContext(surrogateData ?? null, stageById)
 
-    const canViewJourney = useMemo(() => {
+    const canViewJourney = (() => {
         if (!stageContext.effectiveStage) return false
         return stageHasCapability(stageContext.effectiveStage, "locks_match_state")
-    }, [stageContext.effectiveStage])
+    })()
 
     const stage = stageContext.currentStage
     const effectiveStage = stageContext.effectiveStage
@@ -410,33 +399,37 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     const sendZoomInviteMutation = useSendZoomInvite()
 
     // Dialog actions
-    const openDialog = useCallback((dialog: ActiveDialog) => {
+    const openDialog = (dialog: ActiveDialog) => {
+        if (dialog.type !== "zoom_meeting") {
+            zoomIdempotencyKeyRef.current = null
+        }
         setActiveDialog(dialog)
-    }, [])
+    }
 
-    const closeDialog = useCallback(() => {
+    const closeDialog = () => {
+        zoomIdempotencyKeyRef.current = null
         setActiveDialog({ type: "none" })
-    }, [])
+    }
 
     // Zoom form setters
-    const setZoomTopic = useCallback((topic: string) => {
+    const setZoomTopic = (topic: string) => {
         setZoomForm(prev => ({ ...prev, topic }))
-    }, [])
+    }
 
-    const setZoomDuration = useCallback((duration: number) => {
+    const setZoomDuration = (duration: number) => {
         setZoomForm(prev => ({ ...prev, duration }))
-    }, [])
+    }
 
-    const setZoomStartAt = useCallback((startAt: Date | undefined) => {
+    const setZoomStartAt = (startAt: Date | undefined) => {
         setZoomForm(prev => ({ ...prev, startAt }))
-    }, [])
+    }
 
-    const setZoomLastMeetingResult = useCallback((lastMeetingResult: ZoomFormState["lastMeetingResult"]) => {
+    const setZoomLastMeetingResult = (lastMeetingResult: ZoomFormState["lastMeetingResult"]) => {
         setZoomForm(prev => ({ ...prev, lastMeetingResult }))
-    }, [])
+    }
 
     // Actions
-    const changeStatus = useCallback(async (data: {
+    const changeStatus = async (data: {
         stage_id: string
         reason?: string
         effective_at?: string
@@ -507,35 +500,35 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
             toast("Stage change request submitted for approval")
         }
         return response
-    }, [surrogateData, canChangeStage, stageById, changeStatusMutation, surrogateId, closeDialog])
+    }
 
-    const archiveSurrogate = useCallback(async () => {
+    const archiveSurrogate = async () => {
         await archiveMutation.mutateAsync(surrogateId)
         push(returnTo as Route)
-    }, [archiveMutation, surrogateId, push, returnTo])
+    }
 
-    const restoreSurrogate = useCallback(async () => {
+    const restoreSurrogate = async () => {
         await restoreMutation.mutateAsync(surrogateId)
-    }, [restoreMutation, surrogateId])
+    }
 
-    const claimSurrogate = useCallback(async () => {
+    const claimSurrogate = async () => {
         await claimSurrogateMutation.mutateAsync(surrogateId)
         toast.success("Surrogate claimed")
-    }, [claimSurrogateMutation, surrogateId])
+    }
 
-    const releaseSurrogate = useCallback(async () => {
+    const releaseSurrogate = async () => {
         if (!selectedQueueId) return
         await releaseSurrogateMutation.mutateAsync({ surrogateId, queueId: selectedQueueId })
         closeDialog()
         setSelectedQueueId("")
-    }, [releaseSurrogateMutation, surrogateId, selectedQueueId, closeDialog])
+    }
 
-    const updateSurrogate = useCallback(async (data: Record<string, unknown>) => {
+    const updateSurrogate = async (data: Record<string, unknown>) => {
         await updateSurrogateMutation.mutateAsync({ surrogateId, data })
         closeDialog()
-    }, [updateSurrogateMutation, surrogateId, closeDialog])
+    }
 
-    const assignSurrogate = useCallback(async (ownerId: string | null) => {
+    const assignSurrogate = async (ownerId: string | null) => {
         if (!surrogateData) return
         if (ownerId === null) {
             const defaultQueue = queues.find(q => q.name === "Unassigned")
@@ -552,9 +545,9 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
                 owner_id: ownerId,
             })
         }
-    }, [surrogateData, queues, releaseSurrogateMutation, assignSurrogateMutation])
+    }
 
-    const createZoomMeeting = useCallback(async () => {
+    const createZoomMeeting = async () => {
         if (!zoomForm.startAt || !surrogateData) return
 
         try {
@@ -584,9 +577,9 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         } catch {
             // Error handled by react-query
         }
-    }, [zoomForm, surrogateData, createZoomMeetingMutation, surrogateId, timezoneName, setZoomLastMeetingResult])
+    }
 
-    const sendZoomInvite = useCallback(async () => {
+    const sendZoomInvite = async () => {
         if (!surrogateData?.email || !zoomForm.lastMeetingResult) return
 
         try {
@@ -610,13 +603,13 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         } catch {
             // Error handled by react-query
         }
-    }, [surrogateData, zoomForm, sendZoomInviteMutation, surrogateId, closeDialog, setZoomLastMeetingResult])
+    }
 
-    const navigateToList = useCallback(() => {
+    const navigateToList = () => {
         push(returnTo as Route)
-    }, [push, returnTo])
+    }
 
-    const dataValue: SurrogateDetailDataContextValue = useMemo(() => ({
+    const dataValue: SurrogateDetailDataContextValue = {
         surrogateId,
         surrogate: surrogateData || null,
         isLoading,
@@ -646,54 +639,26 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         isInQueue,
         isOwnedByUser,
         zoomConnected,
-    }), [
-        surrogateId,
-        surrogateData,
-        isLoading,
-        error,
-        stage,
-        effectiveStage,
-        pausedFromStage,
-        statusLabel,
-        statusColor,
-        stageOptions,
-        visibleStageOptions,
-        stageById,
-        queues,
-        assigneesData,
-        noteCount,
-        taskCount,
-        canViewJourney,
-        canViewProfile,
-        timezoneName,
-        canManageQueue,
-        canClaimSurrogate,
-        canChangeStage,
-        isOwnedByCurrentUser,
-        isInQueue,
-        isOwnedByUser,
-        zoomConnected,
-        navigateToList,
-    ])
+    }
 
-    const tabsValue: SurrogateDetailTabsContextValue = useMemo(() => ({
+    const tabsValue: SurrogateDetailTabsContextValue = {
         currentTab,
         allowedTabs,
         setTab: handleTabChange,
-    }), [currentTab, allowedTabs, handleTabChange])
+    }
 
-    const dialogValue: SurrogateDetailDialogContextValue = useMemo(() => ({
+    const dialogValue: SurrogateDetailDialogContextValue = {
         activeDialog,
         openDialog,
         closeDialog,
-    }), [activeDialog, openDialog, closeDialog])
+    }
 
-    const queueValue: SurrogateDetailQueueContextValue = useMemo(() => ({
+    const queueValue: SurrogateDetailQueueContextValue = {
         selectedQueueId,
         setSelectedQueueId,
-    }), [selectedQueueId])
+    }
 
-    const zoomValue: SurrogateDetailZoomContextValue = useMemo(() => ({
+    const zoomValue: SurrogateDetailZoomContextValue = {
         zoomForm,
         setZoomTopic,
         setZoomDuration,
@@ -704,20 +669,9 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         sendZoomInvite,
         isCreateZoomPending: createZoomMeetingMutation.isPending,
         isSendZoomInvitePending: sendZoomInviteMutation.isPending,
-    }), [
-        zoomForm,
-        setZoomTopic,
-        setZoomDuration,
-        setZoomStartAt,
-        setZoomLastMeetingResult,
-        zoomIdempotencyKeyRef,
-        createZoomMeeting,
-        sendZoomInvite,
-        createZoomMeetingMutation.isPending,
-        sendZoomInviteMutation.isPending,
-    ])
+    }
 
-    const actionsValue: SurrogateDetailActionsContextValue = useMemo(() => ({
+    const actionsValue: SurrogateDetailActionsContextValue = {
         changeStatus,
         archiveSurrogate,
         restoreSurrogate,
@@ -732,22 +686,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         isClaimPending: claimSurrogateMutation.isPending,
         isReleasePending: releaseSurrogateMutation.isPending,
         isAssignPending: assignSurrogateMutation.isPending,
-    }), [
-        changeStatus,
-        archiveSurrogate,
-        restoreSurrogate,
-        claimSurrogate,
-        releaseSurrogate,
-        updateSurrogate,
-        assignSurrogate,
-        changeStatusMutation.isPending,
-        archiveMutation.isPending,
-        restoreMutation.isPending,
-        updateSurrogateMutation.isPending,
-        claimSurrogateMutation.isPending,
-        releaseSurrogateMutation.isPending,
-        assignSurrogateMutation.isPending,
-    ])
+    }
 
     return (
         <SurrogateDetailDataContext.Provider value={dataValue}>

@@ -973,6 +973,9 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("export interface SurrogateDetailQueueContextValue")
         expect(contextSource).not.toContain("export interface SurrogateDetailZoomContextValue")
         expect(contextSource).not.toContain("export interface SurrogateDetailActionsContextValue")
+        expect(contextSource).not.toContain("useMemo")
+        expect(contextSource).not.toContain("useCallback")
+        expect(contextSource).not.toContain("}, [activeDialog]")
         expect(contextSource).toContain("const { push, replace } = useRouter()")
         expect(contextSource).not.toContain("const { get, toString } = searchParams")
         expect(contextSource).toContain("searchParams.toString()")
@@ -981,7 +984,9 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("router.push")
         expect(contextSource).not.toContain("router.replace")
         expect(contextSource).not.toContain("[defaultPipeline?.feature_config, stageOptions, user?.role]")
-        expect(contextSource).toContain("[defaultPipeline?.feature_config, stageOptions, user]")
+        expect(contextSource).toContain(
+            "canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)"
+        )
     })
 
     it("keeps narrow utility API internals private", () => {

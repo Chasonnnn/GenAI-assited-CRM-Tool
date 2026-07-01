@@ -2505,3 +2505,34 @@ Full command after Batch 111: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `462`
 - Summary: `Bugs 142 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 274 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a6b2cbbd-f044-4d13-8d87-90707d8d8297`
+
+## Batch 112
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/detail/SurrogateDetailLayout/context.tsx` | Valid scanner finding: every flagged `useMemo` and `useCallback` resolved to React imports. `apps/web/next.config.js` has `reactCompiler: true`, `babel-plugin-react-compiler@^1.0.0` is installed, and the Next 16 docs confirm this setup reduces the need for manual `useMemo`/`useCallback`. | High | Removed all manual memoization wrappers in the SurrogateDetailLayout provider, used `useEffectEvent` for invalid-tab normalization after plain handler conversion, moved local timezone fallback to a module helper, and added a source regression guard so this provider does not reintroduce `useMemo` or `useCallback`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate detail layout context internals"` failed first on `useMemo`. GREEN: the same test passed; `pnpm test --run tests/surrogate-detail.test.tsx tests/surrogate-detail-dialog-pickers.test.tsx tests/header-actions.test.tsx` passed with `66` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Focused SurrogateDetailLayout manual memoization warnings dropped from `31` to `0`; full diagnostics dropped from `462` to `430`; global redundant manual memoization dropped from `159` to `128`. |
+| `react-doctor/no-event-handler` | `components/surrogates/detail/SurrogateDetailLayout/context.tsx:314` | Valid secondary finding after removing manual memoization: the Zoom idempotency ref reset was routed through an `activeDialog` effect even though `activeDialog` is local state set by dialog handlers. The canonical rule validation identifies this as work that belongs in the handler that changed the state. | High | Moved the Zoom idempotency ref reset into `openDialog` for non-Zoom dialogs and into `closeDialog`, then added a source guard preventing the `activeDialog` effect from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate detail layout context internals"` failed on `}, [activeDialog]`. GREEN: the same test passed; focused and changed-scope React Doctor no longer report `no-event-handler` for this file. |
+| `react-doctor/no-prevent-default` | `components/surrogates/detail/SurrogateDetailLayout/dialogs/EditDialog.tsx:142` | Valid but outside this batch: converting the surrogate edit form from `onSubmit`/`preventDefault` to a progressive form action changes dialog submission behavior and should be handled with a dedicated form regression slice. | Medium | Logged for a later focused batch; no suppression added. | Focused SurrogateDetailLayout React Doctor reports this as one of two remaining SurrogateDetailLayout issues. |
+| `react-doctor/no-giant-component` | `components/surrogates/detail/SurrogateDetailLayout/context.tsx:259` | Valid but outside this batch: splitting the 448-line provider into smaller modules is a broader context-boundary refactor with import and provider-surface risk. | High | Logged for a later focused batch; no suppression added. | Changed-scope React Doctor reports this as the only remaining changed-file issue. |
+
+Scoped command after Batch 112: `cd apps/web && npx -y react-doctor@latest components/surrogates/detail/SurrogateDetailLayout --verbose`
+
+- Score: `78 / 100 Needs work`
+- Total diagnostics in scope: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1478520b-7a89-4772-b34a-f76cc3656eb3`
+
+Changed-scope command after Batch 112: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-60a0455b-0a4d-4551-a775-854edb5bd9f2`
+- Note: remaining changed-file diagnostic is the valid `no-giant-component` provider split and requires a separate context-boundary refactor.
+
+Full command after Batch 112: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `430`
+- Summary: `Bugs 141 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 243 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0982ba45-0bf4-4c1d-bae0-2e83862d9e6d`
