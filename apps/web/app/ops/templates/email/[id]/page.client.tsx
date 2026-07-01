@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useReducer, useRef, type MutableRefObject } from "react"
+import { useReducer, useRef, type MutableRefObject } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { Badge } from "@/components/ui/badge"
@@ -331,6 +331,34 @@ function recordSelection(
     }
 }
 
+function applyTextInsertion(
+    el: HTMLInputElement | HTMLTextAreaElement | null,
+    selectionRef: MutableRefObject<{ start: number; end: number } | null>,
+    currentValue: string,
+    token: string,
+    commit: (value: string) => void
+) {
+    const value = el?.value ?? currentValue
+    const selection = el
+        ? selectionRef.current ?? {
+              start: el.selectionStart ?? value.length,
+              end: el.selectionEnd ?? value.length,
+          }
+        : { start: value.length, end: value.length }
+    const result = insertAtCursor(value, token, selection.start, selection.end)
+    commit(result.nextValue)
+
+    if (!el) return
+    requestAnimationFrame(() => {
+        el.focus()
+        el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
+        selectionRef.current = {
+            start: result.nextSelectionStart,
+            end: result.nextSelectionEnd,
+        }
+    })
+}
+
 function getFromEmailError(fromEmail: string): string | null {
     const value = fromEmail.trim()
     if (!value) return null
@@ -559,138 +587,90 @@ function useEmailTemplateController({
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
-    const allowedVariableNames = useMemo(
-        () => new Set(templateVariables.map((variable) => variable.name)),
-        [templateVariables]
-    )
-    const requiredVariableNames = useMemo(() => {
-        const names: string[] = []
-        for (const variable of templateVariables) {
-            if (variable.required) {
-                names.push(variable.name)
-            }
+    const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
+    const requiredVariableNames: string[] = []
+    for (const variable of templateVariables) {
+        if (variable.required) {
+            requiredVariableNames.push(variable.name)
         }
-        return names
-    }, [templateVariables])
-    const usedVariableNames = useMemo(
-        () => extractTemplateVariables(`${state.subject}\n${state.body}`),
-        [state.body, state.subject]
-    )
-    const unknownVariables = useMemo(() => {
-        if (!canValidateVariables) return []
-        return usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
-    }, [allowedVariableNames, canValidateVariables, usedVariableNames])
-    const missingRequiredVariables = useMemo(() => {
-        if (!canValidateVariables) return []
-        return requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
-    }, [canValidateVariables, requiredVariableNames, usedVariableNames])
-    const testEditableVariableNames = useMemo(
-        () => usedVariableNames.filter((variable) => variable !== "unsubscribe_url"),
-        [usedVariableNames]
-    )
+    }
+    const usedVariableNames = extractTemplateVariables(`${state.subject}\n${state.body}`)
+    const unknownVariables = canValidateVariables
+        ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
+        : []
+    const missingRequiredVariables = canValidateVariables
+        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        : []
+    const testEditableVariableNames = usedVariableNames.filter((variable) => variable !== "unsubscribe_url")
     const testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")
-    const fromEmailError = useMemo(() => getFromEmailError(state.fromEmail), [state.fromEmail])
-    const hasComplexHtml = useMemo(() => hasComplexTemplateHtml(state.body), [state.body])
-    const previewHtml = useMemo(() => buildPreviewHtml(state.body), [state.body])
+    const fromEmailError = getFromEmailError(state.fromEmail)
+    const hasComplexHtml = hasComplexTemplateHtml(state.body)
+    const previewHtml = buildPreviewHtml(state.body)
 
-    const setTextField = useCallback((field: TextFieldName, value: string) => {
+    const setTextField = (field: TextFieldName, value: string) => {
         dispatch({ type: "setTextField", field, value })
-    }, [])
+    }
 
-    const setBody = useCallback((value: string) => {
+    const setBody = (value: string) => {
         dispatch({ type: "setBody", value })
-    }, [])
+    }
 
-    const setDialog = useCallback((dialog: DialogName, open: boolean) => {
+    const setDialog = (dialog: DialogName, open: boolean) => {
         dispatch({ type: "setDialog", dialog, open })
-    }, [])
+    }
 
-    const setActiveInsertionTarget = useCallback((target: ActiveInsertionTarget) => {
+    const setActiveInsertionTarget = (target: ActiveInsertionTarget) => {
         dispatch({ type: "setActiveInsertionTarget", target })
-    }, [])
+    }
 
-    const setEditorMode = useCallback((mode: EditorMode) => {
+    const setEditorMode = (mode: EditorMode) => {
         dispatch({ type: "setEditorMode", mode })
-    }, [])
+    }
 
-    const setTestVariable = useCallback((name: string, value: string) => {
+    const setTestVariable = (name: string, value: string) => {
         dispatch({ type: "setTestVariable", name, value })
-    }, [])
+    }
 
-    const navigateBack = useCallback(() => {
+    const navigateBack = () => {
         push("/ops/templates?tab=email")
-    }, [push])
+    }
 
-    const recordSubjectSelection = useCallback((el: HTMLInputElement) => {
+    const recordSubjectSelection = (el: HTMLInputElement) => {
         recordSelection(el, subjectSelectionRef)
-    }, [])
+    }
 
-    const recordHtmlBodySelection = useCallback((el: HTMLTextAreaElement) => {
+    const recordHtmlBodySelection = (el: HTMLTextAreaElement) => {
         recordSelection(el, htmlBodySelectionRef)
-    }, [])
+    }
 
-    const applyTextInsertion = useCallback(
-        (
-            el: HTMLInputElement | HTMLTextAreaElement | null,
-            selectionRef: MutableRefObject<{ start: number; end: number } | null>,
-            currentValue: string,
-            token: string,
-            commit: (value: string) => void
-        ) => {
-            const value = el?.value ?? currentValue
-            const selection = el
-                ? selectionRef.current ?? {
-                      start: el.selectionStart ?? value.length,
-                      end: el.selectionEnd ?? value.length,
-                  }
-                : { start: value.length, end: value.length }
-            const result = insertAtCursor(value, token, selection.start, selection.end)
-            commit(result.nextValue)
-
-            if (!el) return
-            requestAnimationFrame(() => {
-                el.focus()
-                el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
-                selectionRef.current = {
-                    start: result.nextSelectionStart,
-                    end: result.nextSelectionEnd,
-                }
-            })
-        },
-        []
-    )
-
-    const insertToken = useCallback(
-        (token: string) => {
-            if (state.activeInsertionTarget === "subject") {
-                applyTextInsertion(subjectRef.current, subjectSelectionRef, state.subject, token, (value) =>
-                    dispatch({ type: "setTextField", field: "subject", value })
-                )
-                return
-            }
-            if (state.activeInsertionTarget === "body_html") {
-                applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
-                    dispatch({ type: "setBody", value })
-                )
-                return
-            }
-            if (state.activeInsertionTarget === "body_visual") {
-                visualBodyRef.current?.insertText(token)
-                return
-            }
-
-            if (state.editorMode === "html") {
-                applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
-                    dispatch({ type: "setBody", value })
-                )
-                return
-            }
+    const insertToken = (token: string) => {
+        if (state.activeInsertionTarget === "subject") {
+            applyTextInsertion(subjectRef.current, subjectSelectionRef, state.subject, token, (value) =>
+                dispatch({ type: "setTextField", field: "subject", value })
+            )
+            return
+        }
+        if (state.activeInsertionTarget === "body_html") {
+            applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
+                dispatch({ type: "setBody", value })
+            )
+            return
+        }
+        if (state.activeInsertionTarget === "body_visual") {
             visualBodyRef.current?.insertText(token)
-        },
-        [applyTextInsertion, state.activeInsertionTarget, state.body, state.editorMode, state.subject]
-    )
+            return
+        }
 
-    const insertOrgLogo = useCallback(() => {
+        if (state.editorMode === "html") {
+            applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
+                dispatch({ type: "setBody", value })
+            )
+            return
+        }
+        visualBodyRef.current?.insertText(token)
+    }
+
+    const insertOrgLogo = () => {
         if (state.body.includes("{{org_logo_url}}")) return
         const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
         if (state.editorMode === "visual") {
@@ -701,20 +681,17 @@ function useEmailTemplateController({
         applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, logo, (value) =>
             dispatch({ type: "setBody", value, activeInsertionTarget: "body_html" })
         )
-    }, [applyTextInsertion, state.body, state.editorMode])
+    }
 
-    const insertVariable = useCallback(
-        (variableName: string) => {
-            if (variableName === "unsubscribe_url") {
-                toast.info("Unsubscribe link is added automatically.")
-                return
-            }
-            insertToken(`{{${variableName}}}`)
-        },
-        [insertToken]
-    )
+    const insertVariable = (variableName: string) => {
+        if (variableName === "unsubscribe_url") {
+            toast.info("Unsubscribe link is added automatically.")
+            return
+        }
+        insertToken(`{{${variableName}}}`)
+    }
 
-    const persistTemplate = useCallback(async (): Promise<PlatformEmailTemplate> => {
+    const persistTemplate = async (): Promise<PlatformEmailTemplate> => {
         const payload = {
             name: state.name.trim(),
             subject: state.subject.trim(),
@@ -736,21 +713,9 @@ function useEmailTemplateController({
                 expected_version: templateData?.current_version ?? null,
             },
         })
-    }, [
-        createTemplate,
-        id,
-        isNew,
-        replace,
-        state.body,
-        state.category,
-        state.fromEmail,
-        state.name,
-        state.subject,
-        templateData?.current_version,
-        updateTemplate,
-    ])
+    }
 
-    const handleSave = useCallback(async () => {
+    const handleSave = async () => {
         if (!state.name.trim() || !state.subject.trim()) {
             toast.error("Name and subject are required")
             return
@@ -770,9 +735,9 @@ function useEmailTemplateController({
             toast.error(error instanceof Error ? error.message : "Failed to save template")
             finishSaving()
         }
-    }, [fromEmailError, persistTemplate, state.name, state.subject])
+    }
 
-    const handlePublish = useCallback(() => {
+    const handlePublish = () => {
         if (!state.name.trim() || !state.subject.trim()) {
             toast.error("Name and subject are required")
             return
@@ -786,34 +751,31 @@ function useEmailTemplateController({
             return
         }
         dispatch({ type: "setDialog", dialog: "publish", open: true })
-    }, [fromEmailError, state.body, state.name, state.subject])
+    }
 
-    const confirmPublish = useCallback(
-        async (publishAll: boolean, orgIds: string[]) => {
-            dispatch({ type: "setBusy", flag: "isPublishing", value: true })
-            const finishPublishing = () => dispatch({ type: "setBusy", flag: "isPublishing", value: false })
-            try {
-                const saved = await persistTemplate()
-                await publishTemplate.mutateAsync({
-                    id: saved.id,
-                    payload: {
-                        publish_all: publishAll,
-                        org_ids: publishAll ? null : orgIds,
-                    },
-                })
-                dispatch({ type: "setPublished", isPublished: true })
-                dispatch({ type: "setDialog", dialog: "publish", open: false })
-                toast.success("Template published")
-                finishPublishing()
-            } catch (error) {
-                toast.error(error instanceof Error ? error.message : "Failed to publish template")
-                finishPublishing()
-            }
-        },
-        [persistTemplate, publishTemplate]
-    )
+    const confirmPublish = async (publishAll: boolean, orgIds: string[]) => {
+        dispatch({ type: "setBusy", flag: "isPublishing", value: true })
+        const finishPublishing = () => dispatch({ type: "setBusy", flag: "isPublishing", value: false })
+        try {
+            const saved = await persistTemplate()
+            await publishTemplate.mutateAsync({
+                id: saved.id,
+                payload: {
+                    publish_all: publishAll,
+                    org_ids: publishAll ? null : orgIds,
+                },
+            })
+            dispatch({ type: "setPublished", isPublished: true })
+            dispatch({ type: "setDialog", dialog: "publish", open: false })
+            toast.success("Template published")
+            finishPublishing()
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to publish template")
+            finishPublishing()
+        }
+    }
 
-    const handleSendTest = useCallback(async () => {
+    const handleSendTest = async () => {
         if (isNew) return
 
         if (!state.testOrgId.trim()) {
@@ -858,18 +820,9 @@ function useEmailTemplateController({
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
             finishSendingTest()
         }
-    }, [
-        isNew,
-        persistTemplate,
-        sendTest,
-        state.testEmail,
-        state.testOrgId,
-        state.testTouched,
-        state.testVariables,
-        testEditableVariableNames,
-    ])
+    }
 
-    const handleDelete = useCallback(async () => {
+    const handleDelete = async () => {
         if (!templateId) return
         try {
             await deleteTemplate.mutateAsync({ id: templateId })
@@ -879,7 +832,7 @@ function useEmailTemplateController({
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to delete template")
         }
-    }, [deleteTemplate, push, templateId])
+    }
 
     return {
         actions: {

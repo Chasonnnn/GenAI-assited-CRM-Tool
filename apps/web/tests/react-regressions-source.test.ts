@@ -2145,6 +2145,14 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps platform email-template edit page helpers compiler-friendly", () => {
+        const source = readSource("app/ops/templates/email/[id]/page.client.tsx")
+
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("const applyTextInsertion =")
+    })
+
     it("keeps shared display and navigation components compiler-friendly", () => {
         const sources = [
             readSource("components/FileUploadZone.tsx"),

@@ -1803,3 +1803,29 @@ Full command after Batch 85: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `648`
 - Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 415 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3f3cab4d-c74c-403d-986e-47fec8fc94ff`
+
+## Batch 86
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/templates/email/[id]/page.client.tsx` | Valid: the platform email-template editor wrapped deterministic variable sets, validation helpers, preview HTML, reducer dispatch helpers, text insertion helpers, and ordinary save/publish/test/delete handlers in `useMemo`/`useCallback`. React Compiler is enabled, and these wrappers did not preserve an identity-sensitive contract. | High | Remove `useMemo`/`useCallback`, convert the derived values and handlers to plain render-local values/functions, and add a source guard that failed on the previous wrappers. | `pnpm test --run tests/react-regressions-source.test.ts tests/platform-email-template-page.test.tsx`; `pnpm tsc --noEmit`; scoped and changed-scope React Doctor report no issues; full React Doctor manual memoization count dropped from `294` to `266`. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/ops/templates/email/[id]/page.client.tsx` | Valid follow-up: after unwrapping callbacks, React Doctor correctly identified the text insertion helper as a pure function rebuilt inside the controller on every render. | High | Move `applyTextInsertion` to module scope while keeping its ref/value/commit dependencies explicit parameters. | Scoped React Doctor for the email-template editor improved from `96 / 100` with one helper warning to `100 / 100` with no issues. |
+
+Scoped command after Batch 86: `cd apps/web && npx react-doctor@latest 'app/ops/templates/email/[id]' --verbose`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in scope: `0`
+- Summary: `No issues found`
+
+Changed-scope command after Batch 86: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 86: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `620`
+- Summary: `Bugs 175 warnings`, `Performance 24 warnings`, `Accessibility 34 warnings`, `Maintainability 387 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-06570955-c15b-4904-869b-4cee9398a426`
