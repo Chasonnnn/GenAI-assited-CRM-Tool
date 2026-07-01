@@ -1862,6 +1862,12 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps top-level matches dialog derivations compiler-friendly", () => {
+        const source = readSource("app/(app)/matches/page.tsx")
+
+        expect(source).not.toContain("useMemo")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -111,17 +111,11 @@ function NewMatchDialog({ open, onOpenChange, onSuccess }: NewMatchDialogProps) 
     const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
     const createMatch = useCreateMatch()
 
-    const eligibleStageLabel = useMemo(
-        () => getEligibleForMatchingStageLabel(surrogatePipeline?.stages),
-        [surrogatePipeline?.stages],
-    )
-    const eligibleSurrogates = useMemo(
-        () =>
-            surrogatesData?.items?.filter((surrogate) =>
-                isEligibleForMatchingCandidate(surrogate, surrogatePipeline?.stages),
-            ) ?? [],
-        [surrogatesData?.items, surrogatePipeline?.stages],
-    )
+    const eligibleStageLabel = getEligibleForMatchingStageLabel(surrogatePipeline?.stages)
+    const eligibleSurrogates =
+        surrogatesData?.items?.filter((surrogate) =>
+            isEligibleForMatchingCandidate(surrogate, surrogatePipeline?.stages),
+        ) ?? []
 
     const handleSubmit = async () => {
         if (!selectedSurrogateId || !selectedIpId) return

@@ -1387,3 +1387,22 @@ Full command after Batch 67: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `806`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 552 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a742f16c-5d20-4dc6-b5b9-368589c97449`
+
+## Batch 68
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/matches/page.tsx` | Valid: the top-level match creation dialog manually memoized deterministic stage-label and eligible-surrogate derivations from hook data. | High | Remove `useMemo` and compute the label and filtered eligible surrogate list directly during render. Added a source guard that failed on the old `useMemo` import/calls, while the existing matches page behavior test covers the eligible-surrogate filtering behavior. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/matches-main-page.test.tsx`; changed-scope React Doctor reports no issues; full React Doctor manual memoization count dropped from `424` to `422`. |
+
+Changed-scope command after Batch 68: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 68: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `804`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 550 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8f002223-581b-4e12-aa0f-1ee93b421521`
