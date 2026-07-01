@@ -1,13 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { createContext, use, useState, useCallback, useMemo } from "react"
+import { createContext, use, useState } from "react"
 import { toast } from "sonner"
 import { useProfile, useSyncProfile, useSaveProfileOverrides, useToggleProfileHidden } from "@/lib/hooks/use-profile"
 import { exportProfilePdf } from "@/lib/api/profile"
 import type { FormSchema } from "@/lib/api/forms"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
-import type { ProfileCustomQa } from "@/lib/api/profile"
+import type { ProfileCustomQa, ProfileDataResponse } from "@/lib/api/profile"
 
 export const PROFILE_HEADER_NAME_KEY = "__profile_header_name"
 export const PROFILE_HEADER_NOTE_KEY = "__profile_header_note"
@@ -238,26 +238,41 @@ function createProfileEditableState(profile: ProfileData | null): ProfileEditabl
     }
 }
 
+function createProfileData(profileData: ProfileDataResponse | undefined): ProfileData | null {
+    if (!profileData) return null
+    return {
+        base_submission_id: profileData.base_submission_id,
+        overrides: profileData.overrides || {},
+        hidden_fields: profileData.hidden_fields || [],
+        merged_view: profileData.merged_view,
+        base_answers: profileData.base_answers,
+        schema_snapshot: profileData.schema_snapshot as FormSchema | null,
+        header_name_override: profileData.header_name_override ?? null,
+        header_note: profileData.header_note ?? null,
+        custom_qas: profileData.custom_qas ?? [],
+    }
+}
+
+function isSameOverrides(a: JsonObject, b: JsonObject) {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+    for (const key of keys) {
+        if (a[key] !== b[key]) return false
+    }
+    return true
+}
+
+function isSameHidden(a: string[], b: string[]) {
+    if (a.length !== b.length) return false
+    const setA = new Set(a)
+    return b.every((item) => setA.has(item))
+}
+
 export function ProfileCardProvider({ surrogateId, children }: ProfileCardProviderProps) {
     const { data: profileData, isLoading, error } = useProfile(surrogateId)
     const syncMutation = useSyncProfile()
     const saveMutation = useSaveProfileOverrides()
     const toggleHiddenMutation = useToggleProfileHidden()
-
-    const profile = useMemo<ProfileData | null>(() => {
-        if (!profileData) return null
-        return {
-            base_submission_id: profileData.base_submission_id,
-            overrides: profileData.overrides || {},
-            hidden_fields: profileData.hidden_fields || [],
-            merged_view: profileData.merged_view,
-            base_answers: profileData.base_answers,
-            schema_snapshot: profileData.schema_snapshot as FormSchema | null,
-            header_name_override: profileData.header_name_override ?? null,
-            header_note: profileData.header_note ?? null,
-            custom_qas: profileData.custom_qas ?? [],
-        }
-    }, [profileData])
+    const profile = createProfileData(profileData)
 
     const activeProfileKey = getProfileStateKey(profile)
     const [profileState, setProfileState] = useState<ProfileEditableState>(() => createProfileEditableState(profile))
@@ -279,105 +294,85 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
         sectionOpen,
     } = profileState
 
-    const setMode = useCallback((updater: React.SetStateAction<CardMode>) => {
+    const setMode = (updater: React.SetStateAction<CardMode>) => {
         setProfileState((current) => ({
             ...current,
             mode: resolveProfileStateUpdate(updater, current.mode),
         }))
-    }, [])
+    }
 
-    const setEditedFields = useCallback((updater: React.SetStateAction<JsonObject>) => {
+    const setEditedFields = (updater: React.SetStateAction<JsonObject>) => {
         setProfileState((current) => ({
             ...current,
             editedFields: resolveProfileStateUpdate(updater, current.editedFields),
         }))
-    }, [])
+    }
 
-    const setHiddenFields = useCallback((updater: React.SetStateAction<string[]>) => {
+    const setHiddenFields = (updater: React.SetStateAction<string[]>) => {
         setProfileState((current) => ({
             ...current,
             hiddenFields: resolveProfileStateUpdate(updater, current.hiddenFields),
         }))
-    }, [])
+    }
 
-    const setRevealedFields = useCallback((updater: React.SetStateAction<Set<string>>) => {
+    const setRevealedFields = (updater: React.SetStateAction<Set<string>>) => {
         setProfileState((current) => ({
             ...current,
             revealedFields: resolveProfileStateUpdate(updater, current.revealedFields),
         }))
-    }, [])
+    }
 
-    const setStagedChanges = useCallback((updater: React.SetStateAction<StagedChange[]>) => {
+    const setStagedChanges = (updater: React.SetStateAction<StagedChange[]>) => {
         setProfileState((current) => ({
             ...current,
             stagedChanges: resolveProfileStateUpdate(updater, current.stagedChanges),
         }))
-    }, [])
+    }
 
-    const setLatestSubmissionId = useCallback((updater: React.SetStateAction<string | null>) => {
+    const setLatestSubmissionId = (updater: React.SetStateAction<string | null>) => {
         setProfileState((current) => ({
             ...current,
             latestSubmissionId: resolveProfileStateUpdate(updater, current.latestSubmissionId),
         }))
-    }, [])
+    }
 
-    const setSectionOpen = useCallback((updater: React.SetStateAction<Record<number, boolean>>) => {
+    const setSectionOpen = (updater: React.SetStateAction<Record<number, boolean>>) => {
         setProfileState((current) => ({
             ...current,
             sectionOpen: resolveProfileStateUpdate(updater, current.sectionOpen),
         }))
-    }, [])
+    }
 
-    // Helpers for change detection
-    const isSameOverrides = useCallback((a: JsonObject, b: JsonObject) => {
-        const keys = new Set([...Object.keys(a), ...Object.keys(b)])
-        for (const key of keys) {
-            if (a[key] !== b[key]) return false
-        }
-        return true
-    }, [])
-
-    const isSameHidden = useCallback((a: string[], b: string[]) => {
-        if (a.length !== b.length) return false
-        const setA = new Set(a)
-        return b.every((item) => setA.has(item))
-    }, [])
-
-    const hasChanges = useMemo(() =>
+    const hasChanges =
         !isSameOverrides(editedFields, baselineOverrides) ||
         !isSameHidden(hiddenFields, baselineHidden) ||
         stagedChanges.length > 0 ||
-        !!latestSubmissionId,
-        [editedFields, baselineOverrides, hiddenFields, baselineHidden, stagedChanges, latestSubmissionId, isSameOverrides, isSameHidden]
-    )
+        !!latestSubmissionId
 
-    const hasOverrideChanges = useMemo(() =>
-        !isSameOverrides(editedFields, baselineOverrides) || !!latestSubmissionId,
-        [editedFields, baselineOverrides, latestSubmissionId, isSameOverrides]
-    )
+    const hasOverrideChanges = !isSameOverrides(editedFields, baselineOverrides) || !!latestSubmissionId
 
     // Mode actions
-    const enterEditMode = useCallback(() => {
+    const enterEditMode = () => {
         setMode({ type: "edit", editingField: null })
-    }, [setMode])
+    }
 
-    const exitEditMode = useCallback(() => {
+    const exitEditMode = () => {
         setMode({ type: "view" })
-    }, [setMode])
+    }
 
-    const setEditingField = useCallback((fieldKey: string | null) => {
+    const setEditingField = (fieldKey: string | null) => {
         setMode(prev => {
             if (prev.type === "view") return prev
             return { type: "edit", editingField: fieldKey }
         })
-    }, [setMode])
+    }
 
     // Field editing
-    const setFieldValue = useCallback((key: string, value: JsonValue) => {
+    const setFieldValue = (key: string, value: JsonValue) => {
         setEditedFields(prev => ({ ...prev, [key]: value }))
-    }, [setEditedFields])
+    }
 
-    const cancelFieldEdit = useCallback((fieldKey?: string) => {
+    const cancelFieldEdit = (fieldKey?: string) => {
         setEditingField(null)
         if (!fieldKey) return
         setEditedFields(prev => {
@@ -389,10 +384,10 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
             }
             return next
         })
-    }, [baselineOverrides, setEditingField, setEditedFields])
+    }
 
     // Hidden fields
-    const toggleHidden = useCallback((fieldKey: string) => {
+    const toggleHidden = (fieldKey: string) => {
         setHiddenFields(prev =>
             prev.includes(fieldKey) ? prev.filter(key => key !== fieldKey) : [...prev, fieldKey]
         )
@@ -401,9 +396,9 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
             next.delete(fieldKey)
             return next
         })
-    }, [setHiddenFields, setRevealedFields])
+    }
 
-    const toggleReveal = useCallback((fieldKey: string) => {
+    const toggleReveal = (fieldKey: string) => {
         setRevealedFields(prev => {
             const next = new Set(prev)
             if (next.has(fieldKey)) {
@@ -413,15 +408,15 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
             }
             return next
         })
-    }, [setRevealedFields])
+    }
 
     // Section state
-    const toggleSection = useCallback((index: number) => {
+    const toggleSection = (index: number) => {
         setSectionOpen(prev => ({ ...prev, [index]: !prev[index] }))
-    }, [setSectionOpen])
+    }
 
     // Actions
-    const syncProfile = useCallback(async () => {
+    const syncProfile = async () => {
         try {
             if (mode.type === "view") {
                 enterEditMode()
@@ -443,9 +438,9 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
         } catch {
             toast.error("Failed to sync profile")
         }
-    }, [mode.type, enterEditMode, syncMutation, surrogateId, editedFields, setEditedFields, setLatestSubmissionId, setStagedChanges])
+    }
 
-    const saveChanges = useCallback(async () => {
+    const saveChanges = async () => {
         try {
             if (hasOverrideChanges) {
                 await saveMutation.mutateAsync({
@@ -478,18 +473,18 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
         } catch {
             toast.error("Failed to save profile")
         }
-    }, [hasOverrideChanges, saveMutation, surrogateId, editedFields, latestSubmissionId, baselineHidden, hiddenFields, toggleHiddenMutation, exitEditMode, setLatestSubmissionId, setRevealedFields, setStagedChanges])
+    }
 
-    const cancelAllChanges = useCallback(() => {
+    const cancelAllChanges = () => {
         setEditedFields(baselineOverrides)
         setHiddenFields(baselineHidden)
         setStagedChanges([])
         setLatestSubmissionId(null)
         exitEditMode()
         setRevealedFields(new Set())
-    }, [baselineOverrides, baselineHidden, exitEditMode, setEditedFields, setHiddenFields, setLatestSubmissionId, setRevealedFields, setStagedChanges])
+    }
 
-    const exportProfile = useCallback(async () => {
+    const exportProfile = async () => {
         setIsExporting(true)
         try {
             await exportProfilePdf(surrogateId)
@@ -500,33 +495,23 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
             return
         }
         setIsExporting(false)
-    }, [surrogateId])
+    }
 
-    const dataValue: ProfileCardDataContextValue = useMemo(() => ({
+    const dataValue: ProfileCardDataContextValue = {
         surrogateId,
         profile,
         isLoading,
         error: error || null,
-    }), [
-        surrogateId,
-        profile,
-        isLoading,
-        error,
-    ])
+    }
 
-    const modeValue: ProfileCardModeContextValue = useMemo(() => ({
+    const modeValue: ProfileCardModeContextValue = {
         mode,
         enterEditMode,
         exitEditMode,
         setEditingField,
-    }), [
-        mode,
-        enterEditMode,
-        exitEditMode,
-        setEditingField,
-    ])
+    }
 
-    const editsValue: ProfileCardEditsContextValue = useMemo(() => ({
+    const editsValue: ProfileCardEditsContextValue = {
         editedFields,
         setFieldValue,
         cancelFieldEdit,
@@ -538,24 +523,14 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
 
         stagedChanges,
         hasChanges,
-    }), [
-        editedFields,
-        setFieldValue,
-        cancelFieldEdit,
-        hiddenFields,
-        toggleHidden,
-        revealedFields,
-        toggleReveal,
-        stagedChanges,
-        hasChanges,
-    ])
+    }
 
-    const sectionsValue: ProfileCardSectionsContextValue = useMemo(() => ({
+    const sectionsValue: ProfileCardSectionsContextValue = {
         sectionOpen,
         toggleSection,
-    }), [sectionOpen, toggleSection])
+    }
 
-    const actionsValue: ProfileCardActionsContextValue = useMemo(() => ({
+    const actionsValue: ProfileCardActionsContextValue = {
         syncProfile,
         saveChanges,
         cancelAllChanges,
@@ -563,16 +538,7 @@ export function ProfileCardProvider({ surrogateId, children }: ProfileCardProvid
         isSyncing: syncMutation.isPending,
         isSaving: saveMutation.isPending || toggleHiddenMutation.isPending,
         isExporting,
-    }), [
-        syncProfile,
-        saveChanges,
-        cancelAllChanges,
-        exportProfile,
-        syncMutation.isPending,
-        saveMutation.isPending,
-        toggleHiddenMutation.isPending,
-        isExporting,
-    ])
+    }
 
     return (
         <ProfileCardDataContext.Provider value={dataValue}>

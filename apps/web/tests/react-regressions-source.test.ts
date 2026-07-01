@@ -1352,6 +1352,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("type ProfileEditableState")
         expect(source).toContain("function createProfileEditableState")
         expect(source).toContain("if (profileState.profileKey !== activeProfileKey)")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useEffect")
         expect(source).not.toContain("finally")
         expect(source).not.toContain("setBaselineOverrides")

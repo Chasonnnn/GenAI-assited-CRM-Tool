@@ -2475,3 +2475,33 @@ Full command after Batch 110: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `492`
 - Summary: `Bugs 142 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 304 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d4b28ba2-f9f3-432d-aae6-753535ffa36a`
+
+## Batch 111
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/profile/ProfileCard/context.tsx` | Valid scanner finding: every flagged `useMemo` and `useCallback` resolved to React imports. `apps/web/next.config.js` has `reactCompiler: true`, `babel-plugin-react-compiler@^1.0.0` is installed, and the Next 16 docs confirm this setup reduces the need for manual `useMemo`/`useCallback`. | High | Removed all manual memoization wrappers in the ProfileCard provider, moved pure equality helpers to module scope, and added a source regression guard so this provider does not reintroduce `useMemo` or `useCallback`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "profile card provider"` failed on `useMemo`. GREEN: the same test passed; `pnpm test --run tests/surrogate-profile-card-accessibility.test.tsx` passed with `3` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Focused ProfileCard diagnostics dropped from `32` to `2`; focused manual memoization warnings dropped from `29` to `0`; full diagnostics dropped from `492` to `462`; global redundant manual memoization dropped from `188` to `159`. |
+| `react-doctor/only-export-components` | `components/surrogates/profile/ProfileCard/context.tsx:16` | Valid but not addressed in this batch: the file intentionally exports context constants/types/hooks next to the provider. Moving those exports is a separate module-boundary refactor with import churn outside the manual-memoization scope. | Medium | Logged for a later focused batch; no suppression added. | Changed-scope React Doctor reports this as the only remaining changed-file issue. |
+| `react-doctor/no-many-boolean-props` | `components/surrogates/profile/ProfileCard/FieldRow.tsx:41` | Valid but outside this batch: splitting `FieldRowValue` variants would change component structure and should be handled with a dedicated behavior/accessibility test slice. | Medium | Logged for a later focused batch; no suppression added. | Focused ProfileCard React Doctor reports this as one of two remaining ProfileCard issues. |
+
+Scoped command after Batch 111: `cd apps/web && npx -y react-doctor@latest components/surrogates/profile/ProfileCard --verbose`
+
+- Score: `88 / 100 Great`
+- Total diagnostics in scope: `2`
+- Summary: `Maintainability 2 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1ab76cb4-1f42-4b90-b0a9-46f42eb7d442`
+
+Changed-scope command after Batch 111: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b5dfcf29-060b-4da9-90fb-7a4c295384ac`
+- Note: remaining changed-file diagnostic is `only-export-components` in the touched context file and requires a separate import-boundary refactor.
+
+Full command after Batch 111: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `462`
+- Summary: `Bugs 142 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 274 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a6b2cbbd-f044-4d13-8d87-90707d8d8297`
