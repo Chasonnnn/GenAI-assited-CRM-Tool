@@ -1305,3 +1305,25 @@ Full command after Batch 63: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `828`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 574 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-51fd5311-dbb6-4da1-bb4d-4c03ac0a5b19`
+
+## Batch 64
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/prefer-module-scope-pure-function` | `app/(app)/intended-parents/matches/page.client.tsx` | Valid: the matches list manually memoized local URL handler callbacks, and rebuilt a pure proposed-date formatter inside the page component. | High | Move URL construction and proposed-date formatting to module-scope helpers, remove `useCallback`, and use plain event handlers that call the helpers. Added a source guard that failed on the old `useCallback` import/calls and local date formatter. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/matches-page.test.tsx`; changed-scope React Doctor reports no manual-memoization or pure-function warning for this page; full React Doctor manual memoization count dropped from `443` to `440`, pure-function count dropped from `31` to `30`. |
+| `react-doctor/no-event-handler`, `react-doctor/no-cascading-set-state` | `app/(app)/intended-parents/matches/page.client.tsx` | Valid but out of scope: the remaining findings are the existing debounced search and URL hydration effects. Fixing them safely requires a separate state-model refactor that preserves browser navigation, query hydration, and debounced search behavior. | Medium | Deferred to a separate URL-state batch because this batch only targeted compiler-friendly memoization and pure-helper rebuilds. No suppression added. | Changed-scope React Doctor score is `88 / 100` with `6` remaining bug warnings in this page. |
+
+Changed-scope command after Batch 64: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `88 / 100 Great`
+- Total diagnostics in changed files: `6`
+- Summary: `Bugs 6 warnings`
+- Deferred: `react-doctor/no-event-handler`, `react-doctor/no-cascading-set-state` in `app/(app)/intended-parents/matches/page.client.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3458a492-2fec-4d1e-9560-64350869914c`
+
+Full command after Batch 64: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `823`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 569 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7313039c-0612-4200-87fd-87ee9a5a2a93`

@@ -1831,6 +1831,15 @@ describe("React regression guards (source)", () => {
         expect(csvSource).not.toContain('<span className="text-muted-foreground">—</span>')
     })
 
+    it("keeps intended-parent matches list routing helpers compiler-friendly", () => {
+        const source = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+
+        expect(source).toContain("function updateMatchListUrl(")
+        expect(source).toContain("function formatMatchProposedDate(")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("const formatDate =")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

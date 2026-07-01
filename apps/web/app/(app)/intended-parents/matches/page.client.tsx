@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useEffect, useCallback, useRef } from "react"
+import { startTransition, useState, useEffect, useRef } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -43,10 +43,56 @@ import {
 import { isPermissionError } from "@/lib/error-utils"
 
 type MatchStatusFilter = MatchStatus | "all"
+type RouterReplace = ReturnType<typeof useRouter>["replace"]
+type SearchParamsSnapshot = {
+    toString: () => string
+}
 
 const parsePageParam = (value: string | null): number => {
     const parsed = Number(value)
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+function updateMatchListUrl(
+    replace: RouterReplace,
+    searchParams: SearchParamsSnapshot,
+    status: MatchStatusFilter,
+    searchValue: string,
+    currentPage: number
+) {
+    const newParams = new URLSearchParams(searchParams.toString())
+    if (status !== "all") {
+        newParams.set("status", status)
+    } else {
+        newParams.delete("status")
+    }
+    if (searchValue) {
+        newParams.set("q", searchValue)
+    } else {
+        newParams.delete("q")
+    }
+    if (currentPage > 1) {
+        newParams.set("page", String(currentPage))
+    } else {
+        newParams.delete("page")
+    }
+    const nextQuery = newParams.toString()
+    const currentQuery = searchParams.toString()
+    if (nextQuery === currentQuery) return
+    const newUrl = nextQuery ? `/intended-parents/matches?${nextQuery}` : "/intended-parents/matches"
+    const currentUrl = currentQuery ? `/intended-parents/matches?${currentQuery}` : "/intended-parents/matches"
+    if (newUrl === currentUrl) return
+    replace(newUrl as Route, { scroll: false })
+}
+
+function formatMatchProposedDate(dateStr: string) {
+    const parsed = parseDateInput(dateStr)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return parsed.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    })
 }
 
 export default function MatchesPage() {
@@ -66,43 +112,17 @@ export default function MatchesPage() {
     const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
     const hasSyncedSearchRef = useRef(false)
 
-    const updateUrlParams = useCallback((status: MatchStatusFilter, searchValue: string, currentPage: number) => {
-        const newParams = new URLSearchParams(searchParams.toString())
-        if (status !== "all") {
-            newParams.set("status", status)
-        } else {
-            newParams.delete("status")
-        }
-        if (searchValue) {
-            newParams.set("q", searchValue)
-        } else {
-            newParams.delete("q")
-        }
-        if (currentPage > 1) {
-            newParams.set("page", String(currentPage))
-        } else {
-            newParams.delete("page")
-        }
-        const nextQuery = newParams.toString()
-        const currentQuery = searchParams.toString()
-        if (nextQuery === currentQuery) return
-        const newUrl = nextQuery ? `/intended-parents/matches?${nextQuery}` : "/intended-parents/matches"
-        const currentUrl = currentQuery ? `/intended-parents/matches?${currentQuery}` : "/intended-parents/matches"
-        if (newUrl === currentUrl) return
-        replace(newUrl as Route, { scroll: false })
-    }, [replace, searchParams])
-
-    const handleStatusChange = useCallback((value: string) => {
+    const handleStatusChange = (value: string) => {
         const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
         setStatusFilter(nextStatus)
         setPage(1)
-        updateUrlParams(nextStatus, debouncedSearch, 1)
-    }, [debouncedSearch, updateUrlParams])
+        updateMatchListUrl(replace, searchParams, nextStatus, debouncedSearch, 1)
+    }
 
-    const handlePageChange = useCallback((nextPage: number) => {
+    const handlePageChange = (nextPage: number) => {
         setPage(nextPage)
-        updateUrlParams(statusFilter, debouncedSearch, nextPage)
-    }, [statusFilter, debouncedSearch, updateUrlParams])
+        updateMatchListUrl(replace, searchParams, statusFilter, debouncedSearch, nextPage)
+    }
 
     // Debounce search input
     useEffect(() => {
@@ -119,10 +139,10 @@ export default function MatchesPage() {
         if (debouncedSearch !== urlSearchValue) {
             startTransition(() => {
                 setPage(1)
-                updateUrlParams(statusFilter, debouncedSearch, 1)
+                updateMatchListUrl(replace, searchParams, statusFilter, debouncedSearch, 1)
             })
         }
-    }, [debouncedSearch, searchParams, statusFilter, updateUrlParams])
+    }, [debouncedSearch, replace, searchParams, statusFilter])
 
     useEffect(() => {
         const nextStatus = searchParams.get("status") && (searchParams.get("status") === "all" || isMatchStatus(searchParams.get("status") as string))
@@ -159,16 +179,6 @@ export default function MatchesPage() {
     } satisfies ListMatchesParams
     const { data, isLoading, isError, error, refetch } = useMatches(filters)
     const { data: stats } = useMatchStats()
-
-    const formatDate = (dateStr: string) => {
-        const parsed = parseDateInput(dateStr)
-        if (Number.isNaN(parsed.getTime())) return "—"
-        return parsed.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        })
-    }
 
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
 
@@ -340,7 +350,7 @@ export default function MatchesPage() {
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-muted-foreground">
-                                                {formatDate(match.proposed_at)}
+                                                {formatMatchProposedDate(match.proposed_at)}
                                             </TableCell>
                                         </TableRow>
                                     ))}
