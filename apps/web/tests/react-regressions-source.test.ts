@@ -751,6 +751,26 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps selected surrogate mutation cache invalidations visible to React Doctor", () => {
+        const source = readSource("lib/hooks/use-surrogates.ts")
+
+        expect(source).not.toContain("function invalidateSelectedSurrogateMutationCaches")
+
+        for (const functionName of [
+            "useBulkAssign",
+            "useBulkArchive",
+        ]) {
+            const functionSource = readExportedFunctionSource(source, functionName)
+            expect(functionSource, functionName).not.toContain("invalidateSelectedSurrogateMutationCaches(queryClient")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.activity(surrogateId)")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.detail(surrogateId)")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.lists()")
+            expect(functionSource, functionName).toContain("queryKey: ['analytics', 'activity-feed']")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.stats()")
+            expect(functionSource, functionName).toContain("queryKey: surrogateKeys.unassignedQueue()")
+        }
+    })
+
     it("keeps unused email template version helpers out of public modules", () => {
         const apiSource = readSource("lib/api/email-templates.ts")
         const hookSource = readSource("lib/hooks/use-email-templates.ts")

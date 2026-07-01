@@ -37,12 +37,6 @@ export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogate
     });
 }
 
-function invalidateSurrogateDirectoryCaches(queryClient: QueryClient) {
-    void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
-    void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
-    void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
-}
-
 function invalidateSurrogateMutationCaches(queryClient: QueryClient, surrogateId: string, options: { history?: boolean } = {}) {
     invalidateSurrogateCrmCaches(queryClient, surrogateId);
     if (options.history) {
@@ -50,17 +44,6 @@ function invalidateSurrogateMutationCaches(queryClient: QueryClient, surrogateId
     }
     void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
     void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
-}
-
-function invalidateSelectedSurrogateMutationCaches(
-    queryClient: QueryClient,
-    surrogateIds: readonly string[],
-    options: { history?: boolean } = {}
-) {
-    invalidateSurrogateDirectoryCaches(queryClient);
-    for (const surrogateId of surrogateIds) {
-        invalidateSurrogateMutationCaches(queryClient, surrogateId, options);
-    }
 }
 
 /**
@@ -326,7 +309,18 @@ export function useBulkAssign() {
     return useMutation({
         mutationFn: surrogatesApi.bulkAssignSurrogates,
         onSuccess: (_result, variables) => {
-            invalidateSelectedSurrogateMutationCaches(queryClient, variables.surrogate_ids);
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            void queryClient.invalidateQueries({
+                queryKey: ['analytics', 'activity-feed'],
+                exact: false,
+            });
+
+            for (const surrogateId of variables.surrogate_ids) {
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            }
         },
     });
 }
@@ -362,7 +356,18 @@ export function useBulkArchive() {
     return useMutation({
         mutationFn: surrogatesApi.bulkArchiveSurrogates,
         onSuccess: (_result, variables) => {
-            invalidateSelectedSurrogateMutationCaches(queryClient, variables);
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
+            void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
+            void queryClient.invalidateQueries({
+                queryKey: ['analytics', 'activity-feed'],
+                exact: false,
+            });
+
+            for (const surrogateId of variables) {
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
+            }
         },
     });
 }
