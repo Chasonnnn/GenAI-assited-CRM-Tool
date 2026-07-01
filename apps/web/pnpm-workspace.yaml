@@ -1,3 +1,6 @@
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+
 packages:
   - "."
 
@@ -17,7 +20,7 @@ overrides:
   vite: 8.1.0
   ws: 8.21.0
   js-yaml: 4.2.0
-  "@babel/core": 7.29.6
+  "@babel/core": 8.0.1
 
 packageExtensions:
   react-simple-maps@*:

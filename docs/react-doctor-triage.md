@@ -1266,3 +1266,20 @@ Full command after Batch 61: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `835`
 - Summary: `Security 2 warnings`, `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 574 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7364dcad-e707-4d97-8876-62de7d1bf9d7`
+
+## Batch 62
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/require-pnpm-hardening` | `pnpm-workspace.yaml`, `pnpm-lock.yaml` | Valid: the frontend workspace had `minimumReleaseAgeExclude` but no active `minimumReleaseAge`, and no `trustPolicy`, leaving newly published or downgraded-trust packages unchecked. Enabling `trustPolicy: no-downgrade` also exposed `semver@6.3.1` as a lockfile trust downgrade through the old Babel override. | High | Add `minimumReleaseAge: 1440` and `trustPolicy: no-downgrade`, move the explicit `@babel/core` override from `7.29.6` to current `8.0.1`, and refresh the lockfile so Babel uses `semver@7`. Verified the keys with `pnpm config get` and verified `pnpm install` passes under the active policy. | `pnpm config get minimumReleaseAge --location project`; `pnpm config get trustPolicy --location project`; `pnpm install`; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; full React Doctor security count dropped from `2` to `0` and score rose from `65` to `66`. |
+
+Changed-scope command after Batch 62: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Result: skipped because this batch changes only `pnpm-workspace.yaml`, not source files.
+
+Full command after Batch 62: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `833`
+- Summary: `Bugs 182 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 574 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-df6bf46e-e504-4f47-bebd-7e976cb7b03e`
