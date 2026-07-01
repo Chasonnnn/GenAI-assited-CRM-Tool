@@ -2337,3 +2337,31 @@ Full command after Batch 105: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `535`
 - Summary: `Bugs 156 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-dc89ed51-6423-4dfe-acbb-539a28182ee6`
+
+## Batch 106
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-email-templates.ts` `useSendEmail` | Valid scanner finding with behavior already protected: sending a surrogate email already refreshed surrogate activity, detail, list, and analytics activity-feed caches through `invalidateSurrogateCrmCaches`, but React Doctor's rule only detects cache operations inside mutation options. | High | Inline the existing surrogate/activity-feed invalidations inside `useSendEmail` and add a source guard that fails if the hook hides those cache operations behind the helper again. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "email send surrogate cache invalidations"` failed on `invalidateSurrogateCrmCaches`. GREEN: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts` passed with `230` tests; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reports no issues. Hook-scope React Doctor warnings dropped from `32` to `31`. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-email-templates.ts` `useSendTestEmailTemplate` | False positive: sending a test template email validates and returns the immediate test-send result. It does not mutate persisted template state, surrogate CRM state, or a cached template collection. | High | Logged as invalid for this batch; no dummy invalidation added. | After Batch 106, the only remaining `use-email-templates.ts` warning is `use-email-templates.ts:118`, which is `useSendTestEmailTemplate`. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-campaigns.ts` `usePreviewFilters` | False positive: recipient filter preview runs an ad hoc preview against supplied filter criteria before campaign creation. It does not mutate persisted campaign state and has no matching campaign query cache to refresh. | High | Logged as invalid after code inspection; no dummy invalidation added. | Hook-scope React Doctor still reports `use-campaigns.ts:101`, which is `usePreviewFilters`. |
+
+Scoped command after Batch 106: `cd apps/web && npx -y react-doctor@latest lib/hooks --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics in scope: `31`
+- Summary: `Bugs 31 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-558c3562-bcf7-4b73-995a-3abd8792c75b`
+
+Changed-scope command after Batch 106: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: `No issues found`
+
+Full command after Batch 106: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `534`
+- Summary: `Bugs 155 warnings`, `Performance 24 warnings`, `Accessibility 22 warnings`, `Maintainability 333 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-82136ab0-3fed-4187-81d6-d11cc1065785`

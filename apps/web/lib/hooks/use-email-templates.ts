@@ -29,7 +29,7 @@ import {
     EmailTemplateLibraryDetail,
 } from '@/lib/api/email-templates'
 import type { TemplateVariableRead } from '@/lib/types/template-variable'
-import { invalidateSurrogateCrmCaches } from './use-surrogates'
+import { surrogateKeys } from './use-surrogates'
 
 // Query keys
 const emailTemplateKeys = {
@@ -102,7 +102,13 @@ export function useSendEmail() {
         mutationFn: (data: EmailSendRequest) => sendEmail(data),
         onSuccess: (_data, variables) => {
             if (variables.surrogate_id) {
-                invalidateSurrogateCrmCaches(queryClient, variables.surrogate_id)
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(variables.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(variables.surrogate_id) })
+                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+                void queryClient.invalidateQueries({
+                    queryKey: ['analytics', 'activity-feed'],
+                    exact: false,
+                })
             }
         },
     })
