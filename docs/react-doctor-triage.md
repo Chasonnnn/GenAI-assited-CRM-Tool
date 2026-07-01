@@ -1425,3 +1425,25 @@ Full command after Batch 69: `cd apps/web && npx react-doctor@latest . --verbose
 - Total diagnostics: `803`
 - Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 549 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-119478a5-3948-4e8b-85f9-bcdc83c102c1`
+
+## Batch 70
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/(app)/settings/compliance/page.tsx`, `app/(app)/settings/integrations/meta/forms/[id]/page.tsx`, `app/(app)/settings/team/roles/[role]/page.client.tsx` | Valid: these settings pages manually memoized deterministic maps derived from fetched data or route detail data. | High | Remove `useMemo` from the three derived maps. For compliance, build the initial policy-edit map inside the existing `policies` effect so the effect depends on `policies` rather than an always-new map object. Added a source guard that failed on the old `useMemo` imports/calls. | `pnpm tsc --noEmit`; `pnpm test --run tests/react-regressions-source.test.ts tests/meta-form-mapping-page.test.tsx`; changed-scope React Doctor no longer reports manual memoization for these files; full React Doctor manual memoization count dropped from `421` to `418`. |
+| `react-doctor/no-cascading-set-state`, `react-doctor/rerender-state-only-in-handlers`, `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | Same changed settings files | Valid but out of scope: the remaining findings are broader state-model and component-structure concerns in the touched settings pages. Fixing them safely requires reducer/ref or component extraction work beyond this memoization batch. | Medium | Deferred to separate settings state-structure batches. No suppressions added. | Changed-scope React Doctor score is `87 / 100` with `7` remaining warnings in changed files. |
+
+Changed-scope command after Batch 70: `cd apps/web && npx react-doctor@latest . --verbose --scope changed`
+
+- Score: `87 / 100 Great`
+- Total diagnostics in changed files: `7`
+- Summary: `Bugs 4 warnings`, `Performance 1 warning`, `Maintainability 2 warnings`
+- Deferred: settings state-model and component-structure findings listed above.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-40050451-d954-4dc1-9f33-7336bd4fd3fc`
+
+Full command after Batch 70: `cd apps/web && npx react-doctor@latest . --verbose`
+
+- Score: `66 / 100 Needs work`
+- Total diagnostics: `800`
+- Summary: `Bugs 177 warnings`, `Performance 37 warnings`, `Accessibility 40 warnings`, `Maintainability 546 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1f087f8c-301a-40fe-8593-4ab84c944531`

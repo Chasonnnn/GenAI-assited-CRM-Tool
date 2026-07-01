@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -100,13 +100,9 @@ export default function MetaFormMappingPage() {
     const [error, setError] = useState<string>("")
     const [reconvertMessage, setReconvertMessage] = useState<string>("")
 
-    const columnLabels = useMemo(() => {
-        const map = new Map<string, string>()
-        data?.columns.forEach((col) => {
-            map.set(col.key, col.label || col.key)
-        })
-        return map
-    }, [data])
+    const columnLabels = new Map(
+        data?.columns.map((col) => [col.key, col.label || col.key] as const) ?? []
+    )
 
     useEffect(() => {
         if (!data) return

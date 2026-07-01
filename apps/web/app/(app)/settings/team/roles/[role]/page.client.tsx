@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,15 +40,12 @@ export default function RoleDetailPage() {
     const [changes, setChanges] = useState<Record<string, boolean>>({})
     const hasChanges = Object.keys(changes).length > 0
 
-    const originalPermissionValues = useMemo(() => {
-        const values = new Map<string, boolean>()
-        for (const perms of Object.values(roleDetail?.permissions_by_category ?? {})) {
-            for (const permission of perms) {
-                values.set(permission.key, permission.is_granted)
-            }
+    const originalPermissionValues = new Map<string, boolean>()
+    for (const perms of Object.values(roleDetail?.permissions_by_category ?? {})) {
+        for (const permission of perms) {
+            originalPermissionValues.set(permission.key, permission.is_granted)
         }
-        return values
-    }, [roleDetail?.permissions_by_category])
+    }
 
     const handleToggle = (permKey: string, newValue: boolean) => {
         setChanges(prev => {

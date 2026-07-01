@@ -1874,6 +1874,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useCallback")
     })
 
+    it("keeps settings derived maps compiler-friendly", () => {
+        const complianceSource = readSource("app/(app)/settings/compliance/page.tsx")
+        const metaFormMappingSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
+        const roleDetailSource = readSource("app/(app)/settings/team/roles/[role]/page.client.tsx")
+
+        expect(complianceSource).not.toContain("useMemo")
+        expect(metaFormMappingSource).not.toContain("useMemo")
+        expect(roleDetailSource).not.toContain("useMemo")
+    })
+
     it("uses typographic ellipses in the AI builder", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 

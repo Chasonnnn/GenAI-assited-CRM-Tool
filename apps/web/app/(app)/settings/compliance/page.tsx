@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useMemo, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -64,17 +64,6 @@ export default function ComplianceSettingsPage() {
     const purgePreview = usePurgePreview()
     const executePurge = useExecutePurge()
 
-    const policyMap = useMemo(() => {
-        const map: Record<string, { retention_days: number; is_active: boolean }> = {}
-        policies?.forEach((policy) => {
-            map[policy.entity_type] = {
-                retention_days: policy.retention_days,
-                is_active: policy.is_active,
-            }
-        })
-        return map
-    }, [policies])
-
     const [policyEdits, setPolicyEdits] = useState<Record<string, { retention_days: number; is_active: boolean }>>({})
     const [holdType, setHoldType] = useState("org")
     const [holdEntityId, setHoldEntityId] = useState("")
@@ -83,10 +72,17 @@ export default function ComplianceSettingsPage() {
 
     useEffect(() => {
         if (!policies) return
+        const policyMap: Record<string, { retention_days: number; is_active: boolean }> = {}
+        policies.forEach((policy) => {
+            policyMap[policy.entity_type] = {
+                retention_days: policy.retention_days,
+                is_active: policy.is_active,
+            }
+        })
         startTransition(() => {
             setPolicyEdits((prev) => (Object.keys(prev).length ? prev : { ...policyMap }))
         })
-    }, [policies, policyMap])
+    }, [policies])
 
     useEffect(() => {
         if (!legalHolds?.pages) return
