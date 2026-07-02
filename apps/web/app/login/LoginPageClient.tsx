@@ -68,10 +68,11 @@ export default function LoginPageClient({
   authError = null,
   authAccountHint = null,
 }: LoginPageClientProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [redirectStatus, setRedirectStatus] = useState<"idle" | "redirecting">("idle")
 
   const apiBase = getAuthApiBase()
   const errorMessage = getLoginErrorMessage(authError)
+  const isRedirecting = redirectStatus === "redirecting"
 
   const buildGoogleLoginUrl = (loginHint?: string) => {
     const returnTo = getLoginReturnTo()
@@ -82,7 +83,7 @@ export default function LoginPageClient({
   }
 
   const handleGoogleLogin = () => {
-    setIsLoading(true)
+    setRedirectStatus("redirecting")
     try {
       const returnTo = getLoginReturnTo()
       const url = buildGoogleLoginUrl()
@@ -173,14 +174,14 @@ export default function LoginPageClient({
           <Button
             onClick={handleGoogleLogin}
             className="w-full font-semibold py-6 text-base rounded-full transition-all duration-300 bg-teal-950 text-white hover:bg-teal-900"
-            disabled={isLoading}
+            disabled={isRedirecting}
           >
-            {isLoading ? (
+            {isRedirecting ? (
               <Loader2Icon className="lucide-loader-2 size-5 mr-2 animate-spin" aria-hidden="true" />
             ) : (
               <ShieldCheck className="size-5 mr-2" aria-hidden="true" />
             )}
-            {isLoading ? "Signing In..." : "Sign in with Google"}
+            {isRedirecting ? "Signing In..." : "Sign in with Google"}
           </Button>
 
           <div className="pt-4 space-y-3 border-t border-zinc-100">

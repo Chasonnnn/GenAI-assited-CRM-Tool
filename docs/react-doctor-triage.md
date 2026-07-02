@@ -3390,3 +3390,23 @@ Full command after Batch 153: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
 - Unchanged from Batch 152 except for test coverage; `react-doctor/async-defer-await` remains as `2` warnings by design.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e8f88199-f85e-45ca-bfa6-21e64d6697dc`
+
+## Batch 154
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rendering-usetransition-loading` | `app/login/LoginPageClient.tsx`, `app/ops/login/page.client.tsx` | Valid scanner hit on `isLoading`, but both subagents confirmed the mechanical `useTransition` recipe is the wrong semantic fit for an external OAuth handoff. The state is urgent redirect feedback and double-click prevention, not background UI rendering. | High | Kept deterministic local state but renamed the model to `redirectStatus: "idle" | "redirecting"` and derived `isRedirecting`. Added ops-login behavior coverage and a source guard rejecting `isLoading` / `setIsLoading` in both login clients. No `useTransition`/`startTransition` added. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "login navigation"` failed on the old `isLoading` API. GREEN: focused source guard passed; `pnpm test --run tests/login.test.tsx tests/ops-login-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 154: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 154: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `157`
+- Summary: `Bugs 88 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
+- Removed globally since Batch 153: `react-doctor/rendering-usetransition-loading` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b9b74af0-bc91-4325-a053-4440b90cf376`

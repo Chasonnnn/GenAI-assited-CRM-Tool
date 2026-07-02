@@ -1805,6 +1805,18 @@ describe("React regression guards (source)", () => {
         expect(fieldRowValueSource).not.toContain("isStaged")
     })
 
+    it("models login navigation as redirect state instead of loading state", () => {
+        const appLoginSource = readSource("app/login/LoginPageClient.tsx")
+        const opsLoginSource = readSource("app/ops/login/page.client.tsx")
+
+        expect(appLoginSource).toContain("redirectStatus")
+        expect(appLoginSource).not.toContain("isLoading")
+        expect(appLoginSource).not.toContain("setIsLoading")
+        expect(opsLoginSource).toContain("redirectStatus")
+        expect(opsLoginSource).not.toContain("isLoading")
+        expect(opsLoginSource).not.toContain("setIsLoading")
+    })
+
     it("uses functional updates for public booking form fields", () => {
         const source = readSource("components/appointments/PublicBookingPage.tsx")
 

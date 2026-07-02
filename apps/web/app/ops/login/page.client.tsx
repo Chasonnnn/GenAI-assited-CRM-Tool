@@ -16,7 +16,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default function OpsLoginPageClient() {
-    const [isLoading, setIsLoading] = useState(false);
+    const [redirectStatus, setRedirectStatus] = useState<"idle" | "redirecting">("idle");
     const [errorMessage] = useState<string | null>(() => {
         if (typeof window === 'undefined') return null;
         const errorCode = new URLSearchParams(window.location.search).get('error');
@@ -24,9 +24,10 @@ export default function OpsLoginPageClient() {
     });
 
     const apiBase = getAuthApiBase();
+    const isRedirecting = redirectStatus === "redirecting";
 
     const handleGoogleLogin = () => {
-        setIsLoading(true);
+        setRedirectStatus("redirecting");
         try {
             sessionStorage.setItem('auth_return_to', 'ops');
             // Pass return_to=ops to redirect back to ops console after auth
@@ -65,7 +66,7 @@ export default function OpsLoginPageClient() {
                     <Button
                         className="w-full py-6 bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-stone-200 dark:text-stone-900"
                         onClick={handleGoogleLogin}
-                        disabled={isLoading}
+                        disabled={isRedirecting}
                     >
                         <svg className="mr-2 size-5" viewBox="0 0 24 24">
                             <path
@@ -85,7 +86,7 @@ export default function OpsLoginPageClient() {
                                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                             />
                         </svg>
-                        {isLoading ? 'Signing In...' : 'Sign in with Google'}
+                        {isRedirecting ? 'Signing In...' : 'Sign in with Google'}
                     </Button>
 
                     <p className="text-xs text-center text-stone-400 dark:text-stone-500">
