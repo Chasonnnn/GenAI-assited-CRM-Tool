@@ -3287,3 +3287,26 @@ Full command after Batch 148: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 65 warnings`
 - Removed globally since Batch 146: `react-doctor/no-initialize-state` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-681bff24-e2fd-4fdf-a486-a96e9deee0c0`
+
+## Batch 149
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-tag-over-role` | `components/appointments/AppointmentsList.tsx` | Valid, but a direct root `<button>` swap was unsafe because pending cards render nested Approve/Decline buttons. A subagent confirmed the safe shape is a native selectable button for the card content plus sibling action buttons. | High | Replaced the outer synthetic `div role="button"` with an inner `<button type="button">` for appointment selection. Kept pending approval actions as siblings. Added a source guard rejecting `role="button"`, `tabIndex={0}`, and manual card key handling, plus a DOM test that pending action buttons are not descendants of the selectable appointment button. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "appointment cards on native button semantics"` failed on the old synthetic role. GREEN: focused source guard passed; `pnpm test --run tests/appointments-google-meet.test.tsx -t "pending appointment selection"`; full `pnpm test --run tests/appointments-google-meet.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reports this accessibility warning. |
+| `react-doctor/prefer-tag-over-role` | `components/email/EmailComposeDialog.tsx`, `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx` | Valid scanner hypotheses but unsafe direct swaps. The email preview is a `contentEditable` rich HTML textbox that reads `innerHTML`; an input/textarea would expose markup text and lose rich editing. The transcript pane wraps selectable sanitized rich transcript HTML with delegated comment targeting, so a native button would be invalid for its contents. | High | Left unchanged and logged; no suppression or config change. | Subagent source validation plus existing email preview-edit/send tests and transcript hover/focus tests. |
+
+Changed-scope command after Batch 149: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `3`
+- Summary: residual pre-existing warnings in `components/appointments/AppointmentsList.tsx`: `react-doctor/prefer-explicit-variants`, `react-doctor/no-giant-component`, and `react-doctor/prefer-useReducer`.
+- Removed from changed-scope results: `react-doctor/prefer-tag-over-role` for the appointment card.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4a0e8928-5602-464d-b171-b3c0034ac63d`
+
+Full command after Batch 149: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `165`
+- Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 65 warnings`
+- Removed globally since Batch 148: `react-doctor/prefer-tag-over-role` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-31e13bf6-cf56-4f4a-9c79-8a6c33123c18`

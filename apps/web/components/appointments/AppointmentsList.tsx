@@ -98,94 +98,89 @@ function AppointmentCard({
 
     return (
         <div
-            className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-            onClick={onSelect}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    onSelect()
-                }
-            }}
+            className="flex items-center justify-between rounded-lg border border-border transition-colors hover:bg-muted/50"
         >
-            <div className="flex items-center gap-4">
-                <Avatar className="size-12">
-                    <AvatarFallback className="bg-primary/10 text-primary">
-                        {initials}
-                    </AvatarFallback>
-                </Avatar>
-                <div>
-                    <div className="flex items-center gap-2">
-                        <h4 className="font-medium">{appointment.client_name}</h4>
-                        <Badge className={STATUS_STYLES[appointment.status as keyof typeof STATUS_STYLES]}>
-                            {appointment.status.replace("_", " ")}
-                        </Badge>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                        <span className="flex items-center gap-1">
-                            <CalendarIcon className="size-3.5" />
-                            {format(parseISO(appointment.scheduled_start), "MMM d, yyyy")}
+            <button
+                type="button"
+                className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-4 rounded-lg bg-transparent p-4 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                onClick={onSelect}
+            >
+                <span className="flex min-w-0 items-center gap-4">
+                    <Avatar className="size-12">
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                            {initials}
+                        </AvatarFallback>
+                    </Avatar>
+                    <span className="min-w-0">
+                        <span className="flex items-center gap-2">
+                            <span className="font-medium">{appointment.client_name}</span>
+                            <Badge className={STATUS_STYLES[appointment.status as keyof typeof STATUS_STYLES]}>
+                                {appointment.status.replace("_", " ")}
+                            </Badge>
                         </span>
-                        <span className="flex items-center gap-1">
-                            <ClockIcon className="size-3.5" />
-                            {format(parseISO(appointment.scheduled_start), "h:mm a")}
+                        <span className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                                <CalendarIcon className="size-3.5" />
+                                {format(parseISO(appointment.scheduled_start), "MMM d, yyyy")}
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <ClockIcon className="size-3.5" />
+                                {format(parseISO(appointment.scheduled_start), "h:mm a")}
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <ModeIcon className="size-3.5" />
+                                {appointment.duration_minutes} min
+                            </span>
                         </span>
-                        <span className="flex items-center gap-1">
-                            <ModeIcon className="size-3.5" />
-                            {appointment.duration_minutes} min
-                        </span>
-                    </div>
-                    {appointment.appointment_type_name && (
-                        <p className="text-sm text-muted-foreground">
-                            {appointment.appointment_type_name}
-                        </p>
-                    )}
-                </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-                {appointment.status === "pending" && onApprove && onCancel && (
-                    <>
-                        <Button
-                            size="sm"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onApprove()
-                            }}
-                            disabled={isApproving}
-                            className="bg-green-600 hover:bg-green-700"
-                        >
-                            {isApproving ? (
-                                <Loader2Icon className="size-4 animate-spin" />
-                            ) : (
-                                <CheckIcon className="size-4" />
-                            )}
-                            <span className="ml-1.5">Approve</span>
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onCancel()
-                            }}
-                            disabled={isCancelling}
-                            className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                        >
-                            {isCancelling ? (
-                                <Loader2Icon className="size-4 animate-spin" />
-                            ) : (
-                                <XIcon className="size-4" />
-                            )}
-                            <span className="ml-1.5">Decline</span>
-                        </Button>
-                    </>
-                )}
+                        {appointment.appointment_type_name && (
+                            <span className="block text-sm text-muted-foreground">
+                                {appointment.appointment_type_name}
+                            </span>
+                        )}
+                    </span>
+                </span>
                 {appointment.status !== "pending" && (
-                    <ChevronRightIcon className="size-5 text-muted-foreground" />
+                    <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" />
                 )}
-            </div>
+            </button>
+
+            {appointment.status === "pending" && onApprove && onCancel && (
+                <div className="flex items-center gap-2 pr-4">
+                    <Button
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onApprove()
+                        }}
+                        disabled={isApproving}
+                        className="bg-green-600 hover:bg-green-700"
+                    >
+                        {isApproving ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                        ) : (
+                            <CheckIcon className="size-4" />
+                        )}
+                        <span className="ml-1.5">Approve</span>
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onCancel()
+                        }}
+                        disabled={isCancelling}
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                    >
+                        {isCancelling ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                        ) : (
+                            <XIcon className="size-4" />
+                        )}
+                        <span className="ml-1.5">Decline</span>
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }

@@ -472,6 +472,59 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByText(/Join Google Meet/i)).toBeInTheDocument()
     })
 
+    it("keeps pending appointment selection separate from approval actions", () => {
+        const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
+        const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()
+
+        mockUseAppointments.mockImplementation((params: { status?: string }) => ({
+            data: {
+                items: params.status === "pending"
+                    ? [
+                        {
+                            id: "appt-pending",
+                            appointment_type_name: "Initial Interview",
+                            client_name: "Casey Client",
+                            client_email: "casey@example.com",
+                            client_phone: "555-0100",
+                            client_timezone: "America/Los_Angeles",
+                            scheduled_start: scheduledStart,
+                            scheduled_end: scheduledEnd,
+                            duration_minutes: 30,
+                            meeting_mode: "google_meet",
+                            status: "pending",
+                            surrogate_id: null,
+                            surrogate_number: null,
+                            intended_parent_id: null,
+                            intended_parent_name: null,
+                            created_at: scheduledStart,
+                        },
+                    ]
+                    : [],
+                total: params.status === "pending" ? 1 : 0,
+                page: 1,
+                per_page: 50,
+                pages: params.status === "pending" ? 1 : 0,
+            },
+            isLoading: false,
+        }))
+
+        render(<AppointmentsList />)
+
+        const selectableCard = screen.getByRole("button", { name: /Casey Client/i })
+        const approveButton = screen.getByRole("button", { name: /Approve/i })
+        const declineButton = screen.getByRole("button", { name: /Decline/i })
+
+        expect(selectableCard.tagName).toBe("BUTTON")
+        expect(selectableCard).toHaveAttribute("type", "button")
+        expect(selectableCard).not.toContainElement(approveButton)
+        expect(selectableCard).not.toContainElement(declineButton)
+
+        fireEvent.click(approveButton)
+
+        expect(mockUseApproveAppointment).toHaveBeenCalledWith("appt-pending")
+        expect(mockUseAppointment).not.toHaveBeenCalledWith("appt-pending")
+    })
+
     it("shows reschedule action in appointment details", () => {
         const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
         const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()

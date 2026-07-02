@@ -1722,6 +1722,16 @@ describe("React regression guards (source)", () => {
         expectKeyAfterLastSpread(commentCardSource, "ReplyItem", "key={reply.id}")
     })
 
+    it("keeps appointment cards on native button semantics", () => {
+        const source = readSource("components/appointments/AppointmentsList.tsx")
+
+        expect(source).toContain("<button")
+        expect(source).toContain('type="button"')
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("tabIndex={0}")
+        expect(source).not.toContain("onKeyDown={(e)")
+    })
+
     it("uses functional updates for public booking form fields", () => {
         const source = readSource("components/appointments/PublicBookingPage.tsx")
 
