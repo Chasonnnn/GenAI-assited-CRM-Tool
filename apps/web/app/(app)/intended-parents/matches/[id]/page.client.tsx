@@ -56,6 +56,30 @@ import { MatchDetailOverviewTabs } from "./components/MatchDetailOverviewTabs"
 import { useMatchDetailTabState } from "./hooks/useMatchDetailTabState"
 import { useMatchDetailTabData } from "./hooks/useMatchDetailTabData"
 
+function formatMatchDate(dateStr: string | null | undefined) {
+    if (!dateStr) return "—"
+    const parsed = parseDateInput(dateStr)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return parsed.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    })
+}
+
+function formatMatchDateTime(dateStr: string | null | undefined) {
+    if (!dateStr) return "—"
+    const parsed = parseDateInput(dateStr)
+    if (Number.isNaN(parsed.getTime())) return "—"
+    return parsed.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    })
+}
+
 export default function MatchDetailPage() {
     const params = useParams<{ id: string }>()
     const matchId = params.id
@@ -137,30 +161,6 @@ export default function MatchDetailPage() {
 
     // Check if user can change surrogate status (case_manager+)
     const canChangeStatus = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
-
-    const formatDate = (dateStr: string | null | undefined) => {
-        if (!dateStr) return "—"
-        const parsed = parseDateInput(dateStr)
-        if (Number.isNaN(parsed.getTime())) return "—"
-        return parsed.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        })
-    }
-
-    const formatDateTime = (dateStr: string | null | undefined) => {
-        if (!dateStr) return "—"
-        const parsed = parseDateInput(dateStr)
-        if (Number.isNaN(parsed.getTime())) return "—"
-        return parsed.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-        })
-    }
 
     const invalidateMatchSourceQueries = (
         entityIds?: {
@@ -468,7 +468,7 @@ export default function MatchDetailPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <CakeIcon className="size-3.5 text-muted-foreground flex-shrink-0" />
-                                                    <span>{formatDate(surrogateData.date_of_birth)}</span>
+                                                    <span>{formatMatchDate(surrogateData.date_of_birth)}</span>
                                                 </div>
                                             </div>
 
@@ -604,8 +604,8 @@ export default function MatchDetailPage() {
                                     onDeleteFile={handleDeleteFile}
                                     isDownloadPending={downloadAttachmentMutation.isPending}
                                     isDeletePending={deleteAttachmentMutation.isPending}
-                                    formatDate={formatDate}
-                                    formatDateTime={formatDateTime}
+                                    formatDate={formatMatchDate}
+                                    formatDateTime={formatMatchDateTime}
                                 />
                             </div>
                         </TabsContent>

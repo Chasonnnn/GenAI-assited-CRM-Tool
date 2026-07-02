@@ -17,6 +17,14 @@ import { format } from "date-fns"
 import { useState } from "react"
 import { parseDateInput } from "@/lib/utils/date"
 
+function formatVersionHistoryDate(dateStr: string) {
+    try {
+        return format(parseDateInput(dateStr), "MMM d, yyyy 'at' h:mm a")
+    } catch {
+        return dateStr
+    }
+}
+
 interface VersionItem {
     id: string
     version: number
@@ -66,14 +74,6 @@ export function VersionHistoryModal({
     canRollback = false,
 }: VersionHistoryModalProps) {
     const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
-
-    const formatDate = (dateStr: string) => {
-        try {
-            return format(parseDateInput(dateStr), "MMM d, yyyy 'at' h:mm a")
-        } catch {
-            return dateStr
-        }
-    }
 
     const toggleExpanded = (version: number) => {
         setExpandedVersion(expandedVersion === version ? null : version)
@@ -178,7 +178,7 @@ export function VersionHistoryModal({
                                     <div className="mt-2 text-sm text-muted-foreground space-y-1">
                                         <div className="flex items-center gap-1">
                                             <Calendar className="size-3" />
-                                            {formatDate(v.created_at)}
+                                            {formatVersionHistoryDate(v.created_at)}
                                         </div>
                                         {v.comment && (
                                             <div className="flex items-center gap-1">

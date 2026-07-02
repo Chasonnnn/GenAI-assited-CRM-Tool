@@ -60,6 +60,19 @@ function opsLayoutReducer(state: OpsLayoutState, action: OpsLayoutAction): OpsLa
     }
 }
 
+function redirectToOpsLogin() {
+    window.location.href = '/ops/login';
+}
+
+async function logoutFromOps() {
+    try {
+        await api.post('/auth/logout');
+    } catch {
+        // Ignore errors
+    }
+    redirectToOpsLogin();
+}
+
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
     const [opsLayoutState, dispatchOpsLayout] = useReducer(opsLayoutReducer, {
         user: null,
@@ -105,15 +118,6 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
         }
         void checkPlatformAdmin();
     }, [replace, isLoginPage]);
-
-    const handleLogout = async () => {
-        try {
-            await api.post('/auth/logout');
-        } catch {
-            // Ignore errors
-        }
-        window.location.href = '/ops/login';
-    };
 
     // Don't show layout for login page
     if (isLoginPage) {
@@ -187,7 +191,7 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                         <span className="text-sm text-stone-500 dark:text-stone-400">
                             {user.email}
                         </span>
-                        <Button variant="ghost" size="sm" onClick={handleLogout}>
+                        <Button variant="ghost" size="sm" onClick={logoutFromOps}>
                             <LogOut className="size-4" />
                         </Button>
                     </div>

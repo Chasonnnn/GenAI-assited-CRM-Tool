@@ -14,6 +14,10 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
+function redirectToLogin() {
+    window.location.href = "/login"
+}
+
 /**
  * Session expiration detection dialog.
  *
@@ -75,11 +79,6 @@ export function SessionExpiredDialog() {
         }
     }, [queryClient])
 
-    const handleLogin = () => {
-        // Redirect to login page
-        window.location.href = "/login"
-    }
-
     return (
         <AlertDialog open={isExpired}>
             <AlertDialogContent>
@@ -94,7 +93,7 @@ export function SessionExpiredDialog() {
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogAction onClick={handleLogin}>
+                    <AlertDialogAction onClick={redirectToLogin}>
                         Log in again
                     </AlertDialogAction>
                 </AlertDialogFooter>

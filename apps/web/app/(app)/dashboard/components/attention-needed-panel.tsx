@@ -478,6 +478,15 @@ function OverdueSummaryRow({
     )
 }
 
+function formatUpcomingItemTime(time: string | null) {
+    if (!time) return "All Day"
+    const [hours = "0", minutes = "00"] = time.split(":")
+    const hour = parseInt(hours, 10)
+    const ampm = hour >= 12 ? "PM" : "AM"
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
+}
+
 function UpcomingItemRow({
     item,
     assigneeId,
@@ -487,15 +496,6 @@ function UpcomingItemRow({
 }) {
     const Icon = item.type === "task" ? CheckSquareIcon : VideoIcon
     const isMeeting = item.type === "meeting"
-
-    const formatTime = (time: string | null) => {
-        if (!time) return "All Day"
-        const [hours = "0", minutes = "00"] = time.split(":")
-        const hour = parseInt(hours, 10)
-        const ampm = hour >= 12 ? "PM" : "AM"
-        const displayHour = hour % 12 || 12
-        return `${displayHour}:${minutes} ${ampm}`
-    }
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -537,7 +537,7 @@ function UpcomingItemRow({
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium">{formatTime(item.time)}</span>
+                    <span className="font-medium">{formatUpcomingItemTime(item.time)}</span>
                     {item.surrogate_id && (
                         <>
                             <span className="text-muted-foreground/60">•</span>

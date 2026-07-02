@@ -20,6 +20,11 @@ type SurrogateNotesTabProps = {
     formatDateTime: (dateString: string) => string
 }
 
+function getNoteAuthorInitials(name: string | null): string {
+    if (!name) return "?"
+    return name.split(" ").map((part) => part[0]).join("").toUpperCase().slice(0, 2)
+}
+
 export function SurrogateNotesTab({
     surrogateId,
     notes,
@@ -28,11 +33,6 @@ export function SurrogateNotesTab({
     onDeleteNote,
     formatDateTime,
 }: SurrogateNotesTabProps) {
-    const getInitials = (name: string | null): string => {
-        if (!name) return "?"
-        return name.split(" ").map((part) => part[0]).join("").toUpperCase().slice(0, 2)
-    }
-
     return (
         <TabsContent value="notes">
             <Card>
@@ -71,7 +71,7 @@ export function SurrogateNotesTab({
                                         <div className="flex items-start gap-3">
                                             <Avatar className="size-9 flex-shrink-0">
                                                 <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                                    {getInitials(note.author_name)}
+                                                    {getNoteAuthorInitials(note.author_name)}
                                                 </AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 min-w-0">

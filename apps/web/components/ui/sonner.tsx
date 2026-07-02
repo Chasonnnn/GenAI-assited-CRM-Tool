@@ -4,14 +4,16 @@ import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
+type ToasterTheme = "light" | "dark" | "system"
+
+function resolveToasterTheme(value: string | undefined): ToasterTheme {
+  if (value === "light" || value === "dark" || value === "system") return value
+  return "system"
+}
+
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme } = useTheme()
-  type Theme = "light" | "dark" | "system"
-  const resolveTheme = (value: string | undefined): Theme => {
-    if (value === "light" || value === "dark" || value === "system") return value
-    return "system"
-  }
-  const appliedTheme = resolveTheme(theme)
+  const appliedTheme = resolveToasterTheme(theme)
   const { theme: ignoredTheme, ...rest } = props
   void ignoredTheme
 

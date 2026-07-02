@@ -168,6 +168,87 @@ function formatTableCellValue(
     return getFormOptionLabel(options, value) ?? String(value)
 }
 
+function getFieldValueContent(
+    field: FormSchema["pages"][number]["fields"][number],
+    value: unknown,
+) {
+    if (value === null || value === undefined || value === "") {
+        return <span className="text-sm text-muted-foreground">Not provided</span>
+    }
+    if (field.type === "repeatable_table" || field.type === "table") {
+        const isFixedTable = field.type === "table"
+        const rows = isFixedTable ? resolveFixedTableRows(field, value) : normalizeTableRows(value)
+        const columns = resolveTableColumns(field, rows)
+        if (rows.length === 0 || columns.length === 0) {
+            return <span className="text-sm text-muted-foreground">Not provided</span>
+        }
+        return (
+            <div className="max-w-[360px] overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                        <tr className="text-muted-foreground">
+                            {isFixedTable ? <th className="border-b border-border pb-1 pr-2">Item</th> : null}
+                            {columns.map((column) => (
+                                <th key={column.key} className="border-b border-border pb-1 pr-2">
+                                    {column.label}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, rowIndex) => (
+                            <tr key={typeof row.row_key === "string" ? row.row_key : `row-${rowIndex}`}>
+                                {isFixedTable ? (
+                                    <td className="py-1 pr-2 align-top font-medium">
+                                        {field.rows?.find((configuredRow) => configuredRow.key === row.row_key)?.label || "—"}
+                                    </td>
+                                ) : null}
+                                {columns.map((column) => (
+                                    <td key={column.key} className="py-1 pr-2 align-top">
+                                        {formatTableCellValue(row[column.key], column.options)}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        )
+    }
+    if (field.type === "date" && typeof value === "string") {
+        return <span className="text-sm text-right">{formatLocalDate(parseDateInput(value))}</span>
+    }
+    if (typeof value === "boolean") {
+        return value ? (
+            <Badge variant="default" className="bg-green-500 hover:bg-green-500/80">
+                Yes
+            </Badge>
+        ) : (
+            <Badge variant="secondary">No</Badge>
+        )
+    }
+    if (
+        typeof value === "string" &&
+        (field.type === "select" || field.type === "radio")
+    ) {
+        return (
+            <span className="text-sm text-right">
+                {getFormOptionLabel(field.options, value) ?? value}
+            </span>
+        )
+    }
+    if (Array.isArray(value)) {
+        return value.length ? (
+            <span className="text-sm text-right">
+                {getFormOptionLabels(field.options, value).join(", ")}
+            </span>
+        ) : (
+            <span className="text-sm text-muted-foreground">Not provided</span>
+        )
+    }
+    return <span className="text-sm text-right">{String(value)}</span>
+}
+
 type SelectControlOption = {
     value: string
     label: string
@@ -1083,87 +1164,6 @@ export function SurrogateApplicationTab({
         page.fields.flatMap((field) => (field.type === "file" ? [] : [field])),
     )
         .slice(0, 3)
-
-    const getFieldValueContent = (
-        field: FormSchema["pages"][number]["fields"][number],
-        value: unknown,
-    ) => {
-        if (value === null || value === undefined || value === "") {
-            return <span className="text-sm text-muted-foreground">Not provided</span>
-        }
-        if (field.type === "repeatable_table" || field.type === "table") {
-            const isFixedTable = field.type === "table"
-            const rows = isFixedTable ? resolveFixedTableRows(field, value) : normalizeTableRows(value)
-            const columns = resolveTableColumns(field, rows)
-            if (rows.length === 0 || columns.length === 0) {
-                return <span className="text-sm text-muted-foreground">Not provided</span>
-            }
-            return (
-                <div className="max-w-[360px] overflow-x-auto">
-                    <table className="w-full text-xs text-left border-collapse">
-                        <thead>
-                            <tr className="text-muted-foreground">
-                                {isFixedTable ? <th className="border-b border-border pb-1 pr-2">Item</th> : null}
-                                {columns.map((column) => (
-                                    <th key={column.key} className="border-b border-border pb-1 pr-2">
-                                        {column.label}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row, rowIndex) => (
-                                <tr key={typeof row.row_key === "string" ? row.row_key : `row-${rowIndex}`}>
-                                    {isFixedTable ? (
-                                        <td className="py-1 pr-2 align-top font-medium">
-                                            {field.rows?.find((configuredRow) => configuredRow.key === row.row_key)?.label || "—"}
-                                        </td>
-                                    ) : null}
-                                    {columns.map((column) => (
-                                        <td key={column.key} className="py-1 pr-2 align-top">
-                                            {formatTableCellValue(row[column.key], column.options)}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )
-        }
-        if (field.type === "date" && typeof value === "string") {
-            return <span className="text-sm text-right">{formatLocalDate(parseDateInput(value))}</span>
-        }
-        if (typeof value === "boolean") {
-            return value ? (
-                <Badge variant="default" className="bg-green-500 hover:bg-green-500/80">
-                    Yes
-                </Badge>
-            ) : (
-                <Badge variant="secondary">No</Badge>
-            )
-        }
-        if (
-            typeof value === "string" &&
-            (field.type === "select" || field.type === "radio")
-        ) {
-            return (
-                <span className="text-sm text-right">
-                    {getFormOptionLabel(field.options, value) ?? value}
-                </span>
-            )
-        }
-        if (Array.isArray(value)) {
-            return value.length ? (
-                <span className="text-sm text-right">
-                    {getFormOptionLabels(field.options, value).join(", ")}
-                </span>
-            ) : (
-                <span className="text-sm text-muted-foreground">Not provided</span>
-            )
-        }
-        return <span className="text-sm text-right">{String(value)}</span>
-    }
 
     const handleDownloadFile = async (fileId: string) => {
         try {

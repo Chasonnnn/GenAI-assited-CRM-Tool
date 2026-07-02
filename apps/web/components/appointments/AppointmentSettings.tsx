@@ -68,6 +68,17 @@ import {
 import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
 import type { AppointmentType, MeetingMode } from "@/lib/api/appointments"
 
+function openBookingPreview() {
+    const baseUrl =
+        typeof window !== "undefined" ? `${window.location.origin}/book/preview` : "/book/preview"
+    window.open(baseUrl, "_blank")
+}
+
+function getAppointmentTypeErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof ApiError && error.message) return error.message
+    return fallback
+}
+
 // =============================================================================
 // Google Calendar Connection Warning Banner
 // =============================================================================
@@ -180,12 +191,6 @@ function BookingLinkCard() {
         }
     }
 
-    const openPreview = () => {
-        const baseUrl =
-            typeof window !== "undefined" ? `${window.location.origin}/book/preview` : "/book/preview"
-        window.open(baseUrl, "_blank")
-    }
-
     if (isLoading) {
         return (
             <Card>
@@ -222,7 +227,7 @@ function BookingLinkCard() {
                         )}
                     </Button>
                 </div>
-                <Button variant="outline" size="sm" onClick={openPreview}>
+                <Button variant="outline" size="sm" onClick={openBookingPreview}>
                     <EyeIcon className="size-4 mr-2" />
                     Preview Booking Page
                 </Button>
@@ -510,11 +515,6 @@ function AppointmentTypesCard() {
         setDialogOpen(true)
     }
 
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof ApiError && error.message) return error.message
-        return fallback
-    }
-
     const toggleMeetingMode = (mode: MeetingMode, checked: boolean | "indeterminate") => {
         const shouldSelect = checked === true
         setFormData((prev) => {
@@ -585,7 +585,7 @@ function AppointmentTypesCard() {
             }
             setDialogOpen(false)
         } catch (error) {
-            toast.error(getErrorMessage(error, "Failed to save appointment type"))
+            toast.error(getAppointmentTypeErrorMessage(error, "Failed to save appointment type"))
         }
     }
 
@@ -593,7 +593,7 @@ function AppointmentTypesCard() {
         if (confirm("Are you sure you want to deactivate this appointment type?")) {
             deleteMutation.mutate(typeId, {
                 onSuccess: () => toast.success("Appointment type deactivated"),
-                onError: (error) => toast.error(getErrorMessage(error, "Failed to deactivate appointment type")),
+                onError: (error) => toast.error(getAppointmentTypeErrorMessage(error, "Failed to deactivate appointment type")),
             })
         }
     }

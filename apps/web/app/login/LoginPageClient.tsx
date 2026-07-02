@@ -51,6 +51,13 @@ function getLoginErrorMessage(errorCode: string | null | undefined) {
   return LOGIN_ERROR_MESSAGES[normalizedCode] ?? FALLBACK_LOGIN_ERROR
 }
 
+function getLoginReturnTo() {
+  return typeof window !== "undefined" &&
+    (window.location.pathname.startsWith("/ops") || window.location.hostname.startsWith("ops."))
+    ? "ops"
+    : "app"
+}
+
 type LoginPageClientProps = {
   authError?: string | null
   authAccountHint?: string | null
@@ -65,14 +72,8 @@ export default function LoginPageClient({
   const apiBase = getAuthApiBase()
   const errorMessage = getLoginErrorMessage(authError)
 
-  const getReturnTo = () =>
-    typeof window !== "undefined" &&
-    (window.location.pathname.startsWith("/ops") || window.location.hostname.startsWith("ops."))
-      ? "ops"
-      : "app"
-
   const buildGoogleLoginUrl = (loginHint?: string) => {
-    const returnTo = getReturnTo()
+    const returnTo = getLoginReturnTo()
     const params = new URLSearchParams()
     if (loginHint) params.set("login_hint", loginHint)
     params.set("return_to", returnTo)
@@ -82,7 +83,7 @@ export default function LoginPageClient({
   const handleGoogleLogin = () => {
     setIsLoading(true)
     try {
-      const returnTo = getReturnTo()
+      const returnTo = getLoginReturnTo()
       const url = buildGoogleLoginUrl()
       try {
         sessionStorage.setItem("auth_return_to", returnTo)

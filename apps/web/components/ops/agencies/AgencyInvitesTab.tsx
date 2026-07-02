@@ -69,6 +69,13 @@ type AgencyInvitesTabProps = {
     onRevokeInvite: (inviteId: string) => void
 }
 
+function formatInviteCooldown(seconds: number) {
+    if (seconds <= 0) return "Resend available soon";
+    if (seconds < 60) return `Resend in ${seconds}s`;
+    const minutes = Math.ceil(seconds / 60);
+    return `Resend in ${minutes}m`;
+}
+
 export function AgencyInvitesTab({
     orgName,
     invites,
@@ -86,13 +93,6 @@ export function AgencyInvitesTab({
     onResendInvite,
     onRevokeInvite,
 }: AgencyInvitesTabProps) {
-    const formatCooldown = (seconds: number) => {
-        if (seconds <= 0) return "Resend available soon";
-        if (seconds < 60) return `Resend in ${seconds}s`;
-        const minutes = Math.ceil(seconds / 60);
-        return `Resend in ${minutes}m`;
-    };
-
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -272,7 +272,7 @@ export function AgencyInvitesTab({
                                                     title={
                                                         invite.can_resend === false
                                                             ? invite.resend_cooldown_seconds
-                                                                ? formatCooldown(invite.resend_cooldown_seconds)
+                                                                ? formatInviteCooldown(invite.resend_cooldown_seconds)
                                                                 : "Resend unavailable"
                                                             : "Resend invite"
                                                     }
