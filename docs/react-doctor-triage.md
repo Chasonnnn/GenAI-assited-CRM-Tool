@@ -2822,3 +2822,31 @@ Full command after Batch 125: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `340`
 - Summary: `Bugs 134 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 161 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1020440c-841b-422f-99b5-63103a735eb9`
+
+## Batch 126
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `app/ops/templates/workflows/[id]/page.client.tsx` | Valid scanner finding: the workflow template editor wrapped trigger setters, option derivations, trigger payload building, and save persistence in `useMemo` / `useCallback`, even though React Compiler is enabled and none of these wrappers needed preserve-manual-memoization semantics. | High | Removed `useMemo` and `useCallback`; derived option lists directly; kept trigger-config updates reducer-backed; converted trigger payload and persistence helpers to plain functions. Extended the source guard so the page stays free of manual React memoization. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "platform workflow save and publish"` failed on the old `useMemo` / `useCallback` source. GREEN: the same guard passed; `pnpm test --run tests/react-regressions-source.test.ts -t "workflow"` passed with `7` source guards; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`; changed-scope React Doctor scored `100 / 100`. Full redundant manual memoization dropped from `49` to `38`. |
+| `react-doctor/exhaustive-deps` | `app/ops/templates/workflows/[id]/page.client.tsx` | Valid follow-on finding after removing `useMemo`: `statusOptions` fell back to a fresh empty array, making the hydrate effect dependency unstable when workflow options were not loaded. | High | Added a module-level empty status-options array and reused it as the fallback dependency value. | Path-scope React Doctor no longer reports the missing-dependency warning. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/ops/templates/workflows/[id]/page.client.tsx` | Valid scanner finding: `getActionValidationError` used no hook-local state and was rebuilt in `useWorkflowTemplatePageState`. | High | Moved `getActionValidationError` to module scope. | Path-scope React Doctor no longer reports the pure-function warning. |
+| `react-doctor/no-many-boolean-props` | `app/ops/templates/workflows/[id]/page.client.tsx` | Valid scanner finding: `WorkflowTemplateHeader` accepted five boolean flags, making header states harder to reason about. | High | Replaced the boolean-heavy header API with named `mode`, `publicationStatus`, and `busyAction` props. Added source guard coverage for the named-state API. | RED: the source guard failed on the old boolean prop API. GREEN: the same guard passed; path-scope React Doctor scored `100 / 100`; changed-scope React Doctor scored `100 / 100`. |
+
+Changed-scope command after Batch 126: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Path-scope command after Batch 126: `cd apps/web && npx -y react-doctor@latest 'app/ops/templates/workflows/[id]' --verbose`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in workflow template page: `0`
+- Summary: no issues found
+
+Full command after Batch 126: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `69 / 100 Needs work`
+- Total diagnostics: `327`
+- Summary: `Bugs 134 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 148 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6e217e4f-3cf8-4864-9040-181e0cb0d429`

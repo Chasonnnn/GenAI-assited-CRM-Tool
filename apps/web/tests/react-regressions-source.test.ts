@@ -183,8 +183,21 @@ describe("React regression guards (source)", () => {
 
     it("keeps platform workflow save and publish compiler-compatible", () => {
         const source = readSource("app/ops/templates/workflows/[id]/page.client.tsx")
+        const headerProps = source.slice(
+            source.indexOf("type WorkflowTemplateHeaderProps"),
+            source.indexOf("function WorkflowTemplateHeader")
+        )
 
         expect(source).not.toContain("finally")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+        expect(headerProps).toContain('mode: "new" | "existing"')
+        expect(headerProps).toContain('publicationStatus: "published" | "draft"')
+        expect(headerProps).toContain('busyAction: "delete" | "save" | "publish" | null')
+        expect(headerProps).not.toContain("isPublished: boolean")
+        expect(headerProps).not.toContain("isPublishing: boolean")
         expect(source).toContain('toast.success("Template saved")')
         expect(source).toContain('toast.success("Template published")')
     })

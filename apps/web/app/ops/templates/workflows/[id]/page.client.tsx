@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useReducer, useState, type Dispatch, type SetStateAction } from "react"
+import { useEffect, useReducer, useState, type Dispatch, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -183,6 +183,10 @@ const FALLBACK_OPERATORS = [
     { value: "less_than", label: "Less than" },
 ]
 
+type WorkflowStatusOption = { id?: string; value: string; label: string }
+
+const EMPTY_STATUS_OPTIONS: WorkflowStatusOption[] = []
+
 const ZAPIER_CONVERSION_SAMPLE = {
     name: "Meta Conversion Stage Sync (Zapier)",
     description:
@@ -199,7 +203,7 @@ const ZAPIER_CONVERSION_SAMPLE = {
 function normalizeTriggerConfigForUi(
     triggerType: string,
     triggerConfig: JsonObject,
-    statuses: { id?: string; value: string; label: string }[],
+    statuses: WorkflowStatusOption[],
 ): JsonObject {
     if (triggerType !== "status_changed") return { ...triggerConfig }
     const next: JsonObject = { ...triggerConfig }
@@ -226,6 +230,43 @@ function normalizeTriggerConfigForUi(
     return next
 }
 
+function getActionValidationError(action: ActionConfig): string | null {
+    const title = typeof action.title === "string" ? action.title : ""
+    const content = typeof action.content === "string" ? action.content : ""
+    if (!action.action_type) return "Select an action type for each action."
+    if (action.action_type === "create_task" && !title.trim()) {
+        return "Task actions need a title."
+    }
+    if (action.action_type === "send_email") {
+        if (Array.isArray(action.recipients) && action.recipients.length === 0) {
+            return "Select at least one recipient."
+        }
+    }
+    if (action.action_type === "send_notification" && !title.trim()) {
+        return "Notification actions need a title."
+    }
+    if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
+        return "Select at least one recipient."
+    }
+    if (action.action_type === "send_email" && Array.isArray(action.recipients) && action.recipients.length === 0) {
+        return "Select an email recipient."
+    }
+    if (action.action_type === "assign_surrogate") {
+        if (!action.owner_type) return "Assign actions need an owner type."
+        if (!action.owner_id) return "Assign actions need a target owner."
+    }
+    if (action.action_type === "update_field") {
+        if (!action.field) return "Select a field to update."
+        if (action.value === undefined || action.value === null || action.value === "") {
+            return "Update actions need a value."
+        }
+    }
+    if (action.action_type === "add_note" && !content.trim()) {
+        return "Note actions need content."
+    }
+    return null
+}
+
 type WorkflowTemplateEditorState = {
     name: string
     description: string
@@ -242,7 +283,7 @@ type WorkflowTemplateEditorState = {
 type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>
 
 type WorkflowTemplateEditorAction =
-    | { type: "hydrateDraft"; templateData: PlatformWorkflowTemplate; statusOptions: { id?: string; value: string; label: string }[] }
+    | { type: "hydrateDraft"; templateData: PlatformWorkflowTemplate; statusOptions: WorkflowStatusOption[] }
     | { type: "loadZapierSample" }
     | { type: "loadSharedIntakeSample" }
     | { type: "setName"; value: string }
@@ -486,11 +527,9 @@ function WorkflowTemplateDeleteDialog({
 type WorkflowTemplateHeaderProps = {
     name: string
     setName: (value: string) => void
-    isPublished: boolean
-    isNew: boolean
-    isDeleting: boolean
-    isSaving: boolean
-    isPublishing: boolean
+    mode: "new" | "existing"
+    publicationStatus: "published" | "draft"
+    busyAction: "delete" | "save" | "publish" | null
     onBack: () => void
     onDelete: () => void
     onSave: () => void
@@ -500,16 +539,21 @@ type WorkflowTemplateHeaderProps = {
 function WorkflowTemplateHeader({
     name,
     setName,
-    isPublished,
-    isNew,
-    isDeleting,
-    isSaving,
-    isPublishing,
+    mode,
+    publicationStatus,
+    busyAction,
     onBack,
     onDelete,
     onSave,
     onPublish,
 }: WorkflowTemplateHeaderProps) {
+    const isPublished = publicationStatus === "published"
+    const isNewTemplate = mode === "new"
+    const isDeleting = busyAction === "delete"
+    const isSaving = busyAction === "save"
+    const isPublishing = busyAction === "publish"
+    const isBusy = busyAction !== null
+
     return (
         <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
             <div className="flex items-center gap-4">
@@ -529,12 +573,12 @@ function WorkflowTemplateHeader({
                 </Badge>
             </div>
             <div className="flex items-center gap-3">
-                {!isNew && (
+                {!isNewTemplate && (
                     <Button
                         variant="destructive"
                         size="sm"
                         onClick={onDelete}
-                        disabled={isDeleting || isSaving || isPublishing}
+                        disabled={isBusy}
                     >
                         {isDeleting ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : <Trash2Icon className="mr-2 size-4" />}
                         Delete
@@ -2052,25 +2096,22 @@ function useWorkflowTemplatePageState() {
     const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
     const setCategory = (value: string) => dispatchEditor({ type: "setCategory", value })
     const setTriggerType = (value: string) => dispatchEditor({ type: "setTriggerType", value })
-    const setTriggerConfig: TriggerConfigSetter = useCallback((value) => {
+    const setTriggerConfig: TriggerConfigSetter = (value) => {
         dispatchEditor({ type: "setTriggerConfig", value })
-    }, [])
+    }
     const setConditionLogic = (value: "AND" | "OR") =>
         dispatchEditor({ type: "setConditionLogic", value })
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
-    const statusOptions = useMemo(() => options?.statuses ?? [], [options?.statuses])
+    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
     const actionTypeOptions = options?.action_types ?? FALLBACK_ACTION_TYPES
     const triggerTypeOptions = options?.trigger_types ?? FALLBACK_TRIGGER_TYPES
     const updateFields = options?.update_fields ?? ["stage_id", "is_priority", "owner_type", "owner_id"]
     const conditionOperators = options?.condition_operators ?? FALLBACK_OPERATORS
     const conditionFields = options?.condition_fields ?? Object.keys(conditionFieldLabels)
-    const userOptions = useMemo(() => options?.users ?? [], [options?.users])
-    const queueOptions = useMemo(() => options?.queues ?? [], [options?.queues])
-    const formOptions = useMemo<SelectOption[]>(
-        () => (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name })),
-        [options?.forms],
-    )
+    const userOptions = options?.users ?? []
+    const queueOptions = options?.queues ?? []
+    const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
 
     const actionTypeValuesForTrigger =
         triggerType && options?.action_types_by_trigger?.[triggerType]
@@ -2080,32 +2121,22 @@ function useWorkflowTemplatePageState() {
         ? actionTypeOptions.filter((action) => actionTypeValuesForTrigger.has(action.value))
         : actionTypeOptions
 
-    const stageIdOptions = useMemo<SelectOption[]>(
-        () =>
-            statusOptions.map((status) => ({
-                value: status.id ?? status.value,
-                label: status.label,
-            })),
-        [statusOptions]
-    )
+    const stageIdOptions: SelectOption[] = statusOptions.map((status) => ({
+        value: status.id ?? status.value,
+        label: status.label,
+    }))
 
-    const stageLabelOptions = useMemo<SelectOption[]>(
-        () => statusOptions.map((status) => ({ value: status.label, label: status.label })),
-        [statusOptions]
-    )
+    const stageLabelOptions: SelectOption[] = statusOptions.map((status) => ({
+        value: status.label,
+        label: status.label,
+    }))
 
-    const ownerOptions = useMemo<SelectOption[]>(
-        () => [
-            ...userOptions.map((user) => ({ value: user.id, label: user.display_name })),
-            ...queueOptions.map((queue) => ({ value: queue.id, label: `Queue: ${queue.name}` })),
-        ],
-        [userOptions, queueOptions]
-    )
+    const ownerOptions: SelectOption[] = [
+        ...userOptions.map((user) => ({ value: user.id, label: user.display_name })),
+        ...queueOptions.map((queue) => ({ value: queue.id, label: `Queue: ${queue.name}` })),
+    ]
 
-    const stateOptions = useMemo<SelectOption[]>(
-        () => US_STATES.map((state) => ({ value: state.value, label: state.label })),
-        []
-    )
+    const stateOptions: SelectOption[] = US_STATES.map((state) => ({ value: state.value, label: state.label }))
 
     const applyZapierConversionSample = () => {
         dispatchEditor({ type: "loadZapierSample" })
@@ -2119,40 +2150,43 @@ function useWorkflowTemplatePageState() {
 
     useEffect(() => {
         if (!triggerType) return
-        setTriggerConfig((current) => {
-            const next = { ...current }
-            if (triggerType === "status_changed") {
-                if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
-                if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
-            }
-            if (triggerType === "scheduled") {
-                if (typeof next.cron !== "string") next.cron = ""
-                if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
-            }
-            if (triggerType === "inactivity") {
-                if (typeof next.days !== "number") next.days = 7
-            }
-            if (triggerType === "task_due") {
-                if (typeof next.hours_before !== "number") next.hours_before = 24
-            }
-            if (triggerType === "surrogate_updated") {
-                if (!Array.isArray(next.fields)) next.fields = []
-            }
-            if (triggerType === "surrogate_assigned") {
-                if (typeof next.to_user_id !== "string") delete next.to_user_id
-            }
-            if (triggerType === "form_started") {
-                if (typeof next.form_id !== "string") next.form_id = ""
-            }
-            if (triggerType === "form_submitted") {
-                if (typeof next.form_id !== "string") next.form_id = ""
-            }
-            if (triggerType === "intake_lead_created") {
-                if (typeof next.form_id !== "string") next.form_id = ""
-            }
-            return areJsonObjectsEqual(next, current) ? current : next
+        dispatchEditor({
+            type: "setTriggerConfig",
+            value: (current) => {
+                const next = { ...current }
+                if (triggerType === "status_changed") {
+                    if (typeof next.to_stage_id !== "string") next.to_stage_id = ""
+                    if (typeof next.from_stage_id !== "string") next.from_stage_id = ""
+                }
+                if (triggerType === "scheduled") {
+                    if (typeof next.cron !== "string") next.cron = ""
+                    if (typeof next.timezone !== "string") next.timezone = "America/Los_Angeles"
+                }
+                if (triggerType === "inactivity") {
+                    if (typeof next.days !== "number") next.days = 7
+                }
+                if (triggerType === "task_due") {
+                    if (typeof next.hours_before !== "number") next.hours_before = 24
+                }
+                if (triggerType === "surrogate_updated") {
+                    if (!Array.isArray(next.fields)) next.fields = []
+                }
+                if (triggerType === "surrogate_assigned") {
+                    if (typeof next.to_user_id !== "string") delete next.to_user_id
+                }
+                if (triggerType === "form_started") {
+                    if (typeof next.form_id !== "string") next.form_id = ""
+                }
+                if (triggerType === "form_submitted") {
+                    if (typeof next.form_id !== "string") next.form_id = ""
+                }
+                if (triggerType === "intake_lead_created") {
+                    if (typeof next.form_id !== "string") next.form_id = ""
+                }
+                return areJsonObjectsEqual(next, current) ? current : next
+            },
         })
-    }, [setTriggerConfig, triggerConfig, triggerType])
+    }, [triggerType])
 
     const addCondition = () => {
         dispatchEditor({ type: "addCondition" })
@@ -2220,43 +2254,6 @@ function useWorkflowTemplatePageState() {
         return null
     }
 
-    const getActionValidationError = (action: ActionConfig): string | null => {
-        const title = typeof action.title === "string" ? action.title : ""
-        const content = typeof action.content === "string" ? action.content : ""
-        if (!action.action_type) return "Select an action type for each action."
-        if (action.action_type === "create_task" && !title.trim()) {
-            return "Task actions need a title."
-        }
-        if (action.action_type === "send_email") {
-            if (Array.isArray(action.recipients) && action.recipients.length === 0) {
-                return "Select at least one recipient."
-            }
-        }
-        if (action.action_type === "send_notification" && !title.trim()) {
-            return "Notification actions need a title."
-        }
-        if (action.action_type === "send_notification" && Array.isArray(action.recipients) && action.recipients.length === 0) {
-            return "Select at least one recipient."
-        }
-        if (action.action_type === "send_email" && Array.isArray(action.recipients) && action.recipients.length === 0) {
-            return "Select an email recipient."
-        }
-        if (action.action_type === "assign_surrogate") {
-            if (!action.owner_type) return "Assign actions need an owner type."
-            if (!action.owner_id) return "Assign actions need a target owner."
-        }
-        if (action.action_type === "update_field") {
-            if (!action.field) return "Select a field to update."
-            if (action.value === undefined || action.value === null || action.value === "") {
-                return "Update actions need a value."
-            }
-        }
-        if (action.action_type === "add_note" && !content.trim()) {
-            return "Note actions need content."
-        }
-        return null
-    }
-
     const getWorkflowValidationError = (): string | null => {
         if (!name.trim()) return "Template name is required."
         const triggerError = getTriggerValidationError()
@@ -2282,7 +2279,7 @@ function useWorkflowTemplatePageState() {
 
     const workflowValidationError = getWorkflowValidationError()
 
-    const buildTriggerConfig = useCallback((): JsonObject => {
+    const buildTriggerConfig = (): JsonObject => {
         const next: JsonObject = { ...triggerConfig }
         if (triggerType === "status_changed") {
             if (typeof next.to_stage_id !== "string" || !next.to_stage_id) delete next.to_stage_id
@@ -2318,54 +2315,35 @@ function useWorkflowTemplatePageState() {
             if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
         }
         return next
-    }, [triggerConfig, triggerType])
+    }
 
-    const persistTemplate = useCallback(
-        async (): Promise<PlatformWorkflowTemplate> => {
-            const payload = {
-                name: name.trim(),
-                description: description.trim() || null,
-                icon: icon || "template",
-                category: category || "general",
-                trigger_type: triggerType,
-                trigger_config: buildTriggerConfig(),
-                conditions: normalizeConditionsForSave(conditions),
-                condition_logic: conditionLogic,
-                actions,
-            }
-
-            if (isNew) {
-                const created = await createTemplate.mutateAsync(payload)
-                replace(`/ops/templates/workflows/${created.id}`)
-                return created
-            }
-
-            return updateTemplate.mutateAsync({
-                id,
-                payload: {
-                    ...payload,
-                    expected_version: templateData?.published_version ?? null,
-                },
-            })
-        },
-        [
+    const persistTemplate = async (): Promise<PlatformWorkflowTemplate> => {
+        const payload = {
+            name: name.trim(),
+            description: description.trim() || null,
+            icon: icon || "template",
+            category: category || "general",
+            trigger_type: triggerType,
+            trigger_config: buildTriggerConfig(),
+            conditions: normalizeConditionsForSave(conditions),
+            condition_logic: conditionLogic,
             actions,
-            buildTriggerConfig,
-            category,
-            conditionLogic,
-            conditions,
-            createTemplate,
-            description,
-            icon,
+        }
+
+        if (isNew) {
+            const created = await createTemplate.mutateAsync(payload)
+            replace(`/ops/templates/workflows/${created.id}`)
+            return created
+        }
+
+        return updateTemplate.mutateAsync({
             id,
-            isNew,
-            name,
-            replace,
-            templateData?.published_version,
-            triggerType,
-            updateTemplate,
-        ]
-    )
+            payload: {
+                ...payload,
+                expected_version: templateData?.published_version ?? null,
+            },
+        })
+    }
 
     const handleSave = async () => {
         const error = getWorkflowValidationError()
@@ -2578,11 +2556,9 @@ export default function PlatformWorkflowTemplatePage() {
             <WorkflowTemplateHeader
                 name={name}
                 setName={setName}
-                isPublished={isPublished}
-                isNew={isNew}
-                isDeleting={isDeleting}
-                isSaving={isSaving}
-                isPublishing={isPublishing}
+                mode={isNew ? "new" : "existing"}
+                publicationStatus={isPublished ? "published" : "draft"}
+                busyAction={isDeleting ? "delete" : isSaving ? "save" : isPublishing ? "publish" : null}
                 onBack={handleBack}
                 onDelete={openDeleteDialog}
                 onSave={handleSave}
