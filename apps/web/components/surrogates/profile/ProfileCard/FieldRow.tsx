@@ -23,49 +23,48 @@ interface FieldRowProps {
 }
 
 type FieldRowValueProps = {
-    fieldKey: string
     field: FormSchema["pages"][number]["fields"][number]
     mergedValue: unknown
-    isEditMode: boolean
-    editingField: string | null
-    isHidden: boolean
-    isRevealed: boolean
-    displayValue: unknown
-    isOverridden: boolean
-    isStaged: boolean
-    editedValue: unknown
-    setFieldValue: (fieldKey: string, value: string) => void
-    cancelFieldEdit: (fieldKey: string) => void
+    valueMode: FieldRowValueMode
+    visibility: FieldRowVisibility
+    changeState: FieldRowChangeState
 }
 
+type FieldRowValueMode =
+    | {
+        kind: "editing"
+        editedValue: unknown
+        onChange: (value: string) => void
+        onCancel: () => void
+    }
+    | {
+        kind: "display"
+        displayValue: unknown
+    }
+
+type FieldRowVisibility = "visible" | "masked" | "revealed"
+type FieldRowChangeState = "default" | "changed"
+
 function FieldRowValue({
-    fieldKey,
     field,
     mergedValue,
-    isEditMode,
-    editingField,
-    isHidden,
-    isRevealed,
-    displayValue,
-    isOverridden,
-    isStaged,
-    editedValue,
-    setFieldValue,
-    cancelFieldEdit,
+    valueMode,
+    visibility,
+    changeState,
 }: FieldRowValueProps) {
-    if (isEditMode && editingField === fieldKey) {
+    if (valueMode.kind === "editing") {
         return (
             <div className="flex items-center gap-2">
                 <Input
-                    value={String(editedValue ?? mergedValue ?? "")}
-                    onChange={(event) => setFieldValue(fieldKey, event.target.value)}
+                    value={String(valueMode.editedValue ?? mergedValue ?? "")}
+                    onChange={(event) => valueMode.onChange(event.target.value)}
                     className="h-8 text-sm"
                 />
                 <Button
                     size="sm"
                     variant="ghost"
                     className="size-7 p-0"
-                    onClick={() => cancelFieldEdit(fieldKey)}
+                    onClick={valueMode.onCancel}
                     aria-label={`Cancel editing ${field.label}`}
                 >
                     <XIcon className="size-3.5" />
@@ -74,14 +73,15 @@ function FieldRowValue({
         )
     }
 
-    if (isHidden && !isRevealed) {
+    if (visibility === "masked") {
         return <span className="text-sm text-muted-foreground font-mono">******</span>
     }
 
+    const displayValue = valueMode.displayValue
     const valueClass = cn(
         "text-sm text-right",
-        (isOverridden || isStaged) && "bg-yellow-100 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded",
-        isHidden && "text-muted-foreground"
+        changeState === "changed" && "bg-yellow-100 dark:bg-yellow-900/30 px-1.5 py-0.5 rounded",
+        visibility !== "visible" && "text-muted-foreground"
     )
 
     if (displayValue === null || displayValue === undefined || displayValue === "") {
@@ -146,6 +146,17 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
     const displayValue = editedValue !== undefined ? editedValue : mergedValue
     const isOverridden = baseValue !== displayValue
     const isStaged = stagedChanges.some(c => c.field_key === fieldKey)
+    const valueMode: FieldRowValueMode =
+        isEditMode && editingField === fieldKey
+            ? {
+                kind: "editing",
+                editedValue,
+                onChange: (value) => setFieldValue(fieldKey, value),
+                onCancel: () => cancelFieldEdit(fieldKey),
+            }
+            : { kind: "display", displayValue }
+    const visibility: FieldRowVisibility = isHidden ? (isRevealed ? "revealed" : "masked") : "visible"
+    const changeState: FieldRowChangeState = isOverridden || isStaged ? "changed" : "default"
 
     return (
         <div className="flex items-center justify-between gap-4 py-1.5 border-b border-border/50 last:border-0 group">
@@ -154,19 +165,11 @@ export function FieldRow({ fieldKey, field, mergedValue, baseValue }: FieldRowPr
             </span>
             <div className="flex items-center gap-2">
                 <FieldRowValue
-                    fieldKey={fieldKey}
                     field={field}
                     mergedValue={mergedValue}
-                    isEditMode={isEditMode}
-                    editingField={editingField}
-                    isHidden={isHidden}
-                    isRevealed={isRevealed}
-                    displayValue={displayValue}
-                    isOverridden={isOverridden}
-                    isStaged={isStaged}
-                    editedValue={editedValue}
-                    setFieldValue={setFieldValue}
-                    cancelFieldEdit={cancelFieldEdit}
+                    valueMode={valueMode}
+                    visibility={visibility}
+                    changeState={changeState}
                 />
 
                 {/* Edit button */}

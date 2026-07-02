@@ -568,34 +568,56 @@ async function handleCopySignatureHtml() {
 
 interface TemplateCardProps {
     template: EmailTemplateListItem
-    isReadOnly?: boolean
-    canCopy?: boolean
-    canShare?: boolean
-    canSendTest?: boolean
-    canDelete?: boolean
-    onEdit: () => void
-    onDelete: () => void
-    onCopy: () => void
-    onShare: () => void
-    onSendTest: () => void
+    controls: TemplateCardControls
 }
 
-function TemplateCard({
-    template,
-    isReadOnly = false,
-    canCopy = false,
-    canShare = false,
-    canSendTest = false,
-    canDelete = true,
-    onEdit,
-    onDelete,
-    onCopy,
-    onShare,
-    onSendTest,
-}: TemplateCardProps) {
-    const canEdit = !template.is_system_template
-    const showDelete = !template.is_system_template && canDelete
+type TemplateCardActionKind = "send_test" | "edit" | "copy" | "share" | "delete"
+type TemplateCardActionGroup = "test" | "edit" | "share" | "danger"
 
+type TemplateCardActionConfig = {
+    group: TemplateCardActionGroup
+    label: string
+}
+
+type TemplateCardControls =
+    | {
+        kind: "actions"
+        actions: TemplateCardActionKind[]
+        onAction: (action: TemplateCardActionKind) => void
+    }
+    | { kind: "read_only" }
+
+function getTemplateCardActionConfig(kind: TemplateCardActionKind): TemplateCardActionConfig {
+    switch (kind) {
+        case "send_test":
+            return { group: "test", label: "Send test email" }
+        case "edit":
+            return { group: "edit", label: "Edit" }
+        case "copy":
+            return { group: "share", label: "Copy to My Templates" }
+        case "share":
+            return { group: "share", label: "Share with Org" }
+        case "delete":
+            return { group: "danger", label: "Delete" }
+    }
+}
+
+function getTemplateCardActionIcon(kind: TemplateCardActionKind) {
+    switch (kind) {
+        case "send_test":
+            return <SendIcon className="mr-2 size-4" />
+        case "edit":
+            return <EditIcon className="mr-2 size-4" />
+        case "copy":
+            return <CopyIcon className="mr-2 size-4" />
+        case "share":
+            return <ShareIcon className="mr-2 size-4" />
+        case "delete":
+            return <TrashIcon className="mr-2 size-4" />
+    }
+}
+
+function TemplateCard({ template, controls }: TemplateCardProps) {
     return (
         <Card className="group relative min-w-0">
             <CardHeader className="pb-3">
@@ -621,7 +643,7 @@ function TemplateCard({
                             </p>
                         )}
                     </div>
-                    {!isReadOnly && (
+                    {controls.kind === "actions" && controls.actions.length > 0 && (
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 render={
@@ -637,56 +659,31 @@ function TemplateCard({
                                 }
                             />
                             <DropdownMenuContent align="end">
-                                {canSendTest && (
-                                    <>
-                                        <DropdownMenuItem onClick={onSendTest}>
-                                            <SendIcon className="mr-2 size-4" />
-                                            Send test email
-                                        </DropdownMenuItem>
-                                        {(canEdit || canCopy || canShare || showDelete) && (
-                                            <DropdownMenuSeparator />
-                                        )}
-                                    </>
-                                )}
-                                {canEdit && (
-                                    <>
-                                        <DropdownMenuItem onClick={onEdit}>
-                                            <EditIcon className="mr-2 size-4" />
-                                            Edit
-                                        </DropdownMenuItem>
-                                        {(canCopy || canShare || showDelete) && (
-                                            <DropdownMenuSeparator />
-                                        )}
-                                    </>
-                                )}
-                                {canCopy && (
-                                    <DropdownMenuItem onClick={onCopy}>
-                                        <CopyIcon className="mr-2 size-4" />
-                                        Copy to My Templates
-                                    </DropdownMenuItem>
-                                )}
-                                {canShare && (
-                                    <DropdownMenuItem onClick={onShare}>
-                                        <ShareIcon className="mr-2 size-4" />
-                                        Share with Org
-                                    </DropdownMenuItem>
-                                )}
-                                {(canCopy || canShare) && showDelete && (
-                                    <DropdownMenuSeparator />
-                                )}
-                                {showDelete && (
-                                    <DropdownMenuItem
-                                        onClick={onDelete}
-                                        className="text-destructive"
-                                    >
-                                        <TrashIcon className="mr-2 size-4" />
-                                        Delete
-                                    </DropdownMenuItem>
-                                )}
+                                {controls.actions.map((action, index) => {
+                                    const actionConfig = getTemplateCardActionConfig(action)
+                                    const previousAction = controls.actions[index - 1]
+                                    const previousActionConfig = previousAction
+                                        ? getTemplateCardActionConfig(previousAction)
+                                        : null
+                                    return (
+                                        <React.Fragment key={action}>
+                                            {previousActionConfig && previousActionConfig.group !== actionConfig.group && (
+                                                <DropdownMenuSeparator />
+                                            )}
+                                            <DropdownMenuItem
+                                                onClick={() => controls.onAction(action)}
+                                                className={actionConfig.group === "danger" ? "text-destructive" : undefined}
+                                            >
+                                                {getTemplateCardActionIcon(action)}
+                                                {actionConfig.label}
+                                            </DropdownMenuItem>
+                                        </React.Fragment>
+                                    )
+                                })}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )}
-                    {isReadOnly && (
+                    {controls.kind === "read_only" && (
                         <Badge variant="outline" className="text-xs shrink-0">
                             <LockIcon className="size-3 mr-1" />
                             View Only
@@ -1332,20 +1329,47 @@ export default function EmailTemplatesPage() {
                                 {personalTemplates.map((template) => {
                                     const isOwner = template.owner_user_id === user?.user_id
                                     const canSendPersonalTest = isOwner || canManageEmailTemplates
+                                    const actions: TemplateCardActionKind[] = []
+                                    if (canSendPersonalTest) {
+                                        actions.push("send_test")
+                                    }
+                                    if (!template.is_system_template) {
+                                        actions.push("edit")
+                                    }
+                                    if (isOwner) {
+                                        actions.push("share")
+                                    }
+                                    if (isOwner && !template.is_system_template) {
+                                        actions.push("delete")
+                                    }
+                                    const controls: TemplateCardControls = !isOwner && !isAdmin
+                                        ? { kind: "read_only" }
+                                        : {
+                                            kind: "actions",
+                                            actions,
+                                            onAction: (action) => {
+                                                if (action === "send_test") {
+                                                    handleOpenTestDialog(template)
+                                                    return
+                                                }
+                                                if (action === "edit") {
+                                                    handleOpenModal(template)
+                                                    return
+                                                }
+                                                if (action === "share") {
+                                                    handleOpenShareDialog(template)
+                                                    return
+                                                }
+                                                if (action === "delete") {
+                                                    handleDelete(template.id)
+                                                }
+                                            },
+                                        }
                                     return (
                                         <TemplateCard
                                             key={template.id}
                                             template={template}
-                                            isReadOnly={!isOwner && !isAdmin}
-                                            canCopy={false}
-                                            canShare={isOwner}
-                                            canSendTest={canSendPersonalTest}
-                                            canDelete={isOwner}
-                                            onEdit={() => handleOpenModal(template)}
-                                            onDelete={() => handleDelete(template.id)}
-                                            onCopy={() => {}}
-                                            onShare={() => handleOpenShareDialog(template)}
-                                            onSendTest={() => handleOpenTestDialog(template)}
+                                            controls={controls}
                                         />
                                     )
                                 })}
@@ -1374,21 +1398,49 @@ export default function EmailTemplatesPage() {
                             </Card>
                         ) : (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {orgTemplates.map((template) => (
-                                    <TemplateCard
-                                        key={template.id}
-                                        template={template}
-                                        isReadOnly={!canManageEmailTemplates && !template.is_system_template}
-                                        canCopy={true}
-                                        canShare={false}
-                                        canSendTest={canManageEmailTemplates}
-                                        onEdit={() => handleOpenModal(template)}
-                                        onDelete={() => handleDelete(template.id)}
-                                        onCopy={() => handleOpenCopyDialog(template)}
-                                        onShare={() => {}}
-                                        onSendTest={() => handleOpenTestDialog(template)}
-                                    />
-                                ))}
+                                {orgTemplates.map((template) => {
+                                    const actions: TemplateCardActionKind[] = []
+                                    if (canManageEmailTemplates) {
+                                        actions.push("send_test")
+                                    }
+                                    if (canManageEmailTemplates && !template.is_system_template) {
+                                        actions.push("edit")
+                                    }
+                                    actions.push("copy")
+                                    if (canManageEmailTemplates && !template.is_system_template) {
+                                        actions.push("delete")
+                                    }
+                                    const controls: TemplateCardControls = !canManageEmailTemplates && !template.is_system_template
+                                        ? { kind: "read_only" }
+                                        : {
+                                            kind: "actions",
+                                            actions,
+                                            onAction: (action) => {
+                                                if (action === "send_test") {
+                                                    handleOpenTestDialog(template)
+                                                    return
+                                                }
+                                                if (action === "edit") {
+                                                    handleOpenModal(template)
+                                                    return
+                                                }
+                                                if (action === "copy") {
+                                                    handleOpenCopyDialog(template)
+                                                    return
+                                                }
+                                                if (action === "delete") {
+                                                    handleDelete(template.id)
+                                                }
+                                            },
+                                        }
+                                    return (
+                                        <TemplateCard
+                                            key={template.id}
+                                            template={template}
+                                            controls={controls}
+                                        />
+                                    )
+                                })}
                             </div>
                         )}
                     </TabsContent>

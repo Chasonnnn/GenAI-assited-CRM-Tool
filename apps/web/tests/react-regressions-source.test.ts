@@ -20,7 +20,8 @@ function readFunctionSource(source: string, functionName: string): string {
 
     const nextFunction = source.indexOf("\nfunction ", start + 1)
     const nextExport = source.indexOf("\nexport function ", start + 1)
-    const nextMarkers = [nextFunction, nextExport].filter((index) => index > start)
+    const nextDefaultExport = source.indexOf("\nexport default function ", start + 1)
+    const nextMarkers = [nextFunction, nextExport, nextDefaultExport].filter((index) => index > start)
     const end = nextMarkers.length ? Math.min(...nextMarkers) : source.length
     return source.slice(start, end)
 }
@@ -1771,6 +1772,37 @@ describe("React regression guards (source)", () => {
         expect(surrogateAiTabSource).toContain("draftEmailStatus")
         expect(surrogateAiTabSource).not.toContain("isGeneratingSummary")
         expect(surrogateAiTabSource).not.toContain("isDraftingEmail")
+    })
+
+    it("keeps boolean-heavy action and value state out of component prop APIs", () => {
+        const emailTemplatesSource = readSource("app/(app)/automation/email-templates/page.tsx")
+        const pipelinesSource = readSource("app/(app)/settings/pipelines/page.tsx")
+        const fieldRowSource = readSource("components/surrogates/profile/ProfileCard/FieldRow.tsx")
+        const templateCardSource = readFunctionSource(emailTemplatesSource, "TemplateCard")
+        const draftActionsSource = readFunctionSource(pipelinesSource, "DraftActionsCard")
+        const fieldRowValueSource = readFunctionSource(fieldRowSource, "FieldRowValue")
+
+        expect(templateCardSource).toContain("controls")
+        expect(templateCardSource).not.toContain("isReadOnly")
+        expect(templateCardSource).not.toContain("canCopy")
+        expect(templateCardSource).not.toContain("canShare")
+        expect(templateCardSource).not.toContain("canSendTest")
+        expect(templateCardSource).not.toContain("canDelete")
+        expect(draftActionsSource).toContain("saveState")
+        expect(pipelinesSource).toContain('"preview_loading"')
+        expect(draftActionsSource).not.toContain("isSaving")
+        expect(draftActionsSource).not.toContain("isPreviewLoading")
+        expect(draftActionsSource).not.toContain("hasValidationErrors")
+        expect(draftActionsSource).not.toContain("hasBlockingIssues")
+        expect(fieldRowValueSource).toContain("valueMode")
+        expect(fieldRowValueSource).toContain("visibility")
+        expect(fieldRowValueSource).toContain("changeState")
+        expect(fieldRowValueSource).not.toContain("isEditMode")
+        expect(fieldRowValueSource).not.toContain("editingField")
+        expect(fieldRowValueSource).not.toContain("isHidden")
+        expect(fieldRowValueSource).not.toContain("isRevealed")
+        expect(fieldRowValueSource).not.toContain("isOverridden")
+        expect(fieldRowValueSource).not.toContain("isStaged")
     })
 
     it("uses functional updates for public booking form fields", () => {

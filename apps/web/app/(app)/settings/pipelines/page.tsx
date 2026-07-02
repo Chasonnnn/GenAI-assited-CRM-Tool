@@ -2215,31 +2215,29 @@ function ImpactPreviewCard({
     )
 }
 
+type DraftSaveState = "ready" | "saving" | "preview_loading" | "validation_errors" | "blocking_issues"
+
 function DraftActionsCard({
-    isSaving,
-    isPreviewLoading,
-    hasValidationErrors,
-    hasBlockingIssues,
+    saveState,
     onSave,
     onDiscard,
 }: {
-    isSaving: boolean
-    isPreviewLoading: boolean
-    hasValidationErrors: boolean
-    hasBlockingIssues: boolean
+    saveState: DraftSaveState
     onSave: () => void
     onDiscard: () => void
 }) {
+    const savePending = saveState === "saving"
+
     return (
         <Card>
             <CardContent className="pt-6">
                 <div className="flex flex-col gap-3 sm:flex-row">
                     <Button
                         onClick={onSave}
-                        disabled={isPreviewLoading || hasValidationErrors || hasBlockingIssues || isSaving}
+                        disabled={saveState !== "ready"}
                         className="flex-1"
                     >
-                        {isSaving ? (
+                        {savePending ? (
                             <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />
                         ) : (
                             <SaveIcon className="mr-2 size-4" aria-hidden="true" />
@@ -2702,10 +2700,17 @@ export default function PipelinesSettingsPage() {
 
                     {hasChanges ? (
                         <DraftActionsCard
-                            isSaving={isSaving}
-                            isPreviewLoading={isPreviewLoading}
-                            hasValidationErrors={validationErrors.length > 0}
-                            hasBlockingIssues={blockingIssues.length > 0}
+                            saveState={
+                                isSaving
+                                    ? "saving"
+                                    : isPreviewLoading
+                                        ? "preview_loading"
+                                        : validationErrors.length > 0
+                                            ? "validation_errors"
+                                            : blockingIssues.length > 0
+                                                ? "blocking_issues"
+                                                : "ready"
+                            }
                             onSave={handleSave}
                             onDiscard={handleReset}
                         />

@@ -3354,3 +3354,25 @@ Full command after Batch 151: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 62 warnings`
 - Removed globally since Batch 150: remaining `react-doctor/prefer-explicit-variants` (`2` warnings); that rule is no longer present in the full scan.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2d5b636b-4b2d-4a41-8810-b75111cb9365`
+
+## Batch 152
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-many-boolean-props` | `app/(app)/automation/email-templates/page.tsx`, `app/(app)/settings/pipelines/page.tsx`, `components/surrogates/profile/ProfileCard/FieldRow.tsx` | Valid. Subagents confirmed the `TemplateCard` and `DraftActionsCard` findings; local inspection confirmed `FieldRowValue` received related edit/visibility/change booleans from a single caller. | High | Replaced `TemplateCard` capability booleans with a discriminated controls model using pure action IDs plus one action dispatcher, avoiding the callback-object shape that initially triggered a React Compiler ref diagnostic. Collapsed `DraftActionsCard` booleans into a single `DraftSaveState` enum. Grouped `FieldRowValue` props into `valueMode`, `visibility`, and `changeState`. Added a source guard for all three component APIs. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "boolean-heavy action"` failed on the old `TemplateCard` API. GREEN: the same guard passed after the refactor; `pnpm test --run tests/email-templates-page.test.tsx tests/pipelines-settings-page.test.tsx tests/surrogate-profile-card-accessibility.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor no longer reports `no-many-boolean-props`. |
+
+Changed-scope command after Batch 152: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `5`
+- Summary: residual pre-existing warnings in `app/(app)/automation/email-templates/page.tsx`: `react-doctor/no-giant-component` (`1`), `react-doctor/prefer-useReducer` (`1`), and `react-doctor/no-event-handler` (`3`).
+- Removed from changed-scope results: the targeted `react-doctor/no-many-boolean-props` findings in `TemplateCard`, `DraftActionsCard`, and `FieldRowValue`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c00184c-25ac-4204-a8d8-220f8d953157`
+
+Full command after Batch 152: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `159`
+- Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
+- Removed globally since Batch 151: `react-doctor/no-many-boolean-props` (`3` warnings); that rule is no longer present in the full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8240b56d-b53c-4d2c-936f-5e60428b02da`
