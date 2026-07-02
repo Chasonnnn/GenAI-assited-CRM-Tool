@@ -2890,3 +2890,26 @@ Full command after Batch 128: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 95 warnings`, `Performance 21 warnings`, `Accessibility 14 warnings`, `Maintainability 139 warnings`
 - Removed globally: `react-doctor/jsx-key` (`11` errors)
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3dca72fa-9bde-42cf-bad0-7bc564287c97`
+
+## Batch 129
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/appointments/UnifiedCalendar.tsx` | Valid scanner finding: all 29 flagged calls resolved to React's `memo`, `useMemo`, or `useCallback` import in a file covered by React Compiler (`reactCompiler: true`, `babel-plugin-react-compiler@1.0.0`). The wrapped component outputs, date-range derivations, formatter objects, grouped calendar maps, agenda lists, and event handlers did not need preserve-manual-memoization semantics. | High | Removed the React `memo`, `useMemo`, and `useCallback` import and wrappers; converted the memoized item components to plain function components; derived calendar maps, agenda lists, date-range params, timezone formatters, and handlers directly during render so React Compiler can cache them. Added/updated source guards to keep UnifiedCalendar free of manual React memoization while preserving direct `Intl.DateTimeFormat` construction without `new`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "unified calendar manual memoization\|production date-time formatters"` failed on the old `memo(function`, `useMemo`, and formatter expectations. GREEN: the same guard passed; `pnpm test --run tests/unified-calendar-reschedule-dnd.test.tsx` passed with `4` behavior tests; `pnpm test --run tests/appointments-google-meet.test.tsx -t "appointment details\|reschedule\|Google Meet join link"` passed with `4` behavior tests; `pnpm test --run tests/react-regressions-source.test.ts -t "immutable sorting in unified calendar\|resets unified calendar\|subtle calendar accents\|rendered list keys"` passed with `4` guards; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Changed-scope React Doctor no longer reports manual memoization in `UnifiedCalendar.tsx`. |
+| `react-doctor/prefer-tag-over-role`, `react-doctor/rerender-state-only-in-handlers`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `components/appointments/UnifiedCalendar.tsx` | Valid residual findings surfaced in the changed file, but outside this manual-memoization batch. The role-to-button fixes affect interactive element semantics; the drag-state refactor changes drag state ownership; the giant-component/useReducer warnings imply a broader calendar split/state-machine refactor. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scored `90 / 100` with `8` warnings: `4` accessibility, `1` performance, `1` bug, `2` maintainability. |
+
+Changed-scope command after Batch 129: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `8`
+- Summary: `Bugs 1 warning`, `Performance 1 warning`, `Accessibility 4 warnings`, `Maintainability 2 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-844f2939-f581-458d-b2a9-ea9fc5e01308`
+- Note: `react-doctor/react-compiler-no-manual-memoization` no longer appears in changed-scope diagnostics.
+
+Full command after Batch 129: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics: `240`
+- Summary: `Bugs 95 warnings`, `Performance 21 warnings`, `Accessibility 14 warnings`, `Maintainability 110 warnings`
+- Removed globally: `react-doctor/react-compiler-no-manual-memoization` in `UnifiedCalendar.tsx` (`29` warnings)
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-914b4e93-e94e-4f81-9347-4a08681cd550`

@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { memo, useState, useMemo, useCallback, type KeyboardEvent } from "react"
+import { useState, type KeyboardEvent } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -126,7 +126,7 @@ type ViewType = "month" | "week" | "day"
 // Task Item Component
 // =============================================================================
 
-const TaskItem = memo(function TaskItem({
+function TaskItem({
     task,
     compact = false,
     onClick,
@@ -196,13 +196,13 @@ const TaskItem = memo(function TaskItem({
             {fullContent}
         </div>
     )
-})
+}
 
 // =============================================================================
 // Google Calendar Event Component
 // =============================================================================
 
-const GoogleEventItem = memo(function GoogleEventItem({
+function GoogleEventItem({
     event,
     compact = false,
 }: {
@@ -252,13 +252,13 @@ const GoogleEventItem = memo(function GoogleEventItem({
             <p className="text-xs text-muted-foreground/70">Google Calendar</p>
         </div>
     )
-})
+}
 
 // =============================================================================
 // Event Item Component
 // =============================================================================
 
-const EventItem = memo(function EventItem({
+function EventItem({
     appointment,
     onClick,
     compact = false,
@@ -315,7 +315,7 @@ const EventItem = memo(function EventItem({
             )}
         </div>
     )
-})
+}
 
 // =============================================================================
 // Appointment Detail Dialog
@@ -353,32 +353,23 @@ function AppointmentDetailDialog({
     const surrogates = surrogatesData?.items || []
     const ips = ipsData?.items || []
 
-    const userTimezone = useMemo(
-        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
-        []
-    )
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles"
     const clientTimezone = appointment?.client_timezone || userTimezone
     const showClientTimezone = !!appointment && clientTimezone !== userTimezone
 
-    const clientDateFormatter = useMemo(
-        () => Intl.DateTimeFormat(undefined, {
-            timeZone: clientTimezone,
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        }),
-        [clientTimezone]
-    )
+    const clientDateFormatter = Intl.DateTimeFormat(undefined, {
+        timeZone: clientTimezone,
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    })
 
-    const clientTimeFormatter = useMemo(
-        () => Intl.DateTimeFormat(undefined, {
-            timeZone: clientTimezone,
-            hour: "numeric",
-            minute: "2-digit",
-        }),
-        [clientTimezone]
-    )
+    const clientTimeFormatter = Intl.DateTimeFormat(undefined, {
+        timeZone: clientTimezone,
+        hour: "numeric",
+        minute: "2-digit",
+    })
 
     const formatDateInClientZone = (iso: string) => clientDateFormatter.format(new Date(iso))
     const formatTimeInClientZone = (iso: string) => clientTimeFormatter.format(new Date(iso))
@@ -690,68 +681,56 @@ function MonthView({
     onDragLeave?: (e: React.DragEvent) => void
     onOpenDayAgenda?: (day: Date) => void
 }) {
-    const days = useMemo(() => {
-        const monthStart = startOfMonth(currentDate)
-        const monthEnd = endOfMonth(currentDate)
-        const calendarStart = startOfWeek(monthStart)
-        const calendarEnd = endOfWeek(monthEnd)
+    const monthStart = startOfMonth(currentDate)
+    const monthEnd = endOfMonth(currentDate)
+    const calendarStart = startOfWeek(monthStart)
+    const calendarEnd = endOfWeek(monthEnd)
+    const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
-        return eachDayOfInterval({ start: calendarStart, end: calendarEnd })
-    }, [currentDate])
+    const appointmentsByDate = new Map<string, AppointmentListItem[]>()
+    appointments.forEach((appt) => {
+        const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
+        if (!appointmentsByDate.has(dateStr)) appointmentsByDate.set(dateStr, [])
+        appointmentsByDate.get(dateStr)!.push(appt)
+    })
 
-    const appointmentsByDate = useMemo(() => {
-        const map = new Map<string, AppointmentListItem[]>()
-        appointments.forEach((appt) => {
-            const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(appt)
-        })
-        return map
-    }, [appointments])
+    const tasksByDate = new Map<string, TaskListItem[]>()
+    tasks.forEach((task) => {
+        if (!task.due_date) return
+        const dateStr = task.due_date
+        if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, [])
+        tasksByDate.get(dateStr)!.push(task)
+    })
 
-    const tasksByDate = useMemo(() => {
-        const map = new Map<string, TaskListItem[]>()
-        tasks.forEach((task) => {
-            if (!task.due_date) return
-            const dateStr = task.due_date
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(task)
-        })
-        return map
-    }, [tasks])
+    const googleEventsByDate = new Map<string, GoogleCalendarEvent[]>()
+    googleEvents.forEach((event) => {
+        if (event.is_all_day) {
+            // All-day events can span multiple days. Google's end date is exclusive.
+            // Extract dates directly to avoid TZ shift
+            const startDate = event.start.slice(0, 10)  // YYYY-MM-DD
+            const endDate = event.end.slice(0, 10)      // YYYY-MM-DD (exclusive)
 
-    const googleEventsByDate = useMemo(() => {
-        const map = new Map<string, GoogleCalendarEvent[]>()
-        googleEvents.forEach((event) => {
-            if (event.is_all_day) {
-                // All-day events can span multiple days. Google's end date is exclusive.
-                // Extract dates directly to avoid TZ shift
-                const startDate = event.start.slice(0, 10)  // YYYY-MM-DD
-                const endDate = event.end.slice(0, 10)      // YYYY-MM-DD (exclusive)
+            // Expand across all days the event spans
+            const start = parseISO(startDate)
+            const end = parseISO(endDate)
+            // End is exclusive, so we go up to but not including end
+            const daysToShow = eachDayOfInterval({
+                start,
+                end: new Date(end.getTime() - 86400000), // Subtract 1 day
+            })
 
-                // Expand across all days the event spans
-                const start = parseISO(startDate)
-                const end = parseISO(endDate)
-                // End is exclusive, so we go up to but not including end
-                const daysToShow = eachDayOfInterval({
-                    start,
-                    end: new Date(end.getTime() - 86400000), // Subtract 1 day
-                })
-
-                daysToShow.forEach((day) => {
-                    const dateStr = format(day, "yyyy-MM-dd")
-                    if (!map.has(dateStr)) map.set(dateStr, [])
-                    map.get(dateStr)!.push(event)
-                })
-            } else {
-                // Timed events: use parsed date
-                const dateStr = format(parseISO(event.start), "yyyy-MM-dd")
-                if (!map.has(dateStr)) map.set(dateStr, [])
-                map.get(dateStr)!.push(event)
-            }
-        })
-        return map
-    }, [googleEvents])
+            daysToShow.forEach((day) => {
+                const dateStr = format(day, "yyyy-MM-dd")
+                if (!googleEventsByDate.has(dateStr)) googleEventsByDate.set(dateStr, [])
+                googleEventsByDate.get(dateStr)!.push(event)
+            })
+        } else {
+            // Timed events: use parsed date
+            const dateStr = format(parseISO(event.start), "yyyy-MM-dd")
+            if (!googleEventsByDate.has(dateStr)) googleEventsByDate.set(dateStr, [])
+            googleEventsByDate.get(dateStr)!.push(event)
+        }
+    })
 
     return (
         <div className="border border-border rounded-lg overflow-hidden">
@@ -902,27 +881,24 @@ function DayAgendaSheet({
 }) {
     const dateStr = day ? format(day, "yyyy-MM-dd") : null
 
-    const dayAppointments = useMemo(() => {
-        if (!dateStr) return []
-        return appointments
+    const dayAppointments = dateStr
+        ? appointments
             .filter((appt) => format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr)
             .toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
-    }, [appointments, dateStr])
+        : []
 
-    const dayTasks = useMemo(() => {
-        if (!dateStr) return []
-        return tasks
+    const dayTasks = dateStr
+        ? tasks
             .filter((task) => task.due_date === dateStr)
             .toSorted((a, b) => {
                 const first = a.due_time ?? "99:99:99"
                 const second = b.due_time ?? "99:99:99"
                 return first.localeCompare(second)
             })
-    }, [dateStr, tasks])
+        : []
 
-    const dayGoogleEvents = useMemo(() => {
-        if (!dateStr) return []
-        return googleEvents
+    const dayGoogleEvents = dateStr
+        ? googleEvents
             .filter((event) => {
                 if (event.is_all_day) {
                     const startDate = event.start.slice(0, 10)
@@ -936,23 +912,17 @@ function DayAgendaSheet({
                 if (!a.is_all_day && b.is_all_day) return 1
                 return a.start.localeCompare(b.start)
             })
-    }, [dateStr, googleEvents])
+        : []
 
     const totalItems = dayAppointments.length + dayTasks.length + dayGoogleEvents.length
-    const handleAgendaAppointmentClick = useCallback(
-        (appointment: AppointmentListItem) => {
-            onOpenChange(false)
-            onEventClick(appointment)
-        },
-        [onEventClick, onOpenChange]
-    )
-    const handleAgendaTaskClick = useCallback(
-        (task: TaskListItem) => {
-            onOpenChange(false)
-            onTaskClick?.(task)
-        },
-        [onOpenChange, onTaskClick]
-    )
+    const handleAgendaAppointmentClick = (appointment: AppointmentListItem) => {
+        onOpenChange(false)
+        onEventClick(appointment)
+    }
+    const handleAgendaTaskClick = (task: TaskListItem) => {
+        onOpenChange(false)
+        onTaskClick?.(task)
+    }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1051,58 +1021,47 @@ function WeekView({
     onEventClick: (appt: AppointmentListItem) => void
     onTaskClick?: (task: TaskListItem) => void
 }) {
-    const days = useMemo(() => {
-        const weekStart = startOfWeek(currentDate)
-        const weekEnd = endOfWeek(currentDate)
-        return eachDayOfInterval({ start: weekStart, end: weekEnd })
-    }, [currentDate])
+    const weekStart = startOfWeek(currentDate)
+    const weekEnd = endOfWeek(currentDate)
+    const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
 
-    const appointmentsByDate = useMemo(() => {
-        const map = new Map<string, AppointmentListItem[]>()
-        appointments.forEach((appt) => {
-            const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(appt)
-        })
-        return map
-    }, [appointments])
+    const appointmentsByDate = new Map<string, AppointmentListItem[]>()
+    appointments.forEach((appt) => {
+        const dateStr = format(parseISO(appt.scheduled_start), "yyyy-MM-dd")
+        if (!appointmentsByDate.has(dateStr)) appointmentsByDate.set(dateStr, [])
+        appointmentsByDate.get(dateStr)!.push(appt)
+    })
 
-    const tasksByDate = useMemo(() => {
-        const map = new Map<string, TaskListItem[]>()
-        tasks.forEach((task) => {
-            if (!task.due_date) return
-            const dateStr = task.due_date
-            if (!map.has(dateStr)) map.set(dateStr, [])
-            map.get(dateStr)!.push(task)
-        })
-        return map
-    }, [tasks])
+    const tasksByDate = new Map<string, TaskListItem[]>()
+    tasks.forEach((task) => {
+        if (!task.due_date) return
+        const dateStr = task.due_date
+        if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, [])
+        tasksByDate.get(dateStr)!.push(task)
+    })
 
-    const googleEventsByDate = useMemo(() => {
-        const map = new Map<string, GoogleCalendarEvent[]>()
-        googleEvents.forEach((event) => {
-            if (event.is_all_day) {
-                const startDate = event.start.slice(0, 10)
-                const endDate = event.end.slice(0, 10)
-                const start = parseISO(startDate)
-                const end = parseISO(endDate)
-                const daysToShow = eachDayOfInterval({
-                    start,
-                    end: new Date(end.getTime() - 86400000),
-                })
-                daysToShow.forEach((day) => {
-                    const dateStr = format(day, "yyyy-MM-dd")
-                    if (!map.has(dateStr)) map.set(dateStr, [])
-                    map.get(dateStr)!.push(event)
-                })
-            } else {
-                const dateStr = format(parseISO(event.start), "yyyy-MM-dd")
-                if (!map.has(dateStr)) map.set(dateStr, [])
-                map.get(dateStr)!.push(event)
-            }
-        })
-        return map
-    }, [googleEvents])
+    const googleEventsByDate = new Map<string, GoogleCalendarEvent[]>()
+    googleEvents.forEach((event) => {
+        if (event.is_all_day) {
+            const startDate = event.start.slice(0, 10)
+            const endDate = event.end.slice(0, 10)
+            const start = parseISO(startDate)
+            const end = parseISO(endDate)
+            const daysToShow = eachDayOfInterval({
+                start,
+                end: new Date(end.getTime() - 86400000),
+            })
+            daysToShow.forEach((day) => {
+                const dateStr = format(day, "yyyy-MM-dd")
+                if (!googleEventsByDate.has(dateStr)) googleEventsByDate.set(dateStr, [])
+                googleEventsByDate.get(dateStr)!.push(event)
+            })
+        } else {
+            const dateStr = format(parseISO(event.start), "yyyy-MM-dd")
+            if (!googleEventsByDate.has(dateStr)) googleEventsByDate.set(dateStr, [])
+            googleEventsByDate.get(dateStr)!.push(event)
+        }
+    })
 
     return (
         <div className="grid grid-cols-7 gap-2">
@@ -1173,30 +1132,24 @@ function DayView({
 }) {
     const dateStr = format(currentDate, "yyyy-MM-dd")
 
-    const dayAppointments = useMemo(() => {
-        return appointments.filter((appt) =>
-            format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr
-        ).toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
-    }, [dateStr, appointments])
+    const dayAppointments = appointments.filter((appt) =>
+        format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr
+    ).toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
 
-    const dayTasks = useMemo(() => {
-        return tasks.filter((task) => task.due_date === dateStr)
-    }, [dateStr, tasks])
+    const dayTasks = tasks.filter((task) => task.due_date === dateStr)
 
-    const dayGoogleEvents = useMemo(() => {
-        return googleEvents.filter((event) => {
-            if (event.is_all_day) {
-                // Multi-day all-day events: check if dateStr falls within range
-                const startDate = event.start.slice(0, 10)
-                const endDate = event.end.slice(0, 10)  // Exclusive
-                // dateStr should be >= start and < end
-                return dateStr >= startDate && dateStr < endDate
-            } else {
-                const eventDate = format(parseISO(event.start), "yyyy-MM-dd")
-                return eventDate === dateStr
-            }
-        })
-    }, [dateStr, googleEvents])
+    const dayGoogleEvents = googleEvents.filter((event) => {
+        if (event.is_all_day) {
+            // Multi-day all-day events: check if dateStr falls within range
+            const startDate = event.start.slice(0, 10)
+            const endDate = event.end.slice(0, 10)  // Exclusive
+            // dateStr should be >= start and < end
+            return dateStr >= startDate && dateStr < endDate
+        } else {
+            const eventDate = format(parseISO(event.start), "yyyy-MM-dd")
+            return eventDate === dateStr
+        }
+    })
 
     const allDayEvents = dayGoogleEvents.filter(e => e.is_all_day)
     const timedGoogleEvents = dayGoogleEvents.filter(e => !e.is_all_day)
@@ -1316,14 +1269,12 @@ export function UnifiedCalendar({
     const [dragOverDate, setDragOverDate] = useState<string | null>(null)
 
     // Fetch appointments for current view range
-    const dateRange = useMemo(() => {
-        const start = startOfMonth(subMonths(currentDate, 1))
-        const end = endOfMonth(addMonths(currentDate, 1))
-        return {
-            date_start: format(start, "yyyy-MM-dd"),
-            date_end: format(end, "yyyy-MM-dd"),
-        }
-    }, [currentDate])
+    const start = startOfMonth(subMonths(currentDate, 1))
+    const end = endOfMonth(addMonths(currentDate, 1))
+    const dateRange = {
+        date_start: format(start, "yyyy-MM-dd"),
+        date_end: format(end, "yyyy-MM-dd"),
+    }
 
     const {
         appointments,
@@ -1359,28 +1310,28 @@ export function UnifiedCalendar({
         setDialogOpen(true)
     }
 
-    const handleOpenDayAgenda = useCallback((day: Date) => {
+    const handleOpenDayAgenda = (day: Date) => {
         setDayAgendaDate(day)
         setDayAgendaOpen(true)
-    }, [])
+    }
 
     // Drag handlers
-    const handleDragStart = useCallback((e: React.DragEvent, appointment: AppointmentListItem) => {
+    const handleDragStart = (e: React.DragEvent, appointment: AppointmentListItem) => {
         setDraggedAppointment(appointment)
         e.dataTransfer.effectAllowed = "move"
         e.dataTransfer.setData("text/plain", appointment.id)
-    }, [])
+    }
 
-    const handleDragOver = useCallback((e: React.DragEvent, date: Date) => {
+    const handleDragOver = (e: React.DragEvent, date: Date) => {
         e.preventDefault()
         setDragOverDate(format(date, "yyyy-MM-dd"))
-    }, [])
+    }
 
-    const handleDragLeave = useCallback(() => {
+    const handleDragLeave = () => {
         setDragOverDate(null)
-    }, [])
+    }
 
-    const handleDrop = useCallback((e: React.DragEvent, date: Date) => {
+    const handleDrop = (e: React.DragEvent, date: Date) => {
         e.preventDefault()
         setDragOverDate(null)
 
@@ -1408,10 +1359,10 @@ export function UnifiedCalendar({
         setDragRescheduleDateSeed(format(targetDate, "yyyy-MM-dd"))
         setDragRescheduleDialogOpen(true)
         setDraggedAppointment(null)
-    }, [draggedAppointment])
-    const handleTodayClick = useCallback(() => {
+    }
+    const handleTodayClick = () => {
         setCurrentDate(new Date())
-    }, [])
+    }
     const appointmentDetailDialogKey = dialogOpen && selectedAppointment
         ? [
             selectedAppointment.id,

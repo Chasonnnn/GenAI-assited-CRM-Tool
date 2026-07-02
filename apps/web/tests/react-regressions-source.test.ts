@@ -1802,6 +1802,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain(".sort((a, b) => {")
     })
 
+    it("keeps unified calendar manual memoization out of React Compiler output", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+
+        expect(source).not.toContain("memo(function")
+        expect(source).not.toContain("useMemo(")
+        expect(source).not.toContain("useCallback(")
+        expect(source).not.toContain("React.useMemo(")
+        expect(source).not.toContain("React.useCallback(")
+        expect(source).toContain("function TaskItem(")
+        expect(source).toContain("function GoogleEventItem(")
+        expect(source).toContain("function EventItem(")
+        expect(source).toContain("const clientDateFormatter = Intl.DateTimeFormat(")
+        expect(source).toContain("const clientTimeFormatter = Intl.DateTimeFormat(")
+    })
+
     it("resets unified calendar appointment detail draft state by keying the dialog", () => {
         const source = readSource("components/appointments/UnifiedCalendar.tsx")
 
@@ -2915,8 +2930,8 @@ describe("React regression guards (source)", () => {
         const dateKeysSource = readSource("lib/utils/date-keys.ts")
         const formattersSource = readSource("lib/formatters.ts")
 
-        expect(unifiedCalendarSource).toContain("clientDateFormatter = useMemo(")
-        expect(unifiedCalendarSource).toContain("clientTimeFormatter = useMemo(")
+        expect(unifiedCalendarSource).toContain("const clientDateFormatter = Intl.DateTimeFormat(")
+        expect(unifiedCalendarSource).toContain("const clientTimeFormatter = Intl.DateTimeFormat(")
         expect(unifiedCalendarSource).not.toMatch(/new Intl\.DateTimeFormat/)
         expect(publicBookingSource).toContain("function useBookingDateTimeFormatters")
         expect(publicBookingSource).toContain("const timeFormatter = Intl.DateTimeFormat")
