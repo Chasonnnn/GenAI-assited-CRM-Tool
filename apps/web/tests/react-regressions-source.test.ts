@@ -1859,6 +1859,7 @@ describe("React regression guards (source)", () => {
     it("keeps surrogate card, task calendar, and CSV derived lists single pass", () => {
         const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
         const taskCalendarSource = readSource("components/surrogates/SurrogateTasksCalendar.tsx")
+        const taskViewModeSource = readSource("components/surrogates/use-surrogate-task-view-mode.ts")
         const csvUploadSource = readSource("components/import/CSVUpload.tsx")
         const metaMappingSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
 
@@ -1867,7 +1868,10 @@ describe("React regression guards (source)", () => {
         expect(medicalInsuranceSource).not.toContain("useMemo")
         expect(medicalInsuranceSource).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*?\)\.map\(/)
         expect(medicalInsuranceSource).not.toMatch(/SECTION_CONFIGS\.filter\([\s\S]*?\)\s*\.filter\(/)
-        expect(taskCalendarSource).toContain("const orphanedCompletedTasks = useMemo")
+        expect(taskCalendarSource).toContain("const taskGroups = buildTaskGroups(tasks)")
+        expect(taskCalendarSource).not.toContain("useMemo")
+        expect(taskViewModeSource).toContain("useSyncExternalStore")
+        expect(taskViewModeSource).not.toContain("useEffect")
         expect(taskCalendarSource).not.toContain("tasks.filter(t => t.is_completed).map")
         expect(csvUploadSource).not.toMatch(/const unmatched = mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)
         expect(csvUploadSource).not.toMatch(/new Set\(\s*mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)

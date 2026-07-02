@@ -2735,3 +2735,24 @@ Full command after Batch 121: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `371`
 - Summary: `Bugs 136 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 190 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8177f010-1403-4ee0-af62-c682de93c3f4`
+
+## Batch 122
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/SurrogateTasksCalendar.tsx` | Valid scanner finding: all three flagged `useMemo` calls resolved to the React named import. React Compiler is enabled through `next.config.js`, and the React Doctor rule docs say to replace React `useMemo` wrappers with plain derivations when no preserve-manual-memoization case applies. | High | Moved task grouping, orphaned-completed detection, completed-count derivation, and due-label formatting into pure helpers, then used plain render-time derivations from the calendar shell. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate card, task calendar"` failed before implementation because the sync-store helper did not exist and the old source still used memoized derivations. GREEN: the same guard passed; `pnpm test --run tests/surrogate-tasks-calendar-accessibility.test.tsx` passed with `2` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`; changed-scope React Doctor scored `100 / 100`. Full diagnostics dropped from `371` to `366`; global redundant manual memoization dropped from `76` to `73`. |
+| `react-doctor/no-event-handler` | `components/surrogates/SurrogateTasksCalendar.tsx:91` | Valid underlying smell: the effect was not an event-handler workflow, but it was still initializing client storage state from an effect. The React Doctor docs call `useSyncExternalStore` the hydration-safe path for external client state. | High | Replaced the mounted-state/localStorage effect with `useSurrogateTaskViewMode`, backed by `useSyncExternalStore`, a server snapshot, a storage-event subscription, and a same-tab custom event after view changes. Added behavior coverage for persisted calendar view and list-view persistence. | The new persisted-view behavior test passed; changed-scope React Doctor reported no issues; full `no-event-handler` diagnostics dropped from `52` to `51`. |
+| `react-doctor/no-giant-component` | `components/surrogates/SurrogateTasksCalendar.tsx:78` | Valid scanner finding: the component mixed the shell, header controls, empty state, list rendering, due-label formatting, and derivation logic. | High | Split the shell into focused files: `SurrogateTasksCalendarHeader.tsx`, `SurrogateTasksEmptyState.tsx`, `SurrogateTasksListView.tsx`, `surrogate-task-derivations.ts`, and `use-surrogate-task-view-mode.ts`. | Changed-scope React Doctor reported no issues; full `no-giant-component` diagnostics dropped from `56` to `55`. |
+
+Changed-scope command after Batch 122: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 122: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `69 / 100 Needs work`
+- Total diagnostics: `366`
+- Summary: `Bugs 135 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 186 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f5798063-995f-4cbe-a876-12541aa212ab`
