@@ -267,6 +267,15 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("TrustedSanitizedHtmlContent")
     })
 
+    it("keeps safe HTML parsing and sanitization free of manual React memoization", () => {
+        const source = readSource("components/safe-html-content.tsx")
+
+        expect(source).toContain("const sanitizedHtml = sanitizeHtml(html)")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+        expect(source).not.toContain("memo(")
+    })
+
     it("keeps interview comment anchor highlighting single-pass", () => {
         const source = readSource("components/surrogates/interviews/InterviewComments/index.tsx")
 

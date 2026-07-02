@@ -120,18 +120,17 @@ function useParsedHtmlContent(html: string) {
         () => false,
     )
 
-    const content = React.useMemo(() => {
-        if (!isClient || typeof window === "undefined") {
-            return null
-        }
-
+    let content: React.ReactNode = null
+    if (isClient && typeof window !== "undefined") {
         const parser = new window.DOMParser()
         const document = parser.parseFromString(`<div>${html}</div>`, "text/html")
         const root = document.body.firstElementChild
-        if (!root) return null
-
-        return Array.from(root.childNodes).map((node, index) => nodeToReactNode(node, `node-${index}`))
-    }, [html, isClient])
+        if (root) {
+            content = Array.from(root.childNodes).map((node, index) =>
+                nodeToReactNode(node, `node-${index}`),
+            )
+        }
+    }
 
     return content ?? stripHtml(html)
 }
@@ -154,7 +153,7 @@ export function TrustedSanitizedHtmlContent({ html, className }: ParsedHtmlConte
 }
 
 export function SafeHtmlContent({ html, className }: SafeHtmlContentProps) {
-    const sanitizedHtml = React.useMemo(() => sanitizeHtml(html), [html])
+    const sanitizedHtml = sanitizeHtml(html)
 
     return (
         <ParsedHtmlContent

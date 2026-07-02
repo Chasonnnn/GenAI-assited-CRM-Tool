@@ -2716,3 +2716,22 @@ Full command after Batch 120: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `373`
 - Summary: `Bugs 136 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 192 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-60661933-dc56-4f35-8107-5f080cb263c0`
+
+## Batch 121
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/safe-html-content.tsx` | Valid scanner finding: both flagged calls resolved to `React.useMemo`. React Compiler is enabled through `next.config.js`, and the React Doctor rule docs say to replace React `useMemo` wrappers with plain values when no preserve-manual-memoization case applies. | High | Replaced the parsed-content and sanitized-html memo wrappers with plain render-time derivations. Added a source guard to keep the safe HTML parser and sanitizer free of manual React memoization. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "safe HTML parsing"` failed on the memoized source. GREEN: the same guard passed; `pnpm test --run tests/safe-html-content.test.tsx` passed with `2` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`; changed-scope React Doctor scored `100 / 100`. Full diagnostics dropped from `373` to `371`; global redundant manual memoization dropped from `78` to `76`. |
+
+Changed-scope command after Batch 121: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 121: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `371`
+- Summary: `Bugs 136 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 190 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8177f010-1403-4ee0-af62-c682de93c3f4`
