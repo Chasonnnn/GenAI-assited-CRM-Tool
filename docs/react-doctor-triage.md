@@ -3264,3 +3264,26 @@ Full command after Batch 146: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 | Rule | Files | Verdict | Confidence | Action | Verification |
 | --- | --- | --- | --- | --- | --- |
 | `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx`, `components/surrogates/CombinedMedicalInsuranceCard.tsx` | False positives, independently confirmed by subagents. In both components the flagged manually added section state is read during render to build `visibleKeys`, `visibleSections`, `availableSections`, and the rendered add/delete section controls. Replacing it with a ref would prevent the UI from rendering newly added sections. | High | Left unchanged and logged; no suppression or config change. | Source inspection of the render derivation and handlers in both files. Existing behavior tests pass: `pnpm test --run tests/intended-parent-detail.test.tsx -t "adds and removes embryo status from medical information"` and `pnpm test --run tests/surrogate-detail.test.tsx -t "allows deleting a visible section from Edit Info with confirmation"`. |
+
+## Batch 148
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-initialize-state` | `components/ui/chart.tsx` | Valid. `ChartContainer` initialized local size state from a mount effect before rendering `ResponsiveContainer`, while Recharts already owns responsive percentage sizing. A subagent confirmed current app call sites provide concrete height classes plus full width. | High | Removed the manual `useState`/`useEffect`/`ResizeObserver` measurement path and rendered `ResponsiveContainer` with `width="100%"`, `height="100%"`, `minHeight={1}`, and `minWidth={1}`. Tightened the source guard and component test around that contract. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "responsive chart sizing"` failed because the wrapper used manual size state. GREEN: focused source guard passed; `pnpm test --run tests/chart-container.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor no longer reports `no-initialize-state`. |
+| `react-doctor/prefer-dynamic-import` | `components/ui/chart.tsx` | Valid but deferred. Production chart surfaces already top-level dynamically import both `recharts` and `@/components/ui/chart`, matching the local Next.js lazy-loading guidance for named exports. Replacing the wrapper import itself safely would require a broader chart API refactor because `ChartTooltip` and `ChartLegend` are Recharts-bound aliases composed by Recharts. | Medium-high | Left unchanged and logged; no suppression or config change. | Source inspection plus subagent validation of local `.next-docs/01-app/02-guides/lazy-loading.mdx` and current dashboard/report chart call sites. |
+
+Changed-scope command after Batch 148: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `1`
+- Summary: residual `react-doctor/prefer-dynamic-import` in `components/ui/chart.tsx`.
+- Removed from changed-scope results: `react-doctor/no-initialize-state` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bed199ed-efd7-4a1b-ba63-3ec4a940e453`
+
+Full command after Batch 148: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `166`
+- Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 65 warnings`
+- Removed globally since Batch 146: `react-doctor/no-initialize-state` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-681bff24-e2fd-4fdf-a486-a96e9deee0c0`

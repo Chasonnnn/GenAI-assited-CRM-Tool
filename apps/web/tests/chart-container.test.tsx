@@ -9,10 +9,12 @@ let rectSpy: ReturnType<typeof vi.spyOn> | null = null
 vi.mock("recharts", () => ({
     ResponsiveContainer: ({
         children,
+        height,
         minHeight,
         minWidth,
-    }: PropsWithChildren<{ minHeight?: number; minWidth?: number }>) => {
-        responsiveSpy({ minHeight, minWidth })
+        width,
+    }: PropsWithChildren<{ height?: number | string; minHeight?: number; minWidth?: number; width?: number | string }>) => {
+        responsiveSpy({ height, minHeight, minWidth, width })
         return <div data-testid="responsive-container">{children}</div>
     },
     Tooltip: ({ children }: PropsWithChildren) => <div>{children}</div>,
@@ -70,7 +72,7 @@ describe("ChartContainer", () => {
 
         await waitFor(() => {
             expect(responsiveSpy).toHaveBeenCalledWith(
-                expect.objectContaining({ minHeight: 1, minWidth: 1 })
+                expect.objectContaining({ height: "100%", minHeight: 1, minWidth: 1, width: "100%" })
             )
         })
     })

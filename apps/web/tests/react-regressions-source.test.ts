@@ -399,6 +399,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("KPICardSkeleton")
     })
 
+    it("lets Recharts own responsive chart sizing without mount state", () => {
+        const source = readSource("components/ui/chart.tsx")
+
+        expect(source).toContain('width="100%"')
+        expect(source).toContain('height="100%"')
+        expect(source).toContain("minHeight={1}")
+        expect(source).toContain("minWidth={1}")
+        expect(source).not.toContain("React.useState")
+        expect(source).not.toContain("setSize")
+        expect(source).not.toContain("getBoundingClientRect")
+        expect(source).not.toContain("ResizeObserver")
+    })
+
     it("keeps dashboard distribution charts code split from Recharts", () => {
         const sources = [
             readSource("app/(app)/dashboard/components/stage-chart.tsx"),
