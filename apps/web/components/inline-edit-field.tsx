@@ -135,26 +135,17 @@ export function InlineEditField({
         }
     }
 
-    const handleDisplayKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
-            e.preventDefault()
-            handleStartEdit()
-        }
-    }
-
     const fieldLabel = label?.trim() || (placeholder && placeholder !== "-" ? placeholder : "field")
 
     if (!isEditing) {
         return (
-            <div
+            <button
+                type="button"
                 className={cn(
-                    "group flex items-center gap-1 cursor-pointer rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    "group flex items-center gap-1 rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     displayClassName
                 )}
                 onClick={handleStartEdit}
-                role="button"
-                tabIndex={0}
-                onKeyDown={handleDisplayKeyDown}
                 aria-label={`Edit ${fieldLabel}`}
             >
                 <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
@@ -164,7 +155,7 @@ export function InlineEditField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </div>
+            </button>
         )
     }
 

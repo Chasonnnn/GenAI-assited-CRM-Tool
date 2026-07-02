@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { describe, it, expect, vi } from "vitest"
-import { createEvent, fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
@@ -15,7 +15,7 @@ function expectIconTagsDecorative(source: string, iconName: string) {
 }
 
 describe("Inline field accessibility", () => {
-    it("activates InlineEditField with Enter", () => {
+    it("uses a native button trigger for InlineEditField display mode", () => {
         render(
             <InlineEditField
                 value="test@example.com"
@@ -25,25 +25,10 @@ describe("Inline field accessibility", () => {
         )
 
         const trigger = screen.getByRole("button", { name: "Edit Email" })
-        fireEvent.keyDown(trigger, { key: "Enter" })
+        expect(trigger.tagName).toBe("BUTTON")
+        expect(trigger).toHaveAttribute("type", "button")
+        fireEvent.click(trigger)
 
-        expect(screen.getByRole("textbox", { name: "Email" })).toBeInTheDocument()
-    })
-
-    it("activates InlineEditField with Space and prevents default scrolling", () => {
-        render(
-            <InlineEditField
-                value="test@example.com"
-                label="Email"
-                onSave={vi.fn().mockResolvedValue(undefined)}
-            />
-        )
-
-        const trigger = screen.getByRole("button", { name: "Edit Email" })
-        const event = createEvent.keyDown(trigger, { key: " ", code: "Space", charCode: 32 })
-        fireEvent(trigger, event)
-
-        expect(event.defaultPrevented).toBe(true)
         expect(screen.getByRole("textbox", { name: "Email" })).toBeInTheDocument()
     })
 

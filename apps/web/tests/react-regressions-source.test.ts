@@ -3110,6 +3110,10 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("inlineEditFieldReducer")
         expect(source).toContain('type: "startEdit"')
+        expect(source).toContain('<button')
+        expect(source).toContain('type="button"')
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain("handleDisplayKeyDown")
         expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
     })
 

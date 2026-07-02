@@ -3027,3 +3027,14 @@ Full command after Batch 134: not rerun for the same tool-availability reason. T
 Changed-scope command after Batch 135: not rerun. React Doctor remains unavailable in this environment for the same reason as Batch 134 (`npx` network blocked/rejected; offline cache missing).
 
 Full command after Batch 135: not rerun for the same tool-availability reason. The latest full React Doctor evidence remains the pre-Batch-134 scan at `76 / 100`, `228` issues, with diagnostics at `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-083eca4f-3cfb-45f4-be16-537f9206fb5c`.
+
+## Batch 136
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-tag-over-role` | `components/inline-edit-field.tsx` | Valid scanner finding: display mode was a clickable `div role="button"` with custom keyboard emulation, and it has no nested interactive children. A native button preserves the edit-trigger behavior with better browser/assistive-tech semantics. | High | Replaced the faux button with `<button type="button">`, removed `role`, `tabIndex`, and the display-only keydown handler, and updated tests to assert the native button shape. | RED: `pnpm test --run tests/inline-fields-accessibility.test.tsx tests/react-regressions-source.test.ts -t "InlineEditField"` failed on the old `div` trigger. GREEN: the same focused command passed; `pnpm test --run tests/inline-fields-accessibility.test.tsx tests/surrogates-accessibility.test.tsx tests/react-regressions-source.test.ts`; `pnpm test --run tests/surrogate-detail.test.tsx -t "renders surrogate header"`; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run` passed with `1085` tests; `git diff --check`. |
+| Test selector hardening | `tests/surrogate-detail.test.tsx` | Valid follow-on: after inline display triggers became native buttons, the surrogate-detail copy-email test's `querySelector('button')` clicked the first inline edit trigger instead of the labeled copy button. | High | Updated the test to select `role="button"` with name `/copy email/i`, matching the existing `aria-label` in the component. | The focused surrogate-detail test and full test suite passed. |
+
+Changed-scope command after Batch 136: not rerun. React Doctor remains unavailable in this environment for the same reason as Batch 134 (`npx` network blocked/rejected; offline cache missing).
+
+Full command after Batch 136: not rerun for the same tool-availability reason. The latest full React Doctor evidence remains the pre-Batch-134 scan at `76 / 100`, `228` issues, with diagnostics at `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-083eca4f-3cfb-45f4-be16-537f9206fb5c`.

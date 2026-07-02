@@ -346,11 +346,8 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
         expect(screen.getByText('jane@example.com')).toBeInTheDocument()
 
-        const emailRow = screen.getByText('Email:').parentElement
-        const copyButton = emailRow?.querySelector('button')
-        expect(copyButton).toBeTruthy()
-
-        fireEvent.click(copyButton!)
+        const copyButton = screen.getByRole('button', { name: /copy email/i })
+        fireEvent.click(copyButton)
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith('jane@example.com')
     })
 
