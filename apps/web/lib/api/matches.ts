@@ -219,13 +219,6 @@ export async function listMatchEvents(matchId: string): Promise<MatchEventRead[]
 }
 
 /**
- * Get a specific match event.
- */
-export async function getMatchEvent(matchId: string, eventId: string): Promise<MatchEventRead> {
-    return api.get<MatchEventRead>(`/matches/${matchId}/events/${eventId}`)
-}
-
-/**
  * Create a match event.
  */
 export async function createMatchEvent(matchId: string, data: MatchEventCreate): Promise<MatchEventRead> {
@@ -244,21 +237,4 @@ export async function updateMatchEvent(matchId: string, eventId: string, data: M
  */
 export async function deleteMatchEvent(matchId: string, eventId: string): Promise<void> {
     await api.delete(`/matches/${matchId}/events/${eventId}`)
-}
-
-// =============================================================================
-// Color Utilities
-// =============================================================================
-
-export const EVENT_TYPE_COLORS: Record<MatchEventType, string> = {
-    medication: '#f97316',
-    medical_exam: '#3b82f6',
-    legal: '#eab308',
-    delivery: '#ef4444',
-    custom: '#6b7280',
-}
-
-export const PERSON_TYPE_COLORS: Record<MatchEventPersonType, string> = {
-    surrogate: '#a855f7',
-    ip: '#22c55e',
 }

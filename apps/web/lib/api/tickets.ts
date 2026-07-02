@@ -164,17 +164,6 @@ interface TicketSendResult {
     job_id?: string | null
 }
 
-interface TicketSendIdentity {
-    integration_id: string
-    account_email: string
-    provider: string
-    is_default: boolean
-}
-
-interface TicketSendIdentityResponse {
-    items: TicketSendIdentity[]
-}
-
 function buildQuery(params: TicketListParams = {}): string {
     const search = new URLSearchParams()
 
@@ -221,10 +210,6 @@ export function linkTicketSurrogate(
     data: { surrogate_id?: string | null; reason?: string }
 ): Promise<TicketListItem> {
     return api.post<TicketListItem>(`/tickets/${ticketId}/link-surrogate`, data)
-}
-
-export function getTicketSendIdentities(): Promise<TicketSendIdentityResponse> {
-    return api.get<TicketSendIdentityResponse>('/tickets/send-identities')
 }
 
 export async function getTicketAttachmentDownloadUrl(

@@ -12,7 +12,6 @@ const ticketKeys = {
     list: (params: TicketListParams) => [...ticketKeys.lists(), params] as const,
     details: () => [...ticketKeys.all, 'detail'] as const,
     detail: (ticketId: string) => [...ticketKeys.details(), ticketId] as const,
-    identities: () => [...ticketKeys.all, 'send-identities'] as const,
 }
 
 export function useTickets(params: TicketListParams = {}, options?: { enabled?: boolean }) {
@@ -28,14 +27,6 @@ export function useTicket(ticketId: string) {
         queryKey: ticketKeys.detail(ticketId),
         queryFn: () => ticketsApi.getTicket(ticketId),
         enabled: !!ticketId,
-    })
-}
-
-export function useTicketSendIdentities(options?: { enabled?: boolean }) {
-    return useQuery({
-        queryKey: ticketKeys.identities(),
-        queryFn: ticketsApi.getTicketSendIdentities,
-        enabled: options?.enabled ?? true,
     })
 }
 

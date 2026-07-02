@@ -39,23 +39,6 @@ export function useCreateSurrogateEmailContact(surrogateId: string) {
     })
 }
 
-export function usePatchSurrogateEmailContact(surrogateId: string) {
-    const queryClient = useQueryClient()
-
-    return useMutation({
-        mutationFn: ({
-            contactId,
-            data,
-        }: {
-            contactId: string
-            data: surrogateEmailsApi.SurrogateEmailContactPatchPayload
-        }) => surrogateEmailsApi.patchSurrogateEmailContact(surrogateId, contactId, data),
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: surrogateEmailKeys.contacts(surrogateId) })
-        },
-    })
-}
-
 export function useDeactivateSurrogateEmailContact(surrogateId: string) {
     const queryClient = useQueryClient()
 

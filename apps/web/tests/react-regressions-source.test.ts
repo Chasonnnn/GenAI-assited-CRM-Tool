@@ -2959,6 +2959,32 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("Add your comment...")
     })
 
+    it("keeps unused library helpers out of the public export surface", () => {
+        const matchesSource = readSource("lib/api/matches.ts")
+        const surrogateEmailApiSource = readSource("lib/api/surrogate-emails.ts")
+        const surrogateEmailsSource = readSource("lib/hooks/use-surrogate-emails.ts")
+        const ticketApiSource = readSource("lib/api/tickets.ts")
+        const ticketsSource = readSource("lib/hooks/use-tickets.ts")
+        const intendedParentStageSource = readSource("lib/intended-parent-stage-utils.ts")
+
+        expect(matchesSource).not.toContain("export async function getMatchEvent")
+        expect(matchesSource).not.toContain("export const EVENT_TYPE_COLORS")
+        expect(matchesSource).not.toContain("export const PERSON_TYPE_COLORS")
+        expect(surrogateEmailApiSource).not.toContain("export interface SurrogateEmailContactPatchPayload")
+        expect(surrogateEmailApiSource).not.toContain("export function patchSurrogateEmailContact")
+        expect(surrogateEmailsSource).not.toContain("export function usePatchSurrogateEmailContact")
+        expect(ticketApiSource).not.toContain("interface TicketSendIdentity")
+        expect(ticketApiSource).not.toContain("interface TicketSendIdentityResponse")
+        expect(ticketApiSource).not.toContain("export function getTicketSendIdentities")
+        expect(ticketsSource).not.toContain("identities: () =>")
+        expect(ticketsSource).not.toContain("export function useTicketSendIdentities")
+        expect(ticketsSource).toContain("export function usePatchTicket")
+        expect(intendedParentStageSource).toContain("const DEFAULT_INTENDED_PARENT_STAGE_OPTIONS")
+        expect(intendedParentStageSource).toContain("function getIntendedParentStageOptionByValue")
+        expect(intendedParentStageSource).not.toContain("export const DEFAULT_INTENDED_PARENT_STAGE_OPTIONS")
+        expect(intendedParentStageSource).not.toContain("export function getIntendedParentStageOptionByValue")
+    })
+
     it("uses typographic ellipses in user-facing loading and placeholder copy", () => {
         const sources = [
             "components/appointments/AppointmentsList.tsx",

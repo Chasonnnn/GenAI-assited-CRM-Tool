@@ -43,13 +43,6 @@ export interface SurrogateEmailContactCreatePayload {
     contact_type?: string
 }
 
-export interface SurrogateEmailContactPatchPayload {
-    email?: string
-    label?: string
-    contact_type?: string
-    is_active?: boolean
-}
-
 export function getSurrogateEmails(surrogateId: string): Promise<SurrogateEmailTicketListResponse> {
     return api.get<SurrogateEmailTicketListResponse>(`/surrogates/${surrogateId}/emails`)
 }
@@ -65,17 +58,6 @@ export function createSurrogateEmailContact(
     data: SurrogateEmailContactCreatePayload
 ): Promise<SurrogateEmailContact> {
     return api.post<SurrogateEmailContact>(`/surrogates/${surrogateId}/email-contacts`, data)
-}
-
-export function patchSurrogateEmailContact(
-    surrogateId: string,
-    contactId: string,
-    data: SurrogateEmailContactPatchPayload
-): Promise<SurrogateEmailContact> {
-    return api.patch<SurrogateEmailContact>(
-        `/surrogates/${surrogateId}/email-contacts/${contactId}`,
-        data
-    )
 }
 
 export function deactivateSurrogateEmailContact(

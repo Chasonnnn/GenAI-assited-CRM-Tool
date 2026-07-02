@@ -3062,3 +3062,25 @@ Full command after Batch 137: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 93 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 94 warnings`
 - Removed globally since the fresh Batch 137 starting scan: `react-doctor/prefer-tag-over-role` in `UnifiedCalendar` (`4` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-42fec818-763b-4bd1-931e-27fdb62685db`
+
+## Batch 138
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `deslop/unused-export` | `lib/api/matches.ts`, `lib/hooks/use-surrogate-emails.ts`, `lib/intended-parent-stage-utils.ts`, `lib/api/surrogate-emails.ts`, `lib/hooks/use-tickets.ts`, `lib/api/tickets.ts` | Valid unused public surface after `rg` validation. `getMatchEvent`, match event color maps, `usePatchSurrogateEmailContact`, the backing surrogate email patch API, `useTicketSendIdentities`, and the backing ticket send-identities API had no callers. The intended-parent fallback stage list and value lookup are still used internally, but did not need to be exported. | High | Deleted unused functions/constants/types where they had no internal use, made the intended-parent fallback stage list and value lookup private, and kept `usePatchTicket` exported because `app/(app)/tickets/[ticketId]/page.tsx` imports it. Added a source guard for the public-surface shape. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "unused library helpers"` failed on the old exports, then failed again on follow-on unused surrogate/ticket identity APIs. GREEN: the same guard passed after pruning; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues. |
+| `react-doctor/async-defer-await` | `app/mfa/page.client.tsx`, `app/ops/agencies/page.client.tsx` | Not edited. The ops agencies await is followed by the stale-response guard that must run after the request resolves. The MFA challenge flow intentionally awaits `refetch()` before route replacement after completing MFA. Moving either await ahead of current guards would be product-dependent and not a safe mechanical fix. | Medium-high | Logged as deferred or likely false-positive/product-dependent. No suppression or config change was added. | Source inspection only. |
+| `react-doctor/rendering-usetransition-loading` | `app/login/LoginPageClient.tsx`, `app/ops/login/page.client.tsx` | Not edited. The loading state is set immediately before `window.location.assign`, so replacing it with `useTransition` is not a clear user-visible improvement and could make disabled-button feedback less deterministic during navigation handoff. | Medium | Logged as deferred or likely low-value. No code change. | Source inspection only. |
+
+Changed-scope command after Batch 138: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 138: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `199`
+- Summary: `Bugs 93 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 87 warnings`
+- Removed globally since Batch 137: `deslop/unused-export` (`7` initial warnings plus `2` follow-on unused exports exposed by the first cleanup).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-347e5069-a47a-404f-a505-3339fc17ead3`

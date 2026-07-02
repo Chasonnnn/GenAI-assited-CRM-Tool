@@ -3,7 +3,7 @@ import type { CSSProperties } from "react"
 import type { StageMetadataOption } from "@/lib/api/metadata"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
-export const DEFAULT_INTENDED_PARENT_STAGE_OPTIONS: StageMetadataOption[] = [
+const DEFAULT_INTENDED_PARENT_STAGE_OPTIONS: StageMetadataOption[] = [
     {
         id: "new",
         value: "new",
@@ -62,7 +62,7 @@ export function getIntendedParentStageOptions(
     return resolved.toSorted((left, right) => left.order - right.order)
 }
 
-export function getIntendedParentStageOptionByValue(
+function getIntendedParentStageOptionByValue(
     options: StageMetadataOption[] | undefined | null,
     value: string | null | undefined,
 ): StageMetadataOption | undefined {
