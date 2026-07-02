@@ -267,6 +267,17 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("TrustedSanitizedHtmlContent")
     })
 
+    it("keeps RichTextEditor split and free of compiler-obsolete callbacks", () => {
+        const source = readSource("components/rich-text-editor.tsx")
+
+        expect(source).not.toContain("useCallback")
+        expect(source).toContain("RichTextEditorLoading")
+        expect(source).toContain("RichTextEditorToolbar")
+        expect(source).not.toContain("emoji-picker-react")
+        expect(source).not.toContain("BoldIcon")
+        expect(source).not.toContain("SmileIcon")
+    })
+
     it("keeps safe HTML parsing and sanitization free of manual React memoization", () => {
         const source = readSource("components/safe-html-content.tsx")
 

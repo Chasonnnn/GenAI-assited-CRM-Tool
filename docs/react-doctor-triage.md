@@ -2756,3 +2756,27 @@ Full command after Batch 122: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `366`
 - Summary: `Bugs 135 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 186 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f5798063-995f-4cbe-a876-12541aa212ab`
+
+## Batch 123
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/rich-text-editor.tsx` | Valid scanner finding: all five flagged calls resolved to React's named `useCallback` import. React Compiler is enabled through `next.config.js`, and the React Doctor rule docs say to replace React `useMemo` / `useCallback` / `memo` wrappers with plain values/functions when no preserve-manual-memoization case applies. | High | Removed the redundant callback wrappers and used plain editor command handlers. Added a source guard to keep the root rich-text editor free of compiler-obsolete callbacks. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "RichTextEditor split"` failed on `useCallback`. GREEN: the same guard passed; `pnpm test --run tests/rich-text-editor.test.tsx` passed with `7` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Full redundant manual memoization dropped from `73` to `68`. |
+| `react-doctor/no-giant-component` | `components/rich-text-editor.tsx:53` | Valid scanner finding: the root editor mixed Tiptap setup, loading skeleton, toolbar controls, emoji-picker UI, submit handling, and editor content rendering in one 397-line component. | High | Split loading, toolbar, and emoji popover UI into `rich-text-editor-loading.tsx`, `rich-text-editor-toolbar.tsx`, and `rich-text-editor-emoji-popover.tsx` while keeping the public `RichTextEditor` props and ref handle unchanged. | Existing behavior tests for emoji control visibility, emoji insertion, suggestion mode switching, undo/redo labels, and React 19 ref insertion all passed. Full giant-component diagnostics dropped from `55` to `54`. |
+| `react-doctor/no-event-handler` | `components/rich-text-editor.tsx:69`, `:74`, `:85-88`, `:92` | Invalid for this batch: the rule docs define the target pattern as a cleanup-less `useEffect` with an `if` reading state/props, but these lines are Tiptap `useEditor` configuration for extensions, initial content, editor attributes, and the Tiptap `onUpdate` callback. There is no state-plus-effect event-handler hop to move into a UI handler. | Medium-high | Logged as a false positive/needs upstream scanner refinement for the Tiptap `useEditor` options shape. No suppression or config change was added. | Changed-scope React Doctor still reports these residual findings; no code change attempted because moving editor ownership to parent would be product-architecture work, not a safe cleanup. |
+| `react-doctor/no-pass-data-to-parent` | `components/rich-text-editor.tsx:113` | Invalid for the cited line: the rule docs define a cleanup-less effect that calls a prop function with child-generated data. The cited effect only syncs an external `content` prop into the existing Tiptap editor via `editor.commands.setContent(content)` and does not call a parent callback. | Medium-high | Logged as a false positive/needs upstream scanner refinement. Kept the existing content-sync behavior covered by the editor tests and public API. | Changed-scope React Doctor still reports this residual finding; no suppression or config change was added. |
+
+Changed-scope command after Batch 123: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `6`
+- Summary: `Bugs 6 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bd060271-c44b-4b75-9dad-e0e16c5b6a2f`
+- Note: all remaining changed-scope diagnostics are the Tiptap `useEditor` residuals logged above as invalid/needs-upstream, with no suppression added.
+
+Full command after Batch 123: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `69 / 100 Needs work`
+- Total diagnostics: `360`
+- Summary: `Bugs 135 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 180 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fe47629e-bf83-4119-ba62-f97e91d9e9e5`
