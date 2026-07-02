@@ -10,7 +10,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { TaskListItem } from "@/lib/types/task"
 import { categoryColors, categoryLabels, getDueCategory, type DueCategory } from "@/lib/utils/task-due"
 import { cn } from "@/lib/utils"
-import { useMemo } from "react"
 import { Loader2Icon } from "lucide-react"
 
 type TasksListViewProps = {
@@ -209,27 +208,24 @@ export function TasksListView({
     onBulkCompleteSelected,
     bulkCompletePending,
 }: TasksListViewProps) {
-    const groupedTasks = useMemo(() => {
-        const grouped: Record<DueCategory, TaskListItem[]> = {
-            overdue: [],
-            today: [],
-            tomorrow: [],
-            "this-week": [],
-            later: [],
-            "no-date": [],
+    const groupedTasks: Record<DueCategory, TaskListItem[]> = {
+        overdue: [],
+        today: [],
+        tomorrow: [],
+        "this-week": [],
+        later: [],
+        "no-date": [],
+    }
+    let selectedIncompleteCount = 0
+    for (const task of incompleteTasks) {
+        const category = getDueCategory(task)
+        groupedTasks[category].push(task)
+        if (selectedTaskIds.has(task.id)) {
+            selectedIncompleteCount += 1
         }
-        for (const task of incompleteTasks) {
-            const category = getDueCategory(task)
-            grouped[category].push(task)
-        }
-        return grouped
-    }, [incompleteTasks])
+    }
 
     const completedTotal = completedTasks?.total ?? 0
-    const selectedIncompleteCount = useMemo(
-        () => incompleteTasks.filter((task) => selectedTaskIds.has(task.id)).length,
-        [incompleteTasks, selectedTaskIds]
-    )
     const allVisibleSelected = incompleteTasks.length > 0 && selectedIncompleteCount === incompleteTasks.length
 
     return (

@@ -2174,6 +2174,9 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("function TaskListItemRow(")
         expect(source).toContain("function TaskDueSection(")
+        expect(source).not.toContain("useMemo")
+        expect(source).toContain("const groupedTasks: Record<DueCategory, TaskListItem[]> = {")
+        expect(source).toContain("let selectedIncompleteCount = 0")
         expect(source).not.toContain("const renderTaskItem =")
         expect(source).not.toContain("const renderSection =")
     })
