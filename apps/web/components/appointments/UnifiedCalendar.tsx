@@ -835,21 +835,21 @@ function MonthView({
                                 {/* Surrogacy Force Appointments */}
                                 {shownAppointments.map((appt) => (
                                     <EventItem
-                                        key={appt.id}
                                         appointment={appt}
                                         onClick={onEventClick}
                                         compact
                                         draggable
                                         {...(onDragStart ? { onDragStart } : {})}
+                                        key={appt.id}
                                     />
                                 ))}
                                 {/* Tasks */}
                                 {shownTasks.map((task) => (
                                     <TaskItem
-                                        key={task.id}
                                         task={task}
                                         compact
                                         {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                        key={task.id}
                                     />
                                 ))}
                                 {/* Google Calendar Events */}
@@ -994,9 +994,9 @@ function DayAgendaSheet({
                                 <div className="space-y-2">
                                     {dayTasks.map((task) => (
                                         <TaskItem
-                                            key={task.id}
                                             task={task}
                                             {...(onTaskClick ? { onClick: handleAgendaTaskClick } : {})}
+                                            key={task.id}
                                         />
                                     ))}
                                 </div>
@@ -1130,9 +1130,9 @@ function WeekView({
                             ))}
                             {dayTasks.map((task) => (
                                 <TaskItem
-                                    key={task.id}
                                     task={task}
                                     {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                    key={task.id}
                                 />
                             ))}
                             {dayGoogleEvents.map((event) => (
@@ -1222,16 +1222,16 @@ function DayView({
             {allDayTasks.length > 0 && (
                 <div className="p-2 bg-muted/50 border-b border-border">
                     <p className="text-xs text-muted-foreground mb-1">Tasks</p>
-                    <div className="space-y-1">
-                        {allDayTasks.map((task) => (
-                            <TaskItem
-                                key={task.id}
-                                task={task}
-                                compact
-                                {...(onTaskClick ? { onClick: onTaskClick } : {})}
-                            />
-                        ))}
-                    </div>
+                        <div className="space-y-1">
+                            {allDayTasks.map((task) => (
+                                <TaskItem
+                                    task={task}
+                                    compact
+                                    {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                    key={task.id}
+                                />
+                            ))}
+                        </div>
                 </div>
             )}
             <div className="divide-y divide-border">
@@ -1265,10 +1265,10 @@ function DayView({
                                 ))}
                                 {hourTasks.map((task) => (
                                     <TaskItem
-                                        key={task.id}
                                         task={task}
                                         compact
                                         {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                        key={task.id}
                                     />
                                 ))}
                                 {hourGoogleEvents.map((event) => (

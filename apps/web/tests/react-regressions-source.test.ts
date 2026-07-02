@@ -14,6 +14,23 @@ function readExportedFunctionSource(source: string, functionName: string): strin
     return nextExport === -1 ? source.slice(start) : source.slice(start, nextExport)
 }
 
+function findOpeningTags(source: string, tagName: string): string[] {
+    return Array.from(source.matchAll(new RegExp(`<${tagName}\\b[\\s\\S]*?/>`, "g"))).map(
+        (match) => match[0]
+    )
+}
+
+function expectKeyAfterLastSpread(source: string, tagName: string, keyAttribute: string): void {
+    const matchingTags = findOpeningTags(source, tagName).filter(
+        (tag) => tag.includes(keyAttribute) && tag.includes("{...")
+    )
+    expect(matchingTags.length, `${tagName} ${keyAttribute}`).toBeGreaterThan(0)
+
+    for (const tag of matchingTags) {
+        expect(tag.lastIndexOf(keyAttribute), tag).toBeGreaterThan(tag.lastIndexOf("{..."))
+    }
+}
+
 function sourceExists(pathFromWebRoot: string): boolean {
     return existsSync(join(process.cwd(), pathFromWebRoot))
 }
@@ -1581,6 +1598,22 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("cellKey")
         expect(source).toContain("key={day.cellKey}")
         expect(source).not.toContain("key={i}")
+    })
+
+    it("keeps rendered list keys after optional prop spreads", () => {
+        const attentionPanelSource = readSource("app/(app)/dashboard/components/attention-needed-panel.tsx")
+        const appointmentsListSource = readSource("components/appointments/AppointmentsList.tsx")
+        const unifiedCalendarSource = readSource("components/appointments/UnifiedCalendar.tsx")
+        const medicalInsuranceSource = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
+        const commentCardSource = readSource("components/surrogates/interviews/CommentCard.tsx")
+
+        expectKeyAfterLastSpread(attentionPanelSource, "UpcomingItemRow", "key={item.id}")
+        expectKeyAfterLastSpread(attentionPanelSource, "OverdueSummaryRow", 'key="overdue-summary"')
+        expectKeyAfterLastSpread(appointmentsListSource, "AppointmentCard", "key={appt.id}")
+        expectKeyAfterLastSpread(unifiedCalendarSource, "EventItem", "key={appt.id}")
+        expectKeyAfterLastSpread(unifiedCalendarSource, "TaskItem", "key={task.id}")
+        expectKeyAfterLastSpread(medicalInsuranceSource, "MedicalContactSection", "key={section.key}")
+        expectKeyAfterLastSpread(commentCardSource, "ReplyItem", "key={reply.id}")
     })
 
     it("uses functional updates for public booking form fields", () => {

@@ -93,9 +93,9 @@ export function AttentionNeededPanel() {
             title,
             rows: slice.map((item) => (
                 <UpcomingItemRow
-                    key={item.id}
                     item={item}
                     {...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {})}
+                    key={item.id}
                 />
             )),
         })
@@ -109,9 +109,9 @@ export function AttentionNeededPanel() {
                 title: "Overdue",
                 rows: [(
                     <OverdueSummaryRow
-                        key="overdue-summary"
                         count={overdueItems.length}
                         {...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {})}
+                        key="overdue-summary"
                     />
                 )],
             })

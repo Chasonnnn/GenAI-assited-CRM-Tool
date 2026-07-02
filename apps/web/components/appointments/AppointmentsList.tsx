@@ -664,7 +664,6 @@ function AppointmentsTabContent({
                         : undefined
                     return (
                         <AppointmentCard
-                            key={appt.id}
                             appointment={appt}
                             onSelect={() => {
                                 setSelectedId(appt.id)
@@ -677,6 +676,7 @@ function AppointmentsTabContent({
                             }
                             {...(onApprove ? { onApprove } : {})}
                             {...(onCancel ? { onCancel } : {})}
+                            key={appt.id}
                         />
                     )
                 })}

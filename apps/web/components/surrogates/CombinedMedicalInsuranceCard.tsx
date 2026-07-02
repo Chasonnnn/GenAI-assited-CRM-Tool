@@ -377,7 +377,6 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
                                     />
                                 ) : (
                                     <MedicalContactSection
-                                        key={section.key}
                                         title={section.title}
                                         icon={section.icon}
                                         prefix={section.prefix}
@@ -387,6 +386,7 @@ export function CombinedMedicalInsuranceCard({ surrogateData, onUpdate }: Combin
                                         {...(section.nameField ? { nameField: section.nameField } : {})}
                                         {...(section.showProviderName !== undefined ? { showProviderName: section.showProviderName } : {})}
                                         {...(section.showClinicName !== undefined ? { showClinicName: section.showClinicName } : {})}
+                                        key={section.key}
                                     />
                                 )
                             )}

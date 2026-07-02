@@ -2867,3 +2867,26 @@ Changed-scope command after Batch 127: `cd apps/web && npx -y react-doctor@lates
 - Note: remaining changed-scope diagnostics are the broader page-state and component-size warnings logged above as a separate future batch.
 
 Full command after Batch 127: not rerun. The required network escalation for `npx -y react-doctor@latest . --verbose` was rejected by the environment usage limit after the local test/lint checks passed.
+
+## Batch 128
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/jsx-key` | `app/(app)/dashboard/components/attention-needed-panel.tsx`, `components/appointments/AppointmentsList.tsx`, `components/appointments/UnifiedCalendar.tsx`, `components/surrogates/CombinedMedicalInsuranceCard.tsx`, `components/surrogates/interviews/CommentCard.tsx` | Valid scanner finding in React Doctor `v0.6.0`: each flagged element is produced by a rendered `.map()` / array literal sibling list and placed its stable `key` before optional prop spreads, so a spread could shadow the list key. | High | Moved each stable list key after the optional spreads so the intended identity wins, without changing the rendered component props otherwise. Added a source guard across the five affected files. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "rendered list keys"` failed on the old key-before-spread order. GREEN: the same guard passed; `pnpm test --run tests/appointments-google-meet.test.tsx tests/unified-calendar-reschedule-dnd.test.tsx tests/surrogate-interview-accessibility.test.tsx` passed with `26` behavior tests; `pnpm test --run tests/dashboard.test.tsx -t "limits upcoming list|attention"` passed with `2` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Changed-scope React Doctor no longer reports `react-doctor/jsx-key`. |
+| `react-doctor/react-compiler-no-manual-memoization`, `react-doctor/prefer-tag-over-role`, `react-doctor/rerender-state-only-in-handlers`, `react-doctor/prefer-module-scope-pure-function`, `react-doctor/no-giant-component`, `react-doctor/prefer-explicit-variants`, `react-doctor/prefer-useReducer` | Touched changed-scope files | Valid residual findings, but outside this JSX key error batch. The largest residual cluster remains `UnifiedCalendar` manual memoization and structural appointment calendar warnings. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scored `89 / 100` with `45` warnings and no errors. |
+
+Changed-scope command after Batch 128: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `89 / 100 Great`
+- Total diagnostics in changed files: `45`
+- Summary: `Bugs 2 warnings`, `Performance 3 warnings`, `Accessibility 5 warnings`, `Maintainability 35 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d4f4a50a-c457-4de4-83e3-48e457fece86`
+- Note: `react-doctor/jsx-key` no longer appears in changed-scope diagnostics.
+
+Full command after Batch 128: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics: `269`
+- Summary: `Bugs 95 warnings`, `Performance 21 warnings`, `Accessibility 14 warnings`, `Maintainability 139 warnings`
+- Removed globally: `react-doctor/jsx-key` (`11` errors)
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3dca72fa-9bde-42cf-bad0-7bc564287c97`

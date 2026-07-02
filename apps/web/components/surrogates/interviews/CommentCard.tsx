@@ -337,11 +337,11 @@ export function CommentCard({
                     <div className="pt-1">
                         {note.replies.map((reply) => (
                             <ReplyItem
-                                key={reply.id}
                                 reply={reply}
                                 canEdit={canEdit}
                                 onDelete={onDeleteReply}
                                 {...(onEditReply ? { onEdit: onEditReply } : {})}
+                                key={reply.id}
                             />
                         ))}
                     </div>
