@@ -3084,3 +3084,24 @@ Full command after Batch 138: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 93 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 87 warnings`
 - Removed globally since Batch 137: `deslop/unused-export` (`7` initial warnings plus `2` follow-on unused exports exposed by the first cleanup).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-347e5069-a47a-404f-a505-3339fc17ead3`
+
+## Batch 139
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-attachments.ts` | Valid for `useDownloadAttachment` and `useAttachmentDownloadUrl`: signed download URL generation records server-side attachment download / PHI audit events, so `useAuditLogs(...)` list caches can become stale even though attachment lists do not change. | High | Added `useQueryClient()` to both download URL mutations and invalidated the audit list prefix `['audit', 'list']` on success. Did not invalidate attachment lists because URL generation does not modify attachment records. | RED: `pnpm test --run tests/use-mutation-invalidations.test.ts -t "attachment download"` failed with no audit invalidation. GREEN: the same focused test passed; `pnpm test --run tests/use-mutation-invalidations.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-ai.ts`, `lib/hooks/use-campaigns.ts`, `lib/hooks/use-email-templates.ts`, `lib/hooks/use-import.ts`, `lib/hooks/use-meta-oauth.ts`, `lib/hooks/use-pipelines.ts`, `lib/hooks/use-resend.ts`, `lib/hooks/use-schedule-parser.ts`, `lib/hooks/use-surrogates.ts`, `lib/hooks/use-workflows.ts` | Read-only validation did not identify more safe true positives in this sampled subset. These hooks are validation-only, preview-only, dry-run, redirect setup, or return proposed data before persistence; several would need a future query-backed log/status surface before invalidation is meaningful. | Medium-high to high by hook | No code change for these sampled diagnostics. Avoided dummy invalidations such as invalidating a query key that no hook owns. | Subagent validation; no tests needed for no-op/preview/redirect findings. |
+
+Changed-scope command after Batch 139: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 139: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `197`
+- Summary: `Bugs 91 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 87 warnings`
+- Removed globally since Batch 138: `react-doctor/query-mutation-missing-invalidation` in `use-attachments` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fd901c9d-40c8-4ba0-b1a4-4d5794bd49ea`

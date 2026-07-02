@@ -8,6 +8,10 @@ import {
     useCreateBooking,
     useRescheduleByManageToken,
 } from '@/lib/hooks/use-appointments'
+import {
+    useAttachmentDownloadUrl,
+    useDownloadAttachment,
+} from '@/lib/hooks/use-attachments'
 import { useCancelCampaign, useSendCampaign } from '@/lib/hooks/use-campaigns'
 import { complianceKeys, useExecutePurge } from '@/lib/hooks/use-compliance'
 import { useDeleteEmailTemplate, useSendEmail } from '@/lib/hooks/use-email-templates'
@@ -51,6 +55,10 @@ import { taskKeys, useCreateTaskBatch } from '@/lib/hooks/use-tasks'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
 import { useZapierOutboundTest, useZapierTestLead, zapierKeys } from '@/lib/hooks/use-zapier'
+
+vi.mock('@/lib/utils/csv-download-warning', () => ({
+    openDownloadUrlWithSpreadsheetWarning: vi.fn(() => true),
+}))
 
 type MutationOptions = {
     onSuccess?: (data: unknown, variables: unknown) => void
@@ -110,6 +118,38 @@ describe('mutation invalidation contracts', () => {
         })
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: appointmentKeys.lists(),
+        })
+    })
+
+    it('refreshes audit logs after attachment download URL creation', () => {
+        useDownloadAttachment()
+
+        capturedOptions?.onSuccess?.(
+            {
+                download_url: 'https://files.example/download',
+                filename: 'screening.csv',
+            },
+            'attachment-1'
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['audit', 'list'],
+        })
+
+        invalidateQueries.mockClear()
+
+        useAttachmentDownloadUrl()
+
+        capturedOptions?.onSuccess?.(
+            {
+                download_url: 'https://files.example/preview',
+                filename: 'ultrasound.png',
+            },
+            'attachment-2'
+        )
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['audit', 'list'],
         })
     })
 

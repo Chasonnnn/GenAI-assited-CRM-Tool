@@ -46,10 +46,13 @@ export function useUploadAttachment() {
 }
 
 export function useDownloadAttachment() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: (attachmentId: string) =>
             attachmentsApi.getDownloadUrl(attachmentId),
         onSuccess: (data) => {
+            void queryClient.invalidateQueries({ queryKey: ["audit", "list"] })
             const opened = openDownloadUrlWithSpreadsheetWarning(
                 data.download_url,
                 data.filename,
@@ -71,9 +74,14 @@ export function useDownloadAttachment() {
  * Useful for image previews.
  */
 export function useAttachmentDownloadUrl() {
+    const queryClient = useQueryClient()
+
     return useMutation({
         mutationFn: (attachmentId: string) =>
             attachmentsApi.getDownloadUrl(attachmentId),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ["audit", "list"] })
+        },
     })
 }
 
