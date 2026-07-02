@@ -1011,6 +1011,20 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps unused dependencies out of the web manifest", () => {
+        const packageJson = readSource("package.json")
+
+        for (const dependencyName of [
+            "@tiptap/extension-underline",
+            "html-to-image",
+            "input-otp",
+            "react-resizable-panels",
+            "vaul",
+        ]) {
+            expect(packageJson, dependencyName).not.toContain(`"${dependencyName}"`)
+        }
+    })
+
     it("keeps task due category internals private", () => {
         const source = readSource("lib/utils/task-due.ts")
 

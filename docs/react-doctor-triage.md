@@ -3171,3 +3171,23 @@ Full command after Batch 142: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 87 warnings`
 - Removed globally since Batch 141: test-file `dialog-has-accessible-name` (`2` warnings) and `prefer-html-dialog` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c73b9ee7-939f-43ce-9156-c2e5c4ab86ca`
+
+## Batch 143
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `deslop/unused-dependency` | `package.json`, `pnpm-lock.yaml` | Valid scanner findings after `rg` validation: `@tiptap/extension-underline`, `html-to-image`, `input-otp`, `react-resizable-panels`, and `vaul` had no source imports or component usage. | High | Removed the unused dependencies with `pnpm remove`, allowing the package manager to update `package.json` and `pnpm-lock.yaml`. Added a manifest source guard so these packages do not return unnoticed. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "unused dependencies"` failed while the dependencies remained. GREEN: the same guard passed after `pnpm remove`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 143: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 143: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `185`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 82 warnings`
+- Removed globally since Batch 142: `deslop/unused-dependency` (`5` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2cb2d81a-ce94-4ea6-b56f-ab14bfda5e82`
