@@ -4,7 +4,8 @@ import { useEffect, useReducer } from "react"
 import { toast } from "sonner"
 import { ArrowUpRight, Eye, Loader2 } from "lucide-react"
 
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
     Dialog,
     DialogContent,

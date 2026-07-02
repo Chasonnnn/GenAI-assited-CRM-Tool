@@ -5,7 +5,8 @@ import { type ChangeEvent, useRef, useState, type Dispatch, type MutableRefObjec
 import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import {

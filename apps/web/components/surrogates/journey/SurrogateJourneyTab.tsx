@@ -4,7 +4,7 @@ import { useState } from "react"
 import { ChevronDownIcon, DownloadIcon, Loader2Icon, SparklesIcon } from "lucide-react"
 import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
     DropdownMenu,
     DropdownMenuContent,

@@ -4,7 +4,8 @@ import { useState } from "react"
 import type { ReactNode } from "react"
 import { format } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
     AlertDialog,
     AlertDialogAction,

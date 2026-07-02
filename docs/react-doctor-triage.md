@@ -3212,3 +3212,27 @@ Full command after Batch 144: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 76 warnings`
 - Removed globally since Batch 143: `react-doctor/no-multi-comp` (`6` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6be4ad6a-bc58-4939-8aad-14ba70f34d96`
+
+## Batch 145
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/only-export-components` | `components/ui/button.tsx`, `components/ui/toggle.tsx`, `components/ui/time-display.tsx`, `lib/query-provider.tsx`, `components/surrogates/interviews/TranscriptEditor.tsx` | Valid maintainability findings. These modules mixed component exports with variant helpers, hooks, pure utilities, retry logic, or backward-compatible utility re-exports. | High | Moved `buttonVariants`, `toggleVariants`, `formatUtcDateLabel`, `useCurrentMinuteTimestamp`, and `shouldRetryQuery` into adjacent helper modules. Removed the `TranscriptEditor` utility re-export and deleted now-unused transcript utility exports. Updated all imports to the new helper modules. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "non-component exports"` failed first on `buttonVariants`, then on the transcript re-export and unused transcript utilities. GREEN: the focused guard passed after the split and utility cleanup; `pnpm test --run tests/query-provider.test.ts tests/time-display.test.tsx tests/surrogate-interview-accessibility.test.tsx tests/interview-tab.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor no longer reports these `only-export-components` findings. |
+| `react-doctor/rendering-usetransition-loading`, `react-doctor/async-defer-await`, `react-doctor/no-prevent-default`, `react-doctor/prefer-dynamic-import` | `app/login/LoginPageClient.tsx`, `app/ops/login/page.client.tsx`, `app/mfa/page.client.tsx`, `app/ops/agencies/page.client.tsx`, `components/tasks/EditDialog.tsx`, `components/ui/chart.tsx` | Triage only. The transition-loading and submit/default-prevention findings need product-behavior decisions; the async findings rely on sequencing guards; the chart dynamic-import finding is valid but should be handled after reading the local Next.js lazy-loading docs. | Medium | Left unchanged in this batch and logged rather than making speculative behavior changes. | Subagent validation plus source inspection; no suppression or config change. |
+
+Changed-scope command after Batch 145: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `32`
+- Summary: residual warnings in touched import-consumer files only: `react-doctor/no-giant-component` (`4`), `react-doctor/prefer-useReducer` (`2`), `react-doctor/no-event-handler` (`21`), `react-doctor/rendering-usetransition-loading` (`1`), `react-doctor/async-defer-await` (`1`), and `react-doctor/jsx-max-depth` (`3`).
+- Removed from changed-scope results: the targeted `react-doctor/only-export-components` and transcript helper export warnings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bad458d7-9424-40fb-8dfe-75b2f881d6af`
+
+Full command after Batch 145: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `172`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 69 warnings`
+- Removed globally since Batch 144: `react-doctor/only-export-components` (`7` net warnings); no `deslop/unused-export` warnings remain from the transcript helper cleanup.
+- Remaining `react-doctor/only-export-components`: `4` warnings in `components/intended-parents/IntendedParentFormFields.tsx` and `components/surrogates/profile/ProfileCard/context.tsx`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6d0c9ead-b1ba-49a5-a77e-758908e4a9a6`

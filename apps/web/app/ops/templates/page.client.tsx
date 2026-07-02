@@ -4,7 +4,8 @@ import { type ReactNode, startTransition, useEffect, useState } from "react"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Table,

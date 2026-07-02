@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ApiError } from '../lib/api'
-import { shouldRetryQuery } from '../lib/query-provider'
+import { shouldRetryQuery } from '../lib/query-retry'
 
 describe('shouldRetryQuery', () => {
     it('does not retry auth or rate limit errors', () => {

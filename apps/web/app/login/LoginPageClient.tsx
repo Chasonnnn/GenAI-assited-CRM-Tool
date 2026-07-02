@@ -5,7 +5,8 @@ import Link from "next/link"
 import { AlertCircle, ArrowLeft, Loader2Icon, ShieldCheck } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getAuthApiBase } from "@/lib/auth-utils"
 

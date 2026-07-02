@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type ElementType } from 'react';
 import Link from "@/components/app-link";
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button-variants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, AlertTriangle, Plus, Bell, Loader2 } from 'lucide-react';

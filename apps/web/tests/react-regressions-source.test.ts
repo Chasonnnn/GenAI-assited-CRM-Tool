@@ -964,6 +964,24 @@ describe("React regression guards (source)", () => {
         expect(inputGroupSource).not.toContain("InputGroupTextarea")
     })
 
+    it("keeps non-component exports out of component modules", () => {
+        const buttonSource = readSource("components/ui/button.tsx")
+        const toggleSource = readSource("components/ui/toggle.tsx")
+        const timeDisplaySource = readSource("components/ui/time-display.tsx")
+        const queryProviderSource = readSource("lib/query-provider.tsx")
+        const transcriptEditorSource = readSource("components/surrogates/interviews/TranscriptEditor.tsx")
+        const transcriptUtilsSource = readSource("components/surrogates/interviews/transcript-utils.ts")
+
+        expect(buttonSource).not.toContain("export { Button, buttonVariants }")
+        expect(toggleSource).not.toContain("export { Toggle, toggleVariants }")
+        expect(timeDisplaySource).not.toContain("export function useCurrentMinuteTimestamp")
+        expect(timeDisplaySource).not.toContain("export function formatUtcDateLabel")
+        expect(queryProviderSource).not.toContain("export function shouldRetryQuery")
+        expect(transcriptEditorSource).not.toContain("export { isTranscriptEmpty")
+        expect(transcriptUtilsSource).not.toContain("extractCommentIds")
+        expect(transcriptUtilsSource).not.toContain("removeCommentFromDoc")
+    })
+
     it("keeps the carousel root free of manual React memoization", () => {
         const source = readSource("components/ui/carousel.tsx")
 

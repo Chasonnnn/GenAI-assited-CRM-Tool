@@ -3,7 +3,8 @@
 import { useState } from "react"
 import Link from "@/components/app-link"
 import { AlertCircle, ChevronDown, ChevronUp, ShieldAlert } from "lucide-react"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
     Empty,
     EmptyHeader,

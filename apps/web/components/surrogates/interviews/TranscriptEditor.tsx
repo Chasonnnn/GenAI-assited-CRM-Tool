@@ -396,6 +396,3 @@ export function TranscriptEditor({
         </div>
     )
 }
-
-// Re-export utilities for backward compatibility
-export { isTranscriptEmpty, extractCommentIds, removeCommentFromDoc } from "./transcript-utils"

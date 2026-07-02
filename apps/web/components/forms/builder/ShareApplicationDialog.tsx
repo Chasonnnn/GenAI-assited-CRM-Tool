@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { formatUtcDateLabel } from "@/components/ui/time-display"
+import { formatUtcDateLabel } from "@/components/ui/time-display-utils"
 import type { FormEmbedHealthRead, FormIntakeLinkRead, TrackingMode } from "@/lib/api/forms"
 
 type ShareApplicationDialogProps = {

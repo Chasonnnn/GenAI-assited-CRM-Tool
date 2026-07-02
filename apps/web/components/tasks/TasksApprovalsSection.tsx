@@ -11,11 +11,9 @@ import type { TaskListItem } from "@/lib/types/task"
 import type { StatusChangeRequestDetail } from "@/lib/api/status-change-requests"
 import type { ImportApprovalItem } from "@/lib/api/import"
 import { ClockIcon, Loader2Icon, ShieldCheckIcon } from "lucide-react"
-import {
-    RelativeTime,
-    formatUtcDateLabel,
-    useCurrentMinuteTimestamp,
-} from "@/components/ui/time-display"
+import { RelativeTime } from "@/components/ui/time-display"
+import { formatUtcDateLabel } from "@/components/ui/time-display-utils"
+import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
 
 type TasksApprovalsSectionProps = {
     pendingApprovals: TaskListItem[]
