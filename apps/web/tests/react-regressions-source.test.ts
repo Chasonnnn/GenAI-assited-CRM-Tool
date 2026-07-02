@@ -14,6 +14,17 @@ function readExportedFunctionSource(source: string, functionName: string): strin
     return nextExport === -1 ? source.slice(start) : source.slice(start, nextExport)
 }
 
+function readFunctionSource(source: string, functionName: string): string {
+    const start = source.indexOf(`function ${functionName}`)
+    expect(start, functionName).toBeGreaterThanOrEqual(0)
+
+    const nextFunction = source.indexOf("\nfunction ", start + 1)
+    const nextExport = source.indexOf("\nexport function ", start + 1)
+    const nextMarkers = [nextFunction, nextExport].filter((index) => index > start)
+    const end = nextMarkers.length ? Math.min(...nextMarkers) : source.length
+    return source.slice(start, end)
+}
+
 function findOpeningTags(source: string, tagName: string): string[] {
     return Array.from(source.matchAll(new RegExp(`<${tagName}\\b[\\s\\S]*?/>`, "g"))).map(
         (match) => match[0]
@@ -1730,6 +1741,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain('role="button"')
         expect(source).not.toContain("tabIndex={0}")
         expect(source).not.toContain("onKeyDown={(e)")
+    })
+
+    it("keeps appointment card pending actions out of the selectable card variant", () => {
+        const source = readSource("components/appointments/AppointmentsList.tsx")
+        const appointmentCardSource = readFunctionSource(source, "AppointmentCard")
+
+        expect(appointmentCardSource).toContain("trailingActions")
+        expect(appointmentCardSource).not.toContain("isApproving")
+        expect(appointmentCardSource).not.toContain("isCancelling")
+        expect(appointmentCardSource).not.toContain("onApprove")
+        expect(appointmentCardSource).not.toContain("onCancel")
     })
 
     it("uses functional updates for public booking form fields", () => {

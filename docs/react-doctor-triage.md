@@ -3310,3 +3310,25 @@ Full command after Batch 149: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 65 warnings`
 - Removed globally since Batch 148: `react-doctor/prefer-tag-over-role` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-31e13bf6-cf56-4f4a-9c79-8a6c33123c18`
+
+## Batch 150
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-explicit-variants` | `components/appointments/AppointmentsList.tsx` | Valid, independently confirmed by subagent. After Batch 149, `AppointmentCard` still owned the pending-card variant through `onApprove`, `onCancel`, `isApproving`, and `isCancelling` boolean/optional props. | High | Refactored `AppointmentCard` to accept a `trailingActions` slot. The parent now renders the pending Approve/Decline buttons with the same handlers, loading icons, disabled states, and classes; non-pending cards still render the chevron inside the selectable button. Added a source guard that keeps pending action props out of `AppointmentCard`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "pending actions out"` failed on missing `trailingActions`. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "appointment card"`; `pnpm test --run tests/appointments-google-meet.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reports `prefer-explicit-variants`. |
+
+Changed-scope command after Batch 150: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `2`
+- Summary: residual pre-existing warnings in `components/appointments/AppointmentsList.tsx`: `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer`.
+- Removed from changed-scope results: `react-doctor/prefer-explicit-variants` for `AppointmentCard`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-180ad583-d47a-4021-86aa-373da8ab2441`
+
+Full command after Batch 150: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `164`
+- Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 64 warnings`
+- Removed globally since Batch 149: `react-doctor/prefer-explicit-variants` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4fd29131-91ca-48ed-b992-ec0a3faffb43`

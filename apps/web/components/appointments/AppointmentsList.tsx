@@ -10,7 +10,7 @@
  * - Detail side panel
  */
 
-import { startTransition, useEffect, useState } from "react"
+import { startTransition, useEffect, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -76,17 +76,11 @@ const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
 function AppointmentCard({
     appointment,
     onSelect,
-    onApprove,
-    onCancel,
-    isApproving,
-    isCancelling,
+    trailingActions,
 }: {
     appointment: AppointmentListItem
     onSelect: () => void
-    onApprove?: () => void
-    onCancel?: () => void
-    isApproving?: boolean
-    isCancelling?: boolean
+    trailingActions?: ReactNode
 }) {
     const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
     const initials = appointment.client_name
@@ -139,46 +133,14 @@ function AppointmentCard({
                         )}
                     </span>
                 </span>
-                {appointment.status !== "pending" && (
+                {!trailingActions && (
                     <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" />
                 )}
             </button>
 
-            {appointment.status === "pending" && onApprove && onCancel && (
+            {trailingActions && (
                 <div className="flex items-center gap-2 pr-4">
-                    <Button
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            onApprove()
-                        }}
-                        disabled={isApproving}
-                        className="bg-green-600 hover:bg-green-700"
-                    >
-                        {isApproving ? (
-                            <Loader2Icon className="size-4 animate-spin" />
-                        ) : (
-                            <CheckIcon className="size-4" />
-                        )}
-                        <span className="ml-1.5">Approve</span>
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            onCancel()
-                        }}
-                        disabled={isCancelling}
-                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                    >
-                        {isCancelling ? (
-                            <Loader2Icon className="size-4 animate-spin" />
-                        ) : (
-                            <XIcon className="size-4" />
-                        )}
-                        <span className="ml-1.5">Decline</span>
-                    </Button>
+                    {trailingActions}
                 </div>
             )}
         </div>
@@ -651,12 +613,41 @@ function AppointmentsTabContent({
         <>
             <div className="space-y-3">
                 {data.items.map((appt) => {
-                    const onApprove = status === "pending"
-                        ? () => approveMutation.mutate(appt.id)
-                        : undefined
-                    const onCancel = status === "pending"
-                        ? () => cancelMutation.mutate({ appointmentId: appt.id })
-                        : undefined
+                    const isApproving = approveMutation.isPending && approveMutation.variables === appt.id
+                    const isCancelling =
+                        cancelMutation.isPending &&
+                        cancelMutation.variables?.appointmentId === appt.id
+                    const trailingActions = status === "pending" ? (
+                        <>
+                            <Button
+                                size="sm"
+                                onClick={() => approveMutation.mutate(appt.id)}
+                                disabled={isApproving}
+                                className="bg-green-600 hover:bg-green-700"
+                            >
+                                {isApproving ? (
+                                    <Loader2Icon className="size-4 animate-spin" />
+                                ) : (
+                                    <CheckIcon className="size-4" />
+                                )}
+                                <span className="ml-1.5">Approve</span>
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => cancelMutation.mutate({ appointmentId: appt.id })}
+                                disabled={isCancelling}
+                                className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                            >
+                                {isCancelling ? (
+                                    <Loader2Icon className="size-4 animate-spin" />
+                                ) : (
+                                    <XIcon className="size-4" />
+                                )}
+                                <span className="ml-1.5">Decline</span>
+                            </Button>
+                        </>
+                    ) : null
                     return (
                         <AppointmentCard
                             appointment={appt}
@@ -664,13 +655,7 @@ function AppointmentsTabContent({
                                 setSelectedId(appt.id)
                                 setDialogOpen(true)
                             }}
-                            isApproving={approveMutation.isPending && approveMutation.variables === appt.id}
-                            isCancelling={
-                                cancelMutation.isPending &&
-                                cancelMutation.variables?.appointmentId === appt.id
-                            }
-                            {...(onApprove ? { onApprove } : {})}
-                            {...(onCancel ? { onCancel } : {})}
+                            {...(trailingActions ? { trailingActions } : {})}
                             key={appt.id}
                         />
                     )
