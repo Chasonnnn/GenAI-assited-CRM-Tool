@@ -1591,6 +1591,21 @@ describe("React regression guards (source)", () => {
         expect(scheduleParserSource).not.toContain("const getConfidenceBadge = (confidence")
     })
 
+    it("keeps email template handler bookkeeping out of render state", () => {
+        const source = readSource("app/(app)/automation/email-templates/page.tsx")
+
+        expect(source).toContain("const templateBodyModeTouchedRef = useRef(false)")
+        expect(source).toContain("const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)")
+        expect(source).toContain("const copyShareTargetRef = useRef<EmailTemplateListItem | null>(null)")
+        expect(source).toContain("const testSendTouchedRef = useRef<Record<string, boolean>>({})")
+        expect(source).toContain("const libraryCopyTargetRef = useRef<EmailTemplateLibraryItem | null>(null)")
+        expect(source).not.toContain("const [templateBodyModeTouched, setTemplateBodyModeTouched] = useState")
+        expect(source).not.toContain("const [activeInsertionTarget, setActiveInsertionTarget] = useState")
+        expect(source).not.toContain("const [copyShareTarget, setCopyShareTarget] = useState")
+        expect(source).not.toContain("const [testSendTouched, setTestSendTouched] = useState")
+        expect(source).not.toContain("const [libraryCopyTarget, setLibraryCopyTarget] = useState")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")

@@ -788,7 +788,7 @@ export default function EmailTemplatesPage() {
     const [templateSubject, setTemplateSubject] = useState("")
     const [templateBody, setTemplateBody] = useState("")
     const [templateBodyMode, setTemplateBodyMode] = useState<EditorMode>("visual")
-    const [templateBodyModeTouched, setTemplateBodyModeTouched] = useState(false)
+    const templateBodyModeTouchedRef = useRef(false)
     const [templateScope, setTemplateScope] = useState<EmailTemplateScope>("personal")
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
@@ -799,12 +799,12 @@ export default function EmailTemplatesPage() {
     const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
-    const [activeInsertionTarget, setActiveInsertionTarget] = useState<ActiveInsertionTarget>(null)
+    const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
 
     // Copy/Share dialog state
     const [copyDialogOpen, setCopyDialogOpen] = useState(false)
     const [shareDialogOpen, setShareDialogOpen] = useState(false)
-    const [copyShareTarget, setCopyShareTarget] = useState<EmailTemplateListItem | null>(null)
+    const copyShareTargetRef = useRef<EmailTemplateListItem | null>(null)
     const [copyShareName, setCopyShareName] = useState("")
 
     // Test send dialog state
@@ -813,11 +813,11 @@ export default function EmailTemplatesPage() {
     const [testSendToEmail, setTestSendToEmail] = useState("")
     const [testSendIgnoreOptOut, setTestSendIgnoreOptOut] = useState(false)
     const [testSendVariables, setTestSendVariables] = useState<Record<string, string>>({})
-    const [testSendTouched, setTestSendTouched] = useState<Record<string, boolean>>({})
+    const testSendTouchedRef = useRef<Record<string, boolean>>({})
 
     // Platform library copy/preview state
     const [libraryCopyOpen, setLibraryCopyOpen] = useState(false)
-    const [libraryCopyTarget, setLibraryCopyTarget] = useState<EmailTemplateLibraryItem | null>(null)
+    const libraryCopyTargetRef = useRef<EmailTemplateLibraryItem | null>(null)
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
 
@@ -971,8 +971,8 @@ export default function EmailTemplatesPage() {
             setTemplateBody("")
             setTemplateScope(template.scope)
             setTemplateBodyMode("visual")
-            setTemplateBodyModeTouched(false)
-            setActiveInsertionTarget(null)
+            templateBodyModeTouchedRef.current = false
+            activeInsertionTargetRef.current = null
         } else {
             setEditingTemplate(null)
             setTemplateName("")
@@ -980,8 +980,8 @@ export default function EmailTemplatesPage() {
             setTemplateBody("")
             setTemplateScope(scope)
             setTemplateBodyMode("visual")
-            setTemplateBodyModeTouched(false)
-            setActiveInsertionTarget(null)
+            templateBodyModeTouchedRef.current = false
+            activeInsertionTargetRef.current = null
         }
         setIsModalOpen(true)
     }
@@ -992,13 +992,13 @@ export default function EmailTemplatesPage() {
             if (!templateBody) {
                 setTemplateBody(fullTemplate.body)
             }
-            if (!templateBodyModeTouched) {
+            if (!templateBodyModeTouchedRef.current) {
                 const complex = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(fullTemplate.body)
                 setTemplateBodyMode(complex ? "html" : "visual")
-                setActiveInsertionTarget(null)
+                activeInsertionTargetRef.current = null
             }
         })
-    }, [fullTemplate, editingTemplate, templateBody, templateBodyModeTouched])
+    }, [fullTemplate, editingTemplate, templateBody])
 
     const handleSave = () => {
         if (!templateName.trim() || !templateSubject.trim() || !templateBody.trim()) return
@@ -1023,13 +1023,13 @@ export default function EmailTemplatesPage() {
     }
 
     const handleOpenCopyDialog = (template: EmailTemplateListItem) => {
-        setCopyShareTarget(template)
+        copyShareTargetRef.current = template
         setCopyShareName(`${template.name} (Copy)`)
         setCopyDialogOpen(true)
     }
 
     const handleOpenShareDialog = (template: EmailTemplateListItem) => {
-        setCopyShareTarget(template)
+        copyShareTargetRef.current = template
         setCopyShareName(template.name)
         setShareDialogOpen(true)
     }
@@ -1039,7 +1039,7 @@ export default function EmailTemplatesPage() {
         setTestSendToEmail(user?.email || "")
         setTestSendIgnoreOptOut(false)
         setTestSendVariables({})
-        setTestSendTouched({})
+        testSendTouchedRef.current = {}
         setTestSendOpen(true)
     }
 
@@ -1053,7 +1053,7 @@ export default function EmailTemplatesPage() {
 
         const overrides: Record<string, string> = {}
         for (const [key, value] of Object.entries(testSendVariables)) {
-            if (!testSendTouched[key]) continue
+            if (!testSendTouchedRef.current[key]) continue
             const trimmed = value.trim()
             if (!trimmed) continue
             overrides[key] = trimmed
@@ -1078,21 +1078,22 @@ export default function EmailTemplatesPage() {
             setTestSendOpen(false)
             setTestSendTarget(null)
             setTestSendVariables({})
-            setTestSendTouched({})
+            testSendTouchedRef.current = {}
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
         }
     }
 
     const handleCopy = () => {
-        if (!copyShareTarget || !copyShareName.trim()) return
+        const target = copyShareTargetRef.current
+        if (!target || !copyShareName.trim()) return
         copyToPersonal.mutate(
-            { id: copyShareTarget.id, data: { name: copyShareName.trim() } },
+            { id: target.id, data: { name: copyShareName.trim() } },
             {
                 onSuccess: () => {
                     toast.success("Template copied to your personal templates")
                     setCopyDialogOpen(false)
-                    setCopyShareTarget(null)
+                    copyShareTargetRef.current = null
                     setCopyShareName("")
                 },
                 onError: (error: Error) => {
@@ -1103,14 +1104,15 @@ export default function EmailTemplatesPage() {
     }
 
     const handleShare = () => {
-        if (!copyShareTarget || !copyShareName.trim()) return
+        const target = copyShareTargetRef.current
+        if (!target || !copyShareName.trim()) return
         shareWithOrg.mutate(
-            { id: copyShareTarget.id, data: { name: copyShareName.trim() } },
+            { id: target.id, data: { name: copyShareName.trim() } },
             {
                 onSuccess: () => {
                     toast.success("Template shared with the organization")
                     setShareDialogOpen(false)
-                    setCopyShareTarget(null)
+                    copyShareTargetRef.current = null
                     setCopyShareName("")
                 },
                 onError: (error: Error) => {
@@ -1172,14 +1174,15 @@ export default function EmailTemplatesPage() {
     }
 
     const handleLibraryCopy = () => {
-        if (!libraryCopyTarget || !libraryCopyName.trim()) return
+        const target = libraryCopyTargetRef.current
+        if (!target || !libraryCopyName.trim()) return
         copyFromLibrary.mutate(
-            { id: libraryCopyTarget.id, data: { name: libraryCopyName.trim() } },
+            { id: target.id, data: { name: libraryCopyName.trim() } },
             {
                 onSuccess: () => {
                     toast.success("Template copied to org templates")
                     setLibraryCopyOpen(false)
-                    setLibraryCopyTarget(null)
+                    libraryCopyTargetRef.current = null
                     setLibraryCopyName("")
                 },
                 onError: (error: Error) => {
@@ -1190,6 +1193,7 @@ export default function EmailTemplatesPage() {
     }
 
     const insertToken = (token: string) => {
+        const activeInsertionTarget = activeInsertionTargetRef.current
         if (activeInsertionTarget === "subject") {
             insertIntoTextControl(subjectRef.current, subjectSelectionRef, setTemplateSubject, token)
             return
@@ -1215,11 +1219,11 @@ export default function EmailTemplatesPage() {
         const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
         if (templateBodyMode === "visual") {
             visualBodyRef.current?.insertHtml(logo)
-            setActiveInsertionTarget("body_visual")
+            activeInsertionTargetRef.current = "body_visual"
             return
         }
         insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, logo)
-        setActiveInsertionTarget("body_html")
+        activeInsertionTargetRef.current = "body_html"
     }
 
     // Save all signature settings
@@ -1473,7 +1477,7 @@ export default function EmailTemplatesPage() {
                                             <Button
                                                 size="sm"
                                                 onClick={() => {
-                                                    setLibraryCopyTarget(template)
+                                                    libraryCopyTargetRef.current = template
                                                     setLibraryCopyName(template.name)
                                                     setLibraryCopyOpen(true)
                                                 }}
@@ -1762,7 +1766,7 @@ export default function EmailTemplatesPage() {
                 onOpenChange={(open) => {
                     setIsModalOpen(open)
                     if (!open) {
-                        setActiveInsertionTarget(null)
+                        activeInsertionTargetRef.current = null
                     }
                 }}
             >
@@ -1805,7 +1809,7 @@ export default function EmailTemplatesPage() {
                                 value={templateSubject}
                                 onChange={(e) => setTemplateSubject(e.target.value)}
                                 onFocus={(e) => {
-                                    setActiveInsertionTarget("subject")
+                                    activeInsertionTargetRef.current = "subject"
                                     recordSelection(e.currentTarget, subjectSelectionRef)
                                 }}
                                 onKeyUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
@@ -1830,14 +1834,13 @@ export default function EmailTemplatesPage() {
                                             const next = value[0] as EditorMode | undefined
                                             if (!next) return
                                             setTemplateBodyMode(next)
-                                            setTemplateBodyModeTouched(true)
-                                            setActiveInsertionTarget((current) =>
-                                                current === "subject"
-                                                    ? current
-                                                    : next === "html"
-                                                      ? "body_html"
-                                                      : "body_visual"
-                                            )
+                                            templateBodyModeTouchedRef.current = true
+                                            const current = activeInsertionTargetRef.current
+                                            activeInsertionTargetRef.current = current === "subject"
+                                                ? current
+                                                : next === "html"
+                                                  ? "body_html"
+                                                  : "body_visual"
                                         }}
                                     >
                                         <ToggleGroupItem value="visual" className="h-8">
@@ -1869,7 +1872,9 @@ export default function EmailTemplatesPage() {
                                     ref={visualBodyRef}
                                     content={templateBody}
                                     onChange={(html) => setTemplateBody(html)}
-                                    onFocus={() => setActiveInsertionTarget("body_visual")}
+                                    onFocus={() => {
+                                        activeInsertionTargetRef.current = "body_visual"
+                                    }}
                                     ariaLabelledBy="template-body-label"
                                     placeholder="Write your email content here… Use the toolbar to format text."
                                     minHeight="200px"
@@ -1885,7 +1890,7 @@ export default function EmailTemplatesPage() {
                                     value={templateBody}
                                     onChange={(event) => setTemplateBody(event.target.value)}
                                     onFocus={(event) => {
-                                        setActiveInsertionTarget("body_html")
+                                        activeInsertionTargetRef.current = "body_html"
                                         recordSelection(event.currentTarget, htmlBodySelectionRef)
                                     }}
                                     onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
@@ -2067,7 +2072,7 @@ export default function EmailTemplatesPage() {
                     if (!open) {
                         setTestSendTarget(null)
                         setTestSendVariables({})
-                        setTestSendTouched({})
+                        testSendTouchedRef.current = {}
                         setTestSendIgnoreOptOut(false)
                     }
                 }}
@@ -2152,10 +2157,7 @@ export default function EmailTemplatesPage() {
                                                                         ...prev,
                                                                         [variableName]: value,
                                                                     }))
-                                                                    setTestSendTouched((prev) => ({
-                                                                        ...prev,
-                                                                        [variableName]: true,
-                                                                    }))
+                                                                    testSendTouchedRef.current[variableName] = true
                                                                 }}
                                                             />
                                                         </div>

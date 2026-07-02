@@ -2936,3 +2936,27 @@ Full command after Batch 130: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 95 warnings`, `Performance 18 warnings`, `Accessibility 14 warnings`, `Maintainability 108 warnings`
 - Removed globally: `react-doctor/rerender-state-only-in-handlers` (`3` warnings) and `react-doctor/prefer-module-scope-pure-function` (`2` warnings)
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-aa4677f1-4835-475a-837c-6788ca9f1776`
+
+## Batch 131
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rerender-state-only-in-handlers` | `app/(app)/automation/email-templates/page.tsx` | Valid scanner finding: `templateBodyModeTouched`, `activeInsertionTarget`, `copyShareTarget`, `testSendTouched`, and `libraryCopyTarget` were bookkeeping values read only by effects or event handlers. They do not feed JSX or rendered derivations, so `useState` rerendered the email template page without changing visible UI. | High | Replaced those values with refs, kept UI-driven values like `copyShareName` and `testSendVariables` in state, and captured ref targets in local constants before mutation calls. Added a source guard so these handler-only values stay out of render state. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "email template handler bookkeeping"` failed on the old `useState` declarations, then failed again when `testSendTouched` was added to the guard. GREEN: the same guard passed; `pnpm test --run tests/email-templates-page.test.tsx` passed with `16` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reports state-only handler warnings for `email-templates`. |
+| `react-doctor/rerender-state-only-in-handlers` | `app/(app)/settings/queues/page.tsx` | False positive: the flagged `selectedUserId` state is render-reachable. It drives the queue member `Select` value and disables/enables the Add button in JSX, so changing it to a ref would break the visible selection flow. | High | No code change. Logged as invalid after source validation. | Source evidence: `selectedUserId` is used in `<Select value={selectedUserId}>` and `disabled={!selectedUserId || addMemberMutation.isPending}`. |
+| `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-explicit-variants`, `react-doctor/no-many-boolean-props`, `react-doctor/prefer-useReducer` | `app/(app)/automation/email-templates/page.tsx` | Valid residual findings, but outside this handler-only state batch. Fixing them implies moving effect-triggered event logic into originating handlers and splitting/reducing the large email-template page, which should be handled as separate TDD slices. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scored `90 / 100` with these `7` residual warnings only. |
+
+Changed-scope command after Batch 131: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `90 / 100 Great`
+- Total diagnostics in changed files: `7`
+- Summary: `Bugs 4 warnings`, `Maintainability 3 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1492b521-368e-49ad-b5d8-e95fa008a4d1`
+- Note: `react-doctor/rerender-state-only-in-handlers` no longer appears in changed-scope diagnostics.
+
+Full command after Batch 131: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics: `229`
+- Summary: `Bugs 94 warnings`, `Performance 13 warnings`, `Accessibility 14 warnings`, `Maintainability 108 warnings`
+- Removed globally: `react-doctor/rerender-state-only-in-handlers` in `email-templates` (`5` warnings) and one follow-on `react-doctor/no-event-handler` warning tied to the touched-state effect dependency.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-08d481f1-e652-43d7-8491-0acc525f4743`
