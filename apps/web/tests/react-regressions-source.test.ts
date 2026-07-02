@@ -2902,6 +2902,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("Saving...")
     })
 
+    it("keeps unified calendar drag payload out of render state", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+
+        expect(source).toContain("const draggedAppointmentRef = useRef<AppointmentListItem | null>(null)")
+        expect(source).toContain("draggedAppointmentRef.current = appointment")
+        expect(source).toContain("const draggedAppointment = draggedAppointmentRef.current")
+        expect(source).not.toContain("const [draggedAppointment, setDraggedAppointment]")
+        expect(source).not.toContain("setDraggedAppointment(")
+    })
+
     it("keeps AppSidebar state and nav rendering compiler-friendly", () => {
         const source = readSource("components/app-sidebar.tsx")
 

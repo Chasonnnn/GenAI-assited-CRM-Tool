@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { useState, type KeyboardEvent } from "react"
+import { useRef, useState, type KeyboardEvent } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -1265,7 +1265,7 @@ export function UnifiedCalendar({
     const [dragRescheduleDateSeed, setDragRescheduleDateSeed] = useState<string | null>(null)
 
     // Drag and drop state
-    const [draggedAppointment, setDraggedAppointment] = useState<AppointmentListItem | null>(null)
+    const draggedAppointmentRef = useRef<AppointmentListItem | null>(null)
     const [dragOverDate, setDragOverDate] = useState<string | null>(null)
 
     // Fetch appointments for current view range
@@ -1317,7 +1317,7 @@ export function UnifiedCalendar({
 
     // Drag handlers
     const handleDragStart = (e: React.DragEvent, appointment: AppointmentListItem) => {
-        setDraggedAppointment(appointment)
+        draggedAppointmentRef.current = appointment
         e.dataTransfer.effectAllowed = "move"
         e.dataTransfer.setData("text/plain", appointment.id)
     }
@@ -1335,6 +1335,7 @@ export function UnifiedCalendar({
         e.preventDefault()
         setDragOverDate(null)
 
+        const draggedAppointment = draggedAppointmentRef.current
         if (!draggedAppointment) return
 
         // Keep same-day drops as no-op.
@@ -1350,7 +1351,7 @@ export function UnifiedCalendar({
         )
 
         if (isSameDay(originalStart, targetDate)) {
-            setDraggedAppointment(null)
+            draggedAppointmentRef.current = null
             return
         }
 
@@ -1358,7 +1359,7 @@ export function UnifiedCalendar({
         setDragRescheduleAppointmentId(draggedAppointment.id)
         setDragRescheduleDateSeed(format(targetDate, "yyyy-MM-dd"))
         setDragRescheduleDialogOpen(true)
-        setDraggedAppointment(null)
+        draggedAppointmentRef.current = null
     }
     const handleTodayClick = () => {
         setCurrentDate(new Date())
