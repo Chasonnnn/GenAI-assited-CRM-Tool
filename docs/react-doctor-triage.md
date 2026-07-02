@@ -2850,3 +2850,20 @@ Full command after Batch 126: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `327`
 - Summary: `Bugs 134 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 148 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6e217e4f-3cf8-4864-9040-181e0cb0d429`
+
+## Batch 127
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/appointments/PublicBookingPage.tsx` | Valid scanner finding: the nine flagged calls resolved to React's named `useMemo` import. React Compiler is enabled, and the React Doctor rule docs say to replace React `useMemo` wrappers with plain values/functions when no preserve-manual-memoization case applies. | High | Removed the manual memoization import and wrappers from public booking date-time formatters, calendar-day derivation, timezone options, selected meeting modes, available dates, and date-filtered slots. Moved block-style derivations into pure helpers and preserved the original mount-time slot range with a lazy `useState` initializer. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "keeps production date-time formatters"` failed on the old source. GREEN: the same guard passed; `pnpm test --run tests/appointments-google-meet.test.tsx` passed with `15` behavior tests; `pnpm test --run tests/react-regressions-source.test.ts tests/appointments-google-meet.test.tsx` passed with `233` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Changed-scope React Doctor no longer reports manual memoization in `PublicBookingPage.tsx`. |
+| `react-doctor/no-event-handler`, `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `components/appointments/PublicBookingPage.tsx` | Valid residual findings, but outside this manual-memoization batch. Fixing them implies a reducer-backed page-state refactor and/or page split that changes event/state ownership and should be handled as a separate TDD slice. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scored `91 / 100` with these five residual warnings only. |
+
+Changed-scope command after Batch 127: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `91 / 100 Great`
+- Total diagnostics in changed files: `5`
+- Summary: `Bugs 4 warnings`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-006cf555-ca61-473f-b045-134ff981091a`
+- Note: remaining changed-scope diagnostics are the broader page-state and component-size warnings logged above as a separate future batch.
+
+Full command after Batch 127: not rerun. The required network escalation for `npx -y react-doctor@latest . --verbose` was rejected by the environment usage limit after the local test/lint checks passed.

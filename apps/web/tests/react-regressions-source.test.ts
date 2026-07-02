@@ -2871,7 +2871,7 @@ describe("React regression guards (source)", () => {
         }
     })
 
-    it("memoizes production date-time formatters instead of rebuilding them per call", () => {
+    it("keeps production date-time formatters compiler-compatible", () => {
         const unifiedCalendarSource = readSource("components/appointments/UnifiedCalendar.tsx")
         const publicBookingSource = readSource("components/appointments/PublicBookingPage.tsx")
         const activityTimelineSource = readSource("components/surrogates/ActivityTimeline.tsx")
@@ -2886,8 +2886,10 @@ describe("React regression guards (source)", () => {
         expect(unifiedCalendarSource).toContain("clientTimeFormatter = useMemo(")
         expect(unifiedCalendarSource).not.toMatch(/new Intl\.DateTimeFormat/)
         expect(publicBookingSource).toContain("function useBookingDateTimeFormatters")
-        expect(publicBookingSource).toContain("timeFormatter = useMemo(")
-        expect(publicBookingSource).toContain("dateFormatter = useMemo(")
+        expect(publicBookingSource).toContain("const timeFormatter = Intl.DateTimeFormat")
+        expect(publicBookingSource).toContain("const dateFormatter = Intl.DateTimeFormat")
+        expect(publicBookingSource).not.toContain("useMemo")
+        expect(publicBookingSource).not.toContain("React.useMemo")
         expect(publicBookingSource).not.toMatch(/new Intl\.DateTimeFormat/)
         expect(activityTimelineSource).toContain("const activityTimestampFormatter = new Intl.DateTimeFormat")
         expect(aiStudioSource).toContain("const draftDateFormatter = new Intl.DateTimeFormat")

@@ -13,7 +13,7 @@
  * - Confirmation view
  */
 
-import { startTransition, useState, useEffect, useMemo } from "react"
+import { startTransition, useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -136,33 +136,100 @@ function getMeetingModes(type: AppointmentType | null | undefined): MeetingMode[
     return type.meeting_mode ? [type.meeting_mode] : []
 }
 
+type BookingCalendarDay = {
+    cellKey: string
+    date: Date | null
+    dateKey: string | null
+    isToday: boolean
+    hasSlots: boolean
+}
+
 function useBookingDateTimeFormatters(timezone: string) {
-    const timeFormatter = useMemo(
-        () => Intl.DateTimeFormat("en-US", {
-            timeZone: timezone,
-            hour: "numeric",
-            minute: "2-digit",
-        }),
-        [timezone]
-    )
+    const timeFormatter = Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "numeric",
+        minute: "2-digit",
+    })
 
-    const dateFormatter = useMemo(
-        () => Intl.DateTimeFormat("en-US", {
-            timeZone: timezone,
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-        }),
-        [timezone]
-    )
+    const dateFormatter = Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    })
 
-    return useMemo(
-        () => ({
-            formatTimeInZone: (date: Date) => timeFormatter.format(date),
-            formatDateInZone: (date: Date) => dateFormatter.format(date),
-        }),
-        [dateFormatter, timeFormatter]
+    return {
+        formatTimeInZone: (date: Date) => timeFormatter.format(date),
+        formatDateInZone: (date: Date) => dateFormatter.format(date),
+    }
+}
+
+function buildCalendarDays(
+    viewMonth: Date,
+    availableDates: Set<string>,
+    timezone: string
+): BookingCalendarDay[] {
+    const start = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
+    const startDay = start.getDay() // 0 = Sunday
+    const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate()
+    const monthKey = format(viewMonth, "yyyy-MM")
+
+    const result: BookingCalendarDay[] = []
+
+    // Padding for days before month starts
+    for (let i = 0; i < startDay; i++) {
+        result.push({
+            cellKey: `${monthKey}-padding-${i}`,
+            date: null,
+            dateKey: null,
+            isToday: false,
+            hasSlots: false,
+        })
+    }
+
+    const todayKey = getTodayDateKeyInTimeZone(timezone)
+    for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d)
+        const dateKey = formatPlainDateKey(date)
+        result.push({
+            cellKey: dateKey,
+            date,
+            dateKey,
+            isToday: dateKey === todayKey,
+            hasSlots: availableDates.has(dateKey) && !isPastDateKey(dateKey, timezone),
+        })
+    }
+
+    return result
+}
+
+function getTimezoneOptions(timezone: string) {
+    if (TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)) {
+        return TIMEZONE_OPTIONS
+    }
+    return [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
+}
+
+function getInitialBookingDateRange() {
+    const start = format(new Date(), "yyyy-MM-dd")
+    const end = format(addDays(new Date(), 30), "yyyy-MM-dd")
+    return { start, end }
+}
+
+function getAvailableDates(slots: TimeSlot[] | undefined, timezone: string) {
+    const dates = new Set<string>()
+    slots?.forEach((slot) => {
+        dates.add(formatDateKeyInTimeZone(parseISO(slot.start), timezone))
+    })
+    return dates
+}
+
+function getSlotsForDate(selectedDate: Date | null, slots: TimeSlot[] | undefined, timezone: string) {
+    if (!selectedDate || !slots) return []
+    const dateStr = formatPlainDateKey(selectedDate)
+    return slots.filter((slot) =>
+        formatDateKeyInTimeZone(parseISO(slot.start), timezone) === dateStr
     )
 }
 
@@ -371,46 +438,7 @@ function CalendarView({
 }) {
     const [viewMonth, setViewMonth] = useState(new Date())
 
-    const days = useMemo(() => {
-        const start = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
-        const startDay = start.getDay() // 0 = Sunday
-        const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate()
-        const monthKey = format(viewMonth, "yyyy-MM")
-
-        const result: Array<{
-            cellKey: string
-            date: Date | null
-            dateKey: string | null
-            isToday: boolean
-            hasSlots: boolean
-        }> = []
-
-        // Padding for days before month starts
-        for (let i = 0; i < startDay; i++) {
-            result.push({
-                cellKey: `${monthKey}-padding-${i}`,
-                date: null,
-                dateKey: null,
-                isToday: false,
-                hasSlots: false,
-            })
-        }
-
-        const todayKey = getTodayDateKeyInTimeZone(timezone)
-        for (let d = 1; d <= daysInMonth; d++) {
-            const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d)
-            const dateKey = formatPlainDateKey(date)
-            result.push({
-                cellKey: dateKey,
-                date,
-                dateKey,
-                isToday: dateKey === todayKey,
-                hasSlots: availableDates.has(dateKey) && !isPastDateKey(dateKey, timezone),
-            })
-        }
-
-        return result
-    }, [viewMonth, availableDates, timezone])
+    const days = buildCalendarDays(viewMonth, availableDates, timezone)
 
     const prevMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1))
     const nextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1))
@@ -1010,18 +1038,8 @@ export function PublicBookingPage({
         }
     }, [pageData?.org_timezone, timezone])
 
-    const timezoneOptions = useMemo(() => {
-        if (TIMEZONE_OPTIONS.some((opt) => opt.value === timezone)) {
-            return TIMEZONE_OPTIONS
-        }
-        return [...TIMEZONE_OPTIONS, { value: timezone, label: timezone }]
-    }, [timezone])
-
-    const dateRange = useMemo(() => {
-        const start = format(new Date(), "yyyy-MM-dd")
-        const end = format(addDays(new Date(), 30), "yyyy-MM-dd")
-        return { start, end }
-    }, [])
+    const timezoneOptions = getTimezoneOptions(timezone)
+    const [dateRange] = useState(getInitialBookingDateRange)
 
     const publicSlotsQuery = useAvailableSlots(
         publicSlug,
@@ -1047,39 +1065,27 @@ export function PublicBookingPage({
 
     // Derived state
     const selectedType = pageData?.appointment_types.find((t) => t.id === selectedTypeId)
-    const selectedTypeModes = useMemo(() => getMeetingModes(selectedType), [selectedType])
+    const selectedTypeModes = getMeetingModes(selectedType)
     const requiresMeetingModeSelection = selectedTypeModes.length > 1
     const meetingModeReady = !requiresMeetingModeSelection || Boolean(selectedMeetingMode)
 
     useEffect(() => {
+        const nextModes = getMeetingModes(selectedType)
         startTransition(() => {
             if (!selectedType) {
                 setSelectedMeetingMode(null)
                 return
             }
-            if (selectedTypeModes.length === 1) {
-                setSelectedMeetingMode(selectedTypeModes[0] ?? null)
+            if (nextModes.length === 1) {
+                setSelectedMeetingMode(nextModes[0] ?? null)
             } else {
                 setSelectedMeetingMode(null)
             }
         })
-    }, [selectedType, selectedTypeModes])
+    }, [selectedType])
 
-    const availableDates = useMemo(() => {
-        const dates = new Set<string>()
-        slotsData?.slots.forEach((slot) => {
-            dates.add(formatDateKeyInTimeZone(parseISO(slot.start), timezone))
-        })
-        return dates
-    }, [slotsData, timezone])
-
-    const slotsForDate = useMemo(() => {
-        if (!selectedDate || !slotsData) return []
-        const dateStr = formatPlainDateKey(selectedDate)
-        return slotsData.slots.filter((slot) =>
-            formatDateKeyInTimeZone(parseISO(slot.start), timezone) === dateStr
-        )
-    }, [selectedDate, slotsData, timezone])
+    const availableDates = getAvailableDates(slotsData?.slots, timezone)
+    const slotsForDate = getSlotsForDate(selectedDate, slotsData?.slots, timezone)
 
     // Handlers
     const handleSubmit = (formData: Omit<BookingCreate, "appointment_type_id" | "scheduled_start" | "client_timezone">) => {
