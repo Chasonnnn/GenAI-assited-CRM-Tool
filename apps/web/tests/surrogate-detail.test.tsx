@@ -1850,6 +1850,30 @@ describe('SurrogateDetailPage', () => {
         })
     })
 
+    it('blocks surrogate edit dialog save when native form validity fails', async () => {
+        const reportValidity = vi.spyOn(HTMLFormElement.prototype, 'reportValidity').mockReturnValueOnce(false)
+
+        try {
+            render(
+                <SurrogateDetailLayoutClient>
+                    <SurrogateOverviewTab />
+                </SurrogateDetailLayoutClient>
+            )
+
+            mockUpdateSurrogate.mockClear()
+
+            fireEvent.click(screen.getByRole('button', { name: /more actions/i }))
+            fireEvent.click(screen.getByRole('menuitem', { name: /^edit$/i }))
+            await screen.findByRole('dialog')
+            fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+            expect(reportValidity).toHaveBeenCalled()
+            expect(mockUpdateSurrogate).not.toHaveBeenCalled()
+        } finally {
+            reportValidity.mockRestore()
+        }
+    })
+
     it('edits height with feet and inches controls and saves canonical decimal feet', async () => {
         mockUseSurrogate.mockReturnValue({
             data: {

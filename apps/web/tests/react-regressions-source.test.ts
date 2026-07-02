@@ -1817,6 +1817,17 @@ describe("React regression guards (source)", () => {
         expect(opsLoginSource).not.toContain("setIsLoading")
     })
 
+    it("keeps surrogate edit dialog saves button-driven", () => {
+        const source = readSource("components/surrogates/detail/SurrogateDetailLayout/dialogs/EditDialog.tsx")
+
+        expect(source).toContain("function handleSave")
+        expect(source).toContain("form.reportValidity()")
+        expect(source).toContain('type="button"')
+        expect(source).not.toContain("onSubmit=")
+        expect(source).not.toContain("preventDefault")
+        expect(source).not.toContain('type="submit"')
+    })
+
     it("uses functional updates for public booking form fields", () => {
         const source = readSource("components/appointments/PublicBookingPage.tsx")
 

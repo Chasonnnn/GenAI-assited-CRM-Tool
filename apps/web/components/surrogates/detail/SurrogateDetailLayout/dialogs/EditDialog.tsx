@@ -121,6 +121,7 @@ export function EditDialog() {
     const { activeDialog, closeDialog } = useSurrogateDetailDialogs()
     const { updateSurrogate, isUpdatePending } = useSurrogateDetailActions()
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
+    const formRef = React.useRef<HTMLFormElement>(null)
 
     const isOpen = activeDialog.type === "edit_surrogate"
 
@@ -133,78 +134,80 @@ export function EditDialog() {
     const visibleChecklistKeys = new Set(editableChecklistItems.map((item) => item.key))
     const heightSelection = splitHeightFt(surrogate.height_ft)
 
+    async function handleSave() {
+        const form = formRef.current
+        if (!form) return
+        if (!form.reportValidity()) return
+
+        const formData = new FormData(form)
+        const data: Record<string, unknown> = {}
+        const getString = (key: string) => {
+            const value = formData.get(key)
+            return typeof value === "string" ? value : ""
+        }
+
+        const fullName = getString("full_name")
+        if (fullName) data.full_name = fullName
+        const email = getString("email")
+        if (email) data.email = email
+        const phone = getString("phone")
+        data.phone = phone || null
+        const state = getString("state")
+        data.state = state || null
+        const dateOfBirth = getString("date_of_birth")
+        data.date_of_birth = dateOfBirth || null
+        const race = getString("race")
+        data.race = race || null
+
+        data.height_ft = serializeHeightSelection(
+            getString("height_feet"),
+            getString("height_inches"),
+        )
+        const weightLb = getString("weight_lb")
+        data.weight_lb = weightLb ? parseFloat(weightLb) : null
+        const numDeliveries = getString("num_deliveries")
+        const numCsections = getString("num_csections")
+        const journeyTimingPreference = getString("journey_timing_preference")
+
+        if (visibleChecklistKeys.has("num_deliveries")) {
+            data.num_deliveries = numDeliveries ? parseInt(numDeliveries, 10) : null
+        }
+        if (visibleChecklistKeys.has("num_csections")) {
+            data.num_csections = numCsections ? parseInt(numCsections, 10) : null
+        }
+        if (visibleChecklistKeys.has("journey_timing_preference")) {
+            data.journey_timing_preference = journeyTimingPreference || null
+        }
+
+        if (visibleChecklistKeys.has("is_age_eligible")) {
+            data.is_age_eligible = formData.get("is_age_eligible") === "on"
+        }
+        if (visibleChecklistKeys.has("is_citizen_or_pr")) {
+            data.is_citizen_or_pr = formData.get("is_citizen_or_pr") === "on"
+        }
+        if (visibleChecklistKeys.has("has_child")) {
+            data.has_child = formData.get("has_child") === "on"
+        }
+        if (visibleChecklistKeys.has("is_non_smoker")) {
+            data.is_non_smoker = formData.get("is_non_smoker") === "on"
+        }
+        if (visibleChecklistKeys.has("has_surrogate_experience")) {
+            data.has_surrogate_experience = formData.get("has_surrogate_experience") === "on"
+        }
+        if (canManagePriority) {
+            data.is_priority = formData.get("is_priority") === "on"
+        }
+
+        await updateSurrogate(data)
+    }
+
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
             <DialogContent key={surrogate.id} className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Edit Surrogate: #{surrogate.surrogate_number}</DialogTitle>
                 </DialogHeader>
-                <form
-                    onSubmit={async (event: React.FormEvent<HTMLFormElement>) => {
-                        event.preventDefault()
-                        const form = event.currentTarget
-                        const formData = new FormData(form)
-                        const data: Record<string, unknown> = {}
-                        const getString = (key: string) => {
-                            const value = formData.get(key)
-                            return typeof value === "string" ? value : ""
-                        }
-
-                        const fullName = getString("full_name")
-                        if (fullName) data.full_name = fullName
-                        const email = getString("email")
-                        if (email) data.email = email
-                        const phone = getString("phone")
-                        data.phone = phone || null
-                        const state = getString("state")
-                        data.state = state || null
-                        const dateOfBirth = getString("date_of_birth")
-                        data.date_of_birth = dateOfBirth || null
-                        const race = getString("race")
-                        data.race = race || null
-
-                        data.height_ft = serializeHeightSelection(
-                            getString("height_feet"),
-                            getString("height_inches"),
-                        )
-                        const weightLb = getString("weight_lb")
-                        data.weight_lb = weightLb ? parseFloat(weightLb) : null
-                        const numDeliveries = getString("num_deliveries")
-                        const numCsections = getString("num_csections")
-                        const journeyTimingPreference = getString("journey_timing_preference")
-
-                        if (visibleChecklistKeys.has("num_deliveries")) {
-                            data.num_deliveries = numDeliveries ? parseInt(numDeliveries, 10) : null
-                        }
-                        if (visibleChecklistKeys.has("num_csections")) {
-                            data.num_csections = numCsections ? parseInt(numCsections, 10) : null
-                        }
-                        if (visibleChecklistKeys.has("journey_timing_preference")) {
-                            data.journey_timing_preference = journeyTimingPreference || null
-                        }
-
-                        if (visibleChecklistKeys.has("is_age_eligible")) {
-                            data.is_age_eligible = formData.get("is_age_eligible") === "on"
-                        }
-                        if (visibleChecklistKeys.has("is_citizen_or_pr")) {
-                            data.is_citizen_or_pr = formData.get("is_citizen_or_pr") === "on"
-                        }
-                        if (visibleChecklistKeys.has("has_child")) {
-                            data.has_child = formData.get("has_child") === "on"
-                        }
-                        if (visibleChecklistKeys.has("is_non_smoker")) {
-                            data.is_non_smoker = formData.get("is_non_smoker") === "on"
-                        }
-                        if (visibleChecklistKeys.has("has_surrogate_experience")) {
-                            data.has_surrogate_experience = formData.get("has_surrogate_experience") === "on"
-                        }
-                        if (canManagePriority) {
-                            data.is_priority = formData.get("is_priority") === "on"
-                        }
-
-                        await updateSurrogate(data)
-                    }}
-                >
+                <form ref={formRef}>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -355,7 +358,7 @@ export function EditDialog() {
                     </div>
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={closeDialog}>Cancel</Button>
-                        <Button type="submit" disabled={isUpdatePending}>
+                        <Button type="button" disabled={isUpdatePending} onClick={() => void handleSave()}>
                             {isUpdatePending ? "Saving..." : "Save Changes"}
                         </Button>
                     </DialogFooter>

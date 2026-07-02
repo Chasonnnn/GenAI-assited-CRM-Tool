@@ -3410,3 +3410,23 @@ Full command after Batch 154: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
 - Removed globally since Batch 153: `react-doctor/rendering-usetransition-loading` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b9b74af0-bc91-4325-a053-4440b90cf376`
+
+## Batch 155
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-prevent-default` | `components/surrogates/detail/SurrogateDetailLayout/dialogs/EditDialog.tsx` | Valid. The edit dialog used a submit handler only to intercept the browser form submission and run the save mutation. The dialog already has an explicit Save control, so the clearer model is button-driven save with native validity reporting before mutation. | High | Moved save logic into `handleSave`, attached a `formRef`, and used `form.reportValidity()` before collecting `FormData`. Changed Save to `type="button"` with `onClick={() => void handleSave()}` and left the form as a field container. Added a source guard rejecting `onSubmit`, `preventDefault`, and submit buttons in this dialog, plus behavior coverage that an invalid form blocks the mutation. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "edit dialog saves"` failed on the missing button-driven save guard. GREEN: focused source guard passed; `pnpm test --run tests/surrogate-detail.test.tsx -t "edit dialog save\|Journey Timing\|height"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 155: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 155: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `156`
+- Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
+- Removed globally since Batch 154: `react-doctor/no-prevent-default` (`1` warning); that rule is no longer present in the full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7431179f-eeaf-4579-aa94-00134f07c038`
