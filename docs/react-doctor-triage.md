@@ -3332,3 +3332,25 @@ Full command after Batch 150: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 64 warnings`
 - Removed globally since Batch 149: `react-doctor/prefer-explicit-variants` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4fd29131-91ca-48ed-b992-ec0a3faffb43`
+
+## Batch 151
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-explicit-variants` | `app/(app)/automation/email-templates/page.tsx`, `components/surrogates/detail/SurrogateAiTab.tsx` | Valid, independently confirmed by subagents. `SignaturePhotoField` mixed upload/delete pending states into its presentational photo layout, and `SurrogateAiTab` exposed action loading variants as boolean props. | High | Converted `SignaturePhotoField` to accept explicit action slots (`avatarAction`, `customPhotoAction`) so the page owns upload/delete controls and pending states. Replaced `SurrogateAiTab` boolean loading props with explicit status props (`summaryStatus`, `draftEmailStatus`). Added a source guard for the prop API and behavior tests for summary/draft loading and disabled states. | GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "small loading variants"`; `pnpm test --run tests/surrogate-ai-tab.test.tsx tests/email-templates-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor no longer reports `prefer-explicit-variants`. |
+
+Changed-scope command after Batch 151: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `6`
+- Summary: residual pre-existing warnings in `app/(app)/automation/email-templates/page.tsx`: `react-doctor/no-many-boolean-props` (`1`), `react-doctor/no-giant-component` (`1`), `react-doctor/prefer-useReducer` (`1`), and `react-doctor/no-event-handler` (`3`).
+- Removed from changed-scope results: the targeted `react-doctor/prefer-explicit-variants` findings in `SignaturePhotoField` and `SurrogateAiTab`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-73da46c3-855f-4912-b3b3-c623ad6784a9`
+
+Full command after Batch 151: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `162`
+- Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 62 warnings`
+- Removed globally since Batch 150: remaining `react-doctor/prefer-explicit-variants` (`2` warnings); that rule is no longer present in the full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2d5b636b-4b2d-4a41-8810-b75111cb9365`

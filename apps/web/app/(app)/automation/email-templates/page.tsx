@@ -174,22 +174,17 @@ interface SignaturePhotoFieldProps {
     signaturePhotoUrl: string | null
     profilePhotoUrl: string | null
     profileName: string
-    onUpload: (file: File) => void
-    onDelete: () => void
-    isUploading: boolean
-    isDeleting: boolean
+    avatarAction: React.ReactNode
+    customPhotoAction?: React.ReactNode
 }
 
 function SignaturePhotoField({
     signaturePhotoUrl,
     profilePhotoUrl,
     profileName,
-    onUpload,
-    onDelete,
-    isUploading,
-    isDeleting,
+    avatarAction,
+    customPhotoAction,
 }: SignaturePhotoFieldProps) {
-    const fileInputRef = useRef<HTMLInputElement>(null)
     const hasSignaturePhoto = !!signaturePhotoUrl
     const displayPhoto = signaturePhotoUrl || profilePhotoUrl
 
@@ -199,25 +194,6 @@ function SignaturePhotoField({
         .join("")
         .toUpperCase()
         .slice(0, 2) || "??"
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
-        const allowedTypes = ["image/png", "image/jpeg", "image/webp"]
-        if (!allowedTypes.includes(file.type)) {
-            toast.error("Please select a PNG, JPEG, or WebP image")
-            return
-        }
-
-        if (file.size > 2 * 1024 * 1024) {
-            toast.error("Image must be less than 2MB")
-            return
-        }
-
-        onUpload(file)
-        e.target.value = ""
-    }
 
     return (
         <div className="space-y-3">
@@ -230,29 +206,7 @@ function SignaturePhotoField({
                             {initials}
                         </AvatarFallback>
                     </Avatar>
-                    <input
-                        id="signature-photo-upload"
-                        name="signature_photo_upload"
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        accept="image/png,image/jpeg,image/webp"
-                        aria-label="Upload signature photo"
-                        className="hidden"
-                    />
-                    <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
-                        aria-label="Upload signature photo"
-                    >
-                        {isUploading ? (
-                            <Loader2Icon className="size-3.5 animate-spin" />
-                        ) : (
-                            <CameraIcon className="size-3.5" />
-                        )}
-                    </button>
+                    {avatarAction}
                 </div>
                 <div className="flex-1 space-y-1">
                     {hasSignaturePhoto ? (
@@ -263,21 +217,7 @@ function SignaturePhotoField({
                             <p className="text-xs text-muted-foreground">
                                 Different from your profile avatar
                             </p>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={onDelete}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <Loader2Icon className="mr-1 size-3 animate-spin" />
-                                ) : (
-                                    <TrashIcon className="mr-1 size-3" />
-                                )}
-                                Remove & use profile photo
-                            </Button>
+                            {customPhotoAction}
                         </>
                     ) : (
                         <>
@@ -800,6 +740,7 @@ export default function EmailTemplatesPage() {
     const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
     const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
     const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
+    const signaturePhotoInputRef = useRef<HTMLInputElement>(null)
 
     // Copy/Share dialog state
     const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -1253,6 +1194,25 @@ export default function EmailTemplatesPage() {
         })
     }
 
+    const handleSignaturePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        const allowedTypes = ["image/png", "image/jpeg", "image/webp"]
+        if (!allowedTypes.includes(file.type)) {
+            toast.error("Please select a PNG, JPEG, or WebP image")
+            return
+        }
+
+        if (file.size > 2 * 1024 * 1024) {
+            toast.error("Image must be less than 2MB")
+            return
+        }
+
+        handleUploadPhoto(file)
+        e.target.value = ""
+    }
+
     const handleDeletePhoto = () => {
         if (confirm("Remove your signature photo? Your profile avatar will be used instead.")) {
             deletePhotoMutation.mutate(undefined, {
@@ -1511,10 +1471,50 @@ export default function EmailTemplatesPage() {
                                             signaturePhotoUrl={signatureData?.signature_photo_url || null}
                                             profilePhotoUrl={signatureData?.profile_photo_url || null}
                                             profileName={signatureData?.profile_name || ""}
-                                            onUpload={handleUploadPhoto}
-                                            onDelete={handleDeletePhoto}
-                                            isUploading={uploadPhotoMutation.isPending}
-                                            isDeleting={deletePhotoMutation.isPending}
+                                            avatarAction={
+                                                <>
+                                                    <input
+                                                        id="signature-photo-upload"
+                                                        name="signature_photo_upload"
+                                                        type="file"
+                                                        ref={signaturePhotoInputRef}
+                                                        onChange={handleSignaturePhotoChange}
+                                                        accept="image/png,image/jpeg,image/webp"
+                                                        aria-label="Upload signature photo"
+                                                        className="hidden"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => signaturePhotoInputRef.current?.click()}
+                                                        disabled={uploadPhotoMutation.isPending}
+                                                        className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
+                                                        aria-label="Upload signature photo"
+                                                    >
+                                                        {uploadPhotoMutation.isPending ? (
+                                                            <Loader2Icon className="size-3.5 animate-spin" />
+                                                        ) : (
+                                                            <CameraIcon className="size-3.5" />
+                                                        )}
+                                                    </button>
+                                                </>
+                                            }
+                                            customPhotoAction={
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                    onClick={handleDeletePhoto}
+                                                    disabled={deletePhotoMutation.isPending}
+                                                >
+                                                    {deletePhotoMutation.isPending ? (
+                                                        <Loader2Icon className="mr-1 size-3 animate-spin" />
+                                                    ) : (
+                                                        <TrashIcon className="mr-1 size-3" />
+                                                    )}
+                                                    Remove & use profile photo
+                                                </Button>
+                                            }
                                         />
 
                                         <div className="border-t pt-4" />

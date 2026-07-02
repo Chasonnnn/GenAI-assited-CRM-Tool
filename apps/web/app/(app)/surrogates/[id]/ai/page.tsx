@@ -42,8 +42,8 @@ export default function SurrogateAiPage() {
                 onSelectEmailType={setSelectedEmailType}
                 onGenerateSummary={handleGenerateSummary}
                 onDraftEmail={handleDraftEmail}
-                isGeneratingSummary={summarizeSurrogateMutation.isPending}
-                isDraftingEmail={draftEmailMutation.isPending}
+                summaryStatus={summarizeSurrogateMutation.isPending ? "generating" : "idle"}
+                draftEmailStatus={draftEmailMutation.isPending ? "drafting" : "idle"}
             />
         </TabsContent>
     )

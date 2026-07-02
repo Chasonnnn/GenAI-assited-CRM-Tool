@@ -1754,6 +1754,25 @@ describe("React regression guards (source)", () => {
         expect(appointmentCardSource).not.toContain("onCancel")
     })
 
+    it("keeps small loading variants out of boolean prop APIs", () => {
+        const emailTemplatesSource = readSource("app/(app)/automation/email-templates/page.tsx")
+        const signaturePhotoFieldSource = readFunctionSource(emailTemplatesSource, "SignaturePhotoField")
+        const surrogateAiTabSource = readSource("components/surrogates/detail/SurrogateAiTab.tsx")
+
+        expect(signaturePhotoFieldSource).toContain("avatarAction")
+        expect(signaturePhotoFieldSource).toContain("customPhotoAction")
+        expect(signaturePhotoFieldSource).not.toContain("uploadStatus")
+        expect(signaturePhotoFieldSource).not.toContain("deleteStatus")
+        expect(signaturePhotoFieldSource).not.toContain("isUploading")
+        expect(signaturePhotoFieldSource).not.toContain("isDeleting")
+        expect(signaturePhotoFieldSource).not.toContain("onUpload")
+        expect(signaturePhotoFieldSource).not.toContain("onDelete")
+        expect(surrogateAiTabSource).toContain("summaryStatus")
+        expect(surrogateAiTabSource).toContain("draftEmailStatus")
+        expect(surrogateAiTabSource).not.toContain("isGeneratingSummary")
+        expect(surrogateAiTabSource).not.toContain("isDraftingEmail")
+    })
+
     it("uses functional updates for public booking form fields", () => {
         const source = readSource("components/appointments/PublicBookingPage.tsx")
 

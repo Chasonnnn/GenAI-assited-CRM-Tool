@@ -22,8 +22,8 @@ type SurrogateAiTabProps = {
     onSelectEmailType: (value: EmailType) => void
     onGenerateSummary: () => void
     onDraftEmail: () => void
-    isGeneratingSummary: boolean
-    isDraftingEmail: boolean
+    summaryStatus: "idle" | "generating"
+    draftEmailStatus: "idle" | "drafting"
     emailTypes?: EmailType[]
 }
 
@@ -35,10 +35,13 @@ export function SurrogateAiTab({
     onSelectEmailType,
     onGenerateSummary,
     onDraftEmail,
-    isGeneratingSummary,
-    isDraftingEmail,
+    summaryStatus,
+    draftEmailStatus,
     emailTypes = DEFAULT_EMAIL_TYPES,
 }: SurrogateAiTabProps) {
+    const summaryPending = summaryStatus === "generating"
+    const draftEmailPending = draftEmailStatus === "drafting"
+
     if (aiSettings && !aiSettings.is_enabled) {
         return (
             <Card>
@@ -68,10 +71,10 @@ export function SurrogateAiTab({
                 <CardContent className="space-y-4">
                     <Button
                         onClick={onGenerateSummary}
-                        disabled={isGeneratingSummary}
+                        disabled={summaryPending}
                         className="w-full"
                     >
-                        {isGeneratingSummary ? (
+                        {summaryPending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin" /> Generating
                             </>
@@ -159,10 +162,10 @@ export function SurrogateAiTab({
 
                     <Button
                         onClick={onDraftEmail}
-                        disabled={!selectedEmailType || isDraftingEmail}
+                        disabled={!selectedEmailType || draftEmailPending}
                         className="w-full"
                     >
-                        {isDraftingEmail ? (
+                        {draftEmailPending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin" /> Drafting
                             </>
