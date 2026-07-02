@@ -2780,3 +2780,26 @@ Full command after Batch 123: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `360`
 - Summary: `Bugs 135 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 180 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fe47629e-bf83-4119-ba62-f97e91d9e9e5`
+
+## Batch 124
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `components/surrogates/SurrogatesFloatingScrollbar.tsx` | Valid scanner finding: the file used 15 React `useMemo` / `useCallback` wrappers even though React Compiler is enabled in `next.config.js`. The derived scrollbar geometry and event handlers did not require preserve-manual-memoization semantics. | High | Moved pointer detection, timer clearing, table-container lookup, scroll-source lookup, and metrics measurement into module-scope helpers; replaced memoized values and callbacks with plain render-time derivations/functions; used `useEffectEvent` only for effect-owned scroll listeners that need latest render state. Added a source guard to keep this scrollbar free of manual React memoization. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "floating scrollbar free"` failed on the old `useMemo` / `useCallback` source. GREEN: the same guard passed; `pnpm test --run tests/surrogates-floating-scrollbar.test.tsx` passed with `8` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Full redundant manual memoization dropped from `68` to `53`. |
+| `react-doctor/prefer-use-effect-event` / `react-doctor/exhaustive-deps` | `components/surrogates/SurrogatesFloatingScrollbar.tsx` | Valid follow-on finding during implementation: removing manual callbacks naively made the subscription effect depend on fresh render functions, which resubscribed timers/listeners and broke idle hiding behavior. | High | Reworked the effect-owned scroll/mouse/resize listeners to call a `useEffectEvent` wrapper and moved effect-local sync/metric work inside the effect. Removed the effect-event function from the dependency list after React Doctor correctly flagged it. | The focused scrollbar behavior tests caught the idle-hide regression during the first implementation attempt. Final changed-scope React Doctor has no errors and no effect-event dependency findings. |
+| `react-doctor/no-cascading-set-state`, `react-doctor/no-initialize-state`, `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `components/surrogates/SurrogatesFloatingScrollbar.tsx` | Valid residual warnings, but not part of this manual-memoization batch. They imply a broader reducer/external-store and component-splitting refactor that should be handled as a separate TDD slice because it touches timer, pointer, and visibility behavior. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scores `89 / 100` with these four residual warnings only. |
+
+Changed-scope command after Batch 124: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `89 / 100 Great`
+- Total diagnostics in changed files: `4`
+- Summary: `Bugs 3 warnings`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-bfb00731-fff3-4177-92ab-98874f98485b`
+- Note: remaining changed-scope diagnostics are the broader reducer/initialization/component-size warnings logged above as a separate future batch.
+
+Full command after Batch 124: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `69 / 100 Needs work`
+- Total diagnostics: `344`
+- Summary: `Bugs 134 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 165 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b0c528a-2c72-4fd3-a0b4-080aa8cf3f24`

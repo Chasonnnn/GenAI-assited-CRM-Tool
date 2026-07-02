@@ -1,6 +1,16 @@
 "use client"
 
-import { type ReactNode, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+    type Dispatch,
+    type ReactNode,
+    type RefObject,
+    type SetStateAction,
+    startTransition,
+    useEffect,
+    useEffectEvent,
+    useRef,
+    useState,
+} from "react"
 import { createPortal } from "react-dom"
 
 const POINTER_QUERIES = ["(any-pointer: fine)", "(pointer: fine)"]
@@ -38,6 +48,100 @@ function clamp(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, value))
 }
 
+function clearTimerRef(timeoutRef: { current: number | null }) {
+    if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+    }
+}
+
+function detectPointerCapability() {
+    if (typeof window === "undefined" || !window.matchMedia) return true
+
+    const hasFinePointer = POINTER_QUERIES.some((query) => window.matchMedia(query).matches)
+    const hasHover = HOVER_QUERIES.some((query) => window.matchMedia(query).matches)
+
+    // Prefer broader activation to avoid false negatives on mixed-input devices.
+    return hasFinePointer || hasHover
+}
+
+function resolveTableContainerFromRefs(
+    wrapperRef: RefObject<HTMLDivElement | null>,
+    tableContainerRef: { current: HTMLDivElement | null }
+) {
+    if (tableContainerRef.current?.isConnected) {
+        return tableContainerRef.current
+    }
+
+    const wrapper = wrapperRef.current
+    if (!wrapper) return null
+    const container = wrapper.querySelector<HTMLDivElement>('[data-slot="table-container"]')
+    tableContainerRef.current = container
+    return container
+}
+
+function resolveScrollSources(element: HTMLElement): Array<HTMLElement | Window> {
+    const sources: Array<HTMLElement | Window> = []
+    let parent = element.parentElement
+
+    // Track all ancestors so scroll activity from any container is captured.
+    while (parent) {
+        sources.push(parent)
+        parent = parent.parentElement
+    }
+
+    sources.push(window)
+    return sources
+}
+
+function updateScrollbarMetrics(
+    wrapperRef: RefObject<HTMLDivElement | null>,
+    tableContainerRef: { current: HTMLDivElement | null },
+    setScrollLeft: Dispatch<SetStateAction<number>>,
+    setMetrics: Dispatch<SetStateAction<ScrollbarMetrics>>
+) {
+    const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
+    if (!tableContainer) {
+        setMetrics((prev) => (prev.hasOverflow ? INITIAL_METRICS : prev))
+        return false
+    }
+
+    const rect = tableContainer.getBoundingClientRect()
+    const width = Math.max(0, rect.width - HORIZONTAL_INSET_PX * 2)
+    const viewportWidth = tableContainer.clientWidth
+    const hasOverflow = tableContainer.scrollWidth - tableContainer.clientWidth > 1
+    const inView = rect.bottom > 0 && rect.top < window.innerHeight
+    const nativeScrollbarVisible =
+        rect.bottom >= 0 && rect.bottom <= window.innerHeight - NATIVE_SCROLLBAR_VISIBILITY_THRESHOLD_PX
+    const nextMetrics: ScrollbarMetrics = {
+        left: rect.left + HORIZONTAL_INSET_PX,
+        width,
+        viewportWidth,
+        contentWidth: tableContainer.scrollWidth,
+        hasOverflow,
+        inView,
+        nativeScrollbarVisible,
+    }
+    setScrollLeft(tableContainer.scrollLeft)
+
+    setMetrics((prev) => {
+        if (
+            prev.left === nextMetrics.left &&
+            prev.width === nextMetrics.width &&
+            prev.viewportWidth === nextMetrics.viewportWidth &&
+            prev.contentWidth === nextMetrics.contentWidth &&
+            prev.hasOverflow === nextMetrics.hasOverflow &&
+            prev.inView === nextMetrics.inView &&
+            prev.nativeScrollbarVisible === nextMetrics.nativeScrollbarVisible
+        ) {
+            return prev
+        }
+        return nextMetrics
+    })
+
+    return hasOverflow && inView && width > 0 && !nativeScrollbarVisible
+}
+
 export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode }) {
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const tableContainerRef = useRef<HTMLDivElement | null>(null)
@@ -54,112 +158,27 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
     const [scrollLeft, setScrollLeft] = useState(0)
     const [metrics, setMetrics] = useState<ScrollbarMetrics>(INITIAL_METRICS)
 
-    const clearHideTimeout = useCallback(() => {
-        if (hideTimeoutRef.current !== null) {
-            window.clearTimeout(hideTimeoutRef.current)
-            hideTimeoutRef.current = null
-        }
-    }, [])
+    const resolveTableContainer = () => {
+        return resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
+    }
 
-    const clearFadeTimeout = useCallback(() => {
-        if (fadeTimeoutRef.current !== null) {
-            window.clearTimeout(fadeTimeoutRef.current)
-            fadeTimeoutRef.current = null
-        }
-    }, [])
+    const updateMetrics = () => {
+        return updateScrollbarMetrics(wrapperRef, tableContainerRef, setScrollLeft, setMetrics)
+    }
 
-    const detectPointerCapability = useCallback(() => {
-        if (typeof window === "undefined" || !window.matchMedia) return true
-
-        const hasFinePointer = POINTER_QUERIES.some((query) => window.matchMedia(query).matches)
-        const hasHover = HOVER_QUERIES.some((query) => window.matchMedia(query).matches)
-
-        // Prefer broader activation to avoid false negatives on mixed-input devices.
-        return hasFinePointer || hasHover
-    }, [])
-
-    const resolveTableContainer = useCallback(() => {
-        if (tableContainerRef.current?.isConnected) {
-            return tableContainerRef.current
-        }
-
-        const wrapper = wrapperRef.current
-        if (!wrapper) return null
-        const container = wrapper.querySelector<HTMLDivElement>('[data-slot="table-container"]')
-        tableContainerRef.current = container
-        return container
-    }, [])
-
-    const resolveScrollSources = useCallback((element: HTMLElement): Array<HTMLElement | Window> => {
-        const sources: Array<HTMLElement | Window> = []
-        let parent = element.parentElement
-
-        // Track all ancestors so scroll activity from any container is captured.
-        while (parent) {
-            sources.push(parent)
-            parent = parent.parentElement
-        }
-
-        sources.push(window)
-        return sources
-    }, [])
-
-    const updateMetrics = useCallback(() => {
-        const tableContainer = resolveTableContainer()
-        if (!tableContainer) {
-            setMetrics((prev) => (prev.hasOverflow ? INITIAL_METRICS : prev))
-            return false
-        }
-
-        const rect = tableContainer.getBoundingClientRect()
-        const width = Math.max(0, rect.width - HORIZONTAL_INSET_PX * 2)
-        const viewportWidth = tableContainer.clientWidth
-        const hasOverflow = tableContainer.scrollWidth - tableContainer.clientWidth > 1
-        const inView = rect.bottom > 0 && rect.top < window.innerHeight
-        const nativeScrollbarVisible =
-            rect.bottom >= 0 && rect.bottom <= window.innerHeight - NATIVE_SCROLLBAR_VISIBILITY_THRESHOLD_PX
-        const nextMetrics: ScrollbarMetrics = {
-            left: rect.left + HORIZONTAL_INSET_PX,
-            width,
-            viewportWidth,
-            contentWidth: tableContainer.scrollWidth,
-            hasOverflow,
-            inView,
-            nativeScrollbarVisible,
-        }
-        setScrollLeft(tableContainer.scrollLeft)
-
-        setMetrics((prev) => {
-            if (
-                prev.left === nextMetrics.left &&
-                prev.width === nextMetrics.width &&
-                prev.viewportWidth === nextMetrics.viewportWidth &&
-                prev.contentWidth === nextMetrics.contentWidth &&
-                prev.hasOverflow === nextMetrics.hasOverflow &&
-                prev.inView === nextMetrics.inView &&
-                prev.nativeScrollbarVisible === nextMetrics.nativeScrollbarVisible
-            ) {
-                return prev
-            }
-            return nextMetrics
-        })
-
-        return hasOverflow && inView && width > 0 && !nativeScrollbarVisible
-    }, [resolveTableContainer])
-
-    const scheduleHide = useCallback(() => {
-        clearHideTimeout()
+    const scheduleHide = () => {
+        clearTimerRef(hideTimeoutRef)
         hideTimeoutRef.current = window.setTimeout(() => {
             setIsActive(false)
             setIsFadingOut(true)
-            clearFadeTimeout()
+            clearTimerRef(fadeTimeoutRef)
             fadeTimeoutRef.current = window.setTimeout(() => {
                 setIsFadingOut(false)
             }, FADE_OUT_MS)
         }, HIDE_DELAY_MS)
-    }, [clearFadeTimeout, clearHideTimeout])
+    }
 
-    const activateFromScroll = useCallback(() => {
+    const activateFromScroll = () => {
         if (!isDesktopPointer) {
             setIsActive(false)
             return
@@ -169,36 +188,24 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         if (!isEligible) {
             setIsActive(false)
             setIsFadingOut(false)
-            clearHideTimeout()
-            clearFadeTimeout()
+            clearTimerRef(hideTimeoutRef)
+            clearTimerRef(fadeTimeoutRef)
             return
         }
 
         if (isFadingOut) {
             setIsFadingOut(false)
-            clearFadeTimeout()
+            clearTimerRef(fadeTimeoutRef)
         }
         setIsActive(true)
         scheduleHide()
-    }, [clearFadeTimeout, clearHideTimeout, isDesktopPointer, isFadingOut, scheduleHide, updateMetrics])
+    }
 
-    const syncFromTable = useCallback(() => {
-        const tableContainer = resolveTableContainer()
-        const floatingViewport = floatingViewportRef.current
-        if (!tableContainer || !floatingViewport) return
-        if (syncSourceRef.current === "floating") return
+    const activateFromScrollEvent = useEffectEvent(() => {
+        activateFromScroll()
+    })
 
-        if (Math.abs(floatingViewport.scrollLeft - tableContainer.scrollLeft) <= 1) {
-            return
-        }
-
-        syncSourceRef.current = "table"
-        floatingViewport.scrollLeft = tableContainer.scrollLeft
-        setScrollLeft(tableContainer.scrollLeft)
-        syncSourceRef.current = null
-    }, [resolveTableContainer])
-
-    const onFloatingScroll = useCallback(() => {
+    const onFloatingScroll = () => {
         const tableContainer = resolveTableContainer()
         const floatingViewport = floatingViewportRef.current
         if (!tableContainer || !floatingViewport) return
@@ -212,7 +219,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         }
 
         activateFromScroll()
-    }, [activateFromScroll, resolveTableContainer])
+    }
 
     useEffect(() => {
         startTransition(() => {
@@ -235,13 +242,13 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
                 mediaQuery.addEventListener("change", handleMediaChange)
             }
             return () => {
-                    for (const mediaQuery of mediaQueries) {
-                        mediaQuery.removeEventListener("change", handleMediaChange)
-                    }
-                    clearHideTimeout()
-                    clearFadeTimeout()
+                for (const mediaQuery of mediaQueries) {
+                    mediaQuery.removeEventListener("change", handleMediaChange)
                 }
+                clearTimerRef(hideTimeoutRef)
+                clearTimerRef(fadeTimeoutRef)
             }
+        }
 
         for (const mediaQuery of mediaQueries) {
             mediaQuery.addListener(handleMediaChange)
@@ -250,10 +257,10 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
             for (const mediaQuery of mediaQueries) {
                 mediaQuery.removeListener(handleMediaChange)
             }
-            clearHideTimeout()
-            clearFadeTimeout()
+            clearTimerRef(hideTimeoutRef)
+            clearTimerRef(fadeTimeoutRef)
         }
-    }, [clearFadeTimeout, clearHideTimeout, detectPointerCapability])
+    }, [])
 
     useEffect(() => {
         if (!isDesktopPointer) {
@@ -261,33 +268,53 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
                 setIsActive(false)
                 setIsFadingOut(false)
             })
-            clearHideTimeout()
-            clearFadeTimeout()
+            clearTimerRef(hideTimeoutRef)
+            clearTimerRef(fadeTimeoutRef)
             return
         }
 
-        const tableContainer = resolveTableContainer()
+        const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
         if (!tableContainer) return
         tableContainerRef.current = tableContainer
 
-        const onActivityScroll = () => {
-            activateFromScroll()
+        const updateMountedMetrics = () => {
+            const isEligible = updateScrollbarMetrics(wrapperRef, tableContainerRef, setScrollLeft, setMetrics)
+            if (!isEligible) setIsActive(false)
         }
+
+        const syncMountedTable = () => {
+            const floatingViewport = floatingViewportRef.current
+            if (!floatingViewport) return
+            if (syncSourceRef.current === "floating") return
+
+            if (Math.abs(floatingViewport.scrollLeft - tableContainer.scrollLeft) <= 1) {
+                return
+            }
+
+            syncSourceRef.current = "table"
+            floatingViewport.scrollLeft = tableContainer.scrollLeft
+            setScrollLeft(tableContainer.scrollLeft)
+            syncSourceRef.current = null
+        }
+
+        const onActivityScroll = () => {
+            activateFromScrollEvent()
+        }
+
         const onMouseMove = (event: MouseEvent) => {
             if (event.clientY < window.innerHeight - BOTTOM_HOVER_TRIGGER_ZONE_PX) {
                 return
             }
-            activateFromScroll()
+            activateFromScrollEvent()
         }
 
         const onResize = () => {
-            const isEligible = updateMetrics()
-            if (!isEligible) setIsActive(false)
+            updateMountedMetrics()
         }
 
         const onTableScroll = () => {
-            syncFromTable()
-            activateFromScroll()
+            syncMountedTable()
+            activateFromScrollEvent()
         }
 
         const scrollSources = resolveScrollSources(tableContainer)
@@ -308,10 +335,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         tableContainer.addEventListener("scroll", onTableScroll, { passive: true })
 
         const resizeObserver = new ResizeObserver(() => {
-            const isEligible = updateMetrics()
-            if (!isEligible) {
-                setIsActive(false)
-            }
+            updateMountedMetrics()
         })
         resizeObserver.observe(tableContainer)
         const tableElement = tableContainer.firstElementChild
@@ -320,7 +344,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         }
 
         startTransition(() => {
-            updateMetrics()
+            updateScrollbarMetrics(wrapperRef, tableContainerRef, setScrollLeft, setMetrics)
         })
 
         return () => {
@@ -339,18 +363,18 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
             window.removeEventListener("mousemove", onMouseMove)
             tableContainer.removeEventListener("scroll", onTableScroll)
         }
-    }, [activateFromScroll, clearFadeTimeout, clearHideTimeout, isDesktopPointer, resolveScrollSources, resolveTableContainer, syncFromTable, updateMetrics])
+    }, [isDesktopPointer])
 
     useEffect(() => {
         if (!isActive) return
-        const tableContainer = resolveTableContainer()
+        const tableContainer = resolveTableContainerFromRefs(wrapperRef, tableContainerRef)
         const floatingViewport = floatingViewportRef.current
         if (!tableContainer || !floatingViewport) return
         floatingViewport.scrollLeft = tableContainer.scrollLeft
         startTransition(() => {
             setScrollLeft(tableContainer.scrollLeft)
         })
-    }, [isActive, metrics.contentWidth, resolveTableContainer])
+    }, [isActive, metrics.contentWidth])
 
     const isEligibleToRender =
         isMounted &&
@@ -361,84 +385,71 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         !metrics.nativeScrollbarVisible
     const isVisible = isEligibleToRender && (isActive || isFadingOut)
 
-    const floatingStyle = useMemo(
-        () => ({
-            left: `${Math.max(HORIZONTAL_INSET_PX, metrics.left)}px`,
-            width: `${Math.max(0, metrics.width)}px`,
-            bottom: `calc(env(safe-area-inset-bottom, 0px) + ${BAR_BOTTOM_OFFSET_PX}px)`,
-        }),
-        [metrics.left, metrics.width]
-    )
+    const floatingStyle = {
+        left: `${Math.max(HORIZONTAL_INSET_PX, metrics.left)}px`,
+        width: `${Math.max(0, metrics.width)}px`,
+        bottom: `calc(env(safe-area-inset-bottom, 0px) + ${BAR_BOTTOM_OFFSET_PX}px)`,
+    }
 
     const maxScrollLeft = Math.max(0, metrics.contentWidth - metrics.viewportWidth)
-    const thumbWidth = useMemo(() => {
-        if (metrics.width <= 0 || metrics.contentWidth <= 0 || metrics.viewportWidth <= 0) return 0
-        const ratio = metrics.viewportWidth / metrics.contentWidth
-        return clamp(Math.round(metrics.width * ratio), 40, metrics.width)
-    }, [metrics.contentWidth, metrics.viewportWidth, metrics.width])
+    const thumbWidth =
+        metrics.width <= 0 || metrics.contentWidth <= 0 || metrics.viewportWidth <= 0
+            ? 0
+            : clamp(Math.round(metrics.width * (metrics.viewportWidth / metrics.contentWidth)), 40, metrics.width)
     const thumbTrackWidth = Math.max(0, metrics.width - thumbWidth)
     const thumbLeft =
         maxScrollLeft > 0 && thumbTrackWidth > 0
             ? clamp((scrollLeft / maxScrollLeft) * thumbTrackWidth, 0, thumbTrackWidth)
             : 0
 
-    const syncScrollLeft = useCallback(
-        (nextScrollLeft: number) => {
-            const tableContainer = resolveTableContainer()
-            const floatingViewport = floatingViewportRef.current
-            if (!tableContainer || !floatingViewport) return
+    const syncScrollLeft = (nextScrollLeft: number) => {
+        const tableContainer = resolveTableContainer()
+        const floatingViewport = floatingViewportRef.current
+        if (!tableContainer || !floatingViewport) return
 
-            const bounded = clamp(nextScrollLeft, 0, Math.max(0, tableContainer.scrollWidth - tableContainer.clientWidth))
-            syncSourceRef.current = "floating"
-            tableContainer.scrollLeft = bounded
-            floatingViewport.scrollLeft = bounded
-            setScrollLeft(bounded)
-            syncSourceRef.current = null
-            activateFromScroll()
-        },
-        [activateFromScroll, resolveTableContainer]
-    )
+        const bounded = clamp(nextScrollLeft, 0, Math.max(0, tableContainer.scrollWidth - tableContainer.clientWidth))
+        syncSourceRef.current = "floating"
+        tableContainer.scrollLeft = bounded
+        floatingViewport.scrollLeft = bounded
+        setScrollLeft(bounded)
+        syncSourceRef.current = null
+        activateFromScroll()
+    }
 
-    const handleTrackPointerDown = useCallback(
-        (event: React.PointerEvent<HTMLDivElement>) => {
-            if (maxScrollLeft <= 0 || thumbTrackWidth <= 0 || thumbWidth <= 0) return
-            if (thumbRef.current?.contains(event.target as Node)) return
+    const handleTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (maxScrollLeft <= 0 || thumbTrackWidth <= 0 || thumbWidth <= 0) return
+        if (thumbRef.current?.contains(event.target as Node)) return
 
-            const rect = event.currentTarget.getBoundingClientRect()
-            const pointerX = event.clientX - rect.left
-            const nextThumbLeft = clamp(pointerX - thumbWidth / 2, 0, thumbTrackWidth)
-            const nextScrollLeft = (nextThumbLeft / thumbTrackWidth) * maxScrollLeft
-            syncScrollLeft(nextScrollLeft)
-        },
-        [maxScrollLeft, syncScrollLeft, thumbTrackWidth, thumbWidth]
-    )
+        const rect = event.currentTarget.getBoundingClientRect()
+        const pointerX = event.clientX - rect.left
+        const nextThumbLeft = clamp(pointerX - thumbWidth / 2, 0, thumbTrackWidth)
+        const nextScrollLeft = (nextThumbLeft / thumbTrackWidth) * maxScrollLeft
+        syncScrollLeft(nextScrollLeft)
+    }
 
-    const handleThumbPointerDown = useCallback(
-        (event: React.PointerEvent<HTMLDivElement>) => {
-            if (maxScrollLeft <= 0 || thumbTrackWidth <= 0) return
+    const handleThumbPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (maxScrollLeft <= 0 || thumbTrackWidth <= 0) return
 
-            event.preventDefault()
-            event.stopPropagation()
+        event.preventDefault()
+        event.stopPropagation()
 
-            const startX = event.clientX
-            const startScrollLeft = scrollLeft
+        const startX = event.clientX
+        const startScrollLeft = scrollLeft
 
-            const handlePointerMove = (moveEvent: PointerEvent) => {
-                const deltaX = moveEvent.clientX - startX
-                const scrollDelta = (deltaX / thumbTrackWidth) * maxScrollLeft
-                syncScrollLeft(startScrollLeft + scrollDelta)
-            }
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+            const deltaX = moveEvent.clientX - startX
+            const scrollDelta = (deltaX / thumbTrackWidth) * maxScrollLeft
+            syncScrollLeft(startScrollLeft + scrollDelta)
+        }
 
-            const handlePointerUp = () => {
-                window.removeEventListener("pointermove", handlePointerMove)
-                window.removeEventListener("pointerup", handlePointerUp)
-            }
+        const handlePointerUp = () => {
+            window.removeEventListener("pointermove", handlePointerMove)
+            window.removeEventListener("pointerup", handlePointerUp)
+        }
 
-            window.addEventListener("pointermove", handlePointerMove)
-            window.addEventListener("pointerup", handlePointerUp)
-        },
-        [maxScrollLeft, scrollLeft, syncScrollLeft, thumbTrackWidth]
-    )
+        window.addEventListener("pointermove", handlePointerMove)
+        window.addEventListener("pointerup", handlePointerUp)
+    }
 
     return (
         <div ref={wrapperRef}>

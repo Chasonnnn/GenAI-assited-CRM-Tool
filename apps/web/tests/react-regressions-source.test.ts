@@ -1724,6 +1724,15 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps the surrogates floating scrollbar free of manual React memoization", () => {
+        const source = readSource("components/surrogates/SurrogatesFloatingScrollbar.tsx")
+
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("React.useMemo")
+        expect(source).not.toContain("React.useCallback")
+    })
+
     it("keeps surrogate detail header context files free of manual React memoization", () => {
         const sources = [
             "components/surrogates/detail/SurrogateDetailContext.tsx",
