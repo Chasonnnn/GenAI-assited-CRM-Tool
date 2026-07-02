@@ -3258,3 +3258,9 @@ Full command after Batch 146: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 65 warnings`
 - Removed globally since Batch 145: remaining `react-doctor/only-export-components` (`4` warnings); that rule is no longer present in the full scan.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-208b470a-6c26-4085-9b3a-ac6ea40b0da3`
+
+## Batch 147
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx`, `components/surrogates/CombinedMedicalInsuranceCard.tsx` | False positives, independently confirmed by subagents. In both components the flagged manually added section state is read during render to build `visibleKeys`, `visibleSections`, `availableSections`, and the rendered add/delete section controls. Replacing it with a ref would prevent the UI from rendering newly added sections. | High | Left unchanged and logged; no suppression or config change. | Source inspection of the render derivation and handlers in both files. Existing behavior tests pass: `pnpm test --run tests/intended-parent-detail.test.tsx -t "adds and removes embryo status from medical information"` and `pnpm test --run tests/surrogate-detail.test.tsx -t "allows deleting a visible section from Edit Info with confirmation"`. |
