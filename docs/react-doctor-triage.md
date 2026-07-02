@@ -3191,3 +3191,24 @@ Full command after Batch 143: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 82 warnings`
 - Removed globally since Batch 142: `deslop/unused-dependency` (`5` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2cb2d81a-ce94-4ea6-b56f-ab14bfda5e82`
+
+## Batch 144
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-multi-comp` | `components/ui/avatar.tsx`, `components/ui/collapsible.tsx`, `components/ui/popover.tsx` | Valid maintainability findings. These shared UI modules were public import surfaces but still declared multiple wrapper components inline, and React Doctor did not classify them as exempt shadcn-style barrels. | High | Split secondary wrappers into one-component files (`avatar-image`, `avatar-fallback`, `collapsible-trigger`, `collapsible-content`, `popover-trigger`, `popover-content`) and kept the original public exports stable from `avatar`, `collapsible`, and `popover`. Added source guards that prevent secondary declarations from returning to the barrel files. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "unused UI subcomponent"` failed on the inline `AvatarImage` declaration. GREEN: the same focused source guard passed after the split; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues. |
+| `react-doctor/async-await-in-loop` | `components/surrogates/interviews/InterviewTab/context.tsx` | Not edited. The rule docs say to parallelize only independent awaits; this upload loop currently stops after the first mutation failure, so a direct `Promise.all` rewrite could upload later files after an earlier upload failed. | Medium-high | Left sequential and logged as product-dependent rather than changing upload failure semantics inside the UI-wrapper batch. | Source inspection of `uploadFiles`; no suppression or config change. |
+
+Changed-scope command after Batch 144: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 144: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `179`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 76 warnings`
+- Removed globally since Batch 143: `react-doctor/no-multi-comp` (`6` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6be4ad6a-bc58-4939-8aad-14ba70f34d96`
