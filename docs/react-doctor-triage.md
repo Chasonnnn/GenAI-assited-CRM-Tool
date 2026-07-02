@@ -3151,3 +3151,23 @@ Full command after Batch 141: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 7 warnings`, `Maintainability 87 warnings`
 - Removed globally since Batch 140: `react-doctor/mouse-events-have-key-events` in `TranscriptPane` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-95be52f6-c2bf-4b67-8ff3-3b23a2abcfd6`
+
+## Batch 142
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/dialog-has-accessible-name`, `react-doctor/prefer-html-dialog` | `tests/integrations-page.test.tsx`, `tests/surrogates.test.tsx` | Valid scanner findings in test mocks: both mocked dialogs used `div role="dialog"` without an accessible name. Since these are local test doubles, swapping to native `<dialog open>` is low risk and better matches the dialog semantics being queried. | High | Replaced the mock dialog wrappers with native `<dialog open aria-label="...">` elements while preserving existing className usage and test query behavior. | `pnpm test --run tests/integrations-page.test.tsx tests/surrogates.test.tsx`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 142: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 142: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `190`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 87 warnings`
+- Removed globally since Batch 141: test-file `dialog-has-accessible-name` (`2` warnings) and `prefer-html-dialog` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c73b9ee7-939f-43ce-9156-c2e5c4ab86ca`

@@ -320,9 +320,9 @@ vi.mock('@/components/ui/dialog', () => ({
     Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
         open ? <div data-testid="dialog-root">{children}</div> : null,
     DialogContent: ({ children, className }: { children?: ReactNode; className?: string }) => (
-        <div role="dialog" className={className}>
+        <dialog open aria-label="Integration settings" className={className}>
             {children}
-        </div>
+        </dialog>
     ),
     DialogHeader: ({ children, className }: { children?: ReactNode; className?: string }) => (
         <div className={className}>{children}</div>

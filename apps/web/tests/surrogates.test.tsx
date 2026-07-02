@@ -48,11 +48,11 @@ vi.mock('@/components/surrogates/BulkChangeStageModal', () => ({
         mockBulkChangeStageModal(props)
         if (!props.open) return null
         return (
-            <div role="dialog">
+            <dialog open aria-label="Bulk stage change">
                 <button type="button" onClick={() => props.onSubmit('s2')}>
                     Mock submit bulk stage change
                 </button>
-            </div>
+            </dialog>
         )
     },
 }))
