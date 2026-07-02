@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
     Dialog,
     DialogContent,
@@ -66,6 +66,20 @@ function getWarningKey(warning: string) {
     return warning
 }
 
+function makeScheduleParserId() {
+    // crypto.randomUUID is supported in modern browsers; the fallback keeps tests/older envs happy.
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID()
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function getConfidenceBadge(confidence: number) {
+    if (confidence >= 0.8) return <Badge variant="secondary" className="bg-green-100 text-green-800">High</Badge>
+    if (confidence >= 0.5) return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Medium</Badge>
+    return <Badge variant="secondary" className="bg-red-100 text-red-800">Low</Badge>
+}
+
 export function ScheduleParserDialog({
     open,
     onOpenChange,
@@ -79,18 +93,10 @@ export function ScheduleParserDialog({
     const [warnings, setWarnings] = useState<string[]>([])
     const [metadata, setMetadata] = useState<{ timezone: string; refDate: string } | null>(null)
     const [step, setStep] = useState<"input" | "review" | "success">("input")
-    const [bulkRequestId, setBulkRequestId] = useState<string | null>(null)
+    const bulkRequestIdRef = useRef<string | null>(null)
 
     const parseSchedule = useParseSchedule()
     const createBulkTasks = useCreateBulkTasks()
-
-    const makeId = () => {
-        // crypto.randomUUID is supported in modern browsers; the fallback keeps tests/older envs happy.
-        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-            return crypto.randomUUID()
-        }
-        return `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    }
 
     // Build entity ID payload based on type
     const getEntityPayload = () => {
@@ -121,7 +127,7 @@ export function ScheduleParserDialog({
             const tasks: EditableTask[] = result.proposed_tasks.map((task) => ({
                 ...task,
                 selected: true,
-                id: makeId(),
+                id: makeScheduleParserId(),
             }))
 
             setEditableTasks(tasks)
@@ -130,7 +136,7 @@ export function ScheduleParserDialog({
                 timezone: result.assumed_timezone,
                 refDate: result.assumed_reference_date,
             })
-            setBulkRequestId(null) // new parse = new payload, reset idempotency key
+            bulkRequestIdRef.current = null // new parse = new payload, reset idempotency key
             setStep("review")
         } catch (e) {
             const message = e instanceof Error ? e.message : "Failed to parse schedule"
@@ -139,14 +145,14 @@ export function ScheduleParserDialog({
     }
 
     const handleTaskChange = <K extends keyof EditableTask>(id: string, field: K, value: EditableTask[K]) => {
-        setBulkRequestId(null) // task edits change the payload; reset idempotency key
+        bulkRequestIdRef.current = null // task edits change the payload; reset idempotency key
         setEditableTasks((prev) =>
             prev.map((task) => (task.id === id ? { ...task, [field]: value } : task))
         )
     }
 
     const handleSelectAll = (checked: boolean) => {
-        setBulkRequestId(null) // selection changes change the payload; reset idempotency key
+        bulkRequestIdRef.current = null // selection changes change the payload; reset idempotency key
         setEditableTasks((prev) => prev.map((task) => ({ ...task, selected: checked })))
     }
 
@@ -158,8 +164,8 @@ export function ScheduleParserDialog({
         }
         setErrorMessage(null)
 
-        const requestId = bulkRequestId ?? makeId()
-        if (!bulkRequestId) setBulkRequestId(requestId)
+        const requestId = bulkRequestIdRef.current ?? makeScheduleParserId()
+        bulkRequestIdRef.current = requestId
 
         try {
             const result = await createBulkTasks.mutateAsync({
@@ -193,19 +199,13 @@ export function ScheduleParserDialog({
         setMetadata(null)
         setStep("input")
         setErrorMessage(null)
-        setBulkRequestId(null)
+        bulkRequestIdRef.current = null
         onOpenChange(false)
     }
 
     const selectedCount = editableTasks.filter((t) => t.selected).length
     const allSelected = editableTasks.length > 0 && selectedCount === editableTasks.length
     const uniqueWarnings = Array.from(new Set(warnings))
-
-    const getConfidenceBadge = (confidence: number) => {
-        if (confidence >= 0.8) return <Badge variant="secondary" className="bg-green-100 text-green-800">High</Badge>
-        if (confidence >= 0.5) return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Medium</Badge>
-        return <Badge variant="secondary" className="bg-red-100 text-red-800">Low</Badge>
-    }
 
     return (
         <Dialog

@@ -2913,3 +2913,26 @@ Full command after Batch 129: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 95 warnings`, `Performance 21 warnings`, `Accessibility 14 warnings`, `Maintainability 110 warnings`
 - Removed globally: `react-doctor/react-compiler-no-manual-memoization` in `UnifiedCalendar.tsx` (`29` warnings)
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-914b4e93-e94e-4f81-9347-4a08681cd550`
+
+## Batch 130
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rerender-state-only-in-handlers` | `components/surrogates/interviews/SelectionPopover.tsx`, `components/ai/ScheduleParserDialog.tsx` | Valid scanner finding: selected transcript text/range and the schedule parser bulk request id are handler-only instance values. They do not feed rendered output, and updating them with `useState` caused avoidable rerenders. | High | Replaced selected transcript payload state with refs, replaced the schedule parser idempotency key state with a ref, and added a source guard to keep these handler-only values out of render state. Added behavior coverage that clicking the selection popover still passes the selected transcript text/range to the comment flow. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "handler-only transcript and schedule values"` failed on the old `useState` values. GREEN: the same guard passed; `pnpm test --run tests/selection-popover-listeners.test.tsx` passed with `3` tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Full React Doctor state-only handler warnings dropped from `15` to `12`. |
+| `react-doctor/prefer-module-scope-pure-function` | `components/ai/ScheduleParserDialog.tsx` | Valid follow-on finding in changed scope: `makeId` and `getConfidenceBadge` used only globals/imports/params and did not close over component state or props. | High | Hoisted them to module scope as `makeScheduleParserId` and `getConfidenceBadge`, with the same source guard covering the helper shape. | RED: the focused source guard failed on the nested `makeId`. GREEN: the guard passed; changed-scope React Doctor no longer reports pure-function warnings. Full React Doctor pure-function warnings dropped from `16` to `14`. |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `components/ai/ScheduleParserDialog.tsx` | Valid residual findings, but outside this handler-only state and pure-helper batch. Fixing them implies a reducer-backed dialog state transition and component split that should be a separate TDD slice. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scored `92 / 100` with these `2` residual warnings only. |
+
+Changed-scope command after Batch 130: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4939db9a-08d2-4960-bcce-c2a0daebe3bf`
+
+Full command after Batch 130: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics: `235`
+- Summary: `Bugs 95 warnings`, `Performance 18 warnings`, `Accessibility 14 warnings`, `Maintainability 108 warnings`
+- Removed globally: `react-doctor/rerender-state-only-in-handlers` (`3` warnings) and `react-doctor/prefer-module-scope-pure-function` (`2` warnings)
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-aa4677f1-4835-475a-837c-6788ca9f1776`

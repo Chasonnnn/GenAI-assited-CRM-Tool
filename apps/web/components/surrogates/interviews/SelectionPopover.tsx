@@ -34,8 +34,8 @@ export function SelectionPopover({
     onSelectionStateChange,
 }: SelectionPopoverProps) {
     const [position, setPosition] = useState<PopoverPosition>({ x: 0, y: 0, visible: false })
-    const [selectedText, setSelectedText] = useState("")
-    const [selectedRange, setSelectedRange] = useState<Range | null>(null)
+    const selectedTextRef = useRef("")
+    const selectedRangeRef = useRef<Range | null>(null)
     const popoverRef = useRef<HTMLDivElement>(null)
     const isClickingPopover = useRef(false)
     const isMouseDownRef = useRef(false)
@@ -69,8 +69,8 @@ export function SelectionPopover({
         const selection = window.getSelection()
         if (!selection || selection.isCollapsed) {
             setPosition({ x: 0, y: 0, visible: false })
-            setSelectedText("")
-            setSelectedRange(null)
+            selectedTextRef.current = ""
+            selectedRangeRef.current = null
             setSelectionActive(false)
             return
         }
@@ -78,8 +78,8 @@ export function SelectionPopover({
         const text = selection.toString().trim()
         if (text.length < 3) {
             setPosition({ x: 0, y: 0, visible: false })
-            setSelectedText("")
-            setSelectedRange(null)
+            selectedTextRef.current = ""
+            selectedRangeRef.current = null
             setSelectionActive(false)
             return
         }
@@ -125,8 +125,8 @@ export function SelectionPopover({
             y: firstRect.top,
             visible: true,
         })
-        setSelectedText(text)
-        setSelectedRange(range.cloneRange())
+        selectedTextRef.current = text
+        selectedRangeRef.current = range.cloneRange()
         setSelectionActive(true)
     })
 
@@ -189,6 +189,8 @@ export function SelectionPopover({
     }, [])
 
     const handleAddComment = () => {
+        const selectedText = selectedTextRef.current
+        const selectedRange = selectedRangeRef.current
         if (!selectedText || !selectedRange) return
 
         onAddComment({
@@ -198,8 +200,8 @@ export function SelectionPopover({
 
         // Clear selection
         setPosition({ x: 0, y: 0, visible: false })
-        setSelectedText("")
-        setSelectedRange(null)
+        selectedTextRef.current = ""
+        selectedRangeRef.current = null
         window.getSelection()?.removeAllRanges()
         setSelectionActive(false)
     }

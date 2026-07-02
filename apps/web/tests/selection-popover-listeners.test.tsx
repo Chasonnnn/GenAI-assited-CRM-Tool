@@ -1,12 +1,14 @@
 import * as React from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi, afterEach } from "vitest"
 
 import { SelectionPopover } from "@/components/surrogates/interviews/SelectionPopover"
 
 function SelectionPopoverHost({
+    onAddComment = vi.fn(),
     onSelectionStateChange,
 }: {
+    onAddComment?: (selection: { text: string; range: Range }) => void
     onSelectionStateChange: (active: boolean) => void
 }) {
     const containerRef = React.useRef<HTMLDivElement>(null)
@@ -16,7 +18,7 @@ function SelectionPopoverHost({
             <div ref={containerRef}>Transcript text</div>
             <SelectionPopover
                 containerRef={containerRef}
-                onAddComment={vi.fn()}
+                onAddComment={onAddComment}
                 onSelectionStateChange={onSelectionStateChange}
             />
         </div>
@@ -96,5 +98,48 @@ describe("SelectionPopover document listeners", () => {
 
         const button = await screen.findByRole("button", { name: /add comment/i })
         expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true")
+    })
+
+    it("passes the current selected transcript text to add comment", async () => {
+        const onAddComment = vi.fn()
+        const { getByText } = render(
+            <SelectionPopoverHost
+                onAddComment={onAddComment}
+                onSelectionStateChange={() => undefined}
+            />
+        )
+        const textNode = getByText("Transcript text").firstChild
+        expect(textNode).not.toBeNull()
+
+        const range = document.createRange()
+        range.setStart(textNode!, 0)
+        range.setEnd(textNode!, "Transcript".length)
+        Object.defineProperty(range, "getClientRects", {
+            value: () => [
+                {
+                    left: 20,
+                    top: 40,
+                    width: 100,
+                    height: 20,
+                    right: 120,
+                    bottom: 60,
+                    x: 20,
+                    y: 40,
+                    toJSON: () => ({}),
+                },
+            ],
+        })
+
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        document.dispatchEvent(new Event("selectionchange"))
+
+        fireEvent.click(await screen.findByRole("button", { name: /add comment/i }))
+
+        expect(onAddComment).toHaveBeenCalledWith({
+            text: "Transcript",
+            range: expect.any(Range),
+        })
     })
 })

@@ -1574,6 +1574,23 @@ describe("React regression guards (source)", () => {
         expect(scheduleParserSource).toContain(">Close task creator</Button>")
     })
 
+    it("keeps handler-only transcript and schedule values out of render state", () => {
+        const selectionPopoverSource = readSource("components/surrogates/interviews/SelectionPopover.tsx")
+        const scheduleParserSource = readSource("components/ai/ScheduleParserDialog.tsx")
+
+        expect(selectionPopoverSource).toContain("const selectedTextRef = useRef(\"\")")
+        expect(selectionPopoverSource).toContain("const selectedRangeRef = useRef<Range | null>(null)")
+        expect(selectionPopoverSource).not.toContain("const [selectedText, setSelectedText] = useState")
+        expect(selectionPopoverSource).not.toContain("const [selectedRange, setSelectedRange] = useState")
+
+        expect(scheduleParserSource).toContain("const bulkRequestIdRef = useRef<string | null>(null)")
+        expect(scheduleParserSource).not.toContain("const [bulkRequestId, setBulkRequestId] = useState")
+        expect(scheduleParserSource).toContain("function makeScheduleParserId()")
+        expect(scheduleParserSource).not.toContain("const makeId = () =>")
+        expect(scheduleParserSource).toContain("function getConfidenceBadge(confidence: number)")
+        expect(scheduleParserSource).not.toContain("const getConfidenceBadge = (confidence")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")
