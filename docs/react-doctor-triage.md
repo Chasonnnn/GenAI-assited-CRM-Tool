@@ -2960,3 +2960,28 @@ Full command after Batch 131: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 94 warnings`, `Performance 13 warnings`, `Accessibility 14 warnings`, `Maintainability 108 warnings`
 - Removed globally: `react-doctor/rerender-state-only-in-handlers` in `email-templates` (`5` warnings) and one follow-on `react-doctor/no-event-handler` warning tied to the touched-state effect dependency.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-08d481f1-e652-43d7-8491-0acc525f4743`
+
+## Batch 132
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rerender-state-only-in-handlers` | `app/(app)/settings/integrations/meta/forms/[id]/page.tsx` | Valid scanner finding: `touchedColumns` is bookkeeping for handler logic and save-payload construction. It is not rendered in JSX and does not feed render-derived locals, so state updates caused avoidable rerenders while editing mappings. | High | Replaced `touchedColumns` render state with a ref while keeping rendered mapping data and unknown-column behavior in state. Added behavior coverage that a manually touched unknown Meta column is saved under `warn` behavior while an untouched unknown column is omitted. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta form mapping touched columns"` failed on the old `useState` shape. GREEN: the same guard passed; `pnpm test --run tests/meta-form-mapping-page.test.tsx` passed with `4` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. Full React Doctor state-only handler warnings dropped from `7` to `6`. |
+| `react-doctor/rerender-lazy-ref-init` | `app/(app)/settings/integrations/meta/forms/[id]/page.tsx` | Valid follow-on finding after the first ref conversion: `useRef(new Set())` allocates a fresh `Set` every render even though React only uses the initial ref value once. The rule docs recommend `useRef(null)` plus a guarded assignment. | High | Switched the touched-column ref to lazy initialization with `useRef<Set<string> | null>(null)` and a `current === null` guard. Updated the source guard to keep the lazy-ref shape. | RED: the focused source guard failed on `useRef<Set<string>>(new Set())`. GREEN: the guard passed, and changed-scope React Doctor no longer reports `rerender-lazy-ref-init`. |
+| `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx`, `components/surrogates/CombinedMedicalInsuranceCard.tsx` | False positives: `manuallyAddedSections`, `optimisticallyHiddenSections`, `manuallyAdded`, and `optimisticallyHiddenSections` are render-reachable. They feed `visibleKeys`, `hiddenKeys`, and ultimately `visibleSections`, which controls which medical/insurance sections render. | High | No code change. Logged as invalid after source validation. | Source evidence: both cards build `visibleKeys` from the flagged state values and then derive rendered `visibleSections`. |
+| `react-doctor/rerender-state-only-in-handlers`, `react-doctor/no-giant-component` | `app/(app)/settings/queues/page.tsx`, `components/appointments/UnifiedCalendar.tsx`, `app/(app)/settings/integrations/meta/forms/[id]/page.tsx` | Valid residual findings, but outside this Meta form touched-column batch. `editingQueue` and `draggedAppointment` are handler-only instance values that can be refactored separately; `MetaFormMappingPage` remains a large component split candidate. | Medium-high | Logged as next-batch candidates. No suppression or config change was added. | Changed-scope React Doctor after this batch scored `98 / 100` with only the `no-giant-component` warning in `MetaFormMappingPage`. |
+
+Changed-scope command after Batch 132: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100 Great`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8518ee0d-1fe9-4568-a16f-98cb15e235ff`
+- Note: `react-doctor/rerender-state-only-in-handlers` and `react-doctor/rerender-lazy-ref-init` no longer appear in changed-scope diagnostics.
+
+Full command after Batch 132: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `76 / 100 Needs work`
+- Total diagnostics: `228`
+- Summary: `Bugs 94 warnings`, `Performance 12 warnings`, `Accessibility 14 warnings`, `Maintainability 108 warnings`
+- Removed globally: `react-doctor/rerender-state-only-in-handlers` in the Meta form mapping page (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ff118b54-4eda-4c39-bd0f-b69fdde01d9a`

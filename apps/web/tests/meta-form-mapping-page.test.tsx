@@ -219,4 +219,143 @@ describe("MetaFormMappingPage", () => {
                 .getByText("Journey Timing")
         ).toBeInTheDocument()
     })
+
+    it("saves manually touched unknown Meta columns when warn behavior omits untouched columns", async () => {
+        const mutateAsync = vi.fn()
+        mockUseUpdateMetaFormMapping.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+        })
+        mockUseMetaFormMapping.mockReturnValue({
+            data: {
+                form: {
+                    id: "form-1",
+                    form_external_id: "form_ext_1",
+                    form_name: "Lead Form",
+                    page_id: "page_1",
+                    page_name: "Meta Page",
+                    mapping_status: "mapped",
+                    current_version_id: "version-1",
+                    mapping_version_id: "version-1",
+                    mapping_updated_at: null,
+                    mapping_updated_by_name: null,
+                    is_active: true,
+                    synced_at: "2026-03-08T00:00:00Z",
+                    unconverted_leads: 0,
+                    total_leads: 3,
+                    last_lead_at: "2026-03-08T00:00:00Z",
+                },
+                columns: [
+                    { key: "full_name", label: "Full Name", question_type: "text" },
+                    { key: "email", label: "Email", question_type: "text" },
+                    { key: "favorite_color", label: "Favorite Color", question_type: "text" },
+                    { key: "hobby", label: "Hobby", question_type: "text" },
+                ],
+                column_suggestions: [
+                    {
+                        csv_column: "full_name",
+                        suggested_field: "full_name",
+                        confidence: 0.99,
+                        confidence_level: "high",
+                        transformation: null,
+                        sample_values: ["Failed Lead"],
+                        reason: "Matched",
+                        warnings: [],
+                        default_action: "map",
+                        needs_inversion: false,
+                    },
+                    {
+                        csv_column: "email",
+                        suggested_field: "email",
+                        confidence: 0.99,
+                        confidence_level: "high",
+                        transformation: null,
+                        sample_values: ["failed@example.com"],
+                        reason: "Matched",
+                        warnings: [],
+                        default_action: "map",
+                        needs_inversion: false,
+                    },
+                    {
+                        csv_column: "favorite_color",
+                        suggested_field: null,
+                        confidence: 0,
+                        confidence_level: "none",
+                        transformation: null,
+                        sample_values: ["blue"],
+                        reason: "No match",
+                        warnings: [],
+                        default_action: "ignore",
+                        needs_inversion: false,
+                    },
+                    {
+                        csv_column: "hobby",
+                        suggested_field: null,
+                        confidence: 0,
+                        confidence_level: "none",
+                        transformation: null,
+                        sample_values: ["cycling"],
+                        reason: "No match",
+                        warnings: [],
+                        default_action: "ignore",
+                        needs_inversion: false,
+                    },
+                ],
+                sample_rows: [
+                    {
+                        full_name: "Failed Lead",
+                        email: "failed@example.com",
+                        favorite_color: "blue",
+                        hobby: "cycling",
+                    },
+                ],
+                has_live_leads: true,
+                available_fields: ["full_name", "email"],
+                ai_available: false,
+                mapping_rules: [
+                    {
+                        csv_column: "full_name",
+                        surrogate_field: "full_name",
+                        transformation: null,
+                        action: "map",
+                        custom_field_key: null,
+                    },
+                    {
+                        csv_column: "email",
+                        surrogate_field: "email",
+                        transformation: null,
+                        action: "map",
+                        custom_field_key: null,
+                    },
+                ],
+                unknown_column_behavior: "warn",
+            },
+            isLoading: false,
+        })
+
+        render(<MetaFormMappingPage />)
+
+        fireEvent.mouseDown(screen.getByRole("combobox", { name: /action for favorite_color/i }))
+        const customOption = await screen.findByRole("option", { name: "Custom" })
+        fireEvent.mouseMove(customOption)
+        fireEvent.click(customOption)
+        fireEvent.change(screen.getByRole("textbox", { name: /custom field key for favorite_color/i }), {
+            target: { value: "favorite_color" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: /save mapping/i }))
+
+        expect(mutateAsync).toHaveBeenCalledWith({
+            column_mappings: expect.arrayContaining([
+                expect.objectContaining({
+                    csv_column: "favorite_color",
+                    action: "custom",
+                    custom_field_key: "favorite_color",
+                }),
+            ]),
+            unknown_column_behavior: "warn",
+        })
+        expect(mutateAsync.mock.calls[0][0].column_mappings).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({ csv_column: "hobby" })])
+        )
+    })
 })

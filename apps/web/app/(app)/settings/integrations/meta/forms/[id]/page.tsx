@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { startTransition, useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -96,7 +96,10 @@ export default function MetaFormMappingPage() {
 
     const [mappings, setMappings] = useState<ColumnMappingDraft[]>([])
     const [unknownColumnBehavior, setUnknownColumnBehavior] = useState<UnknownColumnBehavior>("metadata")
-    const [touchedColumns, setTouchedColumns] = useState<Set<string>>(new Set())
+    const touchedColumnsRef = useRef<Set<string> | null>(null)
+    if (touchedColumnsRef.current === null) {
+        touchedColumnsRef.current = new Set<string>()
+    }
     const [error, setError] = useState<string>("")
     const [reconvertMessage, setReconvertMessage] = useState<string>("")
 
@@ -124,8 +127,8 @@ export default function MetaFormMappingPage() {
 
         const touched = new Set<string>(rules.map((rule) => rule.csv_column))
         const behavior = data.unknown_column_behavior || "metadata"
+        touchedColumnsRef.current = touched
         startTransition(() => {
-            setTouchedColumns(touched)
             setUnknownColumnBehavior(behavior)
             setMappings(applyUnknownColumnBehavior(merged, behavior, touched))
         })
@@ -137,16 +140,14 @@ export default function MetaFormMappingPage() {
                 mapping.csv_column === csvColumn ? { ...mapping, ...patch } : mapping
             )
         )
-        setTouchedColumns((prev) => {
-            const next = new Set(prev)
-            next.add(csvColumn)
-            return next
-        })
+        const nextTouchedColumns = new Set(touchedColumnsRef.current!)
+        nextTouchedColumns.add(csvColumn)
+        touchedColumnsRef.current = nextTouchedColumns
     }
 
     const handleUnknownBehaviorChange = (value: UnknownColumnBehavior) => {
         setUnknownColumnBehavior(value)
-        setMappings((prev) => applyUnknownColumnBehavior(prev, value, touchedColumns))
+        setMappings((prev) => applyUnknownColumnBehavior(prev, value, touchedColumnsRef.current!))
     }
 
     const handleAiHelp = async () => {
@@ -227,7 +228,7 @@ export default function MetaFormMappingPage() {
         setError("")
         if (!ensureRequiredMappings()) return
 
-        const payload = buildImportSubmitPayload(mappings, unknownColumnBehavior, touchedColumns)
+        const payload = buildImportSubmitPayload(mappings, unknownColumnBehavior, touchedColumnsRef.current!)
         try {
             await updateMutation.mutateAsync({
                 column_mappings: payload.column_mappings,

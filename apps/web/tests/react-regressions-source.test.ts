@@ -2418,6 +2418,17 @@ describe("React regression guards (source)", () => {
         expect(roleDetailSource).not.toContain("useMemo")
     })
 
+    it("keeps Meta form mapping touched columns outside render state", () => {
+        const source = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
+
+        expect(source).toContain("touchedColumnsRef")
+        expect(source).toContain("useRef<Set<string> | null>(null)")
+        expect(source).toContain("if (touchedColumnsRef.current === null)")
+        expect(source).toContain("touchedColumnsRef.current = new Set<string>()")
+        expect(source).not.toContain("useRef<Set<string>>(new Set())")
+        expect(source).not.toContain("const [touchedColumns, setTouchedColumns] = useState")
+    })
+
     it("keeps audit settings export derivations compiler-friendly", () => {
         const source = readSource("app/(app)/settings/audit/page.tsx")
 
