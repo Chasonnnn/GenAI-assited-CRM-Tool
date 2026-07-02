@@ -41,12 +41,12 @@ import {
     AlertCircleIcon,
 } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { IntendedParentFormFields } from "@/components/intended-parents/IntendedParentFormFields"
 import {
-    IntendedParentFormFields,
     EMPTY_INTENDED_PARENT_FORM_VALUES,
     buildIntendedParentCreatePayload,
     type IntendedParentFormValues,
-} from "@/components/intended-parents/IntendedParentFormFields"
+} from "@/components/intended-parents/intended-parent-form-values"
 import {
     useIntendedParents,
     useIntendedParentStats,

@@ -3236,3 +3236,25 @@ Full command after Batch 145: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Removed globally since Batch 144: `react-doctor/only-export-components` (`7` net warnings); no `deslop/unused-export` warnings remain from the transcript helper cleanup.
 - Remaining `react-doctor/only-export-components`: `4` warnings in `components/intended-parents/IntendedParentFormFields.tsx` and `components/surrogates/profile/ProfileCard/context.tsx`.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6d0c9ead-b1ba-49a5-a77e-758908e4a9a6`
+
+## Batch 146
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/only-export-components` | `components/intended-parents/IntendedParentFormFields.tsx`, `components/surrogates/profile/ProfileCard/context.tsx` | Valid maintainability findings, independently confirmed by subagents. The intended-parent component file exported form defaults and payload builders, and the profile-card context exported pure template helpers/keys from a client provider module. | High | Moved intended-parent form values, empty defaults, and payload builders into `components/intended-parents/intended-parent-form-values.ts`. Moved profile-card template keys and `renderProfileTemplate` into `components/surrogates/profile/ProfileCard/profile-template.ts`. Updated the existing import sites and extended the source guard to keep those helpers out of component/context modules. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "non-component exports"` failed on `EMPTY_INTENDED_PARENT_FORM_VALUES`. GREEN: the focused guard passed after the split; `pnpm test --run tests/intended-parents-page.test.tsx tests/intended-parent-detail.test.tsx tests/surrogate-profile-card-accessibility.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor no longer reports `only-export-components`. |
+
+Changed-scope command after Batch 146: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `8`
+- Summary: residual pre-existing warnings in touched intended-parent page code only: `react-doctor/no-giant-component` (`1`) and `react-doctor/no-event-handler` (`7`).
+- Removed from changed-scope results: the targeted `react-doctor/only-export-components` findings.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9d1aa93a-297d-4453-8300-d2b9bcdb4ed0`
+
+Full command after Batch 146: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `168`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 3 warnings`, `Maintainability 65 warnings`
+- Removed globally since Batch 145: remaining `react-doctor/only-export-components` (`4` warnings); that rule is no longer present in the full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-208b470a-6c26-4085-9b3a-ac6ea40b0da3`

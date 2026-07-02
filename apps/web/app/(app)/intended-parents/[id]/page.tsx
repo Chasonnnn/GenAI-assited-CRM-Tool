@@ -6,7 +6,7 @@ import {
     EMPTY_INTENDED_PARENT_FORM_VALUES,
     buildIntendedParentUpdatePayload,
     type IntendedParentFormValues,
-} from "@/components/intended-parents/IntendedParentFormFields"
+} from "@/components/intended-parents/intended-parent-form-values"
 import { IntendedParentClinicCard } from "@/components/intended-parents/IntendedParentClinicCard"
 import { TrustInfoCard } from "@/components/intended-parents/TrustInfoCard"
 import { IntendedParentActivityTimeline } from "@/components/intended-parents/IntendedParentActivityTimeline"

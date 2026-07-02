@@ -971,6 +971,8 @@ describe("React regression guards (source)", () => {
         const queryProviderSource = readSource("lib/query-provider.tsx")
         const transcriptEditorSource = readSource("components/surrogates/interviews/TranscriptEditor.tsx")
         const transcriptUtilsSource = readSource("components/surrogates/interviews/transcript-utils.ts")
+        const intendedParentFieldsSource = readSource("components/intended-parents/IntendedParentFormFields.tsx")
+        const profileCardContextSource = readSource("components/surrogates/profile/ProfileCard/context.tsx")
 
         expect(buttonSource).not.toContain("export { Button, buttonVariants }")
         expect(toggleSource).not.toContain("export { Toggle, toggleVariants }")
@@ -980,6 +982,13 @@ describe("React regression guards (source)", () => {
         expect(transcriptEditorSource).not.toContain("export { isTranscriptEmpty")
         expect(transcriptUtilsSource).not.toContain("extractCommentIds")
         expect(transcriptUtilsSource).not.toContain("removeCommentFromDoc")
+        expect(intendedParentFieldsSource).not.toContain("export const EMPTY_INTENDED_PARENT_FORM_VALUES")
+        expect(intendedParentFieldsSource).not.toContain("export function buildIntendedParentCreatePayload")
+        expect(intendedParentFieldsSource).not.toContain("export function buildIntendedParentUpdatePayload")
+        expect(profileCardContextSource).not.toContain("export const PROFILE_HEADER_NAME_KEY")
+        expect(profileCardContextSource).not.toContain("export const PROFILE_HEADER_NOTE_KEY")
+        expect(profileCardContextSource).not.toContain("export const PROFILE_CUSTOM_QAS_KEY")
+        expect(profileCardContextSource).not.toContain("export function renderProfileTemplate")
     })
 
     it("keeps the carousel root free of manual React memoization", () => {

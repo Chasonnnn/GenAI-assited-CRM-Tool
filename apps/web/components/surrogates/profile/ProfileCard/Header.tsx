@@ -9,7 +9,8 @@ import {
     DownloadIcon,
     EditIcon,
 } from "lucide-react"
-import { useProfileCardActions, useProfileCardData, useProfileCardEdits, useProfileCardMode, PROFILE_HEADER_NAME_KEY, PROFILE_HEADER_NOTE_KEY, renderProfileTemplate } from "./context"
+import { useProfileCardActions, useProfileCardData, useProfileCardEdits, useProfileCardMode } from "./context"
+import { PROFILE_HEADER_NAME_KEY, PROFILE_HEADER_NOTE_KEY, renderProfileTemplate } from "./profile-template"
 
 export function Header() {
     const { profile } = useProfileCardData()
