@@ -3376,3 +3376,17 @@ Full command after Batch 152: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
 - Removed globally since Batch 151: `react-doctor/no-many-boolean-props` (`3` warnings); that rule is no longer present in the full scan.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8240b56d-b53c-4d2c-936f-5e60428b02da`
+
+## Batch 153
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/async-defer-await` | `app/mfa/page.client.tsx`, `app/ops/agencies/page.client.tsx` | Unsafe mechanical fixes / product-dependent false positives. Subagents independently confirmed the MFA path must complete the challenge and refresh auth before routing, and the ops agencies post-await guard prevents stale in-flight list responses from overwriting newer results because `listOrganizations` has no abort signal support. | High for agencies; medium-high for MFA auth-refresh sequencing | Reverted the experimental code change that skipped MFA auth refresh for ops return. Left both production flows unchanged and added an MFA ops-return test that asserts redirect waits for both challenge completion and auth refresh. Kept the existing agencies race test as evidence for the required post-await stale-response guard. No suppression or config change. | RED: a speculative source guard and MFA test failed against the existing code; changed-scope React Doctor still reported both warnings after the unsafe mechanical rewrite, confirming it did not resolve the scanner hypothesis safely. GREEN: `pnpm test --run tests/mfa-page.test.tsx tests/ops-agencies-page-race.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; production diff is intentionally empty for both flagged files. |
+
+Full command after Batch 153: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `159`
+- Summary: `Bugs 88 warnings`, `Performance 10 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
+- Unchanged from Batch 152 except for test coverage; `react-doctor/async-defer-await` remains as `2` warnings by design.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e8f88199-f85e-45ca-bfa6-21e64d6697dc`

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import MFAPage from "../app/mfa/page"
 
 const mockUseAuth = vi.fn()
@@ -8,6 +8,19 @@ const mockUseDuoStatus = vi.fn()
 const mockUseCompleteMFAChallenge = vi.fn()
 const mockUseInitiateDuoAuth = vi.fn()
 const mockReplace = vi.fn()
+
+type Deferred<T> = {
+    promise: Promise<T>
+    resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((res) => {
+        resolve = res
+    })
+    return { promise, resolve }
+}
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
@@ -117,6 +130,66 @@ describe("MFAPage", () => {
         await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith("RECOVERYCODE"))
         await waitFor(() => expect(refetch).toHaveBeenCalled())
         await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"))
+    })
+
+    it("redirects ops users after completing MFA and refreshing auth", async () => {
+        const challenge = deferred<{ success: boolean }>()
+        const authRefresh = deferred<void>()
+        const refetch = vi.fn(() => authRefresh.promise)
+        const mutateAsync = vi.fn(() => challenge.promise)
+        window.sessionStorage.setItem("auth_return_to", "ops")
+
+        mockUseAuth.mockReturnValue({
+            user: {
+                email: "ops@example.com",
+                mfa_required: true,
+                mfa_verified: false,
+            },
+            isLoading: false,
+            refetch,
+        })
+        mockUseMFAStatus.mockReturnValue({
+            data: {
+                mfa_enabled: true,
+                totp_enabled: false,
+            },
+            isLoading: false,
+        })
+        mockUseDuoStatus.mockReturnValue({
+            data: {
+                available: false,
+                enrolled: false,
+            },
+            isLoading: false,
+        })
+        mockUseCompleteMFAChallenge.mockReturnValue({
+            mutateAsync,
+            isPending: false,
+        })
+
+        render(<MFAPage />)
+
+        fireEvent.change(screen.getByLabelText(/recovery code/i), {
+            target: { value: "RECOVERYCODE" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: /verify code/i }))
+
+        await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith("RECOVERYCODE"))
+        expect(mockReplace).not.toHaveBeenCalled()
+
+        await act(async () => {
+            challenge.resolve({ success: true })
+        })
+
+        await waitFor(() => expect(refetch).toHaveBeenCalled())
+        expect(mockReplace).not.toHaveBeenCalled()
+
+        await act(async () => {
+            authRefresh.resolve()
+        })
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/ops"))
+        expect(window.sessionStorage.getItem("auth_return_to")).toBeNull()
     })
 
     it("redirects verified app users away from MFA to dashboard", async () => {
