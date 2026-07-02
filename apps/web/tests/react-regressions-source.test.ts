@@ -2923,6 +2923,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const [selection, setSelection] = useState")
         expect(source).not.toContain("const [dateRange, setDateRange] = useState")
         expect(source).not.toContain("const [customRange, setCustomRange] = useState<CustomRange>(initialCustomRange)")
+        expect(source).not.toContain("useMemo")
+        expect(source).not.toContain("useCallback")
     })
 
     it("keeps InlineDateField draft state tied to edit lifecycle", () => {

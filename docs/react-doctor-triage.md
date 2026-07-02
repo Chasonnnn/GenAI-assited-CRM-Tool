@@ -2803,3 +2803,22 @@ Full command after Batch 124: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `344`
 - Summary: `Bugs 134 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 165 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b0c528a-2c72-4fd3-a0b4-080aa8cf3f24`
+
+## Batch 125
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `tests/date-range-picker.test.tsx` | Valid scanner finding in the date-range picker URL harness: the test harness used one `useMemo` and three `useCallback` wrappers around plain query-string derivations and handlers. React Compiler is enabled in `next.config.js`, and no preserve-manual-memoization behavior was needed in this harness. | High | Removed the manual memoization import and wrappers, derived `URLSearchParams` directly from the current query string, and kept the effect dependent on `query` by constructing fresh params inside the effect body. Extended the existing source guard so the harness stays free of `useMemo` and `useCallback`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "date-range picker URL harness"` failed on the old `useMemo` / `useCallback` source. GREEN: the same guard passed; `pnpm test --run tests/date-range-picker.test.tsx` passed with `3` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`; changed-scope React Doctor scored `100 / 100`. Full redundant manual memoization dropped from `53` to `49`. |
+
+Changed-scope command after Batch 125: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 125: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `69 / 100 Needs work`
+- Total diagnostics: `340`
+- Summary: `Bugs 134 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 161 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1020440c-841b-422f-99b5-63103a735eb9`
