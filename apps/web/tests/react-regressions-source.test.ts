@@ -1819,6 +1819,8 @@ describe("React regression guards (source)", () => {
     it("keeps the surrogates floating scrollbar free of manual React memoization", () => {
         const source = readSource("components/surrogates/SurrogatesFloatingScrollbar.tsx")
 
+        expect(source).toContain("useState(detectPointerCapability)")
+        expect(source).not.toContain("const [isDesktopPointer, setIsDesktopPointer] = useState(false)")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("React.useMemo")

@@ -152,7 +152,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
     const syncSourceRef = useRef<SyncSource>(null)
 
     const [isMounted, setIsMounted] = useState(false)
-    const [isDesktopPointer, setIsDesktopPointer] = useState(false)
+    const [isDesktopPointer, setIsDesktopPointer] = useState(detectPointerCapability)
     const [isActive, setIsActive] = useState(false)
     const [isFadingOut, setIsFadingOut] = useState(false)
     const [scrollLeft, setScrollLeft] = useState(0)
@@ -234,8 +234,6 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
                 setIsDesktopPointer(detectPointerCapability())
             })
         }
-
-        handleMediaChange()
 
         if (typeof mediaQueries[0]?.addEventListener === "function") {
             for (const mediaQuery of mediaQueries) {

@@ -3105,3 +3105,26 @@ Full command after Batch 139: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 91 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 87 warnings`
 - Removed globally since Batch 138: `react-doctor/query-mutation-missing-invalidation` in `use-attachments` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fd901c9d-40c8-4ba0-b1a4-4d5794bd49ea`
+
+## Batch 140
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-initialize-state` | `components/surrogates/SurrogatesFloatingScrollbar.tsx` | Valid scanner finding: `isDesktopPointer` was initialized to `false`, then corrected in the mount effect with `handleMediaChange()`, causing an avoidable extra render. The existing `detectPointerCapability()` helper is browser-safe and returns a conservative fallback when `window` is unavailable. | High | Initialized `isDesktopPointer` with `useState(detectPointerCapability)` and removed the redundant immediate `handleMediaChange()` call from the effect while keeping media-query change listeners for later device changes. Added a source guard for the initializer shape. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "floating scrollbar"` failed on `useState(false)`. GREEN: the guard passed; `pnpm test --run tests/surrogates-floating-scrollbar.test.tsx`; changed-scope React Doctor no longer reports `no-initialize-state` for the scrollbar. |
+| `react-doctor/no-initialize-state` | `components/ui/chart.tsx` | Not edited. The remaining `size` state is derived from `containerRef.current.getBoundingClientRect()` and `ResizeObserver`; there is no DOM element available during render to seed that value safely. Converting it mechanically would require a larger external-store or measurement refactor. | Medium-high | Logged as deferred/likely false positive for direct initialization. No suppression or config change was added. | Source inspection and existing chart-container test context. |
+
+Changed-scope command after Batch 140: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining changed-scope diagnostic: `react-doctor/no-giant-component` for `components/surrogates/SurrogatesFloatingScrollbar.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-26ed4811-2333-4e8a-9e32-790c4ede28e8`
+
+Full command after Batch 140: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `196`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 87 warnings`
+- Removed globally since Batch 139: `react-doctor/no-initialize-state` in `SurrogatesFloatingScrollbar` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9abeefdd-d180-416c-88c2-e310e9c09ea1`
