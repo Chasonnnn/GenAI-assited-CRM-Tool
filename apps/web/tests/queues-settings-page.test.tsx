@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import QueuesSettingsPage from '../app/(app)/settings/queues/page'
 
 const mockPush = vi.fn()
@@ -74,5 +74,42 @@ describe('QueuesSettingsPage', () => {
 
         expect(screen.getByText('Queue Management')).toBeInTheDocument()
         expect(screen.getByText('Queue A')).toBeInTheDocument()
+    })
+
+    it('saves edits for the selected queue', async () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
+        mockUseQueues.mockReturnValue({
+            data: [
+                {
+                    id: 'q1',
+                    organization_id: 'org1',
+                    name: 'Queue A',
+                    description: 'Original description',
+                    is_active: true,
+                },
+            ],
+            isLoading: false,
+            error: null,
+        })
+
+        render(<QueuesSettingsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Queue actions for Queue A' }))
+        fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Queue Alpha' } })
+        fireEvent.change(screen.getByLabelText(/Description/i), {
+            target: { value: 'Updated description' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+        await waitFor(() => {
+            expect(mockUpdateQueue).toHaveBeenCalledWith({
+                queueId: 'q1',
+                data: {
+                    name: 'Queue Alpha',
+                    description: 'Updated description',
+                },
+            })
+        })
     })
 })

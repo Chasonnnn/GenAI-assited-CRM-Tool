@@ -1606,6 +1606,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [libraryCopyTarget, setLibraryCopyTarget] = useState")
     })
 
+    it("keeps queue edit target out of render state", () => {
+        const source = readSource("app/(app)/settings/queues/page.tsx")
+        const helperIndex = source.indexOf("function resolveErrorMessage(")
+        const componentIndex = source.indexOf("export default function QueuesSettingsPage()")
+
+        expect(source).toContain("const editingQueueRef = React.useRef<Queue | null>(null)")
+        expect(source).toContain("editingQueueRef.current = queue")
+        expect(source).toContain("editingQueueRef.current = null")
+        expect(helperIndex).toBeGreaterThanOrEqual(0)
+        expect(helperIndex).toBeLessThan(componentIndex)
+        expect(source).not.toContain("const [editingQueue, setEditingQueue] = React.useState")
+        expect(source).not.toContain("const resolveErrorMessage = (error: unknown, fallback: string) =>")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")

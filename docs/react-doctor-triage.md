@@ -2985,3 +2985,23 @@ Full command after Batch 132: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 94 warnings`, `Performance 12 warnings`, `Accessibility 14 warnings`, `Maintainability 108 warnings`
 - Removed globally: `react-doctor/rerender-state-only-in-handlers` in the Meta form mapping page (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ff118b54-4eda-4c39-bd0f-b69fdde01d9a`
+
+## Batch 133
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rerender-state-only-in-handlers` | `app/(app)/settings/queues/page.tsx` | Valid scanner finding in React Doctor `v0.6.0`: `editingQueue` is only read in submit/cancel/edit handlers. It does not feed JSX or render-derived locals, so updating it as state caused an avoidable rerender. | High | Replaced `editingQueue` state with `editingQueueRef`, kept dialog open state and form data in render state, and added edit-save behavior coverage so the selected queue id is still submitted. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "queue edit target"` failed on the old `useState` shape. GREEN: the same guard passed; `pnpm test --run tests/queues-settings-page.test.tsx` passed with `3` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; `git diff --check`. |
+| `react-doctor/prefer-module-scope-pure-function` | `app/(app)/settings/queues/page.tsx` | Valid follow-on finding in changed scope: `resolveErrorMessage` only uses its parameters and `Error`, so it does not need to be rebuilt inside `QueuesSettingsPage`. | High | Hoisted `resolveErrorMessage` to module scope and extended the source guard to keep it above the component. | RED: the focused source guard failed while the helper remained nested. GREEN: the guard passed after the hoist; local TypeScript/lint/full tests passed. |
+| `react-doctor/no-giant-component` | `app/(app)/settings/queues/page.tsx` | Valid residual finding, but outside this handler-only queue target batch. Splitting the queue settings page is a larger component-structure refactor and should be handled separately. | Medium-high | Logged as a next-batch candidate. No suppression or config change was added. | Changed-scope React Doctor before the helper hoist scored `93 / 100` with `prefer-module-scope-pure-function` and `no-giant-component`; final React Doctor rerun was blocked by the environment usage limit. |
+
+Changed-scope command after the first Batch 133 edit: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `93 / 100 Great`
+- Total diagnostics in changed files: `2`
+- Summary: `Maintainability 2 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-95ed5b45-eee0-441b-8d4b-9c17418b843d`
+- Note: `react-doctor/rerender-state-only-in-handlers` no longer appeared in changed-scope diagnostics.
+
+Changed-scope command after the helper hoist: not rerun. The required escalation for `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed` was rejected by the approval reviewer because the Codex account hit its usage limit.
+
+Full command after Batch 133: not rerun for the same usage-limit reason. The latest full scan before this batch remained `76 / 100`, `228` issues, with diagnostics at `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-083eca4f-3cfb-45f4-be16-537f9206fb5c`.

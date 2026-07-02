@@ -51,6 +51,11 @@ import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
+function resolveErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message
+    return fallback
+}
+
 export default function QueuesSettingsPage() {
     const { push } = useRouter()
     const { user } = useAuth()
@@ -61,7 +66,7 @@ export default function QueuesSettingsPage() {
     const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
     const [editDialogOpen, setEditDialogOpen] = React.useState(false)
     const [membersDialogOpen, setMembersDialogOpen] = React.useState(false)
-    const [editingQueue, setEditingQueue] = React.useState<Queue | null>(null)
+    const editingQueueRef = React.useRef<Queue | null>(null)
     const [managingQueue, setManagingQueue] = React.useState<Queue | null>(null)
     const [formData, setFormData] = React.useState<QueueCreatePayload>({ name: "", description: "" })
     const [selectedUserId, setSelectedUserId] = React.useState<string>("")
@@ -95,6 +100,7 @@ export default function QueuesSettingsPage() {
 
     const handleUpdateQueue = async (e: React.FormEvent) => {
         e.preventDefault()
+        const editingQueue = editingQueueRef.current
         if (!editingQueue || !formData.name.trim()) return
 
         const trimmedDescription = (formData.description ?? "").trim()
@@ -106,7 +112,7 @@ export default function QueuesSettingsPage() {
             },
         })
         setEditDialogOpen(false)
-        setEditingQueue(null)
+        editingQueueRef.current = null
         setFormData({ name: "", description: "" })
     }
 
@@ -117,15 +123,17 @@ export default function QueuesSettingsPage() {
         })
     }
 
-    const resolveErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
-
     const openEditDialog = (queue: Queue) => {
-        setEditingQueue(queue)
+        editingQueueRef.current = queue
         setFormData({ name: queue.name, description: queue.description || "" })
         setEditDialogOpen(true)
+    }
+
+    const handleEditDialogOpenChange = (open: boolean) => {
+        setEditDialogOpen(open)
+        if (!open) {
+            editingQueueRef.current = null
+        }
     }
 
     const openMembersDialog = (queue: Queue) => {
@@ -343,7 +351,7 @@ export default function QueuesSettingsPage() {
             </Dialog>
 
             {/* Edit Queue Dialog */}
-            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+            <Dialog open={editDialogOpen} onOpenChange={handleEditDialogOpenChange}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Edit Queue</DialogTitle>
@@ -380,7 +388,7 @@ export default function QueuesSettingsPage() {
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" type="button" onClick={() => setEditDialogOpen(false)}>
+                            <Button variant="outline" type="button" onClick={() => handleEditDialogOpenChange(false)}>
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={updateQueueMutation.isPending || !formData.name.trim()}>
