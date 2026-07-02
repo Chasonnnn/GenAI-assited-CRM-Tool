@@ -2668,3 +2668,24 @@ Full command after Batch 118: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `382`
 - Summary: `Bugs 138 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 199 warnings`
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-81470991-97d0-4dce-b6a4-8e71ae53a61a`
+
+## Batch 119
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/react-compiler-no-manual-memoization` | `lib/context/ai-context.tsx` | Valid scanner finding: all five flagged `useCallback` calls resolved to the React named import. React Compiler is enabled through `next.config.js`, and the React Doctor rule docs say to replace React `useCallback` wrappers with plain handlers when no preserve-manual-memoization case applies. | High | Replaced the context and panel callback wrappers with plain functions. Added a source guard to keep this provider free of manual callback memoization. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI context state"` failed on the old source shape. GREEN: the same guard passed; `pnpm test --run tests/ai-context-provider.test.tsx` passed with `3` behavior tests; `pnpm tsc --noEmit`; `pnpm lint`; `pnpm test --run`; changed-scope React Doctor scored `100 / 100`; full redundant manual memoization dropped from `85` to `80`. |
+| `react-doctor/no-cascading-set-state` | `lib/context/ai-context.tsx:60` | Valid scanner finding: the route-change effect cleared three related entity-context state fields together. The fields are one logical context snapshot, so a reducer action is the right state boundary. | High | Consolidated `entityType`, `entityId`, and `entityName` into `aiEntityContextReducer`, including a single route-sync action that preserves the existing route-away cleanup behavior. Added behavior coverage for setting, clearing, route cleanup, and keyboard panel toggle. | Focused provider tests passed; `npx -y react-doctor@latest lib/context --verbose` reported no issues; full `no-cascading-set-state` diagnostics dropped from `11` to `10`. |
+| `react-doctor/no-event-handler` | `lib/context/ai-context.tsx:66` | Valid as a scanner pattern but not an event-handler smell in this provider: the effect responds to `usePathname`, an external navigation signal. The reducer rewrite still removed the finding without moving route cleanup into unrelated callers. | Medium | Replaced the conditional multi-setter effect body with one reducer dispatch. No suppression added. | `npx -y react-doctor@latest lib/context --verbose` reported no issues; full `no-event-handler` diagnostics dropped from `53` to `52`. |
+
+Changed-scope command after Batch 119: `cd apps/web && npx -y react-doctor@latest --verbose --scope changed`
+
+- Score: `100 / 100 Great`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found
+
+Full command after Batch 119: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `68 / 100 Needs work`
+- Total diagnostics: `375`
+- Summary: `Bugs 136 warnings`, `Performance 24 warnings`, `Accessibility 21 warnings`, `Maintainability 194 warnings`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-afeff8b0-1b4a-4c8e-8015-a59a1caaec2b`

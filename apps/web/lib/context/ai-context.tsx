@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { createContext, use, useState, useCallback, useEffect } from "react"
+import { createContext, use, useEffect, useReducer, useState } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -36,15 +36,58 @@ interface AIContextValue {
 
 const AIContext = createContext<AIContextValue | undefined>(undefined)
 
+type EntityContextState = {
+    entityType: EntityContext["entityType"] | null
+    entityId: string | null
+    entityName: string | null
+}
+
+type EntityContextAction =
+    | { type: "set"; context: EntityContext }
+    | { type: "clear" }
+    | { type: "sync-pathname"; pathname: string }
+
+const emptyEntityContext: EntityContextState = {
+    entityType: null,
+    entityId: null,
+    entityName: null,
+}
+
+function isEntityPathname(pathname: string) {
+    return (
+        pathname.includes("/surrogates/") ||
+        pathname.includes("/intended-parents/") ||
+        pathname.includes("/matches/")
+    )
+}
+
+function aiEntityContextReducer(
+    state: EntityContextState,
+    action: EntityContextAction
+): EntityContextState {
+    switch (action.type) {
+        case "set":
+            return {
+                entityType: action.context.entityType,
+                entityId: action.context.entityId,
+                entityName: action.context.entityName,
+            }
+        case "clear":
+            return state.entityId ? emptyEntityContext : state
+        case "sync-pathname":
+            return state.entityId && !isEntityPathname(action.pathname) ? emptyEntityContext : state
+    }
+}
+
 export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth()
     const pathname = usePathname()
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
 
-    // Context state
-    const [entityType, setEntityType] = useState<"surrogate" | "intended-parent" | "dashboard" | "task" | "match" | null>(null)
-    const [entityId, setEntityId] = useState<string | null>(null)
-    const [entityName, setEntityName] = useState<string | null>(null)
+    const [entityContext, dispatchEntityContext] = useReducer(
+        aiEntityContextReducer,
+        emptyEntityContext
+    )
 
     // Panel state
     const [isOpen, setIsOpen] = useState(false)
@@ -56,23 +99,12 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const canUseAI =
         isAIEnabled && (effectivePermissions?.permissions || []).includes("use_ai_assistant")
 
-    // Clear context on route change if navigating away from entity pages
+    // Clear context on route change if navigating away from entity pages.
     useEffect(() => {
-        const isEntityPage =
-            pathname.includes("/surrogates/") ||
-            pathname.includes("/intended-parents/") ||
-            pathname.includes("/matches/")
-
-        if (!isEntityPage && entityId) {
-            // User navigated away from an entity page
-            // Keep the panel open but clear the context indicator
-            React.startTransition(() => {
-                setEntityType(null)
-                setEntityId(null)
-                setEntityName(null)
-            })
-        }
-    }, [pathname, entityId])
+        React.startTransition(() => {
+            dispatchEntityContext({ type: "sync-pathname", pathname })
+        })
+    }, [pathname, entityContext.entityId])
 
     // Keyboard shortcut: Cmd+Shift+A or Ctrl+Shift+A
     useEffect(() => {
@@ -89,34 +121,30 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
         return () => window.removeEventListener("keydown", handleKeyDown)
     }, [canUseAI])
 
-    const setContext = useCallback((ctx: EntityContext) => {
-        setEntityType(ctx.entityType)
-        setEntityId(ctx.entityId)
-        setEntityName(ctx.entityName)
-    }, [])
+    const setContext = (ctx: EntityContext) => {
+        dispatchEntityContext({ type: "set", context: ctx })
+    }
 
-    const clearContext = useCallback(() => {
-        setEntityType(null)
-        setEntityId(null)
-        setEntityName(null)
-    }, [])
+    const clearContext = () => {
+        dispatchEntityContext({ type: "clear" })
+    }
 
-    const togglePanel = useCallback(() => {
+    const togglePanel = () => {
         setIsOpen(prev => !prev)
-    }, [])
+    }
 
-    const openPanel = useCallback(() => {
+    const openPanel = () => {
         setIsOpen(true)
-    }, [])
+    }
 
-    const closePanel = useCallback(() => {
+    const closePanel = () => {
         setIsOpen(false)
-    }, [])
+    }
 
     const value: AIContextValue = {
-        entityType,
-        entityId,
-        entityName,
+        entityType: entityContext.entityType,
+        entityId: entityContext.entityId,
+        entityName: entityContext.entityName,
         isOpen,
         togglePanel,
         openPanel,

@@ -122,6 +122,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("`assistant-${Date.now()}`")
     })
 
+    it("keeps AI context state updates compiler-friendly", () => {
+        const source = readSource("lib/context/ai-context.tsx")
+
+        expect(source).toContain("function aiEntityContextReducer")
+        expect(source).toContain("const [entityContext, dispatchEntityContext] = useReducer(")
+        expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("React.useCallback")
+        expect(source).not.toContain("setEntityType")
+        expect(source).not.toContain("setEntityId")
+        expect(source).not.toContain("setEntityName")
+    })
+
     it("documents intentional exhaustive-deps exceptions with React Doctor rule names", () => {
         const aiAssistantSource = readSource("app/(app)/ai-assistant/page.tsx")
         const dashboardFilterSource = readSource("app/(app)/dashboard/components/dashboard-filter-bar.tsx")
