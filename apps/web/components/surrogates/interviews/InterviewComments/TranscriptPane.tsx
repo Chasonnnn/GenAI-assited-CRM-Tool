@@ -48,6 +48,23 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
         setHoveredCommentId(null)
     }
 
+    const handleFocus = (e: React.FocusEvent) => {
+        if (isSelectingRef.current) return
+        const target = e.target instanceof HTMLElement ? e.target : null
+        const commentSpan = target?.closest("[data-comment-id]")
+        if (commentSpan) {
+            setHoveredCommentId(commentSpan.getAttribute("data-comment-id"))
+        }
+    }
+
+    const handleBlur = (e: React.FocusEvent) => {
+        if (isSelectingRef.current) return
+        const related = e.relatedTarget instanceof HTMLElement ? e.relatedTarget : null
+        if (!related?.closest("[data-comment-id]")) {
+            setHoveredCommentId(null)
+        }
+    }
+
     const focusCommentFromTarget = (target: HTMLElement | null) => {
         const commentSpan = target?.closest("[data-comment-id]")
         if (commentSpan) {
@@ -75,6 +92,8 @@ export function TranscriptPane({ className }: TranscriptPaneProps) {
                 onMouseOver={handleMouseOver}
                 onMouseOut={handleMouseOut}
                 onMouseLeave={handleMouseLeave}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 onClick={focusCommentFromClick}
                 onKeyDown={(e) => {
                     if (isSelectingRef.current) return

@@ -3128,3 +3128,26 @@ Full command after Batch 140: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 87 warnings`
 - Removed globally since Batch 139: `react-doctor/no-initialize-state` in `SurrogatesFloatingScrollbar` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9abeefdd-d180-416c-88c2-e310e9c09ea1`
+
+## Batch 141
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/mouse-events-have-key-events` | `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx` | Valid scanner finding: delegated transcript highlight hover used `onMouseOver` / `onMouseOut` without keyboard-equivalent focus handling, so keyboard users could focus a highlighted transcript span without updating the related hover state. | High | Added delegated `onFocus` and `onBlur` handlers that mirror hover state for `[data-comment-id]` spans. Added behavior coverage for focus setting the hovered comment id and blur clearing it. | RED: `pnpm test --run tests/surrogate-interview-accessibility.test.tsx -t "highlight hover state"` failed because focus did not update hover state. GREEN: the focused transcript tests passed; changed-scope React Doctor no longer reports `mouse-events-have-key-events`. |
+| `react-doctor/prefer-tag-over-role` | `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx` | Still not a safe direct swap: the transcript pane is selectable rich transcript content with delegated comment targeting and embedded sanitized HTML, not a normal button. | Medium-high | Left unchanged and continued logging as a false-positive/product-dependent finding rather than converting rich content to a native button. | Changed-scope React Doctor reports only this residual transcript-pane accessibility warning. |
+
+Changed-scope command after Batch 141: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `1`
+- Summary: `Accessibility 1 warning`
+- Remaining changed-scope diagnostic: `react-doctor/prefer-tag-over-role` for `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-701f3771-b3a4-4537-ac13-7cfbf230ddaa`
+
+Full command after Batch 141: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `194`
+- Summary: `Bugs 90 warnings`, `Performance 10 warnings`, `Accessibility 7 warnings`, `Maintainability 87 warnings`
+- Removed globally since Batch 140: `react-doctor/mouse-events-have-key-events` in `TranscriptPane` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-95be52f6-c2bf-4b67-8ff3-3b23a2abcfd6`

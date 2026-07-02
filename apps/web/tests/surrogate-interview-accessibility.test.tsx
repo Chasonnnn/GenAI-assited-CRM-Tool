@@ -1,6 +1,6 @@
 import React from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { TranscriptPane } from "@/components/surrogates/interviews/InterviewComments/TranscriptPane"
 import { ListItem } from "@/components/surrogates/interviews/InterviewTab/ListItem"
@@ -52,6 +52,33 @@ describe("Surrogate interview accessibility labels", () => {
     it("adds an aria-label to the interview transcript pane", () => {
         render(<TranscriptPane />)
         expect(screen.getByRole("button", { name: "Interview Transcript" })).toBeInTheDocument()
+    })
+
+    it("updates transcript highlight hover state on keyboard focus", () => {
+        const setHoveredCommentId = vi.fn()
+        mockUseInterviewComments.mockReturnValue({
+            transcriptRef: React.createRef<HTMLDivElement>(),
+            transcriptHtml: '<p><span data-comment-id="comment-1" tabindex="0">Highlighted quote</span></p>',
+            canEdit: true,
+            newComment: { type: "none" },
+            isSelectingRef: { current: false },
+            interaction: {
+                hoveredCommentId: null,
+                focusedCommentId: null,
+            },
+            setHoveredCommentId,
+            setFocusedCommentId: vi.fn(),
+            startPendingComment: vi.fn(),
+        })
+
+        render(<TranscriptPane />)
+
+        const highlightedQuote = screen.getByText("Highlighted quote")
+        fireEvent.focus(highlightedQuote)
+        expect(setHoveredCommentId).toHaveBeenCalledWith("comment-1")
+
+        fireEvent.blur(highlightedQuote)
+        expect(setHoveredCommentId).toHaveBeenCalledWith(null)
     })
 
     it("adds a descriptive aria-label to interview list rows", () => {
