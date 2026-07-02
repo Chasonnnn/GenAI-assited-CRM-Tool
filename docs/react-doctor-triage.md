@@ -3038,3 +3038,27 @@ Full command after Batch 135: not rerun for the same tool-availability reason. T
 Changed-scope command after Batch 136: not rerun. React Doctor remains unavailable in this environment for the same reason as Batch 134 (`npx` network blocked/rejected; offline cache missing).
 
 Full command after Batch 136: not rerun for the same tool-availability reason. The latest full React Doctor evidence remains the pre-Batch-134 scan at `76 / 100`, `228` issues, with diagnostics at `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-083eca4f-3cfb-45f4-be16-537f9206fb5c`.
+
+## Batch 137
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-tag-over-role` | `components/appointments/UnifiedCalendar.tsx` | Valid scanner findings: Google Calendar events navigate to `event.html_link`, so they should be anchors, and clickable appointment event tiles should be native buttons instead of `div role="button"` plus custom keyboard emulation. | High | Replaced Google event wrappers with external `<a>` links, replaced clickable appointment event wrappers with `<button type="button">` while preserving drag behavior, and left non-clickable event render paths as static `<div>` elements. Removed the custom `activateWithKeyboard` helper from this component. | RED: `pnpm test --run tests/unified-calendar-reschedule-dnd.test.tsx -t "Google Calendar events"` failed because no native link existed; `pnpm test --run tests/unified-calendar-reschedule-dnd.test.tsx -t "native draggable buttons"` failed because the appointment tile was a `DIV`. GREEN: both focused tests passed after the fixes; `pnpm test --run tests/unified-calendar-reschedule-dnd.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "uses subtle calendar accents|unified calendar drag payload"`; changed-scope React Doctor no longer reports `prefer-tag-over-role` for `UnifiedCalendar`. |
+| `react-doctor/prefer-tag-over-role` | `components/appointments/AppointmentsList.tsx`, `components/email/EmailComposeDialog.tsx`, `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx` | Current residual findings are not safe one-line native-element swaps. `AppointmentsList` needs the selectable card area split away from nested approve/decline buttons; the email composer is a `contentEditable` rich textbox; the transcript pane is selectable rich transcript content with delegated comment targeting. | Medium-high | No code change. Logged as separate follow-up candidates or false positives instead of converting them blindly. | Read-only validation against current source and existing source guards. Full React Doctor now reports `prefer-tag-over-role` only for these three files. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-profile.ts`, `lib/hooks/use-forms.ts`, `lib/hooks/use-user-integrations.ts`, `lib/hooks/use-mfa.ts`, `lib/hooks/use-platform-templates.ts` | Sampled diagnostics are false positives or no-ops for cache invalidation today: profile sync returns staged data rather than persisted profile detail; form logo upload patches local builder state before save; OAuth/Duo hooks fetch redirect URLs or set callback state outside React Query; platform test/campaign sends do not update template queries and no query-backed log key exists here. | High for sampled hooks | No code change. Do not add noisy invalidations to redirect/setup hooks. If callback or log flows become React Query-backed later, invalidate the dedicated status/list/log keys then. | Read-only subagent validation plus `pnpm test --run tests/use-mutation-invalidations.test.ts` passed with `25/25` in the subagent workspace. |
+
+Changed-scope command after Batch 137: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `2`
+- Summary: `Maintainability 2 warnings`
+- Remaining changed-scope diagnostics: `react-doctor/no-giant-component` for `components/appointments/UnifiedCalendar.tsx`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1e100e01-9116-4d49-aa7e-3bcedc236384`
+
+Full command after Batch 137: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `206`
+- Summary: `Bugs 93 warnings`, `Performance 10 warnings`, `Accessibility 9 warnings`, `Maintainability 94 warnings`
+- Removed globally since the fresh Batch 137 starting scan: `react-doctor/prefer-tag-over-role` in `UnifiedCalendar` (`4` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-42fec818-763b-4bd1-931e-27fdb62685db`

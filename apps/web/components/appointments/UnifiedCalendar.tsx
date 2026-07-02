@@ -10,7 +10,7 @@
  * - Click to view details
  */
 
-import { useRef, useState, type KeyboardEvent } from "react"
+import { useRef, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -100,12 +100,6 @@ const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
     google_meet: VideoIcon,
     phone: PhoneIcon,
     in_person: MapPinIcon,
-}
-
-function activateWithKeyboard(event: KeyboardEvent<HTMLDivElement>, onActivate: () => void) {
-    if (event.key !== "Enter" && event.key !== " ") return
-    event.preventDefault()
-    onActivate()
 }
 
 function formatItemCount(count: number) {
@@ -213,36 +207,28 @@ function GoogleEventItem({
         ? "All day"
         : format(parseISO(event.start), "h:mm a")
 
-    const openGoogleCalendarEvent = () => {
-        if (event.html_link) {
-            window.open(event.html_link, "_blank", "noopener,noreferrer")
-        }
-    }
-
     if (compact) {
         return (
-            <div
-                onClick={openGoogleCalendarEvent}
-                onKeyDown={(e) => activateWithKeyboard(e, openGoogleCalendarEvent)}
-                role="button"
-                tabIndex={0}
-                className="flex w-full cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/70 px-2 py-1 text-left text-[11px] font-medium text-foreground hover:bg-muted"
-                title="Click to open in Google Calendar"
+            <a
+                href={event.html_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center gap-1.5 rounded-md border border-border bg-muted/70 px-2 py-1 text-left text-[11px] font-medium text-foreground hover:bg-muted"
+                title="Open in Google Calendar"
             >
                 <CalendarIcon className="size-3 shrink-0" />
                 <span className="truncate">{time} - {event.summary}</span>
-            </div>
+            </a>
         )
     }
 
     return (
-        <div
-            onClick={openGoogleCalendarEvent}
-            onKeyDown={(e) => activateWithKeyboard(e, openGoogleCalendarEvent)}
-            role="button"
-            tabIndex={0}
-            className="w-full cursor-pointer rounded-lg border border-border bg-muted/50 p-2 text-left hover:bg-muted"
-            title="Click to open in Google Calendar"
+        <a
+            href={event.html_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full rounded-lg border border-border bg-muted/50 p-2 text-left hover:bg-muted"
+            title="Open in Google Calendar"
         >
             <p className="font-medium text-sm truncate flex items-center gap-1">
                 <CalendarIcon className="size-3" />
@@ -250,7 +236,7 @@ function GoogleEventItem({
             </p>
             <p className="text-xs text-muted-foreground">{time}</p>
             <p className="text-xs text-muted-foreground/70">Google Calendar</p>
-        </div>
+        </a>
     )
 }
 
@@ -283,18 +269,55 @@ function EventItem({
     }
 
     if (compact) {
+        const compactClassName = `w-full text-left px-2 py-1 rounded text-xs truncate ${statusColor} text-white hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
+
+        if (onClick) {
+            return (
+                <button
+                    type="button"
+                    draggable={canDrag}
+                    onDragStart={handleDragStart}
+                    onClick={handleAppointmentClick}
+                    className={compactClassName}
+                >
+                    {time} - {appointment.client_name}
+                </button>
+            )
+        }
+
         return (
             <div
                 draggable={canDrag}
                 onDragStart={handleDragStart}
-                onClick={onClick ? handleAppointmentClick : undefined}
-                onKeyDown={onClick ? (e) => activateWithKeyboard(e, handleAppointmentClick) : undefined}
-                role="button"
-                tabIndex={0}
-                className={`w-full text-left px-2 py-1 rounded text-xs truncate ${statusColor} text-white hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+                className={compactClassName}
             >
                 {time} - {appointment.client_name}
             </div>
+        )
+    }
+
+    const fullClassName = `w-full text-left p-2 rounded-lg border-l-4 ${statusColor.replace('bg-', 'border-')} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
+    const fullContent = (
+        <>
+            <p className="font-medium text-sm truncate">{appointment.client_name}</p>
+            <p className="text-xs text-muted-foreground">{time}</p>
+            {appointment.appointment_type_name && (
+                <p className="text-xs text-muted-foreground truncate">{appointment.appointment_type_name}</p>
+            )}
+        </>
+    )
+
+    if (onClick) {
+        return (
+            <button
+                type="button"
+                draggable={canDrag}
+                onDragStart={handleDragStart}
+                onClick={handleAppointmentClick}
+                className={fullClassName}
+            >
+                {fullContent}
+            </button>
         )
     }
 
@@ -302,17 +325,9 @@ function EventItem({
         <div
             draggable={canDrag}
             onDragStart={handleDragStart}
-            onClick={onClick ? handleAppointmentClick : undefined}
-            onKeyDown={onClick ? (e) => activateWithKeyboard(e, handleAppointmentClick) : undefined}
-            role="button"
-            tabIndex={0}
-            className={`w-full text-left p-2 rounded-lg border-l-4 ${statusColor.replace('bg-', 'border-')} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+            className={fullClassName}
         >
-            <p className="font-medium text-sm truncate">{appointment.client_name}</p>
-            <p className="text-xs text-muted-foreground">{time}</p>
-            {appointment.appointment_type_name && (
-                <p className="text-xs text-muted-foreground truncate">{appointment.appointment_type_name}</p>
-            )}
+            {fullContent}
         </div>
     )
 }

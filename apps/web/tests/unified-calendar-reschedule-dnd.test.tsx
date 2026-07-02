@@ -198,6 +198,54 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         expect(screen.getByText("Available Times")).toBeInTheDocument()
     })
 
+    it("renders calendar appointments as native draggable buttons", () => {
+        render(<UnifiedCalendar />)
+
+        const appointmentButton = screen.getByRole("button", { name: /Test Zhang/i })
+        expect(appointmentButton.tagName).toBe("BUTTON")
+        expect(appointmentButton).toHaveAttribute("type", "button")
+        expect(appointmentButton).toHaveAttribute("draggable", "true")
+    })
+
+    it("renders Google Calendar events as native links", () => {
+        const googleEventStart = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            12,
+            10,
+            0,
+            0,
+            0
+        )
+        const googleEventEnd = new Date(googleEventStart.getTime() + 30 * 60 * 1000)
+        mockUseUnifiedCalendarData.mockReturnValue({
+            appointments: [],
+            appointmentsLoading: false,
+            tasks: [],
+            tasksLoading: false,
+            googleEvents: [
+                {
+                    id: "gcal-1",
+                    summary: "Partner sync",
+                    start: googleEventStart.toISOString(),
+                    end: googleEventEnd.toISOString(),
+                    html_link: "https://calendar.google.com/event?eid=gcal-1",
+                    is_all_day: false,
+                    source: "google",
+                },
+            ],
+            calendarConnected: true,
+            calendarError: null,
+        })
+
+        render(<UnifiedCalendar />)
+
+        const eventLink = screen.getByRole("link", { name: /partner sync/i })
+        expect(eventLink).toHaveAttribute("href", "https://calendar.google.com/event?eid=gcal-1")
+        expect(eventLink).toHaveAttribute("target", "_blank")
+        expect(eventLink).toHaveAttribute("rel", "noopener noreferrer")
+    })
+
     it("labels linked appointment unlink actions with the linked record names", () => {
         mockUseUnifiedCalendarData.mockReturnValue({
             appointments: [
