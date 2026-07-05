@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -258,35 +259,60 @@ def _process_resend_event(
 
             run = db.query(CampaignRun).filter(CampaignRun.id == campaign_recipient.run_id).first()
             if run:
-                run.sent_count = (
-                    db.query(CampaignRecipient)
-                    .filter(
-                        CampaignRecipient.run_id == run.id,
-                        CampaignRecipient.status.in_(
-                            [
-                                CampaignRecipientStatus.SENT.value,
-                                CampaignRecipientStatus.DELIVERED.value,
-                            ]
+                # Optimize: Combine three count queries into a single database round-trip using conditional aggregation
+                counts = (
+                    db.query(
+                        func.coalesce(
+                            func.sum(
+                                case(
+                                    (
+                                        CampaignRecipient.status.in_(
+                                            [
+                                                CampaignRecipientStatus.SENT.value,
+                                                CampaignRecipientStatus.DELIVERED.value,
+                                            ]
+                                        ),
+                                        1,
+                                    ),
+                                    else_=0,
+                                )
+                            ),
+                            0,
+                        ),
+                        func.coalesce(
+                            func.sum(
+                                case(
+                                    (
+                                        CampaignRecipient.status
+                                        == CampaignRecipientStatus.DELIVERED.value,
+                                        1,
+                                    ),
+                                    else_=0,
+                                )
+                            ),
+                            0,
+                        ),
+                        func.coalesce(
+                            func.sum(
+                                case(
+                                    (
+                                        CampaignRecipient.status
+                                        == CampaignRecipientStatus.FAILED.value,
+                                        1,
+                                    ),
+                                    else_=0,
+                                )
+                            ),
+                            0,
                         ),
                     )
-                    .count()
+                    .filter(CampaignRecipient.run_id == run.id)
+                    .first()
                 )
-                run.delivered_count = (
-                    db.query(CampaignRecipient)
-                    .filter(
-                        CampaignRecipient.run_id == run.id,
-                        CampaignRecipient.status == CampaignRecipientStatus.DELIVERED.value,
-                    )
-                    .count()
-                )
-                run.failed_count = (
-                    db.query(CampaignRecipient)
-                    .filter(
-                        CampaignRecipient.run_id == run.id,
-                        CampaignRecipient.status == CampaignRecipientStatus.FAILED.value,
-                    )
-                    .count()
-                )
+                if counts:
+                    run.sent_count = counts[0]
+                    run.delivered_count = counts[1]
+                    run.failed_count = counts[2]
 
 
 def _downgrade_workflow_execution_for_delivery_failure(

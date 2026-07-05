@@ -1,0 +1,3 @@
+## 2025-07-05 - Refactor multiple `.count()` queries into single conditional aggregate query
+**Learning:** In SQLAlchemy, performing multiple separate `.count()` queries on the same table with different conditions (e.g., in a webhook processing context like `apps/api/app/services/webhooks/resend.py`) results in multiple unnecessary database round-trips.
+**Action:** Replace multiple `.count()` queries with a single query using conditional aggregation via `func.coalesce(func.sum(case(...)), 0)`. Ensure shared base filters are applied to the main query and specific filters are inside the `case` condition. This significantly reduces database latency without affecting correctness.
