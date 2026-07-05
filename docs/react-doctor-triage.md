@@ -3451,3 +3451,23 @@ Full command after Batch 156: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 58 warnings`
 - Removed globally since Batch 155: `react-doctor/no-giant-component` for `ShareApplicationDialog` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7e0ca27d-8fc5-4c1e-b7c9-b20171203450`
+
+## Batch 157
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/reports/TeamPerformanceTable.tsx` | Valid. The team performance table mixed sort state, status shells, mobile summary cards, sortable headers, data rows, and unassigned rows in one large component. | High | Split status, data-card shell, mobile summary, metric tiles, sortable headers, desktop table, desktop data rows, and unassigned row rendering into focused local components while preserving the public component API and sorting behavior. Added a source guard requiring the split helper structure and keeping the exported component free of the direct table/mobile markup. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "team performance table sections"` failed on the monolithic component. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "team performance"`; `pnpm test --run tests/team-performance-table.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 157: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 157: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `154`
+- Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 57 warnings`
+- Removed globally since Batch 156: `react-doctor/no-giant-component` for `TeamPerformanceTable` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f2d15a21-2f79-4753-94d5-b90cfd41c755`

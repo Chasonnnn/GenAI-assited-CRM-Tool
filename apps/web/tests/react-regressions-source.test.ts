@@ -485,6 +485,18 @@ describe("React regression guards (source)", () => {
         expect(teamTableSource).not.toContain('role="list"')
     })
 
+    it("keeps team performance table sections split into focused render helpers", () => {
+        const source = readSource("components/reports/TeamPerformanceTable.tsx")
+        const tableSource = readExportedFunctionSource(source, "TeamPerformanceTable")
+
+        expect(source).toContain("function TeamPerformanceStatusCard")
+        expect(source).toContain("function TeamPerformanceMobileSummary")
+        expect(source).toContain("function TeamPerformanceDesktopTable")
+        expect(source).toContain("function TeamPerformanceDesktopDataRow")
+        expect(tableSource).not.toContain("<TableHeader>")
+        expect(tableSource).not.toContain('aria-label="Team performance mobile summary"')
+    })
+
     it("keeps unified calendar data timezone derivation compiler-friendly", () => {
         const source = readSource("lib/hooks/use-unified-calendar-data.ts")
 
