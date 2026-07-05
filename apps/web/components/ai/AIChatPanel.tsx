@@ -377,7 +377,7 @@ export function AIChatPanel({
                 </div>
                 {onClose && (
                     <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close AI Assistant">
-                        <XIcon className="size-4" />
+                        <XIcon className="size-4" aria-hidden="true" />
                     </Button>
                 )}
             </div>
