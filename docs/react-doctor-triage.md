@@ -3471,3 +3471,23 @@ Full command after Batch 157: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 57 warnings`
 - Removed globally since Batch 156: `react-doctor/no-giant-component` for `TeamPerformanceTable` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f2d15a21-2f79-4753-94d5-b90cfd41c755`
+
+## Batch 158
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/forms/builder/AutomationFormSubmissionsPanel.tsx` | Valid. The submissions panel mixed approval summary, metrics, ambiguous queue, lead promotion queue, submission history, retry actions, manual linking, and candidate resolution in one large render body. | High | Split the panel into local presentation helpers for workflow approvals, metrics, review queues, history filters/entries/actions, and candidate review while preserving the public prop surface and callback payloads. Added a source guard for the helper split plus direct render coverage for queue/history/candidate actions. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "automation form submissions panel"` failed on the monolithic component. GREEN: `pnpm test --run tests/automation-form-submissions-panel.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "automation form submissions panel\|typographic ellipses in user-facing"`; `pnpm test --run tests/form-builder-page.test.tsx -t "uses design-system tab controls for workspace sections and a dedicated settings tab"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 158: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 158: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `153`
+- Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 56 warnings`
+- Removed globally since Batch 157: `react-doctor/no-giant-component` for `AutomationFormSubmissionsPanel` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-35243218-fc9f-4612-8da6-7be9c0df6b6a`

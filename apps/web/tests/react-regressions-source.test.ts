@@ -3245,6 +3245,18 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps automation form submissions panel split into focused render helpers", () => {
+        const source = readSource("components/forms/builder/AutomationFormSubmissionsPanel.tsx")
+        const panelSource = readExportedFunctionSource(source, "AutomationFormSubmissionsPanel")
+
+        expect(source).toContain("function SubmissionMetricsGrid")
+        expect(source).toContain("function SubmissionReviewQueues")
+        expect(source).toContain("function SubmissionHistoryCard")
+        expect(source).toContain("function SubmissionCandidateReviewCard")
+        expect(panelSource).not.toContain("Ambiguous Match Queue")
+        expect(panelSource).not.toContain("Submission History")
+    })
+
     it("keeps production date-time formatters compiler-compatible", () => {
         const unifiedCalendarSource = readSource("components/appointments/UnifiedCalendar.tsx")
         const publicBookingSource = readSource("components/appointments/PublicBookingPage.tsx")
