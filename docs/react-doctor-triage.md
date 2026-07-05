@@ -3430,3 +3430,24 @@ Full command after Batch 155: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 59 warnings`
 - Removed globally since Batch 154: `react-doctor/no-prevent-default` (`1` warning); that rule is no longer present in the full scan.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7431179f-eeaf-4579-aa94-00134f07c038`
+
+## Batch 156
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/forms/builder/ShareApplicationDialog.tsx` | Valid. The share dialog mixed state wiring, hosted-link display, QR copy, embed diagnostics, embed settings, snippet copy, and footer actions in one large component. | High | Split hosted-link, QR, embed tab, embed settings, snippet, health-check, and footer rendering into focused local components while keeping the parent state and handlers unchanged. Added a source guard requiring the split helper structure. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "share application dialog tabs"` failed on the monolithic component. GREEN: focused source guard passed; `pnpm test --run tests/share-application-dialog.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-user-integrations.ts`, `lib/hooks/use-meta-oauth.ts`, `lib/hooks/use-mfa.ts`, `lib/hooks/use-campaigns.ts`, `lib/hooks/use-profile.ts`, `lib/hooks/use-import.ts`, `lib/hooks/use-forms.ts`, `lib/hooks/use-platform-templates.ts`, `lib/hooks/use-workflows.ts`, `lib/hooks/use-ai.ts`, `lib/hooks/use-resend.ts` | Sampled false positives / product-dependent command mutations. The React Doctor rule docs confirm this is a structural TanStack Query heuristic, and the validated hooks fetch OAuth URLs, initiate external auth redirects, preview/filter/test data, upload transient assets, compute AI/import mappings, or stage profile diffs without persisting cached entities. | Medium-high | Left unchanged and logged instead of adding misleading invalidations to command-style mutations. Continue to validate individual hooks before editing if any later call site proves a real stale-cache path. | Source inspection plus React Doctor rule docs. No suppression or config change. |
+
+Changed-scope command after Batch 156: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 156: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `155`
+- Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 58 warnings`
+- Removed globally since Batch 155: `react-doctor/no-giant-component` for `ShareApplicationDialog` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7e0ca27d-8fc5-4c1e-b7c9-b20171203450`

@@ -1603,6 +1603,18 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setEmbedSettings(DEFAULT_EMBED_SETTINGS)")
     })
 
+    it("keeps share application dialog tabs split into focused render helpers", () => {
+        const source = readSource("components/forms/builder/ShareApplicationDialog.tsx")
+
+        expect(source).toContain("function HostedLinkTabContent")
+        expect(source).toContain("function EmbedTabContent")
+        expect(source).toContain("function EmbedSettingsPanel")
+        expect(source).toContain("function ShareApplicationDialogFooter")
+        expect(source).toContain("<HostedLinkTabContent link={selectedQrLink} />")
+        expect(source).toContain("<EmbedTabContent")
+        expect(source).toContain("<ShareApplicationDialogFooter")
+    })
+
     it("uses indexed lookups for campaign selected filter labels", () => {
         const source = readSource("app/(app)/automation/campaigns/page.tsx")
 

@@ -65,6 +65,8 @@ type EmbedSettingsDraft = {
     settings: EmbedSettingsState
 }
 
+type UpdateEmbedSettings = (update: (current: EmbedSettingsState) => EmbedSettingsState) => void
+
 const DEFAULT_EMBED_SETTINGS: EmbedSettingsState = {
     embedEnabled: false,
     originText: "",
@@ -173,224 +175,376 @@ export function ShareApplicationDialog({
                         </TabsTrigger>
                     </TabsList>
                     <TabsContent value="hosted" className="mt-4 min-w-0">
-                        {selectedQrLink?.intake_url ? (
-                            <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
-                                <div className="font-medium text-stone-900 dark:text-stone-100">
-                                    {selectedQrLink.event_name || selectedQrLink.campaign_name || "Shared intake link"}
-                                </div>
-                                <div className="break-all">{selectedQrLink.intake_url}</div>
-                            </div>
-                        ) : (
-                            <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
-                        )}
+                        <HostedLinkTabContent link={selectedQrLink} />
                     </TabsContent>
                     <TabsContent value="qr" className="mt-4 min-w-0">
-                        <div className="min-w-0 max-w-full rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
-                            Use the QR download actions below for the selected hosted link.
-                        </div>
+                        <QrTabContent />
                     </TabsContent>
                     <TabsContent
                         value="embed"
                         className="mt-4 max-h-[min(48vh,32rem)] min-w-0 space-y-3 overflow-y-auto overflow-x-hidden pr-1"
                     >
-                        {selectedQrLink ? (
-                            <>
-                                <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-md border border-stone-200 p-3 dark:border-stone-800">
-                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                            <EmbedHealthStatusBadge health={embedHealth} />
-                                            {embedHealth?.updated_at ? (
-                                                <span className="text-xs text-stone-500">
-                                                    Checked {formatUtcDateLabel(embedHealth.updated_at, { month: "long" })}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="shrink-0"
-                                            onClick={onRefreshEmbedHealth}
-                                            disabled={!selectedQrLink || isEmbedHealthFetching}
-                                        >
-                                            <RefreshCwIcon
-                                                className={`mr-2 size-4 ${isEmbedHealthFetching ? "animate-spin" : ""}`}
-                                            />
-                                            Check setup
-                                        </Button>
-                                    </div>
-                                    {embedHealth ? (
-                                        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-900/40">
-                                            {embedHealth.checks.map((check) => (
-                                                <div key={check.key} className="flex min-w-0 gap-2 text-xs">
-                                                    <EmbedHealthCheckIcon status={check.status} />
-                                                    <div className="min-w-0">
-                                                        <div className="font-medium text-stone-900 dark:text-stone-100">
-                                                            {check.label}
-                                                        </div>
-                                                        <div className="break-words text-stone-500">{check.message}</div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : null}
-                                    <div className="flex items-center justify-between gap-3">
-                                        <Label htmlFor="sf-embed-enabled" className="text-sm font-medium">
-                                            Enable iframe embed
-                                        </Label>
-                                        <Switch
-                                            id="sf-embed-enabled"
-                                            checked={embedEnabled}
-                                            onCheckedChange={(checked) =>
-                                                updateEmbedSettings((current) => ({ ...current, embedEnabled: checked }))
-                                            }
-                                            disabled={isEmbedSettingsPending}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sf-embed-origins">Allowed origins</Label>
-                                        <Textarea
-                                            id="sf-embed-origins"
-                                            value={originText}
-                                            onChange={(event) =>
-                                                updateEmbedSettings((current) => ({
-                                                    ...current,
-                                                    originText: event.target.value,
-                                                }))
-                                            }
-                                            placeholder="https://www.clientsite.com"
-                                            rows={3}
-                                            className="min-w-0"
-                                            disabled={isEmbedSettingsPending}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sf-embed-tracking">Tracking mode</Label>
-                                        <Select
-                                            value={trackingMode}
-                                            onValueChange={(value) =>
-                                                updateEmbedSettings((current) => ({
-                                                    ...current,
-                                                    trackingMode: value as TrackingMode,
-                                                }))
-                                            }
-                                            disabled={isEmbedSettingsPending}
-                                        >
-                                            <SelectTrigger id="sf-embed-tracking" className="min-w-0">
-                                                <SelectValue>
-                                                    {(value: string | null) =>
-                                                        getTrackingModeLabel((value as TrackingMode | null) ?? "enhanced_match_lead")
-                                                    }
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="enhanced_match_lead">Enhanced Match Lead</SelectItem>
-                                                <SelectItem value="privacy_safe_lead">Privacy-safe Lead</SelectItem>
-                                                <SelectItem value="internal_only">Internal Only</SelectItem>
-                                                <SelectItem value="disabled">Disabled</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="sf-embed-consent">Consent text</Label>
-                                        <Textarea
-                                            id="sf-embed-consent"
-                                            value={consentText}
-                                            onChange={(event) =>
-                                                updateEmbedSettings((current) => ({
-                                                    ...current,
-                                                    consentText: event.target.value,
-                                                }))
-                                            }
-                                            placeholder="I agree to be contacted about my inquiry."
-                                            rows={3}
-                                            className="min-w-0"
-                                            disabled={isEmbedSettingsPending}
-                                        />
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => void saveEmbedSettings()}
-                                        disabled={!selectedQrLink || isEmbedSettingsPending}
-                                    >
-                                        Save Embed Settings
-                                    </Button>
-                                </div>
-                                <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
-                                    <div className="mb-2 flex items-center gap-2 font-medium text-stone-900 dark:text-stone-100">
-                                        <Code2Icon className="size-4" />
-                                        Website embed
-                                    </div>
-                                    <pre className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded border border-stone-200 bg-white p-3 font-mono text-[11px] leading-5 dark:border-stone-800 dark:bg-stone-950">
-                                        {embedSnippet}
-                                    </pre>
-                                </div>
-                                {!selectedQrLink.embed_enabled ? (
-                                    <p className="text-xs text-amber-700">
-                                        Embedding is disabled for this link until allowed origins are configured.
-                                    </p>
-                                ) : selectedQrLink.allowed_embed_origins.length > 0 ? (
-                                    <p className="break-words text-xs text-stone-500">
-                                        Allowed origins: {selectedQrLink.allowed_embed_origins.join(", ")}
-                                    </p>
-                                ) : null}
-                                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={copyEmbedSnippet}>
-                                    <CopyIcon className="mr-2 size-4" />
-                                    Copy Embed
-                                </Button>
-                            </>
-                        ) : (
-                            <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
-                        )}
+                        <EmbedTabContent
+                            link={selectedQrLink}
+                            health={embedHealth}
+                            isHealthFetching={isEmbedHealthFetching}
+                            onRefreshHealth={onRefreshEmbedHealth}
+                            settings={{ embedEnabled, originText, trackingMode, consentText }}
+                            isSettingsPending={isEmbedSettingsPending}
+                            onSettingsChange={updateEmbedSettings}
+                            embedSnippet={embedSnippet}
+                            onCopyEmbedSnippet={copyEmbedSnippet}
+                            onSaveEmbedSettings={saveEmbedSettings}
+                        />
                     </TabsContent>
                 </Tabs>
-                <AlertDialogFooter className="min-w-0 flex-col sm:flex-row sm:flex-wrap">
-                    <AlertDialogCancel className="w-full sm:w-auto">Close</AlertDialogCancel>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full sm:w-auto"
-                        disabled={!selectedQrLink}
-                        onClick={async () => {
-                            if (!selectedQrLink) return
-                            await onCopyLink(selectedQrLink)
-                            onOpenChange(false)
-                        }}
-                    >
-                        <LinkIcon className="mr-2 size-4" />
-                        Copy Link
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full sm:w-auto"
-                        disabled={!selectedQrLink}
-                        onClick={() => {
-                            if (!selectedQrLink) return
-                            onDownloadQrSvg()
-                            onOpenChange(false)
-                        }}
-                    >
-                        <DownloadIcon className="mr-2 size-4" />
-                        QR (SVG)
-                    </Button>
-                    <Button
-                        type="button"
-                        className="w-full sm:w-auto"
-                        disabled={!selectedQrLink}
-                        onClick={() => {
-                            if (!selectedQrLink) return
-                            void onDownloadQrPng()
-                            onOpenChange(false)
-                        }}
-                    >
-                        <QrCodeIcon className="mr-2 size-4" />
-                        QR (PNG)
-                    </Button>
-                </AlertDialogFooter>
+                <ShareApplicationDialogFooter
+                    link={selectedQrLink}
+                    onOpenChange={onOpenChange}
+                    onCopyLink={onCopyLink}
+                    onDownloadQrSvg={onDownloadQrSvg}
+                    onDownloadQrPng={onDownloadQrPng}
+                />
             </AlertDialogContent>
         </AlertDialog>
+    )
+}
+
+function HostedLinkTabContent({ link }: { link: FormIntakeLinkRead | null }) {
+    if (!link?.intake_url) {
+        return <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
+    }
+
+    return (
+        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+            <div className="font-medium text-stone-900 dark:text-stone-100">
+                {link.event_name || link.campaign_name || "Shared intake link"}
+            </div>
+            <div className="break-all">{link.intake_url}</div>
+        </div>
+    )
+}
+
+function QrTabContent() {
+    return (
+        <div className="min-w-0 max-w-full rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+            Use the QR download actions below for the selected hosted link.
+        </div>
+    )
+}
+
+function EmbedTabContent({
+    link,
+    health,
+    isHealthFetching,
+    onRefreshHealth,
+    settings,
+    isSettingsPending,
+    onSettingsChange,
+    embedSnippet,
+    onCopyEmbedSnippet,
+    onSaveEmbedSettings,
+}: {
+    link: FormIntakeLinkRead | null
+    health?: FormEmbedHealthRead | null | undefined
+    isHealthFetching: boolean
+    onRefreshHealth: (() => void) | undefined
+    settings: EmbedSettingsState
+    isSettingsPending: boolean
+    onSettingsChange: UpdateEmbedSettings
+    embedSnippet: string
+    onCopyEmbedSnippet: () => Promise<void>
+    onSaveEmbedSettings: () => Promise<void>
+}) {
+    if (!link) {
+        return <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
+    }
+
+    return (
+        <>
+            <EmbedSettingsPanel
+                link={link}
+                health={health}
+                isHealthFetching={isHealthFetching}
+                onRefreshHealth={onRefreshHealth}
+                settings={settings}
+                isSettingsPending={isSettingsPending}
+                onSettingsChange={onSettingsChange}
+                onSaveEmbedSettings={onSaveEmbedSettings}
+            />
+            <EmbedSnippetPanel
+                link={link}
+                embedSnippet={embedSnippet}
+                onCopyEmbedSnippet={onCopyEmbedSnippet}
+            />
+        </>
+    )
+}
+
+function EmbedSettingsPanel({
+    link,
+    health,
+    isHealthFetching,
+    onRefreshHealth,
+    settings,
+    isSettingsPending,
+    onSettingsChange,
+    onSaveEmbedSettings,
+}: {
+    link: FormIntakeLinkRead
+    health?: FormEmbedHealthRead | null | undefined
+    isHealthFetching: boolean
+    onRefreshHealth: (() => void) | undefined
+    settings: EmbedSettingsState
+    isSettingsPending: boolean
+    onSettingsChange: UpdateEmbedSettings
+    onSaveEmbedSettings: () => Promise<void>
+}) {
+    return (
+        <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-md border border-stone-200 p-3 dark:border-stone-800">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <EmbedHealthStatusBadge health={health} />
+                    {health?.updated_at ? (
+                        <span className="text-xs text-stone-500">
+                            Checked {formatUtcDateLabel(health.updated_at, { month: "long" })}
+                        </span>
+                    ) : null}
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={onRefreshHealth}
+                    disabled={!link || isHealthFetching}
+                >
+                    <RefreshCwIcon className={`mr-2 size-4 ${isHealthFetching ? "animate-spin" : ""}`} />
+                    Check setup
+                </Button>
+            </div>
+            <EmbedHealthChecks health={health} />
+            <EmbedSettingsFields
+                settings={settings}
+                isSettingsPending={isSettingsPending}
+                onSettingsChange={onSettingsChange}
+            />
+            <Button
+                type="button"
+                variant="outline"
+                onClick={() => void onSaveEmbedSettings()}
+                disabled={!link || isSettingsPending}
+            >
+                Save Embed Settings
+            </Button>
+        </div>
+    )
+}
+
+function EmbedHealthChecks({ health }: { health?: FormEmbedHealthRead | null | undefined }) {
+    if (!health) return null
+
+    return (
+        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-900/40">
+            {health.checks.map((check) => (
+                <div key={check.key} className="flex min-w-0 gap-2 text-xs">
+                    <EmbedHealthCheckIcon status={check.status} />
+                    <div className="min-w-0">
+                        <div className="font-medium text-stone-900 dark:text-stone-100">{check.label}</div>
+                        <div className="break-words text-stone-500">{check.message}</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function EmbedSettingsFields({
+    settings,
+    isSettingsPending,
+    onSettingsChange,
+}: {
+    settings: EmbedSettingsState
+    isSettingsPending: boolean
+    onSettingsChange: UpdateEmbedSettings
+}) {
+    const { embedEnabled, originText, trackingMode, consentText } = settings
+
+    return (
+        <>
+            <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="sf-embed-enabled" className="text-sm font-medium">
+                    Enable iframe embed
+                </Label>
+                <Switch
+                    id="sf-embed-enabled"
+                    checked={embedEnabled}
+                    onCheckedChange={(checked) =>
+                        onSettingsChange((current) => ({ ...current, embedEnabled: checked }))
+                    }
+                    disabled={isSettingsPending}
+                />
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="sf-embed-origins">Allowed origins</Label>
+                <Textarea
+                    id="sf-embed-origins"
+                    value={originText}
+                    onChange={(event) =>
+                        onSettingsChange((current) => ({
+                            ...current,
+                            originText: event.target.value,
+                        }))
+                    }
+                    placeholder="https://www.clientsite.com"
+                    rows={3}
+                    className="min-w-0"
+                    disabled={isSettingsPending}
+                />
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="sf-embed-tracking">Tracking mode</Label>
+                <Select
+                    value={trackingMode}
+                    onValueChange={(value) =>
+                        onSettingsChange((current) => ({
+                            ...current,
+                            trackingMode: value as TrackingMode,
+                        }))
+                    }
+                    disabled={isSettingsPending}
+                >
+                    <SelectTrigger id="sf-embed-tracking" className="min-w-0">
+                        <SelectValue>
+                            {(value: string | null) =>
+                                getTrackingModeLabel((value as TrackingMode | null) ?? "enhanced_match_lead")
+                            }
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="enhanced_match_lead">Enhanced Match Lead</SelectItem>
+                        <SelectItem value="privacy_safe_lead">Privacy-safe Lead</SelectItem>
+                        <SelectItem value="internal_only">Internal Only</SelectItem>
+                        <SelectItem value="disabled">Disabled</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="sf-embed-consent">Consent text</Label>
+                <Textarea
+                    id="sf-embed-consent"
+                    value={consentText}
+                    onChange={(event) =>
+                        onSettingsChange((current) => ({
+                            ...current,
+                            consentText: event.target.value,
+                        }))
+                    }
+                    placeholder="I agree to be contacted about my inquiry."
+                    rows={3}
+                    className="min-w-0"
+                    disabled={isSettingsPending}
+                />
+            </div>
+        </>
+    )
+}
+
+function EmbedSnippetPanel({
+    link,
+    embedSnippet,
+    onCopyEmbedSnippet,
+}: {
+    link: FormIntakeLinkRead
+    embedSnippet: string
+    onCopyEmbedSnippet: () => Promise<void>
+}) {
+    return (
+        <>
+            <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+                <div className="mb-2 flex items-center gap-2 font-medium text-stone-900 dark:text-stone-100">
+                    <Code2Icon className="size-4" />
+                    Website embed
+                </div>
+                <pre className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded border border-stone-200 bg-white p-3 font-mono text-[11px] leading-5 dark:border-stone-800 dark:bg-stone-950">
+                    {embedSnippet}
+                </pre>
+            </div>
+            {!link.embed_enabled ? (
+                <p className="text-xs text-amber-700">
+                    Embedding is disabled for this link until allowed origins are configured.
+                </p>
+            ) : link.allowed_embed_origins.length > 0 ? (
+                <p className="break-words text-xs text-stone-500">
+                    Allowed origins: {link.allowed_embed_origins.join(", ")}
+                </p>
+            ) : null}
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onCopyEmbedSnippet}>
+                <CopyIcon className="mr-2 size-4" />
+                Copy Embed
+            </Button>
+        </>
+    )
+}
+
+function ShareApplicationDialogFooter({
+    link,
+    onOpenChange,
+    onCopyLink,
+    onDownloadQrSvg,
+    onDownloadQrPng,
+}: {
+    link: FormIntakeLinkRead | null
+    onOpenChange: (open: boolean) => void
+    onCopyLink: (link: FormIntakeLinkRead) => Promise<void>
+    onDownloadQrSvg: () => void
+    onDownloadQrPng: () => Promise<void>
+}) {
+    return (
+        <AlertDialogFooter className="min-w-0 flex-col sm:flex-row sm:flex-wrap">
+            <AlertDialogCancel className="w-full sm:w-auto">Close</AlertDialogCancel>
+            <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={!link}
+                onClick={async () => {
+                    if (!link) return
+                    await onCopyLink(link)
+                    onOpenChange(false)
+                }}
+            >
+                <LinkIcon className="mr-2 size-4" />
+                Copy Link
+            </Button>
+            <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={!link}
+                onClick={() => {
+                    if (!link) return
+                    onDownloadQrSvg()
+                    onOpenChange(false)
+                }}
+            >
+                <DownloadIcon className="mr-2 size-4" />
+                QR (SVG)
+            </Button>
+            <Button
+                type="button"
+                className="w-full sm:w-auto"
+                disabled={!link}
+                onClick={() => {
+                    if (!link) return
+                    void onDownloadQrPng()
+                    onOpenChange(false)
+                }}
+            >
+                <QrCodeIcon className="mr-2 size-4" />
+                QR (PNG)
+            </Button>
+        </AlertDialogFooter>
     )
 }
 
