@@ -3136,9 +3136,15 @@ describe("React regression guards (source)", () => {
 
     it("keeps workflow templates panel derivations and controls compiler-friendly", () => {
         const source = readSource("components/automation/workflow-templates-panel.tsx")
+        const panelSource = readFunctionSource(source, "WorkflowTemplatesPanel")
 
         expect(source).toContain("const [selectedWorkflowScope, setSelectedWorkflowScope]")
         expect(source).toContain('aria-label="Enable workflow immediately"')
+        expect(source).toContain("function WorkflowTemplatesHeader")
+        expect(source).toContain("function TemplateCategoryFilter")
+        expect(source).toContain("function TemplateSections")
+        expect(source).toContain("function UseTemplateDialog")
+        expect(panelSource).not.toContain("<DialogContent>")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useEffect")
         expect(source).not.toContain("startTransition")

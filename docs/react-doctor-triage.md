@@ -3491,3 +3491,23 @@ Full command after Batch 158: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 56 warnings`
 - Removed globally since Batch 157: `react-doctor/no-giant-component` for `AutomationFormSubmissionsPanel` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-35243218-fc9f-4612-8da6-7be9c0df6b6a`
+
+## Batch 159
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/automation/workflow-templates-panel.tsx` | Valid. The workflow templates panel mixed query state, category controls, template sections, form-scoped template resolution, email-template override selection, and create-dialog rendering in one large component. | High | Kept query/mutation/state ownership in the parent, split header, category filter, template sections, dialog body, workflow scope, published-form selector, missing-email selector, and footer into local helpers. Preserved form-scoped auto-selection order, create payloads, workflow invalidation, and added a Cancel regression test. Also gave workflow-scope `SelectValue` a friendly label renderer and replaced the extracted missing-email field key with action-derived metadata. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "workflow templates panel derivations"` failed on the monolithic panel; `pnpm test --run tests/templates-page.test.tsx -t "closes the use-template dialog"` failed after the initial split exposed a Cancel regression. GREEN: `pnpm test --run tests/templates-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "workflow templates panel derivations"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 159: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 159: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `152`
+- Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 55 warnings`
+- Removed globally since Batch 158: `react-doctor/no-giant-component` for `WorkflowTemplatesPanel` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c7e1894-8295-44e3-8f1c-702874bb3ec2`

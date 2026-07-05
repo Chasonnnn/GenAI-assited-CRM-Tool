@@ -365,4 +365,20 @@ describe('WorkflowTemplatesPanel', () => {
 
         expect(screen.queryByText('Published form')).not.toBeInTheDocument()
     })
+
+    it('closes the use-template dialog when cancelled', async () => {
+        render(<WorkflowTemplatesPanel />)
+
+        fireEvent.click(screen.getByRole('button', { name: /use template task reminder/i }))
+
+        await waitFor(() => {
+            expect(screen.getByRole("heading", { name: /Use Template/i })).toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+        await waitFor(() => {
+            expect(screen.queryByRole("heading", { name: /Use Template/i })).not.toBeInTheDocument()
+        })
+    })
 })
