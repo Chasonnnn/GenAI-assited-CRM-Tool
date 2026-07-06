@@ -1,0 +1,3 @@
+## 2026-07-06 - Optimize Database Count Operations
+**Learning:** In SQLAlchemy, executing multiple `.count()` queries on the same table with different filters causes unnecessary database round-trips. When aggregating multiple statistics for the same base query (e.g. sent, delivered, failed counts for a campaign run), it is significantly faster to use a single `.first()` query with `func.sum(case(...))` conditional aggregation.
+**Action:** Use conditional aggregation (e.g. `func.coalesce(func.sum(case(...)), 0)`) to calculate multiple counts on the same relation in a single query instead of doing separate round-trips.
