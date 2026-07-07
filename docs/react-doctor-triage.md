@@ -3651,3 +3651,25 @@ Full command after Batch 166: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 82 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 51 warnings`
 - Removed globally since Batch 165: `react-doctor/prefer-useReducer` and `react-doctor/no-giant-component` for `ScheduleParserDialog` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cc88c40e-8ad0-4730-9577-49830898e024`
+
+## Batch 167
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/async-defer-await` | `app/mfa/page.client.tsx` | Valid, with a behavior constraint. The return-target decision does not depend on the completed challenge result, but both redirect branches must still wait for MFA completion and auth refresh before navigation. | High | Created the MFA completion promise, branched on the stored return target, and awaited the challenge plus auth refresh inside each branch before redirecting. This keeps the existing ops invariant covered by tests while moving the early-return guard before the await. | GREEN: `pnpm test --run tests/mfa-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+| `react-doctor/async-defer-await` | `app/ops/agencies/page.client.tsx` | Needs human review / likely false positive. The post-fetch `isCurrent` guard is the stale-response protection verified by `ops-agencies-page-race.test.tsx`; moving it before the awaited request would not protect late responses. | Medium | Left unchanged and documented. A future cleanup should preserve the existing stale-response test and only change this if the loading model moves to an abortable request or a query library. | Existing coverage: `pnpm test --run tests/ops-agencies-page-race.test.tsx` exercises stale in-flight responses. Not rerun in this batch because no code changed in that file. |
+
+Changed-scope command after Batch 167: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 167: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `142`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 51 warnings`
+- Removed globally since Batch 166: `react-doctor/async-defer-await` for `MFAPageClient` (`1` warning).
+- Remaining reviewed but unchanged: `react-doctor/async-defer-await` for `AgenciesPage` stale-response guard.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0c2896ba-8066-4dd2-ba9a-733da00ae685`

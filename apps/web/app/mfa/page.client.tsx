@@ -97,13 +97,16 @@ export default function MFAPageClient() {
         setErrorMessage(null)
         try {
             const returnTo = getStoredAuthReturnTo()
-            await completeMFA.mutateAsync(challengeCode)
-            await refetch()
+            const completeChallenge = completeMFA.mutateAsync(challengeCode)
             if (returnTo === "ops") {
+                await completeChallenge
+                await refetch()
                 clearStoredAuthReturnTo()
                 replace("/ops")
                 return
             }
+            await completeChallenge
+            await refetch()
             replace(APP_POST_MFA_PATH)
         } catch (error) {
             console.error("MFA challenge failed:", error)
