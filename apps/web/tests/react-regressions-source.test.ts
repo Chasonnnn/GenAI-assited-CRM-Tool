@@ -1948,6 +1948,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useState")
     })
 
+    it("uses reducer state for the surrogate task form", () => {
+        const source = readSource("components/surrogates/AddSurrogateTaskDialog.tsx")
+
+        expect(source).toContain("useReducer")
+        expect(source).toContain("surrogateTaskFormReducer")
+        expect(source).not.toContain("useState")
+        expect(source).not.toContain("setTitle")
+        expect(source).not.toContain("setError")
+    })
+
     it("uses gap spacing for CSV validation option rows", () => {
         const source = readSource("components/import/CSVUpload.tsx")
 

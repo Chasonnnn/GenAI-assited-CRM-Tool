@@ -4,7 +4,7 @@
  * AddSurrogateTaskDialog - Dialog for creating tasks for a surrogate.
  */
 
-import { useState } from "react"
+import { useReducer } from "react"
 import {
     Dialog,
     DialogContent,
@@ -52,6 +52,64 @@ const TASK_TYPES = [
     { value: "other", label: "Other" },
 ]
 
+type SurrogateTaskFormState = {
+    title: string
+    description: string
+    taskType: SurrogateTaskFormData["task_type"]
+    dueDate: string
+    dueTime: string
+    recurrence: TaskRecurrence
+    repeatUntil: string
+    error: string
+}
+
+type SurrogateTaskFormTextField =
+    | "title"
+    | "description"
+    | "dueDate"
+    | "dueTime"
+    | "repeatUntil"
+
+type SurrogateTaskFormAction =
+    | { type: "field"; field: SurrogateTaskFormTextField; value: string }
+    | { type: "taskType"; value: SurrogateTaskFormData["task_type"] }
+    | { type: "recurrence"; value: TaskRecurrence }
+    | { type: "validationError"; value: string }
+    | { type: "reset" }
+
+function createInitialSurrogateTaskFormState(): SurrogateTaskFormState {
+    return {
+        title: "",
+        description: "",
+        taskType: "other",
+        dueDate: "",
+        dueTime: "",
+        recurrence: "none",
+        repeatUntil: "",
+        error: "",
+    }
+}
+
+function surrogateTaskFormReducer(
+    state: SurrogateTaskFormState,
+    action: SurrogateTaskFormAction
+): SurrogateTaskFormState {
+    switch (action.type) {
+        case "field":
+            return { ...state, [action.field]: action.value }
+        case "taskType":
+            return { ...state, taskType: action.value }
+        case "recurrence":
+            return { ...state, recurrence: action.value }
+        case "validationError":
+            return { ...state, error: action.value }
+        case "reset":
+            return createInitialSurrogateTaskFormState()
+        default:
+            return state
+    }
+}
+
 export function AddSurrogateTaskDialog({
     open,
     onOpenChange,
@@ -59,30 +117,37 @@ export function AddSurrogateTaskDialog({
     isPending,
     surrogateName,
 }: AddSurrogateTaskDialogProps) {
-    const [title, setTitle] = useState("")
-    const [description, setDescription] = useState("")
-    const [taskType, setTaskType] = useState<SurrogateTaskFormData["task_type"]>("other")
-    const [dueDate, setDueDate] = useState("")
-    const [dueTime, setDueTime] = useState("")
-    const [recurrence, setRecurrence] = useState<TaskRecurrence>("none")
-    const [repeatUntil, setRepeatUntil] = useState("")
-    const [error, setError] = useState("")
+    const [formState, dispatchForm] = useReducer(
+        surrogateTaskFormReducer,
+        createInitialSurrogateTaskFormState()
+    )
+    const { title, description, taskType, dueDate, dueTime, recurrence, repeatUntil, error } =
+        formState
 
     const handleSubmit = async () => {
         if (!title.trim()) return
-        setError("")
+        dispatchForm({ type: "validationError", value: "" })
 
         if (recurrence !== "none") {
             if (!dueDate) {
-                setError("Recurring tasks require a due date.")
+                dispatchForm({
+                    type: "validationError",
+                    value: "Recurring tasks require a due date.",
+                })
                 return
             }
             if (!repeatUntil) {
-                setError("Please select a repeat until date.")
+                dispatchForm({
+                    type: "validationError",
+                    value: "Please select a repeat until date.",
+                })
                 return
             }
             if (repeatUntil < dueDate) {
-                setError("Repeat until date must be after the due date.")
+                dispatchForm({
+                    type: "validationError",
+                    value: "Repeat until date must be after the due date.",
+                })
                 return
             }
         }
@@ -98,27 +163,13 @@ export function AddSurrogateTaskDialog({
             ...(repeatUntil ? { repeat_until: repeatUntil } : {}),
         })
 
-        setTitle("")
-        setDescription("")
-        setTaskType("other")
-        setDueDate("")
-        setDueTime("")
-        setRecurrence("none")
-        setRepeatUntil("")
-        setError("")
+        dispatchForm({ type: "reset" })
         onOpenChange(false)
     }
 
     const handleClose = (isOpen: boolean) => {
         if (!isOpen) {
-            setTitle("")
-            setDescription("")
-            setTaskType("other")
-            setDueDate("")
-            setDueTime("")
-            setRecurrence("none")
-            setRepeatUntil("")
-            setError("")
+            dispatchForm({ type: "reset" })
         }
         onOpenChange(isOpen)
     }
@@ -139,7 +190,13 @@ export function AddSurrogateTaskDialog({
                         <Input
                             id="task-title"
                             value={title}
-                            onChange={(e) => setTitle(e.target.value)}
+                            onChange={(e) =>
+                                dispatchForm({
+                                    type: "field",
+                                    field: "title",
+                                    value: e.target.value,
+                                })
+                            }
                             placeholder="Task title..."
                             maxLength={255}
                         />
@@ -147,7 +204,15 @@ export function AddSurrogateTaskDialog({
 
                     <div className="space-y-2">
                         <Label htmlFor="surrogate-task-type">Type</Label>
-                        <Select value={taskType} onValueChange={(v) => setTaskType(v as SurrogateTaskFormData["task_type"])}>
+                        <Select
+                            value={taskType}
+                            onValueChange={(v) =>
+                                dispatchForm({
+                                    type: "taskType",
+                                    value: v as SurrogateTaskFormData["task_type"],
+                                })
+                            }
+                        >
                             <SelectTrigger id="surrogate-task-type">
                                 <SelectValue>
                                     {(value: string | null) => {
@@ -173,7 +238,13 @@ export function AddSurrogateTaskDialog({
                                 id="task-due-date"
                                 type="date"
                                 value={dueDate}
-                                onChange={(e) => setDueDate(e.target.value)}
+                                onChange={(e) =>
+                                    dispatchForm({
+                                        type: "field",
+                                        field: "dueDate",
+                                        value: e.target.value,
+                                    })
+                                }
                             />
                         </div>
                         <div className="space-y-2">
@@ -182,14 +253,28 @@ export function AddSurrogateTaskDialog({
                                 id="task-due-time"
                                 type="time"
                                 value={dueTime}
-                                onChange={(e) => setDueTime(e.target.value)}
+                                onChange={(e) =>
+                                    dispatchForm({
+                                        type: "field",
+                                        field: "dueTime",
+                                        value: e.target.value,
+                                    })
+                                }
                             />
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="surrogate-task-repeat">Repeat</Label>
-                        <Select value={recurrence} onValueChange={(v) => setRecurrence(v as SurrogateTaskFormData["recurrence"])}>
+                        <Select
+                            value={recurrence}
+                            onValueChange={(v) =>
+                                dispatchForm({
+                                    type: "recurrence",
+                                    value: v as SurrogateTaskFormData["recurrence"],
+                                })
+                            }
+                        >
                             <SelectTrigger id="surrogate-task-repeat">
                                 <SelectValue>
                                     {(value: string | null) => {
@@ -219,7 +304,13 @@ export function AddSurrogateTaskDialog({
                                 id="task-repeat-until"
                                 type="date"
                                 value={repeatUntil}
-                                onChange={(e) => setRepeatUntil(e.target.value)}
+                                onChange={(e) =>
+                                    dispatchForm({
+                                        type: "field",
+                                        field: "repeatUntil",
+                                        value: e.target.value,
+                                    })
+                                }
                             />
                         </div>
                     )}
@@ -229,7 +320,13 @@ export function AddSurrogateTaskDialog({
                         <Textarea
                             id="task-description"
                             value={description}
-                            onChange={(e) => setDescription(e.target.value)}
+                            onChange={(e) =>
+                                dispatchForm({
+                                    type: "field",
+                                    field: "description",
+                                    value: e.target.value,
+                                })
+                            }
                             placeholder="Optional task details..."
                             rows={3}
                             maxLength={2000}

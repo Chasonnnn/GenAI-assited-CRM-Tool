@@ -3571,3 +3571,23 @@ Full command after Batch 162: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 86 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
 - Removed globally since Batch 161: `react-doctor/no-giant-component` for `AIChatPanel` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e449de73-e7e6-467c-b847-9109c8e0b2a3`
+
+## Batch 163
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `components/surrogates/AddSurrogateTaskDialog.tsx` | Valid. The surrogate task dialog kept title, description, task type, due date/time, recurrence, repeat-until, and validation error as separate state values even though submit and close reset them together. | High | Replaced the individual form setters with `surrogateTaskFormReducer`, preserving the existing required-title, recurring-task validation, trimmed payload, successful-submit reset, and close reset behavior. Added behavior coverage for recurring-task due-date validation and trimmed submit payloads, plus a source guard requiring the reducer shape. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate task form"` failed on the separate `useState` calls. GREEN: `pnpm test --run tests/add-surrogate-task-dialog.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate task form"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 163: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 163: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `147`
+- Summary: `Bugs 85 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
+- Removed globally since Batch 162: `react-doctor/prefer-useReducer` for `AddSurrogateTaskDialog` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-db99a808-3f8e-44ba-9019-c834071ef74d`
