@@ -3695,3 +3695,26 @@ Full command after Batch 168: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Removed globally since Batch 167: `react-doctor/no-giant-component` for `AttentionNeededPanel` (`1` warning).
 - Deferred reviewed cluster: `react-doctor/no-event-handler` for `SurrogatesPage` URL/filter state model.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e8865237-1df6-48c9-aff6-eb5e55a516a0`
+
+## Batch 169
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/surrogates/SurrogatesFloatingScrollbar.tsx` | Valid. The floating scrollbar component mixed portal markup, thumb rendering, pointer handlers, scroll synchronization, pointer/media detection, metrics calculation, and lifecycle listeners in one component. | High | Extracted the portal, shell, and track rendering helpers, then moved the scroll/listener/controller logic into `useSurrogatesFloatingScrollbarController` so the exported component only renders children and the portal. Existing behavior tests cover active scroll display, parent scrolling, hover activation, idle fade-out, no-overflow/no-fine-pointer suppression, two-way horizontal sync, and native-scrollbar suppression. Added a source guard for the rendering split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogates floating scrollbar rendering"` failed on the monolithic render. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogates floating scrollbar"`; `pnpm test --run tests/surrogates-floating-scrollbar.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+| `react-doctor/no-event-handler` | `components/rich-text-editor.tsx` | False positive. The reported lines are Tiptap `useEditor` options for placeholder configuration, optional image extension, initial content/editor attributes, and Tiptap `onUpdate`, not a state-plus-effect event-handler hop. | High | Left unchanged after read-only audit. Any redesign would need editor-specific coverage for placeholder, image enablement, initial content, attributes/min-height, and `onUpdate -> onChange`. | Read-only audit only; no files changed for this finding. |
+| `react-doctor/no-event-handler` | `components/ui/calendar.tsx` | Needs human review. The finding matches the rule shape because prop-driven focus is performed in an effect, but the shared calendar focus behavior mirrors the local `react-day-picker@10.0.1` default `DayButton` pattern. Mechanical removal risks keyboard focus and date-picker navigation. | Medium-high | Left unchanged after read-only audit. A future batch should start with keyboard-focus behavior coverage asserting focused-day movement and selection after arrow/month navigation before deciding whether to keep, suppress, or redesign this focus handoff. | Read-only audit only; no files changed for this finding. |
+
+Changed-scope command after Batch 169: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 169: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `140`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 49 warnings`
+- Removed globally since Batch 168: `react-doctor/no-giant-component` for `SurrogatesFloatingScrollbar` (`1` warning).
+- Reviewed but unchanged: `react-doctor/no-event-handler` for `RichTextEditor` Tiptap options, and `Calendar` shared focus management.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-62bd86e4-d81c-434a-a0df-c065e500cdf1`

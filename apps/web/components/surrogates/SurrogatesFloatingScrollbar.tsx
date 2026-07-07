@@ -1,7 +1,9 @@
 "use client"
 
 import {
+    type CSSProperties,
     type Dispatch,
+    type PointerEvent as ReactPointerEvent,
     type ReactNode,
     type RefObject,
     type SetStateAction,
@@ -23,6 +25,7 @@ const NATIVE_SCROLLBAR_VISIBILITY_THRESHOLD_PX = 6
 const BOTTOM_HOVER_TRIGGER_ZONE_PX = 96
 
 type SyncSource = "table" | "floating" | null
+type PointerDownHandler = (event: ReactPointerEvent<HTMLDivElement>) => void
 
 interface ScrollbarMetrics {
     left: number
@@ -142,7 +145,116 @@ function updateScrollbarMetrics(
     return hasOverflow && inView && width > 0 && !nativeScrollbarVisible
 }
 
-export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode }) {
+function FloatingScrollbarPortal({
+    isVisible,
+    ...shellProps
+}: {
+    isVisible: boolean
+} & FloatingScrollbarShellProps) {
+    if (!isVisible) return null
+
+    return createPortal(
+        <FloatingScrollbarShell {...shellProps} />,
+        document.body
+    )
+}
+
+interface FloatingScrollbarShellProps extends FloatingScrollbarTrackProps {
+    isActive: boolean
+    floatingStyle: CSSProperties
+}
+
+function FloatingScrollbarShell({
+    isActive,
+    floatingStyle,
+    ...trackProps
+}: FloatingScrollbarShellProps) {
+    return (
+        <div
+            data-testid="surrogates-floating-scrollbar"
+            className="pointer-events-none fixed z-40 transition-[opacity,transform,filter] duration-300 ease-out motion-reduce:transition-none"
+            style={floatingStyle}
+        >
+            <div
+                className={`rounded-full border px-1.5 py-1.5 backdrop-blur-sm transition-[opacity,transform,border-color,background-color] duration-300 ease-out motion-reduce:transition-none ${
+                    isActive
+                        ? "pointer-events-auto translate-y-0 border-border/80 bg-background/88 opacity-100"
+                        : "pointer-events-none translate-y-1 border-border/55 bg-background/70 opacity-0"
+                }`}
+            >
+                <FloatingScrollbarTrack
+                    isActive={isActive}
+                    {...trackProps}
+                />
+            </div>
+        </div>
+    )
+}
+
+interface FloatingScrollbarTrackProps {
+    isActive: boolean
+    floatingViewportRef: RefObject<HTMLDivElement | null>
+    thumbRef: RefObject<HTMLDivElement | null>
+    contentWidth: number
+    thumbWidth: number
+    thumbLeft: number
+    maxScrollLeft: number
+    onFloatingScroll: () => void
+    onTrackPointerDown: PointerDownHandler
+    onThumbPointerDown: PointerDownHandler
+}
+
+function FloatingScrollbarTrack({
+    isActive,
+    floatingViewportRef,
+    thumbRef,
+    contentWidth,
+    thumbWidth,
+    thumbLeft,
+    maxScrollLeft,
+    onFloatingScroll,
+    onTrackPointerDown,
+    onThumbPointerDown,
+}: FloatingScrollbarTrackProps) {
+    return (
+        <div className="relative h-[8px]" onPointerDown={onTrackPointerDown}>
+            <div
+                ref={floatingViewportRef}
+                data-testid="surrogates-floating-scrollbar-viewport"
+                className="surrogates-floating-scrollbar-viewport h-[8px] overflow-x-auto overflow-y-hidden rounded-full"
+                onScroll={onFloatingScroll}
+            >
+                <div aria-hidden className="h-px" style={{ width: `${contentWidth}px` }} />
+            </div>
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-full bg-muted/60"
+            />
+            <div
+                ref={thumbRef}
+                aria-hidden
+                className={`absolute top-0 h-[8px] rounded-full border transition-[background-color,border-color,opacity] duration-300 ease-out motion-reduce:transition-none ${
+                    isActive
+                        ? "border-black/8 bg-[rgba(95,95,95,0.78)] opacity-100 dark:border-white/10 dark:bg-[rgba(238,238,238,0.86)]"
+                        : "border-black/6 bg-[rgba(95,95,95,0.52)] opacity-90 dark:border-white/8 dark:bg-[rgba(238,238,238,0.62)]"
+                }`}
+                style={{
+                    width: `${thumbWidth}px`,
+                    transform: `translateX(${thumbLeft}px)`,
+                    cursor: maxScrollLeft > 0 ? "grab" : "default",
+                }}
+                onPointerDown={onThumbPointerDown}
+            />
+        </div>
+    )
+}
+
+interface FloatingScrollbarController extends FloatingScrollbarShellProps {
+    isVisible: boolean
+    wrapperRef: RefObject<HTMLDivElement | null>
+}
+
+function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController {
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const tableContainerRef = useRef<HTMLDivElement | null>(null)
     const floatingViewportRef = useRef<HTMLDivElement | null>(null)
@@ -383,7 +495,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         !metrics.nativeScrollbarVisible
     const isVisible = isEligibleToRender && (isActive || isFadingOut)
 
-    const floatingStyle = {
+    const floatingStyle: CSSProperties = {
         left: `${Math.max(HORIZONTAL_INSET_PX, metrics.left)}px`,
         width: `${Math.max(0, metrics.width)}px`,
         bottom: `calc(env(safe-area-inset-bottom, 0px) + ${BAR_BOTTOM_OFFSET_PX}px)`,
@@ -414,7 +526,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         activateFromScroll()
     }
 
-    const handleTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const handleTrackPointerDown: PointerDownHandler = (event) => {
         if (maxScrollLeft <= 0 || thumbTrackWidth <= 0 || thumbWidth <= 0) return
         if (thumbRef.current?.contains(event.target as Node)) return
 
@@ -425,7 +537,7 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         syncScrollLeft(nextScrollLeft)
     }
 
-    const handleThumbPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const handleThumbPointerDown: PointerDownHandler = (event) => {
         if (maxScrollLeft <= 0 || thumbTrackWidth <= 0) return
 
         event.preventDefault()
@@ -449,56 +561,30 @@ export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode 
         window.addEventListener("pointerup", handlePointerUp)
     }
 
+    return {
+        wrapperRef,
+        isVisible,
+        isActive,
+        floatingStyle,
+        floatingViewportRef,
+        thumbRef,
+        contentWidth: metrics.contentWidth,
+        thumbWidth,
+        thumbLeft,
+        maxScrollLeft,
+        onFloatingScroll,
+        onTrackPointerDown: handleTrackPointerDown,
+        onThumbPointerDown: handleThumbPointerDown,
+    }
+}
+
+export function SurrogatesFloatingScrollbar({ children }: { children: ReactNode }) {
+    const { wrapperRef, ...portalProps } = useSurrogatesFloatingScrollbarController()
+
     return (
         <div ref={wrapperRef}>
             {children}
-            {isVisible &&
-                createPortal(
-                    <div
-                        data-testid="surrogates-floating-scrollbar"
-                        className="pointer-events-none fixed z-40 transition-[opacity,transform,filter] duration-300 ease-out motion-reduce:transition-none"
-                        style={floatingStyle}
-                    >
-                        <div
-                            className={`rounded-full border px-1.5 py-1.5 backdrop-blur-sm transition-[opacity,transform,border-color,background-color] duration-300 ease-out motion-reduce:transition-none ${
-                                isActive
-                                    ? "pointer-events-auto translate-y-0 border-border/80 bg-background/88 opacity-100"
-                                    : "pointer-events-none translate-y-1 border-border/55 bg-background/70 opacity-0"
-                            }`}
-                        >
-                            <div className="relative h-[8px]" onPointerDown={handleTrackPointerDown}>
-                                <div
-                                    ref={floatingViewportRef}
-                                    data-testid="surrogates-floating-scrollbar-viewport"
-                                    className="surrogates-floating-scrollbar-viewport h-[8px] overflow-x-auto overflow-y-hidden rounded-full"
-                                    onScroll={onFloatingScroll}
-                                >
-                                    <div aria-hidden className="h-px" style={{ width: `${metrics.contentWidth}px` }} />
-                                </div>
-                                <div
-                                    aria-hidden
-                                    className="pointer-events-none absolute inset-0 rounded-full bg-muted/60"
-                                />
-                                <div
-                                    ref={thumbRef}
-                                    aria-hidden
-                                    className={`absolute top-0 h-[8px] rounded-full border transition-[background-color,border-color,opacity] duration-300 ease-out motion-reduce:transition-none ${
-                                        isActive
-                                            ? "border-black/8 bg-[rgba(95,95,95,0.78)] opacity-100 dark:border-white/10 dark:bg-[rgba(238,238,238,0.86)]"
-                                            : "border-black/6 bg-[rgba(95,95,95,0.52)] opacity-90 dark:border-white/8 dark:bg-[rgba(238,238,238,0.62)]"
-                                    }`}
-                                    style={{
-                                        width: `${thumbWidth}px`,
-                                        transform: `translateX(${thumbLeft}px)`,
-                                        cursor: maxScrollLeft > 0 ? "grab" : "default",
-                                    }}
-                                    onPointerDown={handleThumbPointerDown}
-                                />
-                            </div>
-                        </div>
-                    </div>,
-                    document.body
-                )}
+            <FloatingScrollbarPortal {...portalProps} />
         </div>
     )
 }

@@ -2117,6 +2117,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("React.useCallback")
     })
 
+    it("keeps the surrogates floating scrollbar rendering split from scroll orchestration", () => {
+        const source = readSource("components/surrogates/SurrogatesFloatingScrollbar.tsx")
+        const scrollbarSource = readFunctionSource(source, "SurrogatesFloatingScrollbar")
+
+        expect(source).toContain("function FloatingScrollbarPortal")
+        expect(source).toContain("function FloatingScrollbarShell")
+        expect(source).toContain("function FloatingScrollbarTrack")
+        expect(scrollbarSource).not.toContain("data-testid=\"surrogates-floating-scrollbar\"")
+        expect(scrollbarSource).not.toContain("surrogates-floating-scrollbar-viewport")
+    })
+
     it("keeps surrogate detail header context files free of manual React memoization", () => {
         const sources = [
             "components/surrogates/detail/SurrogateDetailContext.tsx",
