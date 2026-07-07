@@ -65,7 +65,7 @@ type TaskEditPayload = {
     surrogate_id: string | null
 }
 
-export default function TasksPage() {
+function useTasksPageController() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
     const { user: currentUser } = useAuth()
@@ -370,147 +370,215 @@ export default function TasksPage() {
         })
     }, [incompleteTasks?.items])
 
+    return {
+        addTaskDialogOpen,
+        addTaskPending: createTask.isPending || createTaskBatch.isPending,
+        completedError: !!completedError,
+        completedTasks: completedTasks ?? null,
+        currentUserId,
+        deleteTaskPending: deleteTask.isPending,
+        editModalTask: editingTask ? {
+            id: editingTask.id,
+            title: editingTask.title,
+            description: editingTask.description ?? null,
+            task_type: editingTask.task_type,
+            due_date: editingTask.due_date,
+            due_time: editingTask.due_time ?? null,
+            is_completed: editingTask.is_completed,
+            surrogate_id: editingTask.surrogate_id,
+        } : null,
+        filter,
+        hasError,
+        incompleteTasks: incompleteTasks?.items ?? [],
+        isLoading,
+        loadingApprovals,
+        loadingCompleted,
+        loadingImportApprovals,
+        loadingStatusRequests,
+        pendingApprovals: pendingApprovals?.items ?? [],
+        pendingImportApprovals: pendingImportApprovals ?? [],
+        pendingStatusRequests: pendingStatusRequests?.items ?? [],
+        selectedTaskIds,
+        showCompleted,
+        view,
+        bulkCompletePending: bulkCompleteTasks.isPending,
+        handleAddTask,
+        handleBulkCompleteSelected,
+        handleDeleteTask,
+        handleFilterChange,
+        handleRetry,
+        handleSaveTask,
+        handleSelectAllTasks,
+        handleSelectTask,
+        handleTaskClick,
+        handleTaskToggle,
+        handleViewChange,
+        onCloseEditModal: () => setEditingTask(null),
+        onOpenAddTaskDialog: () => setAddTaskDialogOpen(true),
+        refetchImportApprovals,
+        refetchStatusRequests,
+        setAddTaskDialogOpen,
+        toggleShowCompleted: () => setShowCompleted((prev) => !prev),
+    }
+}
+
+type TasksPageController = ReturnType<typeof useTasksPageController>
+
+function TasksPageHeader({ controller }: { controller: TasksPageController }) {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <h1 className="text-2xl font-semibold">Tasks</h1>
+                <Button onClick={controller.onOpenAddTaskDialog}>
+                    <PlusIcon className="mr-2 size-4" />
+                    Add Task
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function TasksPageControls({ controller }: { controller: TasksPageController }) {
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-2">
+                <Button
+                    variant={controller.filter === "my_tasks" ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => controller.handleFilterChange("my_tasks")}
+                >
+                    My Tasks
+                </Button>
+                <Button
+                    variant={controller.filter === "all" ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => controller.handleFilterChange("all")}
+                >
+                    All Tasks
+                </Button>
+            </div>
+
+            <div className="flex gap-1 border rounded-lg p-1">
+                <Button
+                    variant={controller.view === "list" ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => controller.handleViewChange("list")}
+                >
+                    <ListIcon className="size-4 mr-1" />
+                    List
+                </Button>
+                <Button
+                    variant={controller.view === "calendar" ? "secondary" : "ghost"}
+                    size="sm"
+                    onClick={() => controller.handleViewChange("calendar")}
+                >
+                    <CalendarIcon className="size-4 mr-1" />
+                    Calendar
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function TasksPageContent({ controller }: { controller: TasksPageController }) {
+    const canShowTaskViews = !controller.isLoading && !controller.hasError
+
+    return (
+        <div className="flex-1 p-6 space-y-6">
+            <p className="text-sm text-muted-foreground">
+                Manage your tasks and appointments in one unified view.
+            </p>
+
+            <TasksPageControls controller={controller} />
+
+            {controller.isLoading && (
+                <Card className="flex items-center justify-center p-12">
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading tasks…</span>
+                </Card>
+            )}
+
+            {!controller.isLoading && controller.hasError && (
+                <Card className="flex flex-col items-center justify-center gap-3 p-12 border-destructive/40 bg-destructive/5">
+                    <span className="text-destructive">Unable to load tasks. Please try again.</span>
+                    <Button variant="outline" size="sm" onClick={controller.handleRetry}>
+                        Retry
+                    </Button>
+                </Card>
+            )}
+
+            {canShowTaskViews && controller.view === "calendar" && (
+                <TasksCalendarView
+                    filter={controller.filter}
+                    onTaskClick={controller.handleTaskClick}
+                />
+            )}
+
+            {canShowTaskViews && (
+                <TasksApprovalsSection
+                    pendingApprovals={controller.pendingApprovals}
+                    pendingStatusRequests={controller.pendingStatusRequests}
+                    pendingImportApprovals={controller.pendingImportApprovals}
+                    loadingApprovals={controller.loadingApprovals}
+                    loadingStatusRequests={controller.loadingStatusRequests}
+                    loadingImportApprovals={controller.loadingImportApprovals}
+                    onResolvedStatusRequests={controller.refetchStatusRequests}
+                    onResolvedImportApprovals={controller.refetchImportApprovals}
+                    currentUserId={controller.currentUserId}
+                />
+            )}
+
+            {canShowTaskViews && controller.view === "list" && (
+                <TasksListView
+                    incompleteTasks={controller.incompleteTasks}
+                    completedTasks={controller.completedTasks}
+                    selectedTaskIds={controller.selectedTaskIds}
+                    showCompleted={controller.showCompleted}
+                    loadingCompleted={controller.loadingCompleted}
+                    completedError={controller.completedError}
+                    onToggleShowCompleted={controller.toggleShowCompleted}
+                    onTaskToggle={controller.handleTaskToggle}
+                    onTaskClick={controller.handleTaskClick}
+                    onSelectTask={controller.handleSelectTask}
+                    onSelectAll={controller.handleSelectAllTasks}
+                    onBulkCompleteSelected={controller.handleBulkCompleteSelected}
+                    bulkCompletePending={controller.bulkCompletePending}
+                />
+            )}
+
+            <TasksPageDialogs controller={controller} />
+        </div>
+    )
+}
+
+function TasksPageDialogs({ controller }: { controller: TasksPageController }) {
+    return (
+        <>
+            <TaskEditModal
+                task={controller.editModalTask}
+                open={!!controller.editModalTask}
+                onClose={controller.onCloseEditModal}
+                onSave={controller.handleSaveTask}
+                onDelete={controller.handleDeleteTask}
+                isDeleting={controller.deleteTaskPending}
+            />
+            <AddTaskDialog
+                open={controller.addTaskDialogOpen}
+                onOpenChange={controller.setAddTaskDialogOpen}
+                onSubmit={controller.handleAddTask}
+                isPending={controller.addTaskPending}
+            />
+        </>
+    )
+}
+
+export default function TasksPage() {
+    const controller = useTasksPageController()
+
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Tasks</h1>
-                    <Button onClick={() => setAddTaskDialogOpen(true)}>
-                        <PlusIcon className="mr-2 size-4" />
-                        Add Task
-                    </Button>
-                </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex-1 p-6 space-y-6">
-                <p className="text-sm text-muted-foreground">
-                    Manage your tasks and appointments in one unified view.
-                </p>
-
-                {/* Filters Row */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex gap-2">
-                        <Button
-                            variant={filter === "my_tasks" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => handleFilterChange("my_tasks")}
-                        >
-                            My Tasks
-                        </Button>
-                        <Button
-                            variant={filter === "all" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => handleFilterChange("all")}
-                        >
-                            All Tasks
-                        </Button>
-                    </div>
-
-                    {/* View Toggle */}
-                    <div className="flex gap-1 border rounded-lg p-1">
-                        <Button
-                            variant={view === "list" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => handleViewChange("list")}
-                        >
-                            <ListIcon className="size-4 mr-1" />
-                            List
-                        </Button>
-                        <Button
-                            variant={view === "calendar" ? "secondary" : "ghost"}
-                            size="sm"
-                            onClick={() => handleViewChange("calendar")}
-                        >
-                            <CalendarIcon className="size-4 mr-1" />
-                            Calendar
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Loading State */}
-                {isLoading && (
-                    <Card className="flex items-center justify-center p-12">
-                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                        <span className="ml-2 text-muted-foreground">Loading tasks…</span>
-                    </Card>
-                )}
-
-                {/* Error State */}
-                {!isLoading && hasError && (
-                    <Card className="flex flex-col items-center justify-center gap-3 p-12 border-destructive/40 bg-destructive/5">
-                        <span className="text-destructive">Unable to load tasks. Please try again.</span>
-                        <Button variant="outline" size="sm" onClick={handleRetry}>
-                            Retry
-                        </Button>
-                    </Card>
-                )}
-
-                {/* Calendar View */}
-                {!isLoading && !hasError && view === "calendar" && (
-                    <TasksCalendarView filter={filter} onTaskClick={handleTaskClick} />
-                )}
-
-                {/* Pending Approvals Section */}
-                {!isLoading && !hasError && (
-                    <TasksApprovalsSection
-                        pendingApprovals={pendingApprovals?.items ?? []}
-                        pendingStatusRequests={pendingStatusRequests?.items ?? []}
-                        pendingImportApprovals={pendingImportApprovals ?? []}
-                        loadingApprovals={loadingApprovals}
-                        loadingStatusRequests={loadingStatusRequests}
-                        loadingImportApprovals={loadingImportApprovals}
-                        onResolvedStatusRequests={refetchStatusRequests}
-                        onResolvedImportApprovals={refetchImportApprovals}
-                        currentUserId={currentUserId}
-                    />
-                )}
-
-                {/* List View */}
-                {!isLoading && !hasError && view === "list" && (
-                    <TasksListView
-                        incompleteTasks={incompleteTasks?.items ?? []}
-                        completedTasks={completedTasks ?? null}
-                        selectedTaskIds={selectedTaskIds}
-                        showCompleted={showCompleted}
-                        loadingCompleted={loadingCompleted}
-                        completedError={!!completedError}
-                        onToggleShowCompleted={() => setShowCompleted((prev) => !prev)}
-                        onTaskToggle={handleTaskToggle}
-                        onTaskClick={handleTaskClick}
-                        onSelectTask={handleSelectTask}
-                        onSelectAll={handleSelectAllTasks}
-                        onBulkCompleteSelected={handleBulkCompleteSelected}
-                        bulkCompletePending={bulkCompleteTasks.isPending}
-                    />
-                )}
-
-                {/* Edit Modal */}
-                <TaskEditModal
-                    task={editingTask ? {
-                        id: editingTask.id,
-                        title: editingTask.title,
-                        description: editingTask.description ?? null,
-                        task_type: editingTask.task_type,
-                        due_date: editingTask.due_date,
-                        due_time: editingTask.due_time ?? null,
-                        is_completed: editingTask.is_completed,
-                        surrogate_id: editingTask.surrogate_id,
-                    } : null}
-                    open={!!editingTask}
-                    onClose={() => setEditingTask(null)}
-                    onSave={handleSaveTask}
-                    onDelete={handleDeleteTask}
-                    isDeleting={deleteTask.isPending}
-                />
-                <AddTaskDialog
-                    open={addTaskDialogOpen}
-                    onOpenChange={setAddTaskDialogOpen}
-                    onSubmit={handleAddTask}
-                    isPending={createTask.isPending || createTaskBatch.isPending}
-                />
-            </div>
+            <TasksPageHeader controller={controller} />
+            <TasksPageContent controller={controller} />
         </div>
     )
 }

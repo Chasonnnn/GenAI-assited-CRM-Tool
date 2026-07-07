@@ -3761,3 +3761,27 @@ Full command after Batch 171: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 47 warnings`
 - Removed globally since Batch 170: `react-doctor/no-giant-component` for `ComplianceSettingsPage` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b91cb783-30cd-4d5f-a011-02e5a6369618`
+
+## Batch 172
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx`, `components/surrogates/CombinedMedicalInsuranceCard.tsx` | False positives reconfirmed. Both cards read the flagged section-visibility state during render to build `visibleKeys`, `hiddenKeys`, and rendered section lists. A local ref rewrite attempt for `CombinedMedicalInsuranceCard` proved invalid because React Compiler correctly rejected reading `ref.current` during render. | High | Kept the visibility values in state and added a source guard for `CombinedMedicalInsuranceCard` so future cleanup does not convert render-driving section visibility into refs. No suppression or config change. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate medical hidden-section"` failed against the current state shape when the guard expected a ref, and changed-scope React Doctor then reported a React Compiler ref-read error after the attempted rewrite. GREEN: reverted the invalid rewrite and changed the guard to preserve render state; `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate medical section visibility\|surrogate card, task calendar"`; `pnpm test --run tests/surrogate-detail.test.tsx -t "saves PCP name\|allows deleting a visible section"`. |
+| `react-doctor/no-giant-component` | `app/(app)/tasks/page.client.tsx` | Valid. `TasksPage` owned route param parsing, task queries, approval queries, modal state, selection handlers, recurrence creation, focus coordination, and the full page render in one component body. | High | Moved hook/query/effect/handler ownership into `useTasksPageController`, then split rendering into `TasksPageHeader`, `TasksPageControls`, `TasksPageContent`, and `TasksPageDialogs`. Left the existing focus coordination effect unchanged because it remains a separate URL/focus state-model warning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Tasks page rendering split"` failed on the monolithic page. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Tasks page"`; `pnpm test --run tests/tasks-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; full React Doctor dropped to `137` issues. |
+| `react-doctor/prefer-tag-over-role`, `react-doctor/async-await-in-loop`, `react-doctor/query-mutation-missing-invalidation` | `components/email/EmailComposeDialog.tsx`, `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx`, `components/surrogates/interviews/InterviewTab/context.tsx`, sampled hooks | Reviewed but unchanged. The email and transcript surfaces are rich editable/selectable HTML rather than safe native input/button swaps; the interview upload loop stops on the first failed upload; sampled remaining mutation warnings are preview/test/redirect/staged-data mutations already logged as no-ops or false positives. | Medium-high | Left unchanged and continued with the higher-confidence tasks-page split instead of adding noisy invalidations or changing product semantics for score. | Source and triage validation only; no files changed for these findings. |
+
+Changed-scope command after Batch 172: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `1`
+- Summary: `Bugs 1 warning`
+- Remaining reviewed but unchanged: `react-doctor/no-event-handler` for `TasksPage` focus/list-view coordination.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e454aa3f-6c4e-465c-91d7-65cea13fccf6`
+
+Full command after Batch 172: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `137`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 46 warnings`
+- Removed globally since Batch 171: `react-doctor/no-giant-component` for `TasksPage` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4beed628-f38d-4174-bd6f-9b9dcc4425da`

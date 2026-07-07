@@ -2324,6 +2324,16 @@ describe("React regression guards (source)", () => {
         expect(metaMappingSource).not.toMatch(/new Set\(\s*mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)
     })
 
+    it("keeps surrogate medical section visibility in render state", () => {
+        const source = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
+
+        expect(source).toContain("const [manuallyAdded, setManuallyAdded] = useState<SectionType[]>([])")
+        expect(source).toContain("const [optimisticallyHiddenSections, setOptimisticallyHiddenSections] = useState<OptimisticallyHiddenSection[]>([])")
+        expect(source).toContain("const visibleKeys = new Set([...sectionsWithData, ...manuallyAdded])")
+        expect(source).toContain("for (const entry of optimisticallyHiddenSections)")
+        expect(source).not.toContain("optimisticallyHiddenSectionsRef")
+    })
+
     it("keeps CSV upload handlers and dropzone compiler-friendly", () => {
         const source = readSource("components/import/CSVUpload.tsx")
 
@@ -3053,6 +3063,19 @@ describe("React regression guards (source)", () => {
 
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
+    })
+
+    it("keeps Tasks page rendering split from the controller hook", () => {
+        const source = readSource("app/(app)/tasks/page.client.tsx")
+        const pageSource = readFunctionSource(source, "TasksPage")
+
+        expect(source).toContain("function useTasksPageController")
+        expect(source).toContain("function TasksPageHeader")
+        expect(source).toContain("function TasksPageControls")
+        expect(source).toContain("function TasksPageContent")
+        expect(source).toContain("function TasksPageDialogs")
+        expect(pageSource).not.toContain("useTasks(")
+        expect(pageSource).not.toContain("Manage your tasks and appointments")
     })
 
     it("keeps platform email-template edit page helpers compiler-friendly", () => {
