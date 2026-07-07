@@ -405,6 +405,7 @@ class Settings(BaseSettings):
     DUO_CLIENT_SECRET: SecretStr = SecretStr("")  # Secret key from Duo Admin
     DUO_API_HOST: str = ""  # API hostname (api-XXXXX.duosecurity.com)
     DUO_REDIRECT_URI: str = ""
+    DUO_TIMEOUT_SECONDS: float = 10.0
     DUO_ADMIN_INTEGRATION_KEY: str = ""
     DUO_ADMIN_SECRET_KEY: SecretStr = SecretStr("")
     DUO_ADMIN_API_HOST: str = ""

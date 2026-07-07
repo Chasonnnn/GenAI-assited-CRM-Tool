@@ -14,7 +14,7 @@ RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
 
 # Copy package files first for better cache utilization
-COPY apps/web/package.json apps/web/pnpm-lock.yaml ./apps/web/
+COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/pnpm-workspace.yaml ./apps/web/
 
 # Install dependencies before copying source
 WORKDIR /app/apps/web

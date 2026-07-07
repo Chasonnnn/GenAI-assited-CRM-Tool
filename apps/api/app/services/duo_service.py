@@ -6,23 +6,44 @@ Provides:
 - Callback verification
 """
 
-from typing import Tuple
+from collections.abc import Callable
+from threading import RLock
+from typing import Any, Tuple
 import logging
 import re
 from urllib.parse import urlparse
 from uuid import UUID
 
 import duo_universal
+import duo_universal.client as duo_client
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 _INVISIBLE_CHARS = ("\ufeff", "\u200b", "\u200c", "\u200d", "\u2060")
+_DUO_REQUESTS_LOCK = RLock()
 
 
 def _strip_invisible(value: str) -> str:
     return "".join(ch for ch in value if ch not in _INVISIBLE_CHARS)
+
+
+def _run_with_duo_request_timeout(call: Callable[[], Any]) -> Any:
+    """Apply a request timeout to Duo SDK calls that do not expose one."""
+    timeout = max(float(settings.DUO_TIMEOUT_SECONDS), 0.1)
+    original_post = duo_client.requests.post
+
+    def post_with_timeout(*args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("timeout", timeout)
+        return original_post(*args, **kwargs)
+
+    with _DUO_REQUESTS_LOCK:
+        duo_client.requests.post = post_with_timeout
+        try:
+            return call()
+        finally:
+            duo_client.requests.post = original_post
 
 
 # =============================================================================
@@ -93,7 +114,7 @@ def health_check() -> Tuple[bool, str]:
 
     try:
         client = get_duo_client()
-        client.health_check()
+        _run_with_duo_request_timeout(client.health_check)
         return True, "Duo API reachable"
     except Exception as e:
         return False, f"Duo health check failed: {str(e)}"
@@ -156,9 +177,11 @@ def verify_callback(
 
     try:
         client = get_duo_client(redirect_uri=redirect_uri)
-        token = client.exchange_authorization_code_for_2fa_result(
-            duoCode=code,
-            username=username,
+        token = _run_with_duo_request_timeout(
+            lambda: client.exchange_authorization_code_for_2fa_result(
+                duoCode=code,
+                username=username,
+            )
         )
         return True, token
     except Exception as e:
