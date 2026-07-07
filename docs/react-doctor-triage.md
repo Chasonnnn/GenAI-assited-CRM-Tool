@@ -3591,3 +3591,23 @@ Full command after Batch 163: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 85 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
 - Removed globally since Batch 162: `react-doctor/prefer-useReducer` for `AddSurrogateTaskDialog` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-db99a808-3f8e-44ba-9019-c834071ef74d`
+
+## Batch 164
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `components/tasks/AddTaskDialog.tsx` | Valid. The general task dialog mirrored the surrogate task form: title, description, task type, due date/time, recurrence, repeat-until, and validation error reset together on submit and close. | High | Replaced the individual state setters with `taskDialogFormReducer`, preserving recurring-task validation, trimmed optional description, optional due date/time fields, submit reset, and close reset behavior. Added behavior coverage for recurring validation and submit payloads, plus a source guard requiring the reducer shape. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "task dialog form"` failed on the separate `useState` calls. GREEN: `pnpm test --run tests/add-task-dialog.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "task dialog form"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 164: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 164: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `146`
+- Summary: `Bugs 84 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
+- Removed globally since Batch 163: `react-doctor/prefer-useReducer` for `AddTaskDialog` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-34762cf0-1649-4ffb-8ad7-c022985c5a23`
