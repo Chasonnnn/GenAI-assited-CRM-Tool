@@ -3738,3 +3738,26 @@ Full command after Batch 170: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 48 warnings`
 - Removed globally since Batch 169: `react-doctor/no-giant-component` for `AutomationFormSettingsPanel` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-073cb45c-5b72-4329-8a78-4d5c70607666`
+
+## Batch 171
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/compliance/page.tsx` | Valid. The compliance settings page mixed the page frame, retention policy table, legal hold form/table/pagination, and developer purge card in one component. | High | Kept auth, query, mutation, and local form state ownership in `ComplianceSettingsPage`, and split the markup into same-file helpers for `CompliancePageHeader`, `RetentionPoliciesCard`, `LegalHoldsCard`, and `RetentionPurgeCard`. Added a source guard so the page component stays focused. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "compliance settings page sections"` failed on the monolithic render. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "compliance settings page sections"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; full React Doctor dropped to `138` issues. |
+| `react-doctor/no-event-handler` | `app/(app)/settings/compliance/page.tsx:537` | Needs human review. The effect clamps `holdsPage` after `legalHolds.pages` changes. Normal UI pagination already clamps page changes, but the effect is defensive against external/server-side list shrink. Removing it is product-sensitive and not required for this structural split. | Medium | Left unchanged after read-only audit. A future behavior-changing batch should start with focused compliance page tests for legal hold pagination, shrinking page counts, create-hold reset, release clicks, and policy save payloads. | Changed-scope React Doctor still reports this one existing finding in the changed file. |
+
+Changed-scope command after Batch 171: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `1`
+- Summary: `Bugs 1 warning`
+- Remaining reviewed but unchanged: `react-doctor/no-event-handler` for the compliance legal-holds page clamp.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-44c1b93e-2e75-4f10-afb0-18eac12f0464`
+
+Full command after Batch 171: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `138`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 47 warnings`
+- Removed globally since Batch 170: `react-doctor/no-giant-component` for `ComplianceSettingsPage` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b91cb783-30cd-4d5f-a011-02e5a6369618`

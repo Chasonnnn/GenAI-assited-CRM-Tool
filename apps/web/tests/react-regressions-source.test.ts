@@ -2824,6 +2824,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const isRedactMode =")
     })
 
+    it("keeps compliance settings page sections split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/compliance/page.tsx")
+        const pageSource = readFunctionSource(source, "ComplianceSettingsPage")
+
+        expect(source).toContain("function CompliancePageHeader")
+        expect(source).toContain("function RetentionPoliciesCard")
+        expect(source).toContain("function LegalHoldsCard")
+        expect(source).toContain("function RetentionPurgeCard")
+        expect(pageSource).not.toContain("Data Retention Policies")
+        expect(pageSource).not.toContain("Legal Holds")
+        expect(pageSource).not.toContain("Retention Purge")
+    })
+
     it("keeps Meta asset selection derivations compiler-friendly", () => {
         const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
 
