@@ -3631,3 +3631,23 @@ Full command after Batch 165: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 83 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
 - Removed globally since Batch 164: `react-doctor/prefer-useReducer` for `LogContactAttemptDialog` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6829ec0c-0bad-4ef3-95ff-53c28135badf`
+
+## Batch 166
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `components/ai/ScheduleParserDialog.tsx` | Valid. The parser workflow state changed as a single input/review/success flow, and the same component owned parser input, warnings, editable task table rows, success state, and footer actions. | High | Moved workflow state into `scheduleParserStateReducer`, kept the bulk idempotency key as a handler-only ref, and split input, review, task table, task row, success, and footer rendering into focused helpers. Added behavior coverage for warning-only parse, parse-to-review/create payloads, and cancel reset, plus source guards for reducer state and helper splits. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "schedule parser workflow"` failed on the separate `useState` calls; `pnpm test --run tests/react-regressions-source.test.ts -t "schedule parser rendering"` failed on the monolithic render. GREEN: `pnpm test --run tests/schedule-parser-dialog.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "schedule parser"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 166: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 166: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `143`
+- Summary: `Bugs 82 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 51 warnings`
+- Removed globally since Batch 165: `react-doctor/prefer-useReducer` and `react-doctor/no-giant-component` for `ScheduleParserDialog` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cc88c40e-8ad0-4730-9577-49830898e024`

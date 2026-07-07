@@ -1701,6 +1701,31 @@ describe("React regression guards (source)", () => {
         expect(scheduleParserSource).not.toContain("const getConfidenceBadge = (confidence")
     })
 
+    it("uses reducer state for the schedule parser workflow", () => {
+        const source = readSource("components/ai/ScheduleParserDialog.tsx")
+
+        expect(source).toContain("useReducer")
+        expect(source).toContain("scheduleParserStateReducer")
+        expect(source).not.toContain("useState")
+        expect(source).not.toContain("setScheduleText")
+        expect(source).not.toContain("setEditableTasks")
+        expect(source).not.toContain("setErrorMessage")
+    })
+
+    it("keeps schedule parser rendering split into focused helpers", () => {
+        const source = readSource("components/ai/ScheduleParserDialog.tsx")
+        const dialogSource = readExportedFunctionSource(source, "ScheduleParserDialog")
+
+        expect(source).toContain("function ScheduleParserInputStep")
+        expect(source).toContain("function ScheduleParserReviewStep")
+        expect(source).toContain("function ScheduleParserTaskTable")
+        expect(source).toContain("function ScheduleParserTaskRow")
+        expect(source).toContain("function ScheduleParserFooter")
+        expect(dialogSource).not.toContain("<Table")
+        expect(dialogSource).not.toContain("Medication Schedule:")
+        expect(dialogSource).not.toContain("Create {selectedCount} Task")
+    })
+
     it("keeps email template handler bookkeeping out of render state", () => {
         const source = readSource("app/(app)/automation/email-templates/page.tsx")
 
