@@ -2128,6 +2128,21 @@ describe("React regression guards (source)", () => {
         expect(scrollbarSource).not.toContain("surrogates-floating-scrollbar-viewport")
     })
 
+    it("keeps automation form settings panel sections split into focused helpers", () => {
+        const source = readSource("components/forms/builder/AutomationFormSettingsPanel.tsx")
+        const panelSource = readFunctionSource(source, "AutomationFormSettingsPanel")
+
+        expect(source).toContain("function FormIdentitySection")
+        expect(source).toContain("function LogoSettingsSection")
+        expect(source).toContain("function SharedDeliverySection")
+        expect(source).toContain("function PublicHeaderSection")
+        expect(source).toContain("function ShareQrSection")
+        expect(source).toContain("function UploadRulesSection")
+        expect(panelSource).not.toContain("Public Form Title & Subtitle")
+        expect(panelSource).not.toContain("Share & QR")
+        expect(panelSource).not.toContain("Allowed MIME types")
+    })
+
     it("keeps surrogate detail header context files free of manual React memoization", () => {
         const sources = [
             "components/surrogates/detail/SurrogateDetailContext.tsx",

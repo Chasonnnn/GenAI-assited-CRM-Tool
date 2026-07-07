@@ -3718,3 +3718,23 @@ Full command after Batch 169: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Removed globally since Batch 168: `react-doctor/no-giant-component` for `SurrogatesFloatingScrollbar` (`1` warning).
 - Reviewed but unchanged: `react-doctor/no-event-handler` for `RichTextEditor` Tiptap options, and `Calendar` shared focus management.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-62bd86e4-d81c-434a-a0df-c065e500cdf1`
+
+## Batch 170
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/forms/builder/AutomationFormSettingsPanel.tsx` | Valid. The settings panel was a presentational component that owned internal identity fields, logo controls, shared delivery defaults, applicant-facing header copy, QR/share controls, and upload rules in one JSX body. | High | Split the card into focused section helpers: `FormIdentitySection`, `LogoSettingsSection`, `SharedDeliverySection`, `PublicHeaderSection`, `ShareQrSection`, and `UploadRulesSection`. Kept the public prop contract, labels, ids, select label mapping, disabled conditions, QR markup, and file input accessibility unchanged. Added a source guard for the section split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "automation form settings panel sections"` failed on the monolithic render. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "automation form settings panel sections"`; `pnpm test --run tests/automation-form-settings-panel-accessibility.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 170: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 170: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `139`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 48 warnings`
+- Removed globally since Batch 169: `react-doctor/no-giant-component` for `AutomationFormSettingsPanel` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-073cb45c-5b72-4329-8a78-4d5c70607666`
