@@ -3673,3 +3673,25 @@ Full command after Batch 167: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Removed globally since Batch 166: `react-doctor/async-defer-await` for `MFAPageClient` (`1` warning).
 - Remaining reviewed but unchanged: `react-doctor/async-defer-await` for `AgenciesPage` stale-response guard.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0c2896ba-8066-4dd2-ba9a-733da00ae685`
+
+## Batch 168
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/dashboard/components/attention-needed-panel.tsx` | Valid. The dashboard attention panel mixed attention data states, view-all popover links, upcoming grouping, loading/empty/error branches, and section rendering inside one component. | High | Kept data fetching and active-section state in `AttentionNeededPanel`, extracted attention/upcoming section headers and content helpers, and moved upcoming section assembly into `buildUpcomingSections`. Reworked the split helper API to use a named upcoming status instead of several boolean props so changed-scope React Doctor stays clean. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "attention needed panel sections"` failed on the monolithic render. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "attention needed panel\\|rendered list keys"`; `pnpm test --run tests/dashboard.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+| `react-doctor/no-event-handler` | `app/(app)/surrogates/page.client.tsx` | Valid but deferred. Read-only sidecar audit found the search/filter URL effects are true positives, but they share a mirrored URL/filter state model and must not be fixed by blindly moving setters into handlers. | High | Left unchanged for a dedicated future batch. The safe boundary is the surrogates list URL/filter state model plus `apps/web/tests/surrogates.test.tsx` coverage for debounced search, direct-link/back-forward hydration, date filters, chips, fetch params, sorting, page, and priority. | Read-only audit only; no files changed for this finding. |
+
+Changed-scope command after Batch 168: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 168: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `141`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 50 warnings`
+- Removed globally since Batch 167: `react-doctor/no-giant-component` for `AttentionNeededPanel` (`1` warning).
+- Deferred reviewed cluster: `react-doctor/no-event-handler` for `SurrogatesPage` URL/filter state model.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e8865237-1df6-48c9-aff6-eb5e55a516a0`

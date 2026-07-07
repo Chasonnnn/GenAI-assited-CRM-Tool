@@ -43,6 +43,7 @@ const COUNT_BADGE_CLASS = "h-5 min-w-5 rounded-full px-2 text-[10px] font-medium
 
 export function AttentionNeededPanel() {
     const { filters } = useDashboardFilters()
+    const assigneeId = filters.assigneeId || undefined
     const { data, isLoading, isError, refetch } = useAttention({
         assignee_id: filters.assigneeId,
         days_unreached: 7,
@@ -67,22 +68,113 @@ export function AttentionNeededPanel() {
         overdueItems.length + todayItems.length + tomorrowItems.length + thisWeekItems.length
     const hasUpcomingItems = upcomingTotal > 0
 
-    const buildTasksUrl = (focus?: string) => {
-        const params = new URLSearchParams({ filter: "my_tasks" })
-        if (filters.assigneeId) params.set("owner_id", filters.assigneeId)
-        if (focus) params.set("focus", focus)
-        return `/tasks?${params.toString()}`
-    }
-
-    const buildSurrogatesUrl = (dynamicFilter: DynamicSurrogateFilter) => {
-        const params = new URLSearchParams()
-        params.set("dynamic_filter", dynamicFilter)
-        if (filters.assigneeId) params.set("owner_id", filters.assigneeId)
-        return `/surrogates${params.toString() ? `?${params.toString()}` : ""}`
-    }
-
     const [activeSection, setActiveSection] = useState<"attention" | "upcoming">("attention")
-    const sections: { title: string; rows: ReactNode[] }[] = []
+    const attentionOpen = activeSection === "attention"
+    const upcomingOpen = activeSection === "upcoming"
+    const upcomingStatus: UpcomingItemsStatus = upcomingLoading
+        ? "loading"
+        : upcomingError || !upcomingData
+            ? "error"
+            : hasUpcomingItems
+                ? "ready"
+                : "empty"
+    const sections = buildUpcomingSections({
+        overdueItems,
+        todayItems,
+        tomorrowItems,
+        thisWeekItems,
+        ...(assigneeId ? { assigneeId } : {}),
+    })
+
+    return (
+        <Card className="h-full flex flex-col gap-0 p-0">
+            <CardContent className="p-6 flex-1 min-h-0">
+                <div className="flex h-full min-h-0 flex-col gap-6">
+                    <AttentionItemsSection
+                        open={attentionOpen}
+                        onToggle={() => {
+                            setActiveSection((current) => (
+                                current === "attention" ? "upcoming" : "attention"
+                            ))
+                        }}
+                        isLoading={isLoading}
+                        isError={isError}
+                        hasAttentionItems={hasAttentionItems}
+                        dataAvailable={Boolean(data)}
+                        totalCount={data?.total_count ?? attentionTotal}
+                        unreachedCount={unreachedCount}
+                        overdueCount={overdueCount}
+                        stuckCount={stuckCount}
+                        unreachedHref={buildSurrogatesHref({
+                            dynamicFilter: "attention_unreached",
+                            ...(assigneeId ? { assigneeId } : {}),
+                        })}
+                        overdueHref={buildTaskHref({
+                            ...(assigneeId ? { assigneeId } : {}),
+                            focus: "overdue",
+                        })}
+                        stuckHref={buildSurrogatesHref({
+                            dynamicFilter: "attention_stuck",
+                            ...(assigneeId ? { assigneeId } : {}),
+                        })}
+                        onRetry={() => refetch()}
+                    />
+
+                    <Separator />
+
+                    <UpcomingItemsSection
+                        open={upcomingOpen}
+                        onToggle={() => {
+                            setActiveSection((current) => (
+                                current === "upcoming" ? "attention" : "upcoming"
+                            ))
+                        }}
+                        status={upcomingStatus}
+                        sections={sections}
+                        allTasksHref={buildTaskHref({
+                            ...(assigneeId ? { assigneeId } : {}),
+                        })}
+                    />
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+type UpcomingSection = {
+    title: string
+    rows: ReactNode[]
+}
+
+type UpcomingItemsStatus = "loading" | "error" | "empty" | "ready"
+
+function buildSurrogatesHref({
+    dynamicFilter,
+    assigneeId,
+}: {
+    dynamicFilter: DynamicSurrogateFilter
+    assigneeId?: string
+}) {
+    const params = new URLSearchParams()
+    params.set("dynamic_filter", dynamicFilter)
+    if (assigneeId) params.set("owner_id", assigneeId)
+    return `/surrogates${params.toString() ? `?${params.toString()}` : ""}`
+}
+
+function buildUpcomingSections({
+    overdueItems,
+    todayItems,
+    tomorrowItems,
+    thisWeekItems,
+    assigneeId,
+}: {
+    overdueItems: UpcomingItem[]
+    todayItems: UpcomingItem[]
+    tomorrowItems: UpcomingItem[]
+    thisWeekItems: UpcomingItem[]
+    assigneeId?: string
+}): UpcomingSection[] {
+    const sections: UpcomingSection[] = []
     let remaining = MAX_UPCOMING_ITEMS
 
     const addSection = (title: string, items: UpcomingItem[]) => {
@@ -94,7 +186,7 @@ export function AttentionNeededPanel() {
             rows: slice.map((item) => (
                 <UpcomingItemRow
                     item={item}
-                    {...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {})}
+                    {...(assigneeId ? { assigneeId } : {})}
                     key={item.id}
                 />
             )),
@@ -110,7 +202,7 @@ export function AttentionNeededPanel() {
                 rows: [(
                     <OverdueSummaryRow
                         count={overdueItems.length}
-                        {...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {})}
+                        {...(assigneeId ? { assigneeId } : {})}
                         key="overdue-summary"
                     />
                 )],
@@ -123,244 +215,404 @@ export function AttentionNeededPanel() {
     addSection("Tomorrow", tomorrowItems)
     addSection("This Week", thisWeekItems)
 
-    const attentionOpen = activeSection === "attention"
-    const upcomingOpen = activeSection === "upcoming"
+    return sections
+}
+
+function AttentionPanelSectionHeader({
+    title,
+    open,
+    onToggle,
+    badge,
+    action,
+}: {
+    title: string
+    open: boolean
+    onToggle: () => void
+    badge?: ReactNode
+    action?: ReactNode
+}) {
+    return (
+        <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    className="inline-flex items-center gap-2 rounded-md text-base font-semibold text-foreground hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    aria-expanded={open}
+                >
+                    {title}
+                    <ChevronDownIcon
+                        className={`size-4 transition-transform ${open ? "rotate-180" : "rotate-0"}`}
+                    />
+                </button>
+                {badge}
+            </div>
+            {action}
+        </div>
+    )
+}
+
+function AttentionViewAllPopover({
+    unreachedHref,
+    overdueHref,
+    stuckHref,
+}: {
+    unreachedHref: string
+    overdueHref: string
+    stuckHref: string
+}) {
+    return (
+        <Popover>
+            <PopoverTrigger
+                render={
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs font-medium text-teal-600 hover:text-teal-700"
+                    >
+                        View all
+                    </Button>
+                }
+            />
+            <PopoverContent align="end" className="w-56 p-2">
+                <div className="space-y-1">
+                    <Link
+                        href={unreachedHref}
+                        className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
+                    >
+                        <span>Unreached leads</span>
+                        <ChevronRightIcon className="size-4 text-muted-foreground" />
+                    </Link>
+                    <Link
+                        href={overdueHref}
+                        className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
+                    >
+                        <span>Overdue tasks</span>
+                        <ChevronRightIcon className="size-4 text-muted-foreground" />
+                    </Link>
+                    <Link
+                        href={stuckHref}
+                        className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
+                    >
+                        <span>Stuck surrogates</span>
+                        <ChevronRightIcon className="size-4 text-muted-foreground" />
+                    </Link>
+                </div>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+function AttentionItemsSection({
+    open,
+    onToggle,
+    isLoading,
+    isError,
+    hasAttentionItems,
+    dataAvailable,
+    totalCount,
+    unreachedCount,
+    overdueCount,
+    stuckCount,
+    unreachedHref,
+    overdueHref,
+    stuckHref,
+    onRetry,
+}: {
+    open: boolean
+    onToggle: () => void
+    isLoading: boolean
+    isError: boolean
+    hasAttentionItems: boolean
+    dataAvailable: boolean
+    totalCount: number
+    unreachedCount: number
+    overdueCount: number
+    stuckCount: number
+    unreachedHref: string
+    overdueHref: string
+    stuckHref: string
+    onRetry: () => void
+}) {
+    const badge = !isLoading && !isError && hasAttentionItems ? (
+        <Badge variant="secondary" className={COUNT_BADGE_CLASS}>
+            {totalCount}
+        </Badge>
+    ) : null
 
     return (
-        <Card className="h-full flex flex-col gap-0 p-0">
-            <CardContent className="p-6 flex-1 min-h-0">
-                <div className="flex h-full min-h-0 flex-col gap-6">
-                    <section
-                        className={cn("flex min-h-0 flex-col", attentionOpen && "flex-1")}
-                    >
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setActiveSection((current) => (
-                                            current === "attention" ? "upcoming" : "attention"
-                                        ))
-                                    }}
-                                    className="inline-flex items-center gap-2 rounded-md text-base font-semibold text-foreground hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                    aria-expanded={attentionOpen}
-                                >
-                                    Attention Needed
-                                    <ChevronDownIcon
-                                        className={`size-4 transition-transform ${attentionOpen ? "rotate-180" : "rotate-0"}`}
-                                    />
-                                </button>
-                                {!isLoading && !isError && hasAttentionItems && (
-                                    <Badge variant="secondary" className={COUNT_BADGE_CLASS}>
-                                        {data?.total_count ?? attentionTotal}
-                                    </Badge>
-                                )}
-                            </div>
-                            <Popover>
-                                <PopoverTrigger
-                                    render={
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 px-2 text-xs font-medium text-teal-600 hover:text-teal-700"
-                                        >
-                                            View all
-                                        </Button>
-                                    }
-                                />
-                                <PopoverContent align="end" className="w-56 p-2">
-                                    <div className="space-y-1">
-                                        <Link
-                                            href={buildSurrogatesUrl("attention_unreached")}
-                                            className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
-                                        >
-                                            <span>Unreached leads</span>
-                                            <ChevronRightIcon className="size-4 text-muted-foreground" />
-                                        </Link>
-                                        <Link
-                                            href={buildTasksUrl("overdue")}
-                                            className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
-                                        >
-                                            <span>Overdue tasks</span>
-                                            <ChevronRightIcon className="size-4 text-muted-foreground" />
-                                        </Link>
-                                        <Link
-                                            href={buildSurrogatesUrl("attention_stuck")}
-                                            className="flex items-center justify-between rounded-md p-2 text-sm hover:bg-muted"
-                                        >
-                                            <span>Stuck surrogates</span>
-                                            <ChevronRightIcon className="size-4 text-muted-foreground" />
-                                        </Link>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                        {attentionOpen && (
-                            <>
-                                <div className="text-xs text-muted-foreground mb-3">
-                                    Items needing follow-up
-                                </div>
-                                <div className="flex-1 min-h-0 overflow-auto">
-                                    {isLoading ? (
-                                        <div className="space-y-3">
-                                            {Array.from({ length: 3 }).map((_, i) => (
-                                                <div key={i} className="flex items-center gap-3 p-3 rounded-lg border">
-                                                    <Skeleton className="size-9 rounded-lg" />
-                                                    <div className="flex-1 space-y-2">
-                                                        <Skeleton className="h-4 w-32" />
-                                                        <Skeleton className="h-3 w-48" />
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : isError ? (
-                                        <div className="flex flex-col items-center justify-center py-6 gap-3">
-                                            <AlertCircleIcon className="size-8 text-destructive" />
-                                            <p className="text-sm text-destructive">Unable to load attention items</p>
-                                            <Button variant="outline" size="sm" onClick={() => refetch()}>
-                                                Retry
-                                            </Button>
-                                        </div>
-                                    ) : !hasAttentionItems || !data ? (
-                                        <div className="flex flex-col items-center justify-center py-6 text-center">
-                                            <div className="size-12 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
-                                                <CheckCircle2Icon className="size-6 text-green-600" />
-                                            </div>
-                                            <h4 className="font-medium text-foreground">All caught up!</h4>
-                                            <p className="text-sm text-muted-foreground mt-1">
-                                                No items need your attention right now
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {unreachedCount > 0 && (
-                                                <AttentionItem
-                                                    icon={<PhoneOffIcon className="size-4" />}
-                                                    iconBg="bg-amber-500/10"
-                                                    iconColor="text-amber-600"
-                                                    title="Unreached leads (7+ days)"
-                                                    description="No contact or activity in 7+ days"
-                                                    count={unreachedCount}
-                                                    href={buildSurrogatesUrl("attention_unreached")}
-                                                    countBadgeClass={COUNT_BADGE_CLASS}
-                                                />
-                                            )}
+        <section className={cn("flex min-h-0 flex-col", open && "flex-1")}>
+            <AttentionPanelSectionHeader
+                title="Attention Needed"
+                open={open}
+                onToggle={onToggle}
+                badge={badge}
+                action={
+                    <AttentionViewAllPopover
+                        unreachedHref={unreachedHref}
+                        overdueHref={overdueHref}
+                        stuckHref={stuckHref}
+                    />
+                }
+            />
+            {open && (
+                <>
+                    <div className="text-xs text-muted-foreground mb-3">
+                        Items needing follow-up
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-auto">
+                        <AttentionItemsContent
+                            isLoading={isLoading}
+                            isError={isError}
+                            hasAttentionItems={hasAttentionItems}
+                            dataAvailable={dataAvailable}
+                            unreachedCount={unreachedCount}
+                            overdueCount={overdueCount}
+                            stuckCount={stuckCount}
+                            unreachedHref={unreachedHref}
+                            overdueHref={overdueHref}
+                            stuckHref={stuckHref}
+                            onRetry={onRetry}
+                        />
+                    </div>
+                </>
+            )}
+        </section>
+    )
+}
 
-                                            {overdueCount > 0 && (
-                                                <AttentionItem
-                                                    icon={<ClockIcon className="size-4" />}
-                                                    iconBg="bg-red-500/10"
-                                                    iconColor="text-red-600"
-                                                    title="Overdue tasks"
-                                                    description="Past due date"
-                                                    count={overdueCount}
-                                                    href={buildTasksUrl("overdue")}
-                                                    countBadgeClass={COUNT_BADGE_CLASS}
-                                                />
-                                            )}
+function AttentionItemsContent({
+    isLoading,
+    isError,
+    hasAttentionItems,
+    dataAvailable,
+    unreachedCount,
+    overdueCount,
+    stuckCount,
+    unreachedHref,
+    overdueHref,
+    stuckHref,
+    onRetry,
+}: {
+    isLoading: boolean
+    isError: boolean
+    hasAttentionItems: boolean
+    dataAvailable: boolean
+    unreachedCount: number
+    overdueCount: number
+    stuckCount: number
+    unreachedHref: string
+    overdueHref: string
+    stuckHref: string
+    onRetry: () => void
+}) {
+    if (isLoading) {
+        return <AttentionItemsSkeleton />
+    }
 
-                                            {stuckCount > 0 && (
-                                                <AttentionItem
-                                                    icon={<PauseCircleIcon className="size-4" />}
-                                                    iconBg="bg-orange-500/10"
-                                                    iconColor="text-orange-600"
-                                                    title="Stuck surrogates (30+ days)"
-                                                    description="In stage for 30+ days"
-                                                    count={stuckCount}
-                                                    href={buildSurrogatesUrl("attention_stuck")}
-                                                    countBadgeClass={COUNT_BADGE_CLASS}
-                                                />
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </section>
+    if (isError) {
+        return (
+            <div className="flex flex-col items-center justify-center py-6 gap-3">
+                <AlertCircleIcon className="size-8 text-destructive" />
+                <p className="text-sm text-destructive">Unable to load attention items</p>
+                <Button variant="outline" size="sm" onClick={onRetry}>
+                    Retry
+                </Button>
+            </div>
+        )
+    }
 
-                    <Separator />
+    if (!hasAttentionItems || !dataAvailable) {
+        return <AttentionItemsEmptyState />
+    }
 
-                    <section className={cn("flex min-h-0 flex-col", upcomingOpen && "flex-1")}>
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setActiveSection((current) => (
-                                            current === "upcoming" ? "attention" : "upcoming"
-                                        ))
-                                    }}
-                                    className="inline-flex items-center gap-2 rounded-md text-base font-semibold text-foreground hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                    aria-expanded={upcomingOpen}
-                                >
-                                    Upcoming This Week
-                                    <ChevronDownIcon
-                                        className={`size-4 transition-transform ${upcomingOpen ? "rotate-180" : "rotate-0"}`}
-                                    />
-                                </button>
-                            </div>
-                            <Link
-                                href={buildTaskHref({
-                                    ...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {}),
-                                })}
-                                className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 transition-colors h-8"
-                            >
-                                View all
-                                <ArrowRightIcon className="size-3" />
-                            </Link>
-                        </div>
-                        {upcomingOpen && (
-                            <>
-                                <div className="text-xs text-muted-foreground mb-3">Next 7 days</div>
-                                <div className="flex-1 min-h-0 overflow-auto">
-                                    {upcomingLoading ? (
-                                        <div className="flex items-center justify-center py-6">
-                                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                                        </div>
-                                    ) : upcomingError || !upcomingData ? (
-                                        <div className="flex flex-col items-center justify-center py-6 text-center">
-                                            <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" />
-                                            <p className="text-sm text-muted-foreground">Unable to load upcoming items</p>
-                                        </div>
-                                    ) : !hasUpcomingItems ? (
-                                        <div className="flex flex-col items-center justify-center py-6 text-center">
-                                            <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" />
-                                            <p className="text-sm font-medium text-muted-foreground">
-                                                No upcoming tasks or meetings this week
-                                            </p>
-                                            <Link
-                                                href={MY_TASKS_HREF}
-                                                className="text-xs text-primary hover:underline mt-2 inline-block"
-                                            >
-                                                View all tasks →
-                                            </Link>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {sections.map((section) => (
-                                                <div key={section.title}>
-                                                    <h3
-                                                        className={`text-xs font-semibold mb-2 ${section.title === "Overdue"
-                                                            ? "text-red-600"
-                                                            : "text-muted-foreground"
-                                                            }`}
-                                                    >
-                                                        {section.title}
-                                                    </h3>
-                                                    <div className="space-y-2">
-                                                        {section.rows}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </section>
+    return (
+        <div className="space-y-3">
+            {unreachedCount > 0 && (
+                <AttentionItem
+                    icon={<PhoneOffIcon className="size-4" />}
+                    iconBg="bg-amber-500/10"
+                    iconColor="text-amber-600"
+                    title="Unreached leads (7+ days)"
+                    description="No contact or activity in 7+ days"
+                    count={unreachedCount}
+                    href={unreachedHref}
+                    countBadgeClass={COUNT_BADGE_CLASS}
+                />
+            )}
+
+            {overdueCount > 0 && (
+                <AttentionItem
+                    icon={<ClockIcon className="size-4" />}
+                    iconBg="bg-red-500/10"
+                    iconColor="text-red-600"
+                    title="Overdue tasks"
+                    description="Past due date"
+                    count={overdueCount}
+                    href={overdueHref}
+                    countBadgeClass={COUNT_BADGE_CLASS}
+                />
+            )}
+
+            {stuckCount > 0 && (
+                <AttentionItem
+                    icon={<PauseCircleIcon className="size-4" />}
+                    iconBg="bg-orange-500/10"
+                    iconColor="text-orange-600"
+                    title="Stuck surrogates (30+ days)"
+                    description="In stage for 30+ days"
+                    count={stuckCount}
+                    href={stuckHref}
+                    countBadgeClass={COUNT_BADGE_CLASS}
+                />
+            )}
+        </div>
+    )
+}
+
+function AttentionItemsSkeleton() {
+    return (
+        <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg border">
+                    <Skeleton className="size-9 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-48" />
+                    </div>
                 </div>
-            </CardContent>
-        </Card>
+            ))}
+        </div>
+    )
+}
+
+function AttentionItemsEmptyState() {
+    return (
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+            <div className="size-12 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
+                <CheckCircle2Icon className="size-6 text-green-600" />
+            </div>
+            <h4 className="font-medium text-foreground">All caught up!</h4>
+            <p className="text-sm text-muted-foreground mt-1">
+                No items need your attention right now
+            </p>
+        </div>
+    )
+}
+
+function UpcomingItemsSection({
+    open,
+    onToggle,
+    status,
+    sections,
+    allTasksHref,
+}: {
+    open: boolean
+    onToggle: () => void
+    status: UpcomingItemsStatus
+    sections: UpcomingSection[]
+    allTasksHref: string
+}) {
+    return (
+        <section className={cn("flex min-h-0 flex-col", open && "flex-1")}>
+            <AttentionPanelSectionHeader
+                title="Upcoming This Week"
+                open={open}
+                onToggle={onToggle}
+                action={
+                    <Link
+                        href={allTasksHref}
+                        className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 transition-colors h-8"
+                    >
+                        View all
+                        <ArrowRightIcon className="size-3" />
+                    </Link>
+                }
+            />
+            {open && (
+                <>
+                    <div className="text-xs text-muted-foreground mb-3">Next 7 days</div>
+                    <div className="flex-1 min-h-0 overflow-auto">
+                        <UpcomingItemsContent
+                            status={status}
+                            sections={sections}
+                        />
+                    </div>
+                </>
+            )}
+        </section>
+    )
+}
+
+function UpcomingItemsContent({
+    status,
+    sections,
+}: {
+    status: UpcomingItemsStatus
+    sections: UpcomingSection[]
+}) {
+    if (status === "loading") {
+        return (
+            <div className="flex items-center justify-center py-6">
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    if (status === "error") {
+        return (
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+                <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" />
+                <p className="text-sm text-muted-foreground">Unable to load upcoming items</p>
+            </div>
+        )
+    }
+
+    if (status === "empty") {
+        return <UpcomingItemsEmptyState />
+    }
+
+    return (
+        <div className="space-y-4">
+            {sections.map((section) => (
+                <UpcomingSectionGroup key={section.title} section={section} />
+            ))}
+        </div>
+    )
+}
+
+function UpcomingItemsEmptyState() {
+    return (
+        <div className="flex flex-col items-center justify-center py-6 text-center">
+            <CalendarIcon className="size-12 text-muted-foreground/50 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">
+                No upcoming tasks or meetings this week
+            </p>
+            <Link
+                href={MY_TASKS_HREF}
+                className="text-xs text-primary hover:underline mt-2 inline-block"
+            >
+                View all tasks →
+            </Link>
+        </div>
+    )
+}
+
+function UpcomingSectionGroup({ section }: { section: UpcomingSection }) {
+    return (
+        <div>
+            <h3
+                className={`text-xs font-semibold mb-2 ${section.title === "Overdue"
+                    ? "text-red-600"
+                    : "text-muted-foreground"
+                    }`}
+            >
+                {section.title}
+            </h3>
+            <div className="space-y-2">
+                {section.rows}
+            </div>
+        </div>
     )
 }
 

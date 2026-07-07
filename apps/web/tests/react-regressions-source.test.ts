@@ -1818,6 +1818,20 @@ describe("React regression guards (source)", () => {
         expect(appointmentCardSource).not.toContain("onCancel")
     })
 
+    it("keeps attention needed panel sections split into focused helpers", () => {
+        const source = readSource("app/(app)/dashboard/components/attention-needed-panel.tsx")
+        const panelSource = readFunctionSource(source, "AttentionNeededPanel")
+
+        expect(source).toContain("function buildUpcomingSections")
+        expect(source).toContain("function AttentionPanelSectionHeader")
+        expect(source).toContain("function AttentionItemsSection")
+        expect(source).toContain("function UpcomingItemsSection")
+        expect(source).toContain("function UpcomingSectionGroup")
+        expect(panelSource).not.toContain("Unreached leads (7+ days)")
+        expect(panelSource).not.toContain("Upcoming This Week")
+        expect(panelSource).not.toContain("Unable to load attention items")
+    })
+
     it("keeps small loading variants out of boolean prop APIs", () => {
         const emailTemplatesSource = readSource("app/(app)/automation/email-templates/page.tsx")
         const signaturePhotoFieldSource = readFunctionSource(emailTemplatesSource, "SignaturePhotoField")
