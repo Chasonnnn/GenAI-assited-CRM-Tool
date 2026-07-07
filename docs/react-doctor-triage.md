@@ -3531,3 +3531,23 @@ Full command after Batch 160: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 86 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 54 warnings`
 - Removed globally since Batch 159: `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer` for `ChangeStageModal` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-96846a68-8659-4d3f-9d7e-9524744c4ae4`
+
+## Batch 161
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/surrogates/MassEditStageModal.tsx` | Valid. The mass edit modal mixed reducer/model setup, filter derivation, base-filter display, extra filters, action controls, preview rendering, and footer actions in one large component. The split initially surfaced a changed-scope `no-many-boolean-props` warning in the extra-filters helper, so the helper API needed grouped state/errors instead of many individual `is*`/`has*` props. | High | Kept reducer state, one-reset-per-open behavior, late default-stage loading, preview signature, and mutation payload construction intact. Extracted render helpers for base filters, extra filters, action controls, preview, and footer; moved model/derivation/mutation wiring into `useMassEditStageModel`; grouped extra-filter state/errors; added source guard coverage and tri-state trigger label coverage so `any` does not leak into the UI. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "mass edit stage modal sections"` failed on the missing helper split; `pnpm test --run tests/mass-edit-stage-modal.test.tsx -t "friendly labels"` failed on raw tri-state trigger labels. GREEN: `pnpm test --run tests/mass-edit-stage-modal.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "MassEditStageModal\|mass edit stage modal\|immutable sorting in report chart and stage modals"`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues. Full `pnpm test --run` was attempted and is currently blocked by unrelated uncommitted AI source-guard tests in `tests/ai-chat-panel.test.tsx` and `tests/ai-studio-page.test.tsx`. |
+
+Changed-scope command after Batch 161: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 161: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `149`
+- Summary: `Bugs 86 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 53 warnings`
+- Removed globally since Batch 160: `react-doctor/no-giant-component` for `MassEditStageModal` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-401df0f1-90bd-4bd7-94e1-5cafc090d0d3`

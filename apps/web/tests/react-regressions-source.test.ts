@@ -250,6 +250,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setPreview(null)")
     })
 
+    it("keeps mass edit stage modal sections split into focused render helpers", () => {
+        const source = readSource("components/surrogates/MassEditStageModal.tsx")
+        const modalSource = readFunctionSource(source, "MassEditStageModal")
+
+        expect(source).toContain("function MassEditBaseFiltersSection")
+        expect(source).toContain("function MassEditExtraFiltersSection")
+        expect(source).toContain("function MassEditActionSection")
+        expect(source).toContain("function MassEditPreviewSection")
+        expect(source).toContain("function MassEditFooter")
+        expect(modalSource).not.toContain("Filter Logic")
+        expect(modalSource).not.toContain("Preview Matches")
+        expect(modalSource).not.toContain("Archive action will soft-archive")
+    })
+
     it("derives open alert count instead of storing duplicate state", () => {
         const source = readSource("app/ops/agencies/[orgId]/page.client.tsx")
 

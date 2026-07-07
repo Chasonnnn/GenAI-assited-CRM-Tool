@@ -182,17 +182,715 @@ function floatOrUndefined(raw: string, opts?: { min?: number; max?: number }): n
     return n
 }
 
-export function MassEditStageModal({
-    open,
-    onOpenChange,
-    stages,
-    baseFilters,
-}: {
+type BaseFilterBadge = { label: string; value: string }
+type MassEditOptionsQuery = ReturnType<typeof useSurrogateMassEditOptions>
+type MassEditFilterErrors = {
+    statesError: string | null
+    createdDateError: string | null
+    ageError: string | null
+    bmiError: string | null
+}
+type MassEditStageModalProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     stages: PipelineStage[]
     baseFilters: SurrogateMassEditStageFilters
+}
+
+const TRI_STATE_LABELS: Record<TriState, string> = {
+    any: "Any",
+    true: "Yes",
+    false: "No",
+}
+
+function getTriStateLabel(value: string | null | undefined): string {
+    if (value === "any" || value === "true" || value === "false") {
+        return TRI_STATE_LABELS[value]
+    }
+    return TRI_STATE_LABELS.any
+}
+
+function MassEditBaseFiltersSection({
+    baseBadges,
+    effectiveCreatedRange,
+    hasCreatedOverride,
+}: {
+    baseBadges: BaseFilterBadge[]
+    effectiveCreatedRange: string | null
+    hasCreatedOverride: boolean
 }) {
+    return (
+        <div className="space-y-2">
+            <div className="text-sm font-medium">Base Filters (from list)</div>
+            <div className="flex flex-wrap gap-2">
+                {baseBadges.length === 0 ? (
+                    <Badge variant="secondary">No base filters</Badge>
+                ) : (
+                    baseBadges.map((badge) => (
+                        <Badge key={badge.label} variant="secondary">
+                            {badge.label}: {badge.value}
+                        </Badge>
+                    ))
+                )}
+            </div>
+            {effectiveCreatedRange || hasCreatedOverride ? (
+                <div className="flex flex-wrap gap-2">
+                    {effectiveCreatedRange ? (
+                        <Badge variant="outline">
+                            Effective Created: {effectiveCreatedRange}
+                        </Badge>
+                    ) : null}
+                    {hasCreatedOverride ? (
+                        <Badge variant="outline">Created: modal override</Badge>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+function RaceFilterField({
+    raceToAdd,
+    selectedRaces,
+    optionsQuery,
+    onRaceAdd,
+    onRaceRemove,
+    onClearRaces,
+}: {
+    raceToAdd: string | null
+    selectedRaces: string[]
+    optionsQuery: MassEditOptionsQuery
+    onRaceAdd: (race: string) => void
+    onRaceRemove: (race: string) => void
+    onClearRaces: () => void
+}) {
+    return (
+        <div className="space-y-2">
+            <Label>Race</Label>
+            <Select
+                value={raceToAdd}
+                onValueChange={(value) => {
+                    if (!value) return
+                    onRaceAdd(value)
+                }}
+                disabled={optionsQuery.isPending || optionsQuery.isError}
+            >
+                <SelectTrigger>
+                    <SelectValue
+                        placeholder={
+                            optionsQuery.isPending
+                                ? "Loading race options…"
+                                : optionsQuery.isError
+                                    ? "Race options unavailable"
+                                    : "Add race"
+                        }
+                    />
+                </SelectTrigger>
+                <SelectContent>
+                    {(optionsQuery.data?.races ?? []).map((raceKey) => (
+                        <SelectItem key={raceKey} value={raceKey}>
+                            {formatRace(raceKey)}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {selectedRaces.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                    {selectedRaces.map((raceKey) => (
+                        <Badge key={raceKey} variant="secondary" className="gap-1 pr-1">
+                            {formatRace(raceKey)}
+                            <button
+                                type="button"
+                                className="rounded-sm p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                onClick={() => onRaceRemove(raceKey)}
+                                aria-label={`Remove race ${formatRace(raceKey)}`}
+                            >
+                                <XIcon className="size-3" aria-hidden="true" />
+                            </button>
+                        </Badge>
+                    ))}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2"
+                        onClick={onClearRaces}
+                    >
+                        Clear
+                    </Button>
+                </div>
+            ) : (
+                <p className="text-xs text-muted-foreground">
+                    Uses the standardized race categories from the intake application form.
+                </p>
+            )}
+        </div>
+    )
+}
+
+function ComparisonFilterField({
+    label,
+    operator,
+    value,
+    inputMode,
+    placeholder,
+    error,
+    description,
+    onOperatorChange,
+    onValueChange,
+}: {
+    label: string
+    operator: ComparisonOp | null
+    value: string
+    inputMode: "numeric" | "decimal"
+    placeholder: string
+    error: string | null
+    description?: string
+    onOperatorChange: (operator: ComparisonOp | null) => void
+    onValueChange: (value: string) => void
+}) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <div className="grid grid-cols-[96px_1fr] gap-3">
+                <Select
+                    value={operator}
+                    onValueChange={(nextValue) =>
+                        onOperatorChange(nextValue ? (nextValue as ComparisonOp) : null)
+                    }
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Op" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value=">">&gt;</SelectItem>
+                        <SelectItem value=">=">&gt;=</SelectItem>
+                        <SelectItem value="<">&lt;</SelectItem>
+                        <SelectItem value="<=">&lt;=</SelectItem>
+                        <SelectItem value="=">=</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Input
+                    inputMode={inputMode}
+                    value={value}
+                    onChange={(event) => onValueChange(event.target.value)}
+                    placeholder={placeholder}
+                />
+            </div>
+            {error ? (
+                <p className="text-xs text-destructive">{error}</p>
+            ) : description ? (
+                <p className="text-xs text-muted-foreground">{description}</p>
+            ) : null}
+        </div>
+    )
+}
+
+function TriStateFilterField({
+    label,
+    value,
+    onValueChange,
+    className,
+}: {
+    label: string
+    value: TriState
+    onValueChange: (value: TriState) => void
+    className?: string
+}) {
+    return (
+        <div className={cn("space-y-2", className)}>
+            <Label>{label}</Label>
+            <Select
+                value={value}
+                onValueChange={(nextValue) => onValueChange(nextValue as TriState)}
+            >
+                <SelectTrigger>
+                    <SelectValue>
+                        {(selectedValue: string | null) => getTriStateLabel(selectedValue)}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="any">Any</SelectItem>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+    )
+}
+
+function NonSmokerFilterField({
+    isNonSmoker,
+    onChange,
+}: {
+    isNonSmoker: boolean | null
+    onChange: (value: boolean | null) => void
+}) {
+    return (
+        <div className="space-y-2">
+            <Label>Non-Smoker</Label>
+            <div className="flex items-center gap-2">
+                <Button
+                    type="button"
+                    variant={isNonSmoker === true ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => onChange(isNonSmoker === true ? null : true)}
+                >
+                    Non-smoker
+                </Button>
+                <Button
+                    type="button"
+                    variant={isNonSmoker === false ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => onChange(isNonSmoker === false ? null : false)}
+                >
+                    Smoker allowed
+                </Button>
+                {isNonSmoker !== null ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onChange(null)}
+                    >
+                        Clear
+                    </Button>
+                ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Click again to unset.
+            </p>
+        </div>
+    )
+}
+
+function MassEditExtraFiltersSection({
+    state,
+    errors,
+    optionsQuery,
+    dispatch,
+}: {
+    state: MassEditStageState
+    errors: MassEditFilterErrors
+    optionsQuery: MassEditOptionsQuery
+    dispatch: React.Dispatch<MassEditStageAction>
+}) {
+    const {
+        statesInput,
+        createdFrom,
+        createdTo,
+        selectedRaces,
+        raceToAdd,
+        ageOp,
+        ageValue,
+        bmiOp,
+        bmiValue,
+        isAgeEligible,
+        isCitizenOrPr,
+        hasChild,
+        isNonSmoker,
+        hasSurrogateExperience,
+    } = state
+    const { statesError, createdDateError, ageError, bmiError } = errors
+
+    return (
+        <div className="space-y-3">
+            <div className="text-sm font-medium">Extra Filters</div>
+            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                <div className="font-medium text-foreground">Filter Logic</div>
+                <p>
+                    Different filter groups combine with <span className="font-semibold">AND</span>.
+                </p>
+                <p>
+                    Multiple values in one field (for example, States or Race) combine with{" "}
+                    <span className="font-semibold">OR</span>.
+                </p>
+                <p>
+                    Search matches name, email, phone, or surrogate number with{" "}
+                    <span className="font-semibold">OR</span>.
+                </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                    <Label htmlFor="mass-states">States (comma or space separated)</Label>
+                    <Input
+                        id="mass-states"
+                        value={statesInput}
+                        onChange={(event) =>
+                            dispatch({ type: "set", patch: { statesInput: event.target.value } })
+                        }
+                        placeholder="CA, TX, FL"
+                    />
+                    {statesError ? (
+                        <p className="text-xs text-destructive">{statesError}</p>
+                    ) : null}
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="mass-created-from">Created From</Label>
+                    <Input
+                        id="mass-created-from"
+                        type="date"
+                        value={createdFrom}
+                        onChange={(event) =>
+                            dispatch({ type: "set", patch: { createdFrom: event.target.value } })
+                        }
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="mass-created-to">Created To</Label>
+                    <Input
+                        id="mass-created-to"
+                        type="date"
+                        value={createdTo}
+                        onChange={(event) =>
+                            dispatch({ type: "set", patch: { createdTo: event.target.value } })
+                        }
+                    />
+                    {createdDateError ? (
+                        <p className="text-xs text-destructive">{createdDateError}</p>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">
+                            When set here, this overrides the Surrogates page date filter.
+                        </p>
+                    )}
+                </div>
+
+                <RaceFilterField
+                    raceToAdd={raceToAdd}
+                    selectedRaces={selectedRaces}
+                    optionsQuery={optionsQuery}
+                    onRaceAdd={(race) => dispatch({ type: "addRace", race })}
+                    onRaceRemove={(race) => dispatch({ type: "removeRace", race })}
+                    onClearRaces={() => dispatch({ type: "set", patch: { selectedRaces: [] } })}
+                />
+
+                <ComparisonFilterField
+                    label="Age"
+                    operator={ageOp}
+                    value={ageValue}
+                    inputMode="numeric"
+                    placeholder="e.g. 36"
+                    error={ageError}
+                    onOperatorChange={(nextOperator) =>
+                        dispatch({ type: "set", patch: { ageOp: nextOperator } })
+                    }
+                    onValueChange={(value) => dispatch({ type: "set", patch: { ageValue: value } })}
+                />
+
+                <ComparisonFilterField
+                    label="BMI"
+                    operator={bmiOp}
+                    value={bmiValue}
+                    inputMode="decimal"
+                    placeholder="e.g. 32"
+                    error={bmiError}
+                    description="Note: BMI is computed from height/weight; “=” matches roughly the 1-decimal BMI shown in the UI."
+                    onOperatorChange={(nextOperator) =>
+                        dispatch({ type: "set", patch: { bmiOp: nextOperator } })
+                    }
+                    onValueChange={(value) => dispatch({ type: "set", patch: { bmiValue: value } })}
+                />
+
+                <TriStateFilterField
+                    label="Age Eligible"
+                    value={isAgeEligible}
+                    onValueChange={(value) =>
+                        dispatch({ type: "set", patch: { isAgeEligible: value } })
+                    }
+                />
+
+                <TriStateFilterField
+                    label="US Citizen or PR"
+                    value={isCitizenOrPr}
+                    onValueChange={(value) =>
+                        dispatch({ type: "set", patch: { isCitizenOrPr: value } })
+                    }
+                />
+
+                <TriStateFilterField
+                    label="Has Child"
+                    value={hasChild}
+                    onValueChange={(value) => dispatch({ type: "set", patch: { hasChild: value } })}
+                />
+
+                <NonSmokerFilterField
+                    isNonSmoker={isNonSmoker}
+                    onChange={(value) => dispatch({ type: "set", patch: { isNonSmoker: value } })}
+                />
+
+                <TriStateFilterField
+                    label="Prior Surrogate Experience"
+                    value={hasSurrogateExperience}
+                    onValueChange={(value) =>
+                        dispatch({ type: "set", patch: { hasSurrogateExperience: value } })
+                    }
+                    className="sm:col-span-2"
+                />
+            </div>
+        </div>
+    )
+}
+
+function MassEditActionSection({
+    state,
+    activeStages,
+    selectedStage,
+    dispatch,
+}: {
+    state: MassEditStageState
+    activeStages: PipelineStage[]
+    selectedStage: PipelineStage | undefined
+    dispatch: React.Dispatch<MassEditStageAction>
+}) {
+    const { actionMode, targetStageId, triggerWorkflows, reason } = state
+
+    return (
+        <div className="space-y-3">
+            <div className="text-sm font-medium">Action</div>
+            <div className="flex flex-wrap gap-2">
+                <Button
+                    type="button"
+                    variant={actionMode === "change_stage" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => dispatch({ type: "set", patch: { actionMode: "change_stage" } })}
+                >
+                    Change Stage
+                </Button>
+                <Button
+                    type="button"
+                    variant={actionMode === "archive" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => dispatch({ type: "set", patch: { actionMode: "archive" } })}
+                >
+                    Archive
+                </Button>
+            </div>
+
+            {actionMode === "change_stage" ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                        <Label>New Stage</Label>
+                        <Select
+                            value={targetStageId}
+                            onValueChange={(value) =>
+                                dispatch({ type: "set", patch: { targetStageId: value ?? "" } })
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a stage">
+                                    {(value: string | null) => {
+                                        if (!value) return "Select a stage"
+                                        const stage = activeStages.find((item) => item.id === value)
+                                        return stage?.label ?? "Unknown stage"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {activeStages.map((stage) => (
+                                    <SelectItem key={stage.id} value={stage.id}>
+                                        {stage.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {selectedStage ? (
+                            <p className="text-xs text-muted-foreground">
+                                Target: <span className="font-medium">{selectedStage.label}</span>
+                            </p>
+                        ) : null}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Trigger Workflows</Label>
+                        <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                            <div className="text-sm">
+                                <div className="font-medium">Automation workflows</div>
+                                <div className="text-xs text-muted-foreground">
+                                    Toggle whether status-change workflows run.
+                                </div>
+                            </div>
+                            <Switch
+                                checked={triggerWorkflows}
+                                onCheckedChange={(checked) =>
+                                    dispatch({ type: "set", patch: { triggerWorkflows: checked } })
+                                }
+                            />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700">
+                    Archive action will soft-archive all matched surrogates.
+                </div>
+            )}
+
+            <div className="space-y-2">
+                <Label htmlFor="mass-reason">Reason (optional)</Label>
+                <Textarea
+                    id="mass-reason"
+                    value={reason}
+                    onChange={(event) =>
+                        dispatch({ type: "set", patch: { reason: event.target.value } })
+                    }
+                    placeholder={
+                        actionMode === "archive"
+                            ? "e.g. Bulk archive dormant leads"
+                            : "e.g. Bulk disqualify based on eligibility checklist"
+                    }
+                    rows={2}
+                />
+            </div>
+        </div>
+    )
+}
+
+function MassEditPreviewSection({
+    preview,
+    actionMode,
+    selectedStage,
+    canPreview,
+    previewPending,
+    isApplying,
+    onPreview,
+}: {
+    preview: SurrogateMassEditStagePreviewResponse | null
+    actionMode: ActionMode
+    selectedStage: PipelineStage | undefined
+    canPreview: boolean
+    previewPending: boolean
+    isApplying: boolean
+    onPreview: () => void
+}) {
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium">Preview</div>
+                <Button
+                    variant="outline"
+                    onClick={onPreview}
+                    disabled={!canPreview || previewPending || isApplying}
+                >
+                    {previewPending ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
+                    Preview Matches
+                </Button>
+            </div>
+
+            {preview ? (
+                <div
+                    className={cn(
+                        "rounded-lg border p-3",
+                        preview.over_limit && "border-amber-500/50 bg-amber-500/5",
+                    )}
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm">
+                            <span className="font-medium">{preview.total.toLocaleString()}</span>{" "}
+                            match{preview.total === 1 ? "" : "es"}
+                            {actionMode === "archive" ? (
+                                <> will be archived</>
+                            ) : selectedStage ? (
+                                <>
+                                    {" "}
+                                    will be moved to{" "}
+                                    <span className="font-medium">{selectedStage.label}</span>
+                                </>
+                            ) : null}
+                        </div>
+                        {preview.over_limit ? (
+                            <div className="inline-flex items-center gap-2 text-xs text-amber-700">
+                                <TriangleAlertIcon className="size-4" />
+                                Too many matches (max {preview.max_apply.toLocaleString()}). Narrow filters.
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {preview.items.length > 0 ? (
+                        <div className="mt-3">
+                            <div className="text-xs text-muted-foreground mb-2">Sample</div>
+                            <ScrollArea className="h-44 rounded-md border">
+                                <div className="divide-y">
+                                    {preview.items.map((item) => (
+                                        <div
+                                            key={item.id}
+                                            className="px-3 py-2 text-sm flex items-center justify-between gap-3"
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="truncate font-medium">
+                                                    #{item.surrogate_number} {item.full_name}
+                                                </div>
+                                                <div className="truncate text-xs text-muted-foreground">
+                                                    {item.state ?? "—"} · {item.status_label}
+                                                    {typeof item.age === "number" ? ` · Age ${item.age}` : ""}
+                                                </div>
+                                            </div>
+                                            <Badge variant="secondary" className="shrink-0">
+                                                {formatUtcDateLabel(item.created_at)}
+                                            </Badge>
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+function MassEditFooter({
+    preview,
+    actionMode,
+    isApplying,
+    canApply,
+    onCancel,
+    onApply,
+}: {
+    preview: SurrogateMassEditStagePreviewResponse | null
+    actionMode: ActionMode
+    isApplying: boolean
+    canApply: boolean
+    onCancel: () => void
+    onApply: () => void
+}) {
+    return (
+        <div className="space-y-3">
+            <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                    variant="outline"
+                    onClick={onCancel}
+                    disabled={isApplying}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    onClick={onApply}
+                    disabled={!canApply}
+                    className={cn(preview?.over_limit && "opacity-50")}
+                >
+                    {isApplying ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
+                    {actionMode === "archive" ? "Apply Archive" : "Apply Stage Change"}
+                </Button>
+            </DialogFooter>
+
+            {!preview ? (
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <TriangleAlertIcon className="size-4" />
+                    Always preview first. Apply requires the preview count (prevents accidental wide updates).
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+function useMassEditStageModel({
+    open,
+    onOpenChange,
+    stages,
+    baseFilters,
+}: MassEditStageModalProps) {
     const previewMutation = usePreviewSurrogateMassEditStage()
     const applyStageMutation = useApplySurrogateMassEditStage()
     const applyArchiveMutation = useApplySurrogateMassEditArchive()
@@ -208,7 +906,6 @@ export function MassEditStageModal({
         createdFrom,
         createdTo,
         selectedRaces,
-        raceToAdd,
         ageOp,
         ageValue,
         bmiOp,
@@ -443,6 +1140,52 @@ export function MassEditStageModal({
         })
     }
 
+    return {
+        state,
+        dispatch,
+        optionsQuery,
+        activeStages,
+        selectedStage,
+        baseBadges,
+        effectiveCreatedRange,
+        hasCreatedOverride,
+        errors: {
+            statesError,
+            createdDateError,
+            ageError,
+            bmiError,
+        },
+        preview,
+        isApplying,
+        canPreview,
+        canApply,
+        previewPending: previewMutation.isPending,
+        handlePreview,
+        handleApply,
+    }
+}
+
+export function MassEditStageModal(props: MassEditStageModalProps) {
+    const { open, onOpenChange } = props
+    const {
+        state,
+        dispatch,
+        optionsQuery,
+        activeStages,
+        selectedStage,
+        baseBadges,
+        effectiveCreatedRange,
+        hasCreatedOverride,
+        errors,
+        preview,
+        isApplying,
+        canPreview,
+        canApply,
+        previewPending,
+        handlePreview,
+        handleApply,
+    } = useMassEditStageModel(props)
+
     return (
         <Dialog open={open} onOpenChange={(next) => !isApplying && onOpenChange(next)}>
             <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -458,517 +1201,52 @@ export function MassEditStageModal({
 
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                     <div className="space-y-5">
-                        {/* Base Filters */}
-                        <div className="space-y-2">
-                            <div className="text-sm font-medium">Base Filters (from list)</div>
-                            <div className="flex flex-wrap gap-2">
-                                {baseBadges.length === 0 ? (
-                                    <Badge variant="secondary">No base filters</Badge>
-                                ) : (
-                                    baseBadges.map((b) => (
-                                        <Badge key={b.label} variant="secondary">
-                                            {b.label}: {b.value}
-                                        </Badge>
-                                    ))
-                                )}
-                            </div>
-                            {(effectiveCreatedRange || hasCreatedOverride) && (
-                                <div className="flex flex-wrap gap-2">
-                                    {effectiveCreatedRange && (
-                                        <Badge variant="outline">
-                                            Effective Created: {effectiveCreatedRange}
-                                        </Badge>
-                                    )}
-                                    {hasCreatedOverride && (
-                                        <Badge variant="outline">Created: modal override</Badge>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                        <MassEditBaseFiltersSection
+                            baseBadges={baseBadges}
+                            effectiveCreatedRange={effectiveCreatedRange}
+                            hasCreatedOverride={hasCreatedOverride}
+                        />
 
                         <Separator />
 
-                        {/* Extra Filters */}
-                        <div className="space-y-3">
-                            <div className="text-sm font-medium">Extra Filters</div>
-                            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
-                                <div className="font-medium text-foreground">Filter Logic</div>
-                                <p>Different filter groups combine with <span className="font-semibold">AND</span>.</p>
-                                <p>Multiple values in one field (for example, States or Race) combine with <span className="font-semibold">OR</span>.</p>
-                                <p>Search matches name, email, phone, or surrogate number with <span className="font-semibold">OR</span>.</p>
-                            </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="mass-states">States (comma or space separated)</Label>
-                                    <Input
-                                        id="mass-states"
-                                        value={statesInput}
-                                        onChange={(e) => dispatch({ type: "set", patch: { statesInput: e.target.value } })}
-                                        placeholder="CA, TX, FL"
-                                    />
-                                    {statesError && (
-                                        <p className="text-xs text-destructive">{statesError}</p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="mass-created-from">Created From</Label>
-                                    <Input
-                                        id="mass-created-from"
-                                        type="date"
-                                        value={createdFrom}
-                                        onChange={(e) => dispatch({ type: "set", patch: { createdFrom: e.target.value } })}
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="mass-created-to">Created To</Label>
-                                    <Input
-                                        id="mass-created-to"
-                                        type="date"
-                                        value={createdTo}
-                                        onChange={(e) => dispatch({ type: "set", patch: { createdTo: e.target.value } })}
-                                    />
-                                    {createdDateError ? (
-                                        <p className="text-xs text-destructive">{createdDateError}</p>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground">
-                                            When set here, this overrides the Surrogates page date filter.
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Race</Label>
-                                    <Select
-                                        value={raceToAdd}
-                                        onValueChange={(value) => {
-                                            if (!value) return
-                                            dispatch({ type: "addRace", race: value })
-                                        }}
-                                        disabled={optionsQuery.isPending || optionsQuery.isError}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue
-                                                placeholder={
-                                                    optionsQuery.isPending
-                                                        ? "Loading race options…"
-                                                        : optionsQuery.isError
-                                                            ? "Race options unavailable"
-                                                            : "Add race"
-                                                }
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {(optionsQuery.data?.races ?? []).map((raceKey) => (
-                                                <SelectItem key={raceKey} value={raceKey}>
-                                                    {formatRace(raceKey)}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {selectedRaces.length > 0 ? (
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedRaces.map((raceKey) => (
-                                                <Badge key={raceKey} variant="secondary" className="gap-1 pr-1">
-                                                    {formatRace(raceKey)}
-                                                    <button
-                                                        type="button"
-                                                        className="rounded-sm p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                                        onClick={() =>
-                                                            dispatch({ type: "removeRace", race: raceKey })
-                                                        }
-                                                        aria-label={`Remove race ${formatRace(raceKey)}`}
-                                                    >
-                                                        <XIcon className="size-3" aria-hidden="true" />
-                                                    </button>
-                                                </Badge>
-                                            ))}
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2"
-                                                onClick={() => dispatch({ type: "set", patch: { selectedRaces: [] } })}
-                                            >
-                                                Clear
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground">
-                                            Uses the standardized race categories from the intake application form.
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Age</Label>
-                                    <div className="grid grid-cols-[96px_1fr] gap-3">
-                                        <Select
-                                            value={ageOp}
-                                            onValueChange={(v) =>
-                                                dispatch({ type: "set", patch: { ageOp: v ? (v as ComparisonOp) : null } })
-                                            }
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Op" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value=">">&gt;</SelectItem>
-                                                <SelectItem value=">=">&gt;=</SelectItem>
-                                                <SelectItem value="<">&lt;</SelectItem>
-                                                <SelectItem value="<=">&lt;=</SelectItem>
-                                                <SelectItem value="=">=</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <Input
-                                            inputMode="numeric"
-                                            value={ageValue}
-                                            onChange={(e) => dispatch({ type: "set", patch: { ageValue: e.target.value } })}
-                                            placeholder="e.g. 36"
-                                        />
-                                    </div>
-                                    {ageError && <p className="text-xs text-destructive">{ageError}</p>}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>BMI</Label>
-                                    <div className="grid grid-cols-[96px_1fr] gap-3">
-                                        <Select
-                                            value={bmiOp}
-                                            onValueChange={(v) =>
-                                                dispatch({ type: "set", patch: { bmiOp: v ? (v as ComparisonOp) : null } })
-                                            }
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Op" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value=">">&gt;</SelectItem>
-                                                <SelectItem value=">=">&gt;=</SelectItem>
-                                                <SelectItem value="<">&lt;</SelectItem>
-                                                <SelectItem value="<=">&lt;=</SelectItem>
-                                                <SelectItem value="=">=</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <Input
-                                            inputMode="decimal"
-                                            value={bmiValue}
-                                            onChange={(e) => dispatch({ type: "set", patch: { bmiValue: e.target.value } })}
-                                            placeholder="e.g. 32"
-                                        />
-                                    </div>
-                                    {bmiError ? (
-                                        <p className="text-xs text-destructive">{bmiError}</p>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground">
-                                            Note: BMI is computed from height/weight; “=” matches roughly the 1-decimal BMI shown in the UI.
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Age Eligible</Label>
-                                    <Select
-                                        value={isAgeEligible}
-                                        onValueChange={(v) => dispatch({ type: "set", patch: { isAgeEligible: v as TriState } })}
-                                    >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="any">Any</SelectItem>
-                                            <SelectItem value="true">Yes</SelectItem>
-                                            <SelectItem value="false">No</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>US Citizen or PR</Label>
-                                    <Select
-                                        value={isCitizenOrPr}
-                                        onValueChange={(v) => dispatch({ type: "set", patch: { isCitizenOrPr: v as TriState } })}
-                                    >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="any">Any</SelectItem>
-                                            <SelectItem value="true">Yes</SelectItem>
-                                            <SelectItem value="false">No</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Has Child</Label>
-                                    <Select
-                                        value={hasChild}
-                                        onValueChange={(v) => dispatch({ type: "set", patch: { hasChild: v as TriState } })}
-                                    >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="any">Any</SelectItem>
-                                            <SelectItem value="true">Yes</SelectItem>
-                                            <SelectItem value="false">No</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Non-Smoker</Label>
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            type="button"
-                                            variant={isNonSmoker === true ? "secondary" : "outline"}
-                                            size="sm"
-                                            onClick={() =>
-                                                dispatch({
-                                                    type: "set",
-                                                    patch: { isNonSmoker: isNonSmoker === true ? null : true },
-                                                })
-                                            }
-                                        >
-                                            Non-smoker
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant={isNonSmoker === false ? "secondary" : "outline"}
-                                            size="sm"
-                                            onClick={() =>
-                                                dispatch({
-                                                    type: "set",
-                                                    patch: { isNonSmoker: isNonSmoker === false ? null : false },
-                                                })
-                                            }
-                                        >
-                                            Smoker allowed
-                                        </Button>
-                                        {isNonSmoker !== null && (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => dispatch({ type: "set", patch: { isNonSmoker: null } })}
-                                            >
-                                                Clear
-                                            </Button>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Click again to unset.
-                                    </p>
-                                </div>
-
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label>Prior Surrogate Experience</Label>
-                                    <Select
-                                        value={hasSurrogateExperience}
-                                        onValueChange={(v) =>
-                                            dispatch({ type: "set", patch: { hasSurrogateExperience: v as TriState } })
-                                        }
-                                    >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="any">Any</SelectItem>
-                                            <SelectItem value="true">Yes</SelectItem>
-                                            <SelectItem value="false">No</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
+                        <MassEditExtraFiltersSection
+                            state={state}
+                            errors={errors}
+                            optionsQuery={optionsQuery}
+                            dispatch={dispatch}
+                        />
 
                         <Separator />
 
-                        {/* Action */}
-                        <div className="space-y-3">
-                            <div className="text-sm font-medium">Action</div>
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    type="button"
-                                    variant={actionMode === "change_stage" ? "secondary" : "outline"}
-                                    size="sm"
-                                    onClick={() => dispatch({ type: "set", patch: { actionMode: "change_stage" } })}
-                                >
-                                    Change Stage
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant={actionMode === "archive" ? "secondary" : "outline"}
-                                    size="sm"
-                                    onClick={() => dispatch({ type: "set", patch: { actionMode: "archive" } })}
-                                >
-                                    Archive
-                                </Button>
-                            </div>
-
-                            {actionMode === "change_stage" ? (
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label>New Stage</Label>
-                                        <Select
-                                            value={targetStageId}
-                                            onValueChange={(v) => dispatch({ type: "set", patch: { targetStageId: v ?? "" } })}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select a stage">
-                                                    {(value: string | null) => {
-                                                        if (!value) return "Select a stage"
-                                                        const stage = activeStages.find((s) => s.id === value)
-                                                        return stage?.label ?? "Unknown stage"
-                                                    }}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {activeStages.map((s) => (
-                                                    <SelectItem key={s.id} value={s.id}>
-                                                        {s.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {selectedStage && (
-                                            <p className="text-xs text-muted-foreground">
-                                                Target: <span className="font-medium">{selectedStage.label}</span>
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label>Trigger Workflows</Label>
-                                        <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                            <div className="text-sm">
-                                                <div className="font-medium">Automation workflows</div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    Toggle whether status-change workflows run.
-                                                </div>
-                                            </div>
-                                            <Switch
-                                                checked={triggerWorkflows}
-                                                onCheckedChange={(checked) =>
-                                                    dispatch({ type: "set", patch: { triggerWorkflows: checked } })
-                                                }
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700">
-                                    Archive action will soft-archive all matched surrogates.
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <Label htmlFor="mass-reason">Reason (optional)</Label>
-                                <Textarea
-                                    id="mass-reason"
-                                    value={reason}
-                                    onChange={(e) => dispatch({ type: "set", patch: { reason: e.target.value } })}
-                                    placeholder={
-                                        actionMode === "archive"
-                                            ? "e.g. Bulk archive dormant leads"
-                                            : "e.g. Bulk disqualify based on eligibility checklist"
-                                    }
-                                    rows={2}
-                                />
-                            </div>
-                        </div>
+                        <MassEditActionSection
+                            state={state}
+                            activeStages={activeStages}
+                            selectedStage={selectedStage}
+                            dispatch={dispatch}
+                        />
 
                         <Separator />
 
-                        {/* Preview */}
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="text-sm font-medium">Preview</div>
-                                <Button
-                                    variant="outline"
-                                    onClick={handlePreview}
-                                    disabled={!canPreview || previewMutation.isPending || isApplying}
-                                >
-                                    {previewMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                                    Preview Matches
-                                </Button>
-                            </div>
-
-                            {preview && (
-                                <div className={cn("rounded-lg border p-3", preview.over_limit && "border-amber-500/50 bg-amber-500/5")}>
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="text-sm">
-                                            <span className="font-medium">{preview.total.toLocaleString()}</span> match{preview.total === 1 ? "" : "es"}
-                                            {actionMode === "archive" ? (
-                                                <>
-                                                    {" "}will be archived
-                                                </>
-                                            ) : selectedStage ? (
-                                                <>
-                                                    {" "}will be moved to{" "}
-                                                    <span className="font-medium">{selectedStage.label}</span>
-                                                </>
-                                            ) : null}
-                                        </div>
-                                        {preview.over_limit && (
-                                            <div className="inline-flex items-center gap-2 text-xs text-amber-700">
-                                                <TriangleAlertIcon className="size-4" />
-                                                Too many matches (max {preview.max_apply.toLocaleString()}). Narrow filters.
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {preview.items.length > 0 && (
-                                        <div className="mt-3">
-                                            <div className="text-xs text-muted-foreground mb-2">Sample</div>
-                                            <ScrollArea className="h-44 rounded-md border">
-                                                <div className="divide-y">
-                                                    {preview.items.map((item) => (
-                                                        <div key={item.id} className="px-3 py-2 text-sm flex items-center justify-between gap-3">
-                                                            <div className="min-w-0">
-                                                                <div className="truncate font-medium">
-                                                                    #{item.surrogate_number} {item.full_name}
-                                                                </div>
-                                                                <div className="truncate text-xs text-muted-foreground">
-                                                                    {item.state ?? "—"} · {item.status_label}
-                                                                    {typeof item.age === "number" ? ` · Age ${item.age}` : ""}
-                                                                </div>
-                                                            </div>
-                                                            <Badge variant="secondary" className="shrink-0">
-                                                                {formatUtcDateLabel(item.created_at)}
-                                                            </Badge>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </ScrollArea>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                        <MassEditPreviewSection
+                            preview={preview}
+                            actionMode={state.actionMode}
+                            selectedStage={selectedStage}
+                            canPreview={canPreview}
+                            previewPending={previewPending}
+                            isApplying={isApplying}
+                            onPreview={() => void handlePreview()}
+                        />
                     </div>
                 </div>
 
-                <div className="space-y-3">
-                    <DialogFooter className="gap-2 sm:gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => onOpenChange(false)}
-                            disabled={isApplying}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleApply}
-                            disabled={!canApply}
-                            className={cn(preview?.over_limit && "opacity-50")}
-                        >
-                            {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                            {actionMode === "archive" ? "Apply Archive" : "Apply Stage Change"}
-                        </Button>
-                    </DialogFooter>
-
-                    {!preview && (
-                        <div className="text-xs text-muted-foreground flex items-center gap-2">
-                            <TriangleAlertIcon className="size-4" />
-                            Always preview first. Apply requires the preview count (prevents accidental wide updates).
-                        </div>
-                    )}
-                </div>
+                <MassEditFooter
+                    preview={preview}
+                    actionMode={state.actionMode}
+                    isApplying={isApplying}
+                    canApply={canApply}
+                    onCancel={() => onOpenChange(false)}
+                    onApply={() => void handleApply()}
+                />
             </DialogContent>
         </Dialog>
     )

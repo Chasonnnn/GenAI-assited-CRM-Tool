@@ -89,6 +89,13 @@ describe("MassEditStageModal", () => {
         expect(screen.getByText(/Search matches name, email, phone, or surrogate number/i)).toBeInTheDocument()
     })
 
+    it("renders friendly labels for tri-state filter triggers", () => {
+        renderModal()
+
+        expect(screen.getAllByText("Any")).toHaveLength(4)
+        expect(screen.queryByText("any")).not.toBeInTheDocument()
+    })
+
     it("sends modal created date filters in preview request and shows override badge", async () => {
         renderModal({
             created_from: "2025-01-01",
