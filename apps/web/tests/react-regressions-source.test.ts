@@ -2422,6 +2422,21 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps AI chat panel rendering split into focused sections", () => {
+        const source = readSource("components/ai/AIChatPanel.tsx")
+        const panelSource = readFunctionSource(source, "AIChatPanel")
+
+        expect(source).toContain("function AIChatHeader")
+        expect(source).toContain("function AIChatContextBar")
+        expect(source).toContain("function AIChatMessages")
+        expect(source).toContain("function AIChatQuickActions")
+        expect(source).toContain("function AIChatComposer")
+        expect(source).toContain("function AIChatScheduleParser")
+        expect(panelSource).not.toContain("AI Assistant")
+        expect(panelSource).not.toContain("Ask anything")
+        expect(panelSource).not.toContain("Parse Schedule")
+    })
+
     it("uses gap spacing for report summary card headers", () => {
         const source = readSource("app/(app)/reports/page.tsx")
 

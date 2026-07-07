@@ -3551,3 +3551,23 @@ Full command after Batch 161: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 86 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 53 warnings`
 - Removed globally since Batch 160: `react-doctor/no-giant-component` for `MassEditStageModal` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-401df0f1-90bd-4bd7-94e1-5cafc090d0d3`
+
+## Batch 162
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/ai/AIChatPanel.tsx` | Valid. The AI chat panel mixed stream state, scroll refs, context tracking, message rendering, action approval cards, quick actions, composer controls, and schedule parser mounting in one component. | High | Kept conversation state, streaming handlers, abort/stop behavior, scroll stickiness, approval gating, and schedule-parser state in `AIChatPanel`. Extracted presentational helpers for header, context bar, messages, quick actions, composer, and schedule parser mounting. Preserved the existing decorative close-icon fix and added a source guard requiring the split helpers. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI chat panel rendering"` failed on the missing helper split. GREEN: `pnpm test --run tests/ai-chat-panel.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "AI chat"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 162: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 162: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `148`
+- Summary: `Bugs 86 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
+- Removed globally since Batch 161: `react-doctor/no-giant-component` for `AIChatPanel` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e449de73-e7e6-467c-b847-9109c8e0b2a3`

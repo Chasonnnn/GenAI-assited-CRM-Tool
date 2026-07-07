@@ -130,6 +130,307 @@ const ACTION_LABELS: Record<string, string> = {
     update_status: "Update Stage",
 }
 
+type AIChatActionControls = {
+    canApproveActions: boolean
+    approvePending: boolean
+    rejectPending: boolean
+    onApprove: (approvalId: string | null | undefined) => void
+    onReject: (approvalId: string | null | undefined) => void
+}
+
+function AIChatHeader({ onClose }: { onClose?: () => void }) {
+    return (
+        <div className="flex items-center justify-between border-b px-4 py-3">
+            <div className="flex items-center gap-2">
+                <SparklesIcon className="size-5 text-primary" />
+                <span className="font-semibold">AI Assistant</span>
+            </div>
+            {onClose ? (
+                <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close AI Assistant">
+                    <XIcon className="size-4" aria-hidden="true" />
+                </Button>
+            ) : null}
+        </div>
+    )
+}
+
+function AIChatContextBar({
+    entityType,
+    entityName,
+}: {
+    entityType: AIChatPanelProps["entityType"]
+    entityName: AIChatPanelProps["entityName"]
+}) {
+    return (
+        <div className="border-b bg-muted/30 px-4 py-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Context:</span>
+                <Badge variant="secondary" className="font-normal">
+                    {entityType === "surrogate" && entityName
+                        ? `Surrogate • ${entityName}`
+                        : "Global Mode"}
+                </Badge>
+            </div>
+        </div>
+    )
+}
+
+function AIChatEmptyState({ entityType }: { entityType: AIChatPanelProps["entityType"] }) {
+    return (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+            <SparklesIcon className="mb-4 size-10 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">
+                {entityType === "surrogate"
+                    ? `Ask me anything about this surrogate.`
+                    : "Ask me anything! I can help with drafts, answer questions, or parse emails."}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+                {entityType === "surrogate"
+                    ? "I can help summarize, draft emails, suggest next steps, and more."
+                    : "Open a surrogate for context-aware assistance with actions."}
+            </p>
+        </div>
+    )
+}
+
+function AIChatMessageBubble({ message }: { message: PanelMessage }) {
+    return (
+        <div
+            className={cn(
+                "rounded-lg px-4 py-2",
+                message.role === "user"
+                    ? "ml-8 bg-primary text-primary-foreground"
+                    : "mr-8 bg-muted"
+            )}
+        >
+            {message.role === "assistant" && message.status === "thinking" && !message.content ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                    Thinking
+                </div>
+            ) : message.role === "assistant" ? (
+                <AssistantRichText content={message.content} />
+            ) : (
+                <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+            )}
+        </div>
+    )
+}
+
+function AIChatActionCards({
+    message,
+    actionControls,
+}: {
+    message: PanelMessage
+    actionControls: AIChatActionControls
+}) {
+    if (message.role !== "assistant" || !message.proposed_actions?.length) return null
+
+    return (
+        <div className="mt-2 mr-8 space-y-2">
+            {message.proposed_actions.map((action: ProposedAction, index: number) => {
+                const approval = message.action_approvals?.find(
+                    (item) => item.action_index === index
+                )
+                const approvalId = action.approval_id
+                const status = approval?.status || (approvalId ? "pending" : "unavailable")
+
+                return (
+                    <ActionCard
+                        key={action.approval_id || index}
+                        action={action}
+                        status={status}
+                        canApprove={
+                            !!approvalId &&
+                            actionControls.canApproveActions &&
+                            status === "pending"
+                        }
+                        onApprove={() => actionControls.onApprove(approvalId)}
+                        onReject={() => actionControls.onReject(approvalId)}
+                        isApproving={actionControls.approvePending}
+                        isRejecting={actionControls.rejectPending}
+                    />
+                )
+            })}
+        </div>
+    )
+}
+
+function AIChatMessageList({
+    messages,
+    actionControls,
+}: {
+    messages: PanelMessage[]
+    actionControls: AIChatActionControls
+}) {
+    return (
+        <div className="space-y-4">
+            {messages.map((message) => (
+                <div key={message.id}>
+                    <AIChatMessageBubble message={message} />
+                    <AIChatActionCards message={message} actionControls={actionControls} />
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function AIChatMessages({
+    scrollRef,
+    messages,
+    loadingConversation,
+    entityType,
+    actionControls,
+    onScroll,
+}: {
+    scrollRef: React.RefObject<HTMLDivElement | null>
+    messages: PanelMessage[]
+    loadingConversation: boolean
+    entityType: AIChatPanelProps["entityType"]
+    actionControls: AIChatActionControls
+    onScroll: () => void
+}) {
+    return (
+        <div ref={scrollRef} onScroll={onScroll} className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-4">
+                {loadingConversation ? (
+                    <div className="flex items-center justify-center py-8">
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    </div>
+                ) : messages.length === 0 ? (
+                    <AIChatEmptyState entityType={entityType} />
+                ) : (
+                    <AIChatMessageList messages={messages} actionControls={actionControls} />
+                )}
+            </div>
+        </div>
+    )
+}
+
+function AIChatQuickActions({
+    entityType,
+    entityId,
+    streamVisible,
+    onSetMessage,
+    onOpenScheduleParser,
+}: {
+    entityType: AIChatPanelProps["entityType"]
+    entityId: AIChatPanelProps["entityId"]
+    streamVisible: boolean
+    onSetMessage: (message: string) => void
+    onOpenScheduleParser: () => void
+}) {
+    return (
+        <div className="border-t px-4 py-2">
+            <div className="flex flex-wrap gap-2">
+                <QuickActionButton
+                    onClick={() => onSetMessage("Summarize this surrogate")}
+                    disabled={streamVisible}
+                >
+                    Summarize
+                </QuickActionButton>
+                <QuickActionButton
+                    onClick={() => onSetMessage("What should I do next?")}
+                    disabled={streamVisible}
+                >
+                    Next Steps
+                </QuickActionButton>
+                <QuickActionButton
+                    onClick={() => onSetMessage("Draft a follow-up email")}
+                    disabled={streamVisible}
+                >
+                    Draft Email
+                </QuickActionButton>
+                {entityType === "surrogate" && entityId ? (
+                    <QuickActionButton onClick={onOpenScheduleParser} disabled={streamVisible}>
+                        <CalendarPlusIcon className="mr-1 size-3" />
+                        Parse Schedule
+                    </QuickActionButton>
+                ) : null}
+            </div>
+        </div>
+    )
+}
+
+function AIChatComposer({
+    inputRef,
+    message,
+    streamVisible,
+    onMessageChange,
+    onKeyDown,
+    onSend,
+    onStop,
+}: {
+    inputRef: React.RefObject<HTMLInputElement | null>
+    message: string
+    streamVisible: boolean
+    onMessageChange: (message: string) => void
+    onKeyDown: (event: React.KeyboardEvent) => void
+    onSend: () => void
+    onStop: () => void
+}) {
+    return (
+        <div className="border-t p-4">
+            <div className="flex gap-2">
+                <Input
+                    ref={inputRef}
+                    value={message}
+                    onChange={(event) => onMessageChange(event.target.value)}
+                    onKeyDown={onKeyDown}
+                    placeholder="Ask anything"
+                    disabled={streamVisible}
+                    className="flex-1"
+                />
+                {streamVisible ? (
+                    <Button
+                        onClick={onStop}
+                        size="icon"
+                        variant="outline"
+                        aria-label="Stop generating"
+                    >
+                        <StopCircleIcon className="size-4" aria-hidden="true" />
+                    </Button>
+                ) : (
+                    <Button
+                        onClick={onSend}
+                        disabled={!message.trim()}
+                        size="icon"
+                        aria-label="Send message"
+                    >
+                        <SendIcon className="size-4" aria-hidden="true" />
+                    </Button>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function AIChatScheduleParser({
+    open,
+    entityType,
+    entityId,
+    entityName,
+    onOpenChange,
+}: {
+    open: boolean
+    entityType: AIChatPanelProps["entityType"]
+    entityId: AIChatPanelProps["entityId"]
+    entityName: AIChatPanelProps["entityName"]
+    onOpenChange: (open: boolean) => void
+}) {
+    if (!open || entityType !== "surrogate" || !entityId) return null
+
+    return (
+        <ScheduleParserDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            entityType="surrogate"
+            entityId={entityId}
+            {...(entityName ? { entityName } : {})}
+        />
+    )
+}
+
 export function AIChatPanel({
     entityType,
     entityId,
@@ -366,191 +667,49 @@ export function AIChatPanel({
         if (!approvalId) return
         rejectAction.mutate(approvalId)
     }
+    const actionControls: AIChatActionControls = {
+        canApproveActions,
+        approvePending: approveAction.isPending,
+        rejectPending: rejectAction.isPending,
+        onApprove: handleApprove,
+        onReject: handleReject,
+    }
 
     return (
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b px-4 py-3">
-                <div className="flex items-center gap-2">
-                    <SparklesIcon className="size-5 text-primary" />
-                    <span className="font-semibold">AI Assistant</span>
-                </div>
-                {onClose && (
-                    <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close AI Assistant">
-                        <XIcon className="size-4" aria-hidden="true" />
-                    </Button>
-                )}
-            </div>
-
-            {/* Context indicator */}
-            <div className="border-b bg-muted/30 px-4 py-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>Context:</span>
-                    <Badge variant="secondary" className="font-normal">
-                        {entityType === "surrogate" && entityName
-                            ? `Surrogate • ${entityName}`
-                            : "Global Mode"}
-                    </Badge>
-                </div>
-            </div>
-
-            {/* Messages */}
-            <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto">
-                <div className="p-4">
-                    {loadingConversation ? (
-                        <div className="flex items-center justify-center py-8">
-                            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : messages.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <SparklesIcon className="mb-4 size-10 text-muted-foreground/50" />
-                            <p className="text-sm text-muted-foreground">
-                                {entityType === "surrogate"
-                                    ? `Ask me anything about this surrogate.`
-                                    : "Ask me anything! I can help with drafts, answer questions, or parse emails."}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground/70">
-                                {entityType === "surrogate"
-                                    ? "I can help summarize, draft emails, suggest next steps, and more."
-                                    : "Open a surrogate for context-aware assistance with actions."}
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {messages.map((msg) => (
-                                <div key={msg.id}>
-                                    {/* Message bubble */}
-                                    <div
-                                        className={cn(
-                                            "rounded-lg px-4 py-2",
-                                            msg.role === "user"
-                                                ? "ml-8 bg-primary text-primary-foreground"
-                                                : "mr-8 bg-muted"
-                                        )}
-                                    >
-                                        {msg.role === "assistant" && msg.status === "thinking" && !msg.content ? (
-                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <Loader2Icon className="size-3.5 animate-spin" />
-                                                Thinking
-                                            </div>
-                                        ) : (
-                                            msg.role === "assistant" ? (
-                                                <AssistantRichText content={msg.content} />
-                                            ) : (
-                                                <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
-                                            )
-                                        )}
-                                    </div>
-
-                                    {/* Action cards */}
-                                    {msg.role === "assistant" && msg.proposed_actions && msg.proposed_actions.length > 0 && (
-                                        <div className="mt-2 mr-8 space-y-2">
-                                            {msg.proposed_actions.map((action: ProposedAction, idx: number) => {
-                                                const approval = msg.action_approvals?.find(
-                                                    (a) => a.action_index === idx
-                                                )
-                                                const approvalId = action.approval_id
-                                                const status = approval?.status || (approvalId ? "pending" : "unavailable")
-
-                                                return (
-                                                    <ActionCard
-                                                        key={action.approval_id || idx}
-                                                        action={action}
-                                                        status={status}
-                                                        canApprove={!!approvalId && canApproveActions && status === "pending"}
-                                                        onApprove={() => handleApprove(approvalId)}
-                                                        onReject={() => handleReject(approvalId)}
-                                                        isApproving={approveAction.isPending}
-                                                        isRejecting={rejectAction.isPending}
-                                                    />
-                                                )
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Quick actions */}
-            <div className="border-t px-4 py-2">
-                <div className="flex flex-wrap gap-2">
-                    <QuickActionButton
-                        onClick={() => setMessage("Summarize this surrogate")}
-                        disabled={streamVisible}
-                    >
-                        Summarize
-                    </QuickActionButton>
-                    <QuickActionButton
-                        onClick={() => setMessage("What should I do next?")}
-                        disabled={streamVisible}
-                    >
-                        Next Steps
-                    </QuickActionButton>
-                    <QuickActionButton
-                        onClick={() => setMessage("Draft a follow-up email")}
-                        disabled={streamVisible}
-                    >
-                        Draft Email
-                    </QuickActionButton>
-                    {entityType === "surrogate" && entityId && (
-                        <QuickActionButton
-                            onClick={() => setScheduleParserOpen(true)}
-                            disabled={streamVisible}
-                        >
-                            <CalendarPlusIcon className="mr-1 size-3" />
-                            Parse Schedule
-                        </QuickActionButton>
-                    )}
-                </div>
-            </div>
-
-            {/* Input */}
-            <div className="border-t p-4">
-                <div className="flex gap-2">
-                    <Input
-                        ref={inputRef}
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Ask anything"
-                        disabled={streamVisible}
-                        className="flex-1"
-                    />
-                    {streamVisible ? (
-                        <Button
-                            onClick={handleStop}
-                            size="icon"
-                            variant="outline"
-                            aria-label="Stop generating"
-                        >
-                            <StopCircleIcon className="size-4" aria-hidden="true" />
-                        </Button>
-                    ) : (
-                        <Button
-                            onClick={handleSend}
-                            disabled={!message.trim()}
-                            size="icon"
-                            aria-label="Send message"
-                        >
-                            <SendIcon className="size-4" aria-hidden="true" />
-                        </Button>
-                    )}
-                </div>
-            </div>
-
-            {/* Schedule Parser Dialog (mount only when open to avoid unnecessary hooks) */}
-            {scheduleParserOpen && entityType === "surrogate" && entityId && (
-                <ScheduleParserDialog
-                    open={scheduleParserOpen}
-                    onOpenChange={setScheduleParserOpen}
-                    entityType="surrogate"
-                    entityId={entityId}
-                    {...(entityName ? { entityName } : {})}
-                />
-            )}
+            <AIChatHeader {...(onClose ? { onClose } : {})} />
+            <AIChatContextBar entityType={entityType} entityName={entityName} />
+            <AIChatMessages
+                scrollRef={scrollRef}
+                messages={messages}
+                loadingConversation={loadingConversation}
+                entityType={entityType}
+                actionControls={actionControls}
+                onScroll={handleScroll}
+            />
+            <AIChatQuickActions
+                entityType={entityType}
+                entityId={entityId}
+                streamVisible={streamVisible}
+                onSetMessage={setMessage}
+                onOpenScheduleParser={() => setScheduleParserOpen(true)}
+            />
+            <AIChatComposer
+                inputRef={inputRef}
+                message={message}
+                streamVisible={streamVisible}
+                onMessageChange={setMessage}
+                onKeyDown={handleKeyDown}
+                onSend={() => void handleSend()}
+                onStop={handleStop}
+            />
+            <AIChatScheduleParser
+                open={scheduleParserOpen}
+                entityType={entityType}
+                entityId={entityId}
+                entityName={entityName}
+                onOpenChange={setScheduleParserOpen}
+            />
         </div>
     )
 }
