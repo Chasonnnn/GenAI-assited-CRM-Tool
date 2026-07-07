@@ -2056,6 +2056,17 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("uses reducer state for the contact attempt form", () => {
+        const source = readSource("components/surrogates/LogContactAttemptDialog.tsx")
+
+        expect(source).toContain("useReducer")
+        expect(source).toContain("contactAttemptFormReducer")
+        expect(source).not.toContain("useState")
+        expect(source).not.toContain("setSelectedMethods")
+        expect(source).not.toContain("setOutcome")
+        expect(source).not.toContain("setIsBackdating")
+    })
+
     it("keeps the surrogates floating scrollbar free of manual React memoization", () => {
         const source = readSource("components/surrogates/SurrogatesFloatingScrollbar.tsx")
 

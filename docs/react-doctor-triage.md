@@ -3611,3 +3611,23 @@ Full command after Batch 164: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 84 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
 - Removed globally since Batch 163: `react-doctor/prefer-useReducer` for `AddTaskDialog` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-34762cf0-1649-4ffb-8ad7-c022985c5a23`
+
+## Batch 165
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `components/surrogates/LogContactAttemptDialog.tsx` | Valid. The contact attempt draft fields (`selectedMethods`, `outcome`, `notes`, `attemptedAt`, and `isBackdating`) reset together, validate together, and submit as one payload. | High | Moved the contact attempt draft into `contactAttemptFormReducer`, preserving multi-method toggles, required method/outcome validation, backdate datetime gating, stale datetime suppression when backdating is off, success toast/tracking, close reset, and mutation-failure draft preservation. Added behavior coverage for those payload and side-effect paths plus a source guard requiring the reducer shape. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "contact attempt form"` failed on the separate `useState` calls. GREEN: `pnpm test --run tests/log-contact-attempt-dialog.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "contact attempt form"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 165: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 165: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `145`
+- Summary: `Bugs 83 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 52 warnings`
+- Removed globally since Batch 164: `react-doctor/prefer-useReducer` for `LogContactAttemptDialog` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6829ec0c-0bad-4ef3-95ff-53c28135badf`

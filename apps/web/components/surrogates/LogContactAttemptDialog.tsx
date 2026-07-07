@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -55,35 +54,80 @@ function getMaxLocalDateTime(): string {
     return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16)
 }
 
+type ContactAttemptFormState = {
+    selectedMethods: ContactMethod[]
+    outcome: ContactOutcome | ""
+    notes: string
+    attemptedAt: string
+    isBackdating: boolean
+}
+
+type ContactAttemptFormAction =
+    | { type: "toggleMethod"; method: ContactMethod }
+    | { type: "outcome"; value: ContactOutcome }
+    | { type: "notes"; value: string }
+    | { type: "attemptedAt"; value: string }
+    | { type: "backdating"; value: boolean }
+    | { type: "reset" }
+
+function createInitialContactAttemptFormState(): ContactAttemptFormState {
+    return {
+        selectedMethods: [],
+        outcome: "",
+        notes: "",
+        attemptedAt: "",
+        isBackdating: false,
+    }
+}
+
+function contactAttemptFormReducer(
+    state: ContactAttemptFormState,
+    action: ContactAttemptFormAction
+): ContactAttemptFormState {
+    switch (action.type) {
+        case "toggleMethod":
+            return {
+                ...state,
+                selectedMethods: state.selectedMethods.includes(action.method)
+                    ? state.selectedMethods.filter((method) => method !== action.method)
+                    : [...state.selectedMethods, action.method],
+            }
+        case "outcome":
+            return { ...state, outcome: action.value }
+        case "notes":
+            return { ...state, notes: action.value }
+        case "attemptedAt":
+            return { ...state, attemptedAt: action.value }
+        case "backdating":
+            return { ...state, isBackdating: action.value }
+        case "reset":
+            return createInitialContactAttemptFormState()
+        default:
+            return state
+    }
+}
+
 export function LogContactAttemptDialog({
     open,
     onOpenChange,
     surrogateId,
     surrogateName = "Surrogate",
 }: LogContactAttemptDialogProps) {
-    const [selectedMethods, setSelectedMethods] = useState<ContactMethod[]>([])
-    const [outcome, setOutcome] = useState<ContactOutcome | "">("")
-    const [notes, setNotes] = useState("")
-    const [attemptedAt, setAttemptedAt] = useState("")
-    const [isBackdating, setIsBackdating] = useState(false)
+    const [formState, dispatchForm] = React.useReducer(
+        contactAttemptFormReducer,
+        createInitialContactAttemptFormState()
+    )
+    const { selectedMethods, outcome, notes, attemptedAt, isBackdating } = formState
 
     const createContactAttempt = useCreateContactAttempt()
     const maxLocalDateTime = getMaxLocalDateTime()
 
     const handleMethodToggle = (method: ContactMethod) => {
-        setSelectedMethods(prev =>
-            prev.includes(method)
-                ? prev.filter(m => m !== method)
-                : [...prev, method]
-        )
+        dispatchForm({ type: "toggleMethod", method })
     }
 
     const resetForm = () => {
-        setSelectedMethods([])
-        setOutcome("")
-        setNotes("")
-        setAttemptedAt("")
-        setIsBackdating(false)
+        dispatchForm({ type: "reset" })
     }
 
     const handleSubmit = async () => {
@@ -173,7 +217,9 @@ export function LogContactAttemptDialog({
                         <Label htmlFor="outcome">Outcome</Label>
                         <Select
                             value={outcome}
-                            onValueChange={(v) => setOutcome(v as ContactOutcome)}
+                            onValueChange={(v) =>
+                                dispatchForm({ type: "outcome", value: v as ContactOutcome })
+                            }
                         >
                             <SelectTrigger id="outcome">
                                 <SelectValue placeholder="Select outcome" />
@@ -200,7 +246,9 @@ export function LogContactAttemptDialog({
                             id="notes"
                             placeholder="Add any relevant details"
                             value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
+                            onChange={(e) =>
+                                dispatchForm({ type: "notes", value: e.target.value })
+                            }
                             rows={3}
                             className="resize-none"
                         />
@@ -212,7 +260,12 @@ export function LogContactAttemptDialog({
                             <Checkbox
                                 id="contact-attempt-backdate"
                                 checked={isBackdating}
-                                onCheckedChange={(checked) => setIsBackdating(checked === true)}
+                                onCheckedChange={(checked) =>
+                                    dispatchForm({
+                                        type: "backdating",
+                                        value: checked === true,
+                                    })
+                                }
                             />
                             <Label htmlFor="contact-attempt-backdate" className="cursor-pointer">
                                 Log for a different date/time
@@ -224,7 +277,12 @@ export function LogContactAttemptDialog({
                                 <Input
                                     type="datetime-local"
                                     value={attemptedAt}
-                                    onChange={(e) => setAttemptedAt(e.target.value)}
+                                    onChange={(e) =>
+                                        dispatchForm({
+                                            type: "attemptedAt",
+                                            value: e.target.value,
+                                        })
+                                    }
                                     max={maxLocalDateTime}
                                     className="flex-1"
                                 />
