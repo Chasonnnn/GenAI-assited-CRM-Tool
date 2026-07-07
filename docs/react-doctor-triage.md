@@ -3511,3 +3511,23 @@ Full command after Batch 159: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 87 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 55 warnings`
 - Removed globally since Batch 158: `react-doctor/no-giant-component` for `WorkflowTemplatesPanel` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c7e1894-8295-44e3-8f1c-702874bb3ec2`
+
+## Batch 160
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `components/surrogates/ChangeStageModal.tsx` | Valid. The change-stage dialog mixed stage selection, effective scheduling, on-hold follow-up reminders, interview scheduling, delivery details, warnings, reason capture, and footer actions in one component. The interview appointment fields also changed together and were a better fit for a reducer action model. | High | Split the modal body into focused local helpers for stage selection, effective schedule, on-hold follow-up, interview appointment, delivery details, warning banners, reason capture, and actions. Kept state ownership and payload assembly in `ChangeStageModalContent`, then grouped the interview appointment state into `interviewStateReducer`. Added a source guard requiring the split helper structure. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "change stage modal sections"` failed on the monolithic component. GREEN: `pnpm test --run tests/change-stage-modal.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "change stage modal\|stage modals"`; `pnpm tsc --noEmit`; `pnpm lint`; full `pnpm test --run`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 160: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 160: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `150`
+- Summary: `Bugs 86 warnings`, `Performance 8 warnings`, `Accessibility 2 warnings`, `Maintainability 54 warnings`
+- Removed globally since Batch 159: `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer` for `ChangeStageModal` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-96846a68-8659-4d3f-9d7e-9524744c4ae4`

@@ -1982,6 +1982,22 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setCalendarToday(new Date())")
     })
 
+    it("keeps change stage modal sections split into focused render helpers", () => {
+        const source = readSource("components/surrogates/ChangeStageModal.tsx")
+        const contentSource = readFunctionSource(source, "ChangeStageModalContent")
+
+        expect(source).toContain("function StageSelectionList")
+        expect(source).toContain("function EffectiveScheduleSection")
+        expect(source).toContain("function OnHoldFollowUpSection")
+        expect(source).toContain("function InterviewAppointmentSection")
+        expect(source).toContain("function DeliveryDetailsSection")
+        expect(source).toContain("function ChangeStageWarnings")
+        expect(source).toContain("function ChangeStageActions")
+        expect(contentSource).not.toContain("Follow-up reminder")
+        expect(contentSource).not.toContain("Interview appointment")
+        expect(contentSource).not.toContain("Delivery details")
+    })
+
     it("keeps bulk stage change reset logic in event handlers", () => {
         const source = readSource("components/surrogates/BulkChangeStageModal.tsx")
 
