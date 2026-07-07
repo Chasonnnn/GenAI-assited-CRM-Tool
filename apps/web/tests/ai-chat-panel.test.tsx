@@ -1,4 +1,5 @@
 import * as React from "react"
+import { readFileSync } from "node:fs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
@@ -112,9 +113,16 @@ describe('AIChatPanel', () => {
 
         const closeButton = screen.getByRole('button', { name: /close ai assistant/i })
         expect(closeButton).toBeInTheDocument()
+        expect(closeButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true")
 
         fireEvent.click(closeButton)
         expect(onClose).toHaveBeenCalled()
+    })
+
+    it("marks the close icon explicitly decorative in source", () => {
+        const source = readFileSync("components/ai/AIChatPanel.tsx", "utf8")
+
+        expect(source).toContain('<XIcon className="size-4" aria-hidden="true" />')
     })
 
     it('does not render close button when onClose is not provided', () => {

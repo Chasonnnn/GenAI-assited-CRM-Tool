@@ -3,10 +3,12 @@
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 
 from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import get_default_stage_defs
@@ -209,6 +211,81 @@ def test_create_stage_clamps_custom_stage_order_between_protected_anchors(db, te
     assert active_stage_keys[0] == "new_unread"
     assert active_stage_keys[-1] == "disqualified"
     assert active_stage_keys[1] == stage.stage_key
+
+
+def test_pipeline_service_count_paths_use_direct_aggregate_queries():
+    source = Path("app/services/pipeline_service.py").read_text()
+    create_stage_source = source[
+        source.index("def create_stage(") : source.index("def update_stage(")
+    ]
+    apply_draft_source = source[
+        source.index("def apply_pipeline_draft(") : source.index("def sync_surrogate_labels(")
+    ]
+
+    assert ".count()" not in create_stage_source
+    assert ".count()" not in apply_draft_source
+
+
+def test_apply_pipeline_draft_counts_removed_stage_entities_with_direct_count(
+    db, test_org, test_user
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug=f"cleanup_{uuid.uuid4().hex[:6]}",
+        label="Cleanup",
+        color="#64748b",
+        stage_type="paused",
+        order=999,
+        user_id=test_user.id,
+    )
+    db.flush()
+
+    draft_stages = [
+        {
+            "id": str(stage.id),
+            "stage_key": stage.stage_key,
+            "slug": stage.slug,
+            "label": stage.label,
+            "color": stage.color,
+            "order": index + 1,
+            "category": stage.stage_type,
+            "is_active": stage.is_active,
+            "semantics": stage.semantics or {},
+        }
+        for index, stage in enumerate(pipeline_service.get_stages(db, pipeline.id))
+        if stage.id != custom_stage.id
+    ]
+    statements: list[str] = []
+
+    def capture_sql(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        pipeline_service.apply_pipeline_draft(
+            db,
+            pipeline,
+            name=pipeline.name,
+            stages=draft_stages,
+            feature_config=pipeline.feature_config,
+            remaps=[],
+            user_id=test_user.id,
+            comment="Remove unused cleanup stage",
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_sql)
+
+    aggregate_statements = [
+        statement.lower()
+        for statement in statements
+        if "surrogates" in statement.lower() and "count(" in statement.lower()
+    ]
+
+    assert aggregate_statements
+    assert all("from (select" not in statement for statement in aggregate_statements)
 
 
 def test_resolve_stage_color_uses_keyword_presets_for_gray_custom_stages():

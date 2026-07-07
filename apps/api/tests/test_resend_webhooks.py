@@ -7,6 +7,7 @@ import time
 import uuid
 
 import pytest
+from sqlalchemy import event
 
 
 def _generate_svix_signature(body: bytes, secret: str, timestamp: str) -> str:
@@ -356,19 +357,41 @@ class TestResendWebhookHandler:
         body = json.dumps(payload).encode("utf-8")
         timestamp = str(int(time.time()))
         msg_id, signature = _generate_svix_signature(body, webhook_secret, timestamp)
+        statements: list[str] = []
 
-        response = await client.post(
-            f"/webhooks/resend/{settings.webhook_id}",
-            content=body,
-            headers={
-                "Content-Type": "application/json",
-                "svix-id": msg_id,
-                "svix-timestamp": timestamp,
-                "svix-signature": signature,
-            },
-        )
+        def capture_sql(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        engine = db.get_bind()
+        event.listen(engine, "before_cursor_execute", capture_sql)
+        try:
+            response = await client.post(
+                f"/webhooks/resend/{settings.webhook_id}",
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "svix-id": msg_id,
+                    "svix-timestamp": timestamp,
+                    "svix-signature": signature,
+                },
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_sql)
+
+        campaign_recipient_statements = [
+            statement.lower()
+            for statement in statements
+            if "campaign_recipients" in statement.lower()
+        ]
+        aggregate_statements = [
+            statement
+            for statement in campaign_recipient_statements
+            if "sum(" in statement or "count(" in statement
+        ]
 
         assert response.status_code == 200
+        assert any("sum(" in statement for statement in aggregate_statements)
+        assert all("from (select" not in statement for statement in aggregate_statements)
 
         db.refresh(recipient)
         db.refresh(run)

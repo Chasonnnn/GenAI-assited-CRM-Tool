@@ -241,7 +241,7 @@ function DraftPreview({
             <Empty className="min-h-[520px] border bg-card">
                 <EmptyHeader>
                     <EmptyMedia variant="icon">
-                        <ImageIcon />
+                        <ImageIcon aria-hidden="true" />
                     </EmptyMedia>
                     <EmptyTitle>Draft preview</EmptyTitle>
                     <EmptyDescription>
@@ -293,7 +293,7 @@ function DraftPreview({
                     </div>
                 ) : (
                     <div className="flex aspect-square items-center justify-center rounded-lg border bg-muted text-muted-foreground">
-                        <ImageIcon />
+                        <ImageIcon aria-hidden="true" />
                     </div>
                 )}
 
@@ -325,14 +325,14 @@ function DraftPreview({
                         disabled={draft.status === "saved" || isSaving}
                     >
                         {isSaving ? (
-                            <Spinner data-icon="inline-start" />
+                            <Spinner data-icon="inline-start" aria-hidden="true" />
                         ) : (
-                            <SaveIcon data-icon="inline-start" />
+                            <SaveIcon data-icon="inline-start" aria-hidden="true" />
                         )}
                         Save draft
                     </Button>
                     <Button type="button" variant="outline" onClick={onRegenerate}>
-                        <RefreshCwIcon data-icon="inline-start" />
+                        <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
                         Regenerate
                     </Button>
                 </CardFooter>
@@ -489,7 +489,7 @@ function BriefComposer({
                                     onClick={() => onRemove(image.id)}
                                     className="absolute -right-2 -top-2 size-6 rounded-full bg-background p-0"
                                 >
-                                    <XIcon />
+                                    <XIcon aria-hidden="true" />
                                 </Button>
                             </div>
                         ))}
@@ -512,7 +512,7 @@ function BriefComposer({
                             aria-label="Attach sample pictures"
                             onClick={() => inputRef.current?.click()}
                         >
-                            <PaperclipIcon />
+                            <PaperclipIcon aria-hidden="true" />
                         </Button>
                         <span className="truncate text-xs text-muted-foreground">
                             Paste images here or attach up to {maxReferenceImages}
@@ -528,7 +528,7 @@ function BriefComposer({
             </FieldDescription>
             {isAdding && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Spinner data-icon="inline-start" />
+                    <Spinner data-icon="inline-start" aria-hidden="true" />
                     Reading sample picture
                 </div>
             )}
@@ -713,7 +713,7 @@ export default function AIStudioPage() {
                                 variant="outline"
                                 onClick={openSettingsDialog}
                             >
-                                <Settings2Icon data-icon="inline-start" />
+                                <Settings2Icon data-icon="inline-start" aria-hidden="true" />
                                 Studio settings
                             </Button>
                         )}
@@ -722,7 +722,7 @@ export default function AIStudioPage() {
 
                 {!aiAvailable && (
                     <Alert variant="destructive">
-                        <AlertCircleIcon />
+                        <AlertCircleIcon aria-hidden="true" />
                         <AlertTitle>AI Studio is unavailable</AlertTitle>
                         <AlertDescription>
                             Your organization or role does not currently have AI access.
@@ -732,7 +732,7 @@ export default function AIStudioPage() {
 
                 {settingsQuery.isError && (
                     <Alert variant="destructive">
-                        <AlertCircleIcon />
+                        <AlertCircleIcon aria-hidden="true" />
                         <AlertTitle>Settings could not load</AlertTitle>
                         <AlertDescription>{getErrorMessage(settingsQuery.error)}</AlertDescription>
                     </Alert>
@@ -740,7 +740,7 @@ export default function AIStudioPage() {
 
                 {errorMessage && (
                     <Alert variant="destructive">
-                        <AlertCircleIcon />
+                        <AlertCircleIcon aria-hidden="true" />
                         <AlertTitle>AI Studio needs attention</AlertTitle>
                         <AlertDescription>{errorMessage}</AlertDescription>
                     </Alert>
@@ -1007,7 +1007,7 @@ export default function AIStudioPage() {
 
                                                 {!settings?.has_api_key && (
                                                     <Alert>
-                                                        <AlertCircleIcon />
+                                                        <AlertCircleIcon aria-hidden="true" />
                                                         <AlertTitle>Connect OpenAI</AlertTitle>
                                                         <AlertDescription>
                                                             Admins can add an organization API key in
@@ -1024,9 +1024,9 @@ export default function AIStudioPage() {
                                                     className="w-full"
                                                 >
                                                     {generateDraft.isPending ? (
-                                                        <Spinner data-icon="inline-start" />
+                                                        <Spinner data-icon="inline-start" aria-hidden="true" />
                                                     ) : (
-                                                        <SparklesIcon data-icon="inline-start" />
+                                                        <SparklesIcon data-icon="inline-start" aria-hidden="true" />
                                                     )}
                                                     Generate draft
                                                 </Button>
@@ -1124,7 +1124,7 @@ export default function AIStudioPage() {
                         </Field>
                         {settingsSaved && (
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <CheckIcon className="size-4" />
+                                <CheckIcon className="size-4" aria-hidden="true" />
                                 Saved
                             </div>
                         )}
@@ -1143,7 +1143,7 @@ export default function AIStudioPage() {
                             disabled={updateSettings.isPending}
                             className={cn(updateSettings.isPending && "cursor-wait")}
                         >
-                            {updateSettings.isPending && <Spinner data-icon="inline-start" />}
+                            {updateSettings.isPending && <Spinner data-icon="inline-start" aria-hidden="true" />}
                             Save settings
                         </Button>
                     </DialogFooter>

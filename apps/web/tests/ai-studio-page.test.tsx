@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import AIStudioPage from "../app/(app)/ai-studio/page"
@@ -88,6 +90,25 @@ describe("AIStudioPage", () => {
         expect(screen.getByRole("button", { name: /generate draft/i })).toBeDisabled()
         expect(screen.getByText("Size")).toBeInTheDocument()
         expect(screen.getByText("Quality")).toBeInTheDocument()
+    })
+
+    it("marks decorative AI Studio icons as hidden from assistive tech", () => {
+        const source = readFileSync("app/(app)/ai-studio/page.tsx", "utf8")
+
+        for (const expected of [
+            "<ImageIcon aria-hidden=\"true\" />",
+            "<Spinner data-icon=\"inline-start\" aria-hidden=\"true\" />",
+            "<SaveIcon data-icon=\"inline-start\" aria-hidden=\"true\" />",
+            "<RefreshCwIcon data-icon=\"inline-start\" aria-hidden=\"true\" />",
+            "<XIcon aria-hidden=\"true\" />",
+            "<PaperclipIcon aria-hidden=\"true\" />",
+            "<Settings2Icon data-icon=\"inline-start\" aria-hidden=\"true\" />",
+            "<AlertCircleIcon aria-hidden=\"true\" />",
+            "<SparklesIcon data-icon=\"inline-start\" aria-hidden=\"true\" />",
+            "<CheckIcon className=\"size-4\" aria-hidden=\"true\" />",
+        ]) {
+            expect(source).toContain(expected)
+        }
     })
 
     it("generates a preview and saves the draft", async () => {

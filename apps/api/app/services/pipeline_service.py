@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.pipeline_stage_colors import resolve_stage_color
@@ -1341,11 +1342,12 @@ def create_stage(
         # Auto-calculate order if not provided
         if order is None:
             max_order = (
-                db.query(PipelineStage)
-                .filter(
-                    PipelineStage.pipeline_id == pipeline_id,
+                db.scalar(
+                    select(func.count(PipelineStage.id)).where(
+                        PipelineStage.pipeline_id == pipeline_id
+                    )
                 )
-                .count()
+                or 0
             )
             order = max_order + 1
 
@@ -1934,23 +1936,25 @@ def apply_pipeline_draft(
         target_stage = target_stage_by_key.get(target_stage_key) if target_stage_key else None
         if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
             entity_count = (
-                db.query(IntendedParent)
-                .filter(
-                    IntendedParent.organization_id == pipeline.organization_id,
-                    IntendedParent.stage_id == stage.id,
-                    IntendedParent.is_archived.is_(False),
+                db.scalar(
+                    select(func.count(IntendedParent.id)).where(
+                        IntendedParent.organization_id == pipeline.organization_id,
+                        IntendedParent.stage_id == stage.id,
+                        IntendedParent.is_archived.is_(False),
+                    )
                 )
-                .count()
+                or 0
             )
         else:
             entity_count = (
-                db.query(Surrogate)
-                .filter(
-                    Surrogate.organization_id == pipeline.organization_id,
-                    Surrogate.stage_id == stage.id,
-                    Surrogate.is_archived.is_(False),
+                db.scalar(
+                    select(func.count(Surrogate.id)).where(
+                        Surrogate.organization_id == pipeline.organization_id,
+                        Surrogate.stage_id == stage.id,
+                        Surrogate.is_archived.is_(False),
+                    )
                 )
-                .count()
+                or 0
             )
         if entity_count > 0 and target_stage is None:
             raise ValueError(
