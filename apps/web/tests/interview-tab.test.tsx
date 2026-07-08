@@ -16,6 +16,19 @@ const mockUploadInterviewAttachment = vi.fn()
 const mockRequestTranscription = vi.fn()
 const mockRefetchInterview = vi.fn()
 
+type Deferred<T> = {
+    promise: Promise<T>
+    resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((res) => {
+        resolve = res
+    })
+    return { promise, resolve }
+}
+
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({ user: { role: 'case_manager', user_id: 'u1' } }),
 }))
@@ -215,5 +228,44 @@ describe('SurrogateInterviewTab', () => {
                 attachmentId: 'att1',
             })
         })
+    })
+
+    it('starts valid attachment uploads without waiting for earlier files to finish', async () => {
+        const uploadRequests: Array<Deferred<unknown>> = []
+        mockUploadInterviewAttachment.mockImplementation(() => {
+            const request = deferred<unknown>()
+            uploadRequests.push(request)
+            return request.promise
+        })
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        fireEvent.click(screen.getAllByText('Phone')[0])
+
+        await waitFor(() => {
+            expect(screen.getByText('Phone Interview')).toBeDefined()
+        })
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+
+        const firstFile = new File(["first"], "first.pdf", { type: "application/pdf" })
+        const secondFile = new File(["second"], "second.pdf", { type: "application/pdf" })
+        fireEvent.change(await screen.findByLabelText("Upload interview attachments"), {
+            target: { files: [firstFile, secondFile] },
+        })
+
+        await waitFor(() => {
+            expect(mockUploadInterviewAttachment).toHaveBeenCalledTimes(2)
+        })
+        expect(mockUploadInterviewAttachment).toHaveBeenNthCalledWith(1, {
+            interviewId: "i1",
+            file: firstFile,
+        })
+        expect(mockUploadInterviewAttachment).toHaveBeenNthCalledWith(2, {
+            interviewId: "i1",
+            file: secondFile,
+        })
+
+        uploadRequests.forEach((request) => request.resolve({}))
     })
 })

@@ -3918,3 +3918,26 @@ Full command after Batch 178: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Removed globally since Batch 177: `react-doctor/async-defer-await` for the ops agencies list loader (`1` warning).
 - Invalid findings logged: `react-doctor/rerender-state-only-in-handlers` for intended-parent clinic and surrogate medical section visibility, and `react-doctor/prefer-tag-over-role` for rich email preview/transcript interaction surfaces (`4` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c220fc0-58f1-4c43-9205-9173caeb69ad`
+
+## Batch 179
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/async-await-in-loop` | `components/surrogates/interviews/InterviewTab/context.tsx:340` | Valid. Valid attachment uploads are independent, but the provider awaited each upload before starting the next one. | High | Added a behavior test proving two valid uploads start before the first promise resolves. Changed `uploadFiles` to validate files first, then start valid uploads together with `Promise.all`. Kept the existing upload input reset behavior. | RED: `pnpm test --run tests/interview-tab.test.tsx -t "starts valid attachment uploads"` failed with only one upload call while the first promise was pending. GREEN: `pnpm test --run tests/interview-tab.test.tsx -t "starts valid attachment uploads"`; `pnpm test --run tests/react-regressions-source.test.ts -t "interview tab context"`; `pnpm test --run tests/interview-tab.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full React Doctor dropped to `129` issues. |
+| `react-doctor/no-giant-component` | `components/surrogates/interviews/InterviewTab/context.tsx:164` | Valid but separate. The provider still owns selection, dialogs, form state, mutations, uploads, notes, and transcription in one context component. | Medium-high | Left unchanged to keep this commit focused on upload concurrency. | Changed-scope React Doctor after the fix reports only this existing maintainability warning in the changed file. |
+
+Changed-scope command after Batch 179: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining reviewed but unchanged: `react-doctor/no-giant-component` for `InterviewTabProvider`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7bf29161-b649-4f77-b2d1-07cdb01f81a8`
+
+Full command after Batch 179: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `129`
+- Summary: `Bugs 79 warnings`, `Performance 4 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
+- Removed globally since Batch 178: `react-doctor/async-await-in-loop` for interview attachment uploads (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5cec0925-f83e-4055-a430-0b95e89c2189`

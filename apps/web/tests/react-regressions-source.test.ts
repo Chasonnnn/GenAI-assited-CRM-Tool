@@ -370,6 +370,8 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("finally")
         expect(source).not.toContain('if (dialog.type === "editor")')
+        expect(source).toContain("await Promise.all(")
+        expect(source).not.toMatch(/for \(const file of Array\.from\(files\)\)[\s\S]*await uploadAttachmentMutation\.mutateAsync/)
     })
 
     it("uses Set membership for attachment upload extension validation", () => {

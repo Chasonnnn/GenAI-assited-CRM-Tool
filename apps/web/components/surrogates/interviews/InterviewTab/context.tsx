@@ -325,6 +325,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         ])
         const maxSize = 25 * 1024 * 1024
 
+        const validFiles: File[] = []
         for (const file of Array.from(files)) {
             const ext = file.name.split(".").pop()?.toLowerCase() || ""
             if (!allowedExtensions.has(ext)) {
@@ -336,12 +337,17 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
                 continue
             }
 
-            try {
-                await uploadAttachmentMutation.mutateAsync({ interviewId: selectedId, file })
-            } catch (error) {
-                setUpload({ type: "error", message: error instanceof Error ? error.message : "Upload failed" })
-                break
-            }
+            validFiles.push(file)
+        }
+
+        try {
+            await Promise.all(
+                validFiles.map((file) =>
+                    uploadAttachmentMutation.mutateAsync({ interviewId: selectedId, file })
+                )
+            )
+        } catch (error) {
+            setUpload({ type: "error", message: error instanceof Error ? error.message : "Upload failed" })
         }
 
         if (uploadInputRef.current) {
