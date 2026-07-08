@@ -75,8 +75,9 @@ const TIMEZONE_OPTIONS = [
 
 const DEFAULT_TIMEZONE = "America/Los_Angeles"
 const INVALID_MANAGE_LINK_MESSAGE = "Invalid appointment management link"
+type TimezoneOption = { value: string; label: string }
 
-function getTimezoneLabel(value: string | null | undefined, options = TIMEZONE_OPTIONS) {
+function getTimezoneLabel(value: string | null | undefined, options: TimezoneOption[] = TIMEZONE_OPTIONS) {
     if (!value) return "Select timezone"
     return options.find((option) => option.value === value)?.label ?? value
 }
@@ -116,6 +117,407 @@ function getTimezoneSnapshot() {
 
 function getServerTimezoneSnapshot() {
     return DEFAULT_TIMEZONE
+}
+
+type CalendarDay = {
+    key: string
+    date: Date | null
+    isToday: boolean
+    isAvailable: boolean
+}
+
+function ManageLoadingState() {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+        </div>
+    )
+}
+
+function ManageErrorState({
+    title,
+    message,
+    centered = true,
+    mutedIcon = false,
+}: {
+    title: string
+    message: string
+    centered?: boolean
+    mutedIcon?: boolean
+}) {
+    const content = (
+        <Card className={centered ? "max-w-md" : undefined}>
+            <CardContent className="pt-6 text-center">
+                <AlertCircleIcon
+                    className={`size-12 mx-auto mb-4 ${mutedIcon ? "text-muted-foreground" : "text-destructive"}`}
+                />
+                <h2 className="text-xl font-semibold mb-2">{title}</h2>
+                <p className="text-muted-foreground">{message}</p>
+            </CardContent>
+        </Card>
+    )
+
+    if (centered) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                {content}
+            </div>
+        )
+    }
+
+    return (
+        <div className="min-h-screen bg-background py-12">
+            <div className="max-w-lg mx-auto px-4">{content}</div>
+        </div>
+    )
+}
+
+function ManageSuccessState({ status }: { status: "rescheduled" | "cancelled" }) {
+    const title = status === "rescheduled" ? "Appointment Rescheduled" : "Appointment Cancelled"
+    const message =
+        status === "rescheduled"
+            ? "Your appointment has been updated. You will receive a confirmation email shortly."
+            : "Your appointment has been cancelled. You will receive a confirmation email shortly."
+
+    return (
+        <div className="min-h-screen bg-background py-12">
+            <div className="max-w-lg mx-auto px-4">
+                <Card>
+                    <CardContent className="pt-6 text-center">
+                        <div className="size-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-6">
+                            <CheckCircleIcon className="size-8 text-green-600" />
+                        </div>
+                        <h2 className="text-2xl font-semibold mb-2">{title}</h2>
+                        <p className="text-muted-foreground">{message}</p>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    )
+}
+
+function AppointmentSummary({ appointment }: { appointment: PublicAppointmentView | null }) {
+    if (!appointment) return null
+
+    return (
+        <div className="rounded-lg border border-border p-4 space-y-2">
+            <p className="font-medium">{appointment.appointment_type_name || "Appointment"}</p>
+            {appointment.staff_name ? (
+                <p className="text-sm text-muted-foreground">with {appointment.staff_name}</p>
+            ) : null}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarIcon className="size-4" />
+                {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ClockIcon className="size-4" />
+                {format(parseISO(appointment.scheduled_start), "h:mm a")} (
+                {appointment.duration_minutes} min)
+            </div>
+        </div>
+    )
+}
+
+function AppointmentActionToggle({
+    action,
+    onActionChange,
+}: {
+    action: ManageAction
+    onActionChange: (action: ManageAction) => void
+}) {
+    return (
+        <div className="inline-flex rounded-lg border border-border p-1">
+            <Button
+                type="button"
+                variant={action === "reschedule" ? "default" : "ghost"}
+                onClick={() => onActionChange("reschedule")}
+                className="h-8 px-4"
+            >
+                Reschedule
+            </Button>
+            <Button
+                type="button"
+                variant={action === "cancel" ? "default" : "ghost"}
+                onClick={() => onActionChange("cancel")}
+                className="h-8 px-4"
+            >
+                Cancel
+            </Button>
+        </div>
+    )
+}
+
+function ReschedulePanel({
+    timezone,
+    timezoneOptions,
+    onTimezoneChange,
+    viewMonth,
+    onViewMonthChange,
+    calendarDays,
+    selectedDate,
+    onDateSelect,
+    isLoadingSlots,
+    slots,
+    selectedSlot,
+    onSlotSelect,
+    isSubmitting,
+    onConfirm,
+}: {
+    timezone: string
+    timezoneOptions: TimezoneOption[]
+    onTimezoneChange: (timezone: string) => void
+    viewMonth: Date | null
+    onViewMonthChange: (month: Date) => void
+    calendarDays: CalendarDay[]
+    selectedDate: Date | null
+    onDateSelect: (date: Date) => void
+    isLoadingSlots: boolean
+    slots: TimeSlot[]
+    selectedSlot: TimeSlot | null
+    onSlotSelect: (slot: TimeSlot) => void
+    isSubmitting: boolean
+    onConfirm: () => void
+}) {
+    return (
+        <div className="space-y-5">
+            <div className="flex items-center gap-2 text-sm">
+                <GlobeIcon className="size-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Timezone:</span>
+                <Select
+                    value={timezone}
+                    onValueChange={(value) => {
+                        if (value) onTimezoneChange(value)
+                    }}
+                >
+                    <SelectTrigger className="w-auto h-8 text-sm">
+                        <SelectValue>
+                            {(value: string | null) => getTimezoneLabel(value, timezoneOptions)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {timezoneOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div className="space-y-3">
+                <p className="font-medium">Select New Date</p>
+                <ManageCalendarGrid
+                    viewMonth={viewMonth}
+                    calendarDays={calendarDays}
+                    selectedDate={selectedDate}
+                    onViewMonthChange={onViewMonthChange}
+                    onDateSelect={onDateSelect}
+                />
+            </div>
+
+            <ManageSlotsGrid
+                selectedDate={selectedDate}
+                isLoadingSlots={isLoadingSlots}
+                slots={slots}
+                selectedSlot={selectedSlot}
+                onSlotSelect={onSlotSelect}
+            />
+
+            <Button
+                type="button"
+                className="w-full"
+                size="lg"
+                disabled={!selectedSlot || isSubmitting}
+                onClick={onConfirm}
+            >
+                {isSubmitting ? <Loader2Icon className="size-4 mr-2 animate-spin" /> : null}
+                Confirm Reschedule
+            </Button>
+        </div>
+    )
+}
+
+function ManageCalendarGrid({
+    viewMonth,
+    calendarDays,
+    selectedDate,
+    onViewMonthChange,
+    onDateSelect,
+}: {
+    viewMonth: Date | null
+    calendarDays: CalendarDay[]
+    selectedDate: Date | null
+    onViewMonthChange: (month: Date) => void
+    onDateSelect: (date: Date) => void
+}) {
+    return (
+        <Card>
+            <CardContent className="pt-4">
+                <div className="flex items-center justify-between mb-4">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!viewMonth}
+                        onClick={() => {
+                            if (viewMonth) onViewMonthChange(addMonths(viewMonth, -1))
+                        }}
+                    >
+                        <ChevronLeftIcon className="size-4" />
+                    </Button>
+                    <span className="font-medium">
+                        {viewMonth ? format(viewMonth, "MMMM yyyy") : "Loading calendar"}
+                    </span>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!viewMonth}
+                        onClick={() => {
+                            if (viewMonth) onViewMonthChange(addMonths(viewMonth, 1))
+                        }}
+                    >
+                        <ChevronRightIcon className="size-4" />
+                    </Button>
+                </div>
+
+                <div className="grid grid-cols-7 text-center text-sm text-muted-foreground mb-2">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                        <div key={day} className="py-2">
+                            {day}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                    {calendarDays.map((day) => {
+                        if (!day.date) {
+                            return <div key={day.key} className="h-10" />
+                        }
+                        const isSelected = selectedDate ? isSameDay(day.date, selectedDate) : false
+                        return (
+                            <Button
+                                key={day.key}
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    if (day.isAvailable && day.date) {
+                                        onDateSelect(day.date)
+                                    }
+                                }}
+                                disabled={!day.isAvailable}
+                                className={`h-10 text-sm font-medium ${
+                                    isSelected
+                                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                                        : day.isToday
+                                          ? "bg-primary/10 text-primary hover:bg-primary/20"
+                                          : day.isAvailable
+                                            ? "hover:bg-muted"
+                                            : "text-muted-foreground/40"
+                                }`}
+                            >
+                                {getDate(day.date)}
+                            </Button>
+                        )
+                    })}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function ManageSlotsGrid({
+    selectedDate,
+    isLoadingSlots,
+    slots,
+    selectedSlot,
+    onSlotSelect,
+}: {
+    selectedDate: Date | null
+    isLoadingSlots: boolean
+    slots: TimeSlot[]
+    selectedSlot: TimeSlot | null
+    onSlotSelect: (slot: TimeSlot) => void
+}) {
+    if (!selectedDate) return null
+
+    return (
+        <div className="space-y-3">
+            <p className="font-medium">Select New Time</p>
+            {isLoadingSlots ? (
+                <div className="py-8 flex items-center justify-center">
+                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                </div>
+            ) : slots.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">
+                    No available times for this date
+                </p>
+            ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
+                    {slots.map((slot) => {
+                        const timeLabel = format(parseISO(slot.start), "h:mm a")
+                        const isSelected = selectedSlot?.start === slot.start
+                        return (
+                            <Button
+                                key={slot.start}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onSlotSelect(slot)}
+                                className={`py-2 px-3 h-auto text-sm font-medium ${
+                                    isSelected
+                                        ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                                        : "hover:border-primary/50"
+                                }`}
+                            >
+                                {timeLabel}
+                            </Button>
+                        )
+                    })}
+                </div>
+            )}
+        </div>
+    )
+}
+
+function CancelPanel({
+    reason,
+    onReasonChange,
+    isSubmitting,
+    onCancel,
+}: {
+    reason: string
+    onReasonChange: (reason: string) => void
+    isSubmitting: boolean
+    onCancel: () => void
+}) {
+    return (
+        <div className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="cancel-reason">Reason for cancellation (optional)</Label>
+                <Textarea
+                    id="cancel-reason"
+                    value={reason}
+                    onChange={(event) => onReasonChange(event.target.value)}
+                    placeholder="Let us know why you're cancelling..."
+                    rows={3}
+                />
+            </div>
+
+            <Button
+                type="button"
+                variant="destructive"
+                className="w-full"
+                size="lg"
+                disabled={isSubmitting}
+                onClick={onCancel}
+            >
+                {isSubmitting ? <Loader2Icon className="size-4 mr-2 animate-spin" /> : null}
+                Cancel Appointment
+            </Button>
+        </div>
+    )
 }
 
 interface PageProps {
@@ -208,7 +610,7 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
         : null
     const viewMonth = viewMonthOverride ?? appointmentMonth
 
-    const calendarDays: Array<{ key: string; date: Date | null; isToday: boolean; isAvailable: boolean }> = []
+    const calendarDays: CalendarDay[] = []
     if (viewMonth && today) {
         const monthStart = startOfMonth(viewMonth)
         const startDay = getDay(monthStart)
@@ -293,80 +695,30 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
     }
 
     if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-            </div>
-        )
+        return <ManageLoadingState />
     }
 
     if (error && !appointment) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <Card className="max-w-md">
-                    <CardContent className="pt-6 text-center">
-                        <AlertCircleIcon className="size-12 mx-auto mb-4 text-destructive" />
-                        <h2 className="text-xl font-semibold mb-2">Unable to Manage Appointment</h2>
-                        <p className="text-muted-foreground">{error}</p>
-                    </CardContent>
-                </Card>
-            </div>
+            <ManageErrorState
+                title="Unable to Manage Appointment"
+                message={error}
+            />
         )
     }
 
-    if (successState === "rescheduled") {
-        return (
-            <div className="min-h-screen bg-background py-12">
-                <div className="max-w-lg mx-auto px-4">
-                    <Card>
-                        <CardContent className="pt-6 text-center">
-                            <div className="size-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-6">
-                                <CheckCircleIcon className="size-8 text-green-600" />
-                            </div>
-                            <h2 className="text-2xl font-semibold mb-2">Appointment Rescheduled</h2>
-                            <p className="text-muted-foreground">
-                                Your appointment has been updated. You will receive a confirmation email shortly.
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        )
-    }
-
-    if (successState === "cancelled") {
-        return (
-            <div className="min-h-screen bg-background py-12">
-                <div className="max-w-lg mx-auto px-4">
-                    <Card>
-                        <CardContent className="pt-6 text-center">
-                            <div className="size-16 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-6">
-                                <CheckCircleIcon className="size-8 text-green-600" />
-                            </div>
-                            <h2 className="text-2xl font-semibold mb-2">Appointment Cancelled</h2>
-                            <p className="text-muted-foreground">
-                                Your appointment has been cancelled. You will receive a confirmation email shortly.
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        )
+    if (successState) {
+        return <ManageSuccessState status={successState} />
     }
 
     if (appointment?.status === "cancelled") {
         return (
-            <div className="min-h-screen bg-background py-12">
-                <div className="max-w-lg mx-auto px-4">
-                    <Card>
-                        <CardContent className="pt-6 text-center">
-                            <AlertCircleIcon className="size-12 mx-auto mb-4 text-muted-foreground" />
-                            <h2 className="text-xl font-semibold mb-2">Already Cancelled</h2>
-                            <p className="text-muted-foreground">This appointment has already been cancelled.</p>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
+            <ManageErrorState
+                title="Already Cancelled"
+                message="This appointment has already been cancelled."
+                centered={false}
+                mutedIcon
+            />
         )
     }
 
@@ -381,225 +733,34 @@ export default function ManageAppointmentPage({ params, searchParams }: PageProp
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {appointment && (
-                            <div className="rounded-lg border border-border p-4 space-y-2">
-                                <p className="font-medium">{appointment.appointment_type_name || "Appointment"}</p>
-                                {appointment.staff_name ? (
-                                    <p className="text-sm text-muted-foreground">with {appointment.staff_name}</p>
-                                ) : null}
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <CalendarIcon className="size-4" />
-                                    {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
-                                </div>
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <ClockIcon className="size-4" />
-                                    {format(parseISO(appointment.scheduled_start), "h:mm a")} ({appointment.duration_minutes} min)
-                                </div>
-                            </div>
-                        )}
+                        <AppointmentSummary appointment={appointment} />
 
-                        <div className="inline-flex rounded-lg border border-border p-1">
-                            <Button
-                                type="button"
-                                variant={action === "reschedule" ? "default" : "ghost"}
-                                onClick={() => setAction("reschedule")}
-                                className="h-8 px-4"
-                            >
-                                Reschedule
-                            </Button>
-                            <Button
-                                type="button"
-                                variant={action === "cancel" ? "default" : "ghost"}
-                                onClick={() => setAction("cancel")}
-                                className="h-8 px-4"
-                            >
-                                Cancel
-                            </Button>
-                        </div>
+                        <AppointmentActionToggle action={action} onActionChange={setAction} />
 
                         {action === "reschedule" ? (
-                            <div className="space-y-5">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <GlobeIcon className="size-4 text-muted-foreground" />
-                                    <span className="text-muted-foreground">Timezone:</span>
-                                    <Select
-                                        value={timezone}
-                                        onValueChange={(value) => {
-                                            if (value) setTimezoneOverride(value)
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-auto h-8 text-sm">
-                                            <SelectValue>
-                                                {(value: string | null) => getTimezoneLabel(value, timezoneOptions)}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {timezoneOptions.map((option) => (
-                                                <SelectItem key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <p className="font-medium">Select New Date</p>
-                                    <Card>
-                                        <CardContent className="pt-4">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    disabled={!viewMonth}
-                                                    onClick={() => {
-                                                        if (viewMonth) setViewMonthOverride(addMonths(viewMonth, -1))
-                                                    }}
-                                                >
-                                                    <ChevronLeftIcon className="size-4" />
-                                                </Button>
-                                                <span className="font-medium">
-                                                    {viewMonth ? format(viewMonth, "MMMM yyyy") : "Loading calendar"}
-                                                </span>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    disabled={!viewMonth}
-                                                    onClick={() => {
-                                                        if (viewMonth) setViewMonthOverride(addMonths(viewMonth, 1))
-                                                    }}
-                                                >
-                                                    <ChevronRightIcon className="size-4" />
-                                                </Button>
-                                            </div>
-
-                                            <div className="grid grid-cols-7 text-center text-sm text-muted-foreground mb-2">
-                                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                                                    <div key={day} className="py-2">
-                                                        {day}
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="grid grid-cols-7 gap-1">
-                                                {calendarDays.map((day) => {
-                                                    if (!day.date) {
-                                                        return <div key={day.key} className="h-10" />
-                                                    }
-                                                    const isSelected = selectedDate
-                                                        ? isSameDay(day.date, selectedDate)
-                                                        : false
-                                                    return (
-                                                        <Button
-                                                            key={day.key}
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => {
-                                                                if (day.isAvailable) {
-                                                                    void loadSlotsForDate(day.date!)
-                                                                }
-                                                            }}
-                                                            disabled={!day.isAvailable}
-                                                            className={`h-10 text-sm font-medium ${
-                                                                isSelected
-                                                                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                                                                    : day.isToday
-                                                                      ? "bg-primary/10 text-primary hover:bg-primary/20"
-                                                                      : day.isAvailable
-                                                                        ? "hover:bg-muted"
-                                                                        : "text-muted-foreground/40"
-                                                            }`}
-                                                        >
-                                                            {getDate(day.date)}
-                                                        </Button>
-                                                    )
-                                                })}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-
-                                {selectedDate ? (
-                                    <div className="space-y-3">
-                                        <p className="font-medium">Select New Time</p>
-                                        {isLoadingSlots ? (
-                                            <div className="py-8 flex items-center justify-center">
-                                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                                            </div>
-                                        ) : slots.length === 0 ? (
-                                            <p className="text-muted-foreground text-center py-4">
-                                                No available times for this date
-                                            </p>
-                                        ) : (
-                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-                                                {slots.map((slot) => {
-                                                    const timeLabel = format(parseISO(slot.start), "h:mm a")
-                                                    const isSelected = selectedSlot?.start === slot.start
-                                                    return (
-                                                        <Button
-                                                            key={slot.start}
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() => setSelectedSlot(slot)}
-                                                            className={`py-2 px-3 h-auto text-sm font-medium ${
-                                                                isSelected
-                                                                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                                                                    : "hover:border-primary/50"
-                                                            }`}
-                                                        >
-                                                            {timeLabel}
-                                                        </Button>
-                                                    )
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : null}
-
-                                <Button
-                                    type="button"
-                                    className="w-full"
-                                    size="lg"
-                                    disabled={!selectedSlot || isSubmitting}
-                                    onClick={() => void handleReschedule()}
-                                >
-                                    {isSubmitting ? (
-                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                    ) : null}
-                                    Confirm Reschedule
-                                </Button>
-                            </div>
+                            <ReschedulePanel
+                                timezone={timezone}
+                                timezoneOptions={timezoneOptions}
+                                onTimezoneChange={setTimezoneOverride}
+                                viewMonth={viewMonth}
+                                onViewMonthChange={setViewMonthOverride}
+                                calendarDays={calendarDays}
+                                selectedDate={selectedDate}
+                                onDateSelect={(date) => void loadSlotsForDate(date)}
+                                isLoadingSlots={isLoadingSlots}
+                                slots={slots}
+                                selectedSlot={selectedSlot}
+                                onSlotSelect={setSelectedSlot}
+                                isSubmitting={isSubmitting}
+                                onConfirm={() => void handleReschedule()}
+                            />
                         ) : (
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="cancel-reason">Reason for cancellation (optional)</Label>
-                                    <Textarea
-                                        id="cancel-reason"
-                                        value={reason}
-                                        onChange={(event) => setReason(event.target.value)}
-                                        placeholder="Let us know why you're cancelling..."
-                                        rows={3}
-                                    />
-                                </div>
-
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    className="w-full"
-                                    size="lg"
-                                    disabled={isSubmitting}
-                                    onClick={() => void handleCancel()}
-                                >
-                                    {isSubmitting ? (
-                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                    ) : null}
-                                    Cancel Appointment
-                                </Button>
-                            </div>
+                            <CancelPanel
+                                reason={reason}
+                                onReasonChange={setReason}
+                                isSubmitting={isSubmitting}
+                                onCancel={() => void handleCancel()}
+                            />
                         )}
 
                         {error ? (

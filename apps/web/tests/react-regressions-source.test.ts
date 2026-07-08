@@ -2580,6 +2580,24 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("<SelectValue />")
     })
 
+    it("keeps self-service manage appointment rendering split into focused helpers", () => {
+        const source = readSource("app/book/self-service/[orgId]/manage/[token]/page.tsx")
+        const pageSource = readFunctionSource(source, "ManageAppointmentPage")
+
+        expect(source).toContain("function ManageLoadingState")
+        expect(source).toContain("function ManageErrorState")
+        expect(source).toContain("function ManageSuccessState")
+        expect(source).toContain("function AppointmentSummary")
+        expect(source).toContain("function AppointmentActionToggle")
+        expect(source).toContain("function ReschedulePanel")
+        expect(source).toContain("function ManageCalendarGrid")
+        expect(source).toContain("function ManageSlotsGrid")
+        expect(source).toContain("function CancelPanel")
+        expect(pageSource).not.toContain("Appointment Rescheduled")
+        expect(pageSource).not.toContain("Select New Date")
+        expect(pageSource).not.toContain("Cancel Appointment")
+    })
+
     it("keeps form builder document hook compiler-derived", () => {
         const source = readSource("lib/forms/use-form-builder-document.ts")
 

@@ -4490,3 +4490,23 @@ Full command after Batch 206: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 28 warnings`
 - Removed globally since Batch 205: forms list page `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fee734b7-75be-423c-b65c-3882d0546f7d`
+
+## Batch 207
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/book/self-service/[orgId]/manage/[token]/page.tsx:126` | Valid. `ManageAppointmentPage` owned loading/error/success states, appointment summary, action toggle, timezone selector, calendar grid, time-slot grid, and cancellation form in one component. | High | Extracted `ManageLoadingState`, `ManageErrorState`, `ManageSuccessState`, `AppointmentSummary`, `AppointmentActionToggle`, `ReschedulePanel`, `ManageCalendarGrid`, `ManageSlotsGrid`, and `CancelPanel` while keeping route parsing, API calls, timezone derivation, slot loading, and submit handlers in the page controller. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "self-service manage appointment rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "self-service manage appointment rendering"`; `pnpm test --run tests/self-service-manage-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 207: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 207: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `41`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 27 warnings`
+- Removed globally since Batch 206: self-service manage appointment page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2e26bef8-2211-4201-bcf0-16cccc91755d`
