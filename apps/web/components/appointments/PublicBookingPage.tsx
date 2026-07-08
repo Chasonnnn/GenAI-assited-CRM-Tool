@@ -13,7 +13,7 @@
  * - Confirmation view
  */
 
-import { startTransition, useState, useEffect } from "react"
+import { startTransition, useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -64,9 +64,11 @@ import {
     isPastDateKey,
 } from "@/lib/utils/date-keys"
 
+const DEFAULT_TIMEZONE = "America/Los_Angeles"
+
 // Timezone options
 const TIMEZONE_OPTIONS = [
-    { value: "America/Los_Angeles", label: "Pacific Time (US)" },
+    { value: DEFAULT_TIMEZONE, label: "Pacific Time (US)" },
     { value: "America/Phoenix", label: "Arizona (US)" },
     { value: "America/Denver", label: "Mountain Time (US)" },
     { value: "America/Chicago", label: "Central Time (US)" },
@@ -215,6 +217,32 @@ function getInitialBookingDateRange() {
     const start = format(new Date(), "yyyy-MM-dd")
     const end = format(addDays(new Date(), 30), "yyyy-MM-dd")
     return { start, end }
+}
+
+function subscribeTimezoneSnapshot() {
+    return () => {}
+}
+
+function getInitialClientTimezone() {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
+    } catch {
+        return DEFAULT_TIMEZONE
+    }
+}
+
+function getServerTimezoneSnapshot() {
+    return DEFAULT_TIMEZONE
+}
+
+function getEffectiveBookingTimezone(
+    timezoneOverride: string | null,
+    orgTimezone: string | null | undefined,
+    detectedTimezone: string
+) {
+    if (timezoneOverride) return timezoneOverride
+    if (detectedTimezone === DEFAULT_TIMEZONE && orgTimezone) return orgTimezone
+    return detectedTimezone
 }
 
 function getAvailableDates(slots: TimeSlot[] | undefined, timezone: string) {
@@ -1006,21 +1034,12 @@ export function PublicBookingPage({
     const [selectedMeetingMode, setSelectedMeetingMode] = useState<MeetingMode | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
-    const [timezone, setTimezone] = useState("America/Los_Angeles")
-
-    // Auto-detect timezone
-    useEffect(() => {
-        try {
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-            if (tz) {
-                startTransition(() => {
-                    setTimezone(tz)
-                })
-            }
-        } catch {
-            // Use default
-        }
-    }, [])
+    const detectedTimezone = useSyncExternalStore(
+        subscribeTimezoneSnapshot,
+        getInitialClientTimezone,
+        getServerTimezoneSnapshot
+    )
+    const [timezoneOverride, setTimezoneOverride] = useState<string | null>(null)
 
     // Queries
     const publicPageQuery = usePublicBookingPage(publicSlug, !isPreview)
@@ -1028,15 +1047,11 @@ export function PublicBookingPage({
     const pageData = isPreview ? previewPageQuery.data : publicPageQuery.data
     const isLoadingPage = isPreview ? previewPageQuery.isLoading : publicPageQuery.isLoading
     const pageError = isPreview ? previewPageQuery.error : publicPageQuery.error
-
-    useEffect(() => {
-        const orgTimezone = pageData?.org_timezone
-        if (orgTimezone && timezone === "America/Los_Angeles") {
-            startTransition(() => {
-                setTimezone(orgTimezone)
-            })
-        }
-    }, [pageData?.org_timezone, timezone])
+    const timezone = getEffectiveBookingTimezone(
+        timezoneOverride,
+        pageData?.org_timezone,
+        detectedTimezone
+    )
 
     const timezoneOptions = getTimezoneOptions(timezone)
     const [dateRange] = useState(getInitialBookingDateRange)
@@ -1197,7 +1212,7 @@ export function PublicBookingPage({
                         <div className="flex items-center gap-2 text-sm">
                             <GlobeIcon className="size-4 text-muted-foreground" />
                             <span className="text-muted-foreground">Timezone:</span>
-                            <Select value={timezone} onValueChange={(v) => v && setTimezone(v)}>
+                            <Select value={timezone} onValueChange={(v) => v && setTimezoneOverride(v)}>
                                 <SelectTrigger className="w-auto h-8 text-sm">
                                     <SelectValue />
                                 </SelectTrigger>

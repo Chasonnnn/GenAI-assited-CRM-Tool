@@ -4197,3 +4197,24 @@ Full command after Batch 192: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 36 warnings`, `Performance 2 warnings`, `Maintainability 36 warnings`
 - Full diagnostics remain dominated by `query-mutation-missing-invalidation`, `no-event-handler`, `no-giant-component`, and `prefer-useReducer`; no accessibility diagnostics remain in the current full scan.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-39d2fcab-f7ac-44ba-8c05-74d751e4f24e`
+
+## Batch 193
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `components/appointments/PublicBookingPage.tsx:1001`, `components/appointments/PublicBookingPage.tsx:1034` | Valid. Public booking set timezone defaults from browser and org data through effects, adding extra renders and effect-driven state mirroring for a value that can be derived at render time. | High | Added `getInitialClientTimezone` with `useSyncExternalStore`, kept a `timezoneOverride` only for user selection, and derived `timezone` from override, org timezone when the detected/default timezone is still Pacific, otherwise the detected timezone. Updated the timezone select to set only the override. Added behavior and source guards preventing the effect-driven `setTimezone` path from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "public booking timezone defaults"` failed before the refactor. GREEN: same source guard; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm test --run tests/appointments-google-meet.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor no longer reports these `no-event-handler` findings. |
+
+Changed-scope command after Batch 193: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Bugs 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/prefer-useReducer` in `components/appointments/PublicBookingPage.tsx:1028`.
+
+Full command after Batch 193: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `86 / 100`
+- Total diagnostics: `71`
+- Summary: `Bugs 34 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 192: public booking timezone effect warnings (`2` `no-event-handler` warnings) and the broader public booking giant-component diagnostic. The public booking reducer diagnostic remains valid but separate.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cba3c2aa-1800-4758-8978-74167d277c3d`

@@ -398,6 +398,54 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByText(/^[A-Z][a-z]+ \d{4}$/)).toHaveAttribute("aria-live", "polite")
     })
 
+    it("uses the organization timezone for public booking slots when detection is still Pacific", () => {
+        const originalDateTimeFormat = Intl.DateTimeFormat
+        const dateTimeFormatSpy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation((
+            (locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) => {
+                const formatter = originalDateTimeFormat(locales, options)
+                if (locales === undefined && options === undefined) {
+                    return Object.assign(formatter, {
+                        resolvedOptions: () => ({
+                            ...formatter.resolvedOptions(),
+                            timeZone: "America/Los_Angeles",
+                        }),
+                    })
+                }
+                return formatter
+            }
+        ) as typeof Intl.DateTimeFormat)
+
+        try {
+            mockUsePublicBookingPage.mockReturnValue({
+                data: {
+                    staff: {
+                        user_id: "u1",
+                        display_name: "Test User",
+                        avatar_url: null,
+                    },
+                    appointment_types: [],
+                    org_name: "Demo Org",
+                    org_timezone: "America/New_York",
+                },
+                isLoading: false,
+                error: null,
+            })
+
+            render(<PublicBookingPage publicSlug="timezone" />)
+
+            expect(mockUseAvailableSlots).toHaveBeenLastCalledWith(
+                "timezone",
+                "",
+                expect.any(String),
+                expect.any(String),
+                "America/New_York",
+                true
+            )
+        } finally {
+            dateTimeFormatSpy.mockRestore()
+        }
+    })
+
     it("shows Google Meet join link in appointment details", () => {
         const scheduledStart = new Date("2024-02-01T18:00:00Z").toISOString()
         const scheduledEnd = new Date("2024-02-01T18:30:00Z").toISOString()

@@ -2109,6 +2109,23 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setIsConfirmed")
     })
 
+    it("keeps public booking timezone defaults render-derived", () => {
+        const source = readSource("components/appointments/PublicBookingPage.tsx")
+
+        expect(source).toContain("function getInitialClientTimezone")
+        expect(source).toContain("function getEffectiveBookingTimezone")
+        expect(source).toContain("if (detectedTimezone === DEFAULT_TIMEZONE && orgTimezone) return orgTimezone")
+        expect(source).toContain("useSyncExternalStore(")
+        expect(source).toContain("const [timezoneOverride, setTimezoneOverride] = useState<string | null>(null)")
+        expect(source).toContain("const timezone = getEffectiveBookingTimezone(")
+        expect(source).toContain("pageData?.org_timezone,")
+        expect(source).toContain("detectedTimezone")
+        expect(source).toContain("onValueChange={(v) => v && setTimezoneOverride(v)}")
+        expect(source).not.toContain("const [timezone, setTimezone]")
+        expect(source).not.toContain("setTimezone(tz)")
+        expect(source).not.toContain("setTimezone(orgTimezone)")
+    })
+
     it("uses gap spacing for match dialog radio rows", () => {
         const addTaskSource = readSource("components/matches/AddTaskDialog.tsx")
         const uploadFileSource = readSource("components/matches/UploadFileDialog.tsx")
