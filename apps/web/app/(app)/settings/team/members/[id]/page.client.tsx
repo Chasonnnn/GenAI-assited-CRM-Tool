@@ -32,9 +32,19 @@ import {
     useRemoveMember,
     useAvailablePermissions,
 } from "@/lib/hooks/use-permissions"
+import type { MemberDetail } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "sonner"
 import { formatDate, formatRelativeTime } from "@/lib/formatters"
+
+type DisplayedOverride = MemberDetail["overrides"][number]
+
+const ROLE_LABELS: Record<string, string> = {
+    intake_specialist: "Intake Specialist",
+    case_manager: "Case Manager",
+    admin: "Admin",
+    developer: "Developer",
+}
 
 function AddOverrideDialog({
     open,
@@ -52,6 +62,8 @@ function AddOverrideDialog({
     const [permission, setPermission] = useState("")
     const [type, setType] = useState<"grant" | "revoke">("grant")
     const { data: allPermissions } = useAvailablePermissions()
+    const existingOverrideKeys = new Set(existingOverrides)
+    const effectivePermissionKeys = new Set(effectivePermissions)
 
     // Filter permissions based on override type:
     // - Grant: show permissions user DOESN'T have (not in effective && not developer_only)
@@ -59,16 +71,16 @@ function AddOverrideDialog({
     // Always exclude already overridden permissions
     const availablePermissions = allPermissions?.filter(p => {
         // Skip if already has an override for this permission
-        if (existingOverrides.includes(p.key)) return false
+        if (existingOverrideKeys.has(p.key)) return false
         // Skip developer_only permissions for non-developers
         if (p.developer_only) return false
 
         if (type === "grant") {
             // Grant: only show permissions they DON'T currently have
-            return !effectivePermissions.includes(p.key)
+            return !effectivePermissionKeys.has(p.key)
         } else {
             // Revoke: only show permissions they DO currently have
-            return effectivePermissions.includes(p.key)
+            return effectivePermissionKeys.has(p.key)
         }
     }) || []
 
@@ -264,8 +276,9 @@ export default function MemberDetailPage() {
     if (!member) return null
 
     // Combine existing overrides with pending changes
+    const pendingOverrideRemovals = new Set(pendingOverrides.remove)
     const displayedOverrides = [
-        ...member.overrides.filter(o => !pendingOverrides.remove.includes(o.permission)),
+        ...member.overrides.filter(o => !pendingOverrideRemovals.has(o.permission)),
         ...pendingOverrides.add.map(o => ({
             permission: o.permission,
             override_type: o.override_type,
@@ -278,208 +291,285 @@ export default function MemberDetailPage() {
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
-            <div className="flex items-center justify-between">
-                <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
-                    <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
-                    Back to Team
-                </Button>
-                {hasChanges && (
-                    <Button onClick={handleSave} disabled={updateMember.isPending}>
-                        {updateMember.isPending ? (
-                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        ) : (
-                            <Save className="size-4 mr-2" aria-hidden="true" />
-                        )}
-                        Save Changes
-                    </Button>
-                )}
-            </div>
+            <MemberDetailToolbar
+                hasChanges={hasChanges}
+                isSaving={updateMember.isPending}
+                onSave={handleSave}
+            />
 
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center justify-center size-16 rounded-full bg-muted">
-                            <User className="size-8 text-muted-foreground" aria-hidden="true" />
-                        </div>
-                        <div className="flex-1">
-                            <CardTitle className="text-xl flex items-center gap-2">
-                                {member.display_name || member.email}
-                                {isCurrentUser && (
-                                    <Badge variant="outline">You</Badge>
-                                )}
-                            </CardTitle>
-                            <CardDescription>{member.email}</CardDescription>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <span className="text-muted-foreground">Joined</span>
-                            <p className="font-medium">
-                                {formatDate(member.created_at, { dateStyle: "long" }, "—")}
-                            </p>
-                        </div>
-                        <div>
-                            <span className="text-muted-foreground">Last Login</span>
-                            <p className="font-medium flex items-center gap-1">
-                                {member.last_login_at ? (
-                                    <>
-                                        <Clock className="size-3" aria-hidden="true" />
-                                        {formatRelativeTime(member.last_login_at, "—")}
-                                    </>
-                                ) : (
-                                    "Never"
-                                )}
-                            </p>
-                        </div>
-                    </div>
+            <MemberProfileCard
+                member={member}
+                isCurrentUser={isCurrentUser}
+                currentRole={currentRole}
+                pendingRole={pendingRole}
+                isDeveloper={isDeveloper}
+                onRoleChange={handleRoleChange}
+            />
 
-                    <div className="space-y-2">
-                        <Label htmlFor="member-role">Role</Label>
-                        <Select
-                            value={currentRole}
-                            onValueChange={handleRoleChange}
-                            disabled={isCurrentUser}
-                        >
-                            <SelectTrigger id="member-role" className={pendingRole ? "border-yellow-400 bg-yellow-50" : ""}>
-                                <SelectValue>
-                                    {(value: string | null) => {
-                                        const labels: Record<string, string> = {
-                                            intake_specialist: "Intake Specialist",
-                                            case_manager: "Case Manager",
-                                            admin: "Admin",
-                                            developer: "Developer",
-                                        }
-                                        return labels[value ?? ""] ?? "Select role"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
-                                <SelectItem value="case_manager">Case Manager</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                {isDeveloper && (
-                                    <SelectItem value="developer">Developer</SelectItem>
-                                )}
-                            </SelectContent>
-                        </Select>
-                        {isCurrentUser && (
-                            <p className="text-xs text-muted-foreground">
-                                You cannot change your own role.
-                            </p>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <Shield className="size-5" aria-hidden="true" />
-                                Permission Overrides
-                            </CardTitle>
-                            <CardDescription>
-                                Grant or revoke individual permissions beyond the role defaults.
-                            </CardDescription>
-                        </div>
-                        {!isCurrentUser && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowOverrideDialog(true)}
-                            >
-                                <Plus className="size-4 mr-1" aria-hidden="true" />
-                                Add Override
-                            </Button>
-                        )}
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {displayedOverrides.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                            No permission overrides. This user has the standard permissions for their role.
-                        </p>
-                    ) : (
-                        <div className="space-y-2">
-                            {displayedOverrides.map((override) => (
-                                <div
-                                    key={override.permission}
-                                    className={`flex items-center justify-between p-3 rounded-lg ${override.category === "Pending"
-                                        ? "bg-yellow-50 border border-yellow-200"
-                                        : "bg-muted/50"
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        {override.override_type === "grant" ? (
-                                            <Check className="size-5 text-green-600" aria-hidden="true" />
-                                        ) : (
-                                            <XCircle className="size-5 text-red-600" aria-hidden="true" />
-                                        )}
-                                        <div>
-                                            <p className="font-medium">{override.label}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {override.override_type === "grant" ? "Granted" : "Revoked"} • {override.category}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    {!isCurrentUser && (
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleRemoveOverride(override.permission)}
-                                            aria-label={`Remove ${override.label} override`}
-                                        >
-                                            <X className="size-4" aria-hidden="true" />
-                                        </Button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+            <PermissionOverridesCard
+                displayedOverrides={displayedOverrides}
+                isCurrentUser={isCurrentUser}
+                onAddOverride={() => setShowOverrideDialog(true)}
+                onRemoveOverride={handleRemoveOverride}
+            />
 
             {!isCurrentUser && (
-                <Card className="border-destructive/50">
-                    <CardHeader>
-                        <CardTitle className="text-destructive flex items-center gap-2">
-                            <AlertTriangle className="size-5" aria-hidden="true" />
-                            Danger Zone
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="font-medium">Remove from organization</p>
-                                <p className="text-sm text-muted-foreground">
-                                    This will revoke all access and delete permission overrides.
-                                </p>
-                            </div>
-                            <Button
-                                variant="destructive"
-                                onClick={handleRemoveMember}
-                                disabled={removeMember.isPending}
-                            >
-                                {removeMember.isPending && (
-                                    <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                )}
-                                Remove Member
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                <DangerZoneCard
+                    isRemoving={removeMember.isPending}
+                    onRemoveMember={handleRemoveMember}
+                />
             )}
 
             <AddOverrideDialog
                 open={showOverrideDialog}
                 onOpenChange={setShowOverrideDialog}
                 onAdd={handleAddOverride}
-                existingOverrides={displayedOverrides.map(o => o.permission)}
+                existingOverrides={getOverridePermissions(displayedOverrides)}
                 effectivePermissions={member?.effective_permissions || []}
             />
         </div>
+    )
+}
+
+function getOverridePermissions(overrides: DisplayedOverride[]) {
+    return overrides.map(o => o.permission)
+}
+
+function MemberDetailToolbar({
+    hasChanges,
+    isSaving,
+    onSave,
+}: {
+    hasChanges: boolean
+    isSaving: boolean
+    onSave: () => void
+}) {
+    return (
+        <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
+                <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
+                Back to Team
+            </Button>
+            {hasChanges && (
+                <Button onClick={onSave} disabled={isSaving}>
+                    {isSaving ? (
+                        <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    ) : (
+                        <Save className="size-4 mr-2" aria-hidden="true" />
+                    )}
+                    Save Changes
+                </Button>
+            )}
+        </div>
+    )
+}
+
+function MemberProfileCard({
+    member,
+    isCurrentUser,
+    currentRole,
+    pendingRole,
+    isDeveloper,
+    onRoleChange,
+}: {
+    member: MemberDetail
+    isCurrentUser: boolean
+    currentRole: string
+    pendingRole: string | null
+    isDeveloper: boolean
+    onRoleChange: (newRole: string | null) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-center size-16 rounded-full bg-muted">
+                        <User className="size-8 text-muted-foreground" aria-hidden="true" />
+                    </div>
+                    <div className="flex-1">
+                        <CardTitle className="text-xl flex items-center gap-2">
+                            {member.display_name || member.email}
+                            {isCurrentUser && (
+                                <Badge variant="outline">You</Badge>
+                            )}
+                        </CardTitle>
+                        <CardDescription>{member.email}</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span className="text-muted-foreground">Joined</span>
+                        <p className="font-medium">
+                            {formatDate(member.created_at, { dateStyle: "long" }, "—")}
+                        </p>
+                    </div>
+                    <div>
+                        <span className="text-muted-foreground">Last Login</span>
+                        <p className="font-medium flex items-center gap-1">
+                            {member.last_login_at ? (
+                                <>
+                                    <Clock className="size-3" aria-hidden="true" />
+                                    {formatRelativeTime(member.last_login_at, "—")}
+                                </>
+                            ) : (
+                                "Never"
+                            )}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="member-role">Role</Label>
+                    <Select
+                        value={currentRole}
+                        onValueChange={onRoleChange}
+                        disabled={isCurrentUser}
+                    >
+                        <SelectTrigger id="member-role" className={pendingRole ? "border-yellow-400 bg-yellow-50" : ""}>
+                            <SelectValue>
+                                {(value: string | null) => ROLE_LABELS[value ?? ""] ?? "Select role"}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="intake_specialist">Intake Specialist</SelectItem>
+                            <SelectItem value="case_manager">Case Manager</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            {isDeveloper && (
+                                <SelectItem value="developer">Developer</SelectItem>
+                            )}
+                        </SelectContent>
+                    </Select>
+                    {isCurrentUser && (
+                        <p className="text-xs text-muted-foreground">
+                            You cannot change your own role.
+                        </p>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function PermissionOverridesCard({
+    displayedOverrides,
+    isCurrentUser,
+    onAddOverride,
+    onRemoveOverride,
+}: {
+    displayedOverrides: DisplayedOverride[]
+    isCurrentUser: boolean
+    onAddOverride: () => void
+    onRemoveOverride: (permission: string) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Shield className="size-5" aria-hidden="true" />
+                            Permission Overrides
+                        </CardTitle>
+                        <CardDescription>
+                            Grant or revoke individual permissions beyond the role defaults.
+                        </CardDescription>
+                    </div>
+                    {!isCurrentUser && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onAddOverride}
+                        >
+                            <Plus className="size-4 mr-1" aria-hidden="true" />
+                            Add Override
+                        </Button>
+                    )}
+                </div>
+            </CardHeader>
+            <CardContent>
+                {displayedOverrides.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                        No permission overrides. This user has the standard permissions for their role.
+                    </p>
+                ) : (
+                    <div className="space-y-2">
+                        {displayedOverrides.map((override) => (
+                            <div
+                                key={override.permission}
+                                className={`flex items-center justify-between p-3 rounded-lg ${override.category === "Pending"
+                                    ? "bg-yellow-50 border border-yellow-200"
+                                    : "bg-muted/50"
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    {override.override_type === "grant" ? (
+                                        <Check className="size-5 text-green-600" aria-hidden="true" />
+                                    ) : (
+                                        <XCircle className="size-5 text-red-600" aria-hidden="true" />
+                                    )}
+                                    <div>
+                                        <p className="font-medium">{override.label}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {override.override_type === "grant" ? "Granted" : "Revoked"} • {override.category}
+                                        </p>
+                                    </div>
+                                </div>
+                                {!isCurrentUser && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => onRemoveOverride(override.permission)}
+                                        aria-label={`Remove ${override.label} override`}
+                                    >
+                                        <X className="size-4" aria-hidden="true" />
+                                    </Button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function DangerZoneCard({
+    isRemoving,
+    onRemoveMember,
+}: {
+    isRemoving: boolean
+    onRemoveMember: () => void
+}) {
+    return (
+        <Card className="border-destructive/50">
+            <CardHeader>
+                <CardTitle className="text-destructive flex items-center gap-2">
+                    <AlertTriangle className="size-5" aria-hidden="true" />
+                    Danger Zone
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="font-medium">Remove from organization</p>
+                        <p className="text-sm text-muted-foreground">
+                            This will revoke all access and delete permission overrides.
+                        </p>
+                    </div>
+                    <Button
+                        variant="destructive"
+                        onClick={onRemoveMember}
+                        disabled={isRemoving}
+                    >
+                        {isRemoving && (
+                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        )}
+                        Remove Member
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
     )
 }

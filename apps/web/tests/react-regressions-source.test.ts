@@ -649,6 +649,37 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("Intake Pool Access")
     })
 
+    it("uses Sets for team member permission membership checks", () => {
+        const source = readSource("app/(app)/settings/team/members/[id]/page.client.tsx")
+
+        expect(source).toContain("const existingOverrideKeys = new Set(existingOverrides)")
+        expect(source).toContain("const effectivePermissionKeys = new Set(effectivePermissions)")
+        expect(source).toContain("const pendingOverrideRemovals = new Set(pendingOverrides.remove)")
+        expect(source).not.toContain("existingOverrides.includes(")
+        expect(source).not.toContain("effectivePermissions.includes(")
+        expect(source).not.toContain("pendingOverrides.remove.includes(")
+    })
+
+    it("keeps team member detail rendering split into focused sections", () => {
+        const source = readSource("app/(app)/settings/team/members/[id]/page.client.tsx")
+        const pageIndex = source.indexOf("export default function MemberDetailPage()")
+        const firstHelperIndex = source.indexOf("function MemberDetailToolbar")
+        const pageSource = source.slice(
+            pageIndex,
+            firstHelperIndex > pageIndex ? firstHelperIndex : undefined
+        )
+
+        expect(pageIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function MemberDetailToolbar")
+        expect(source).toContain("function MemberProfileCard")
+        expect(source).toContain("function PermissionOverridesCard")
+        expect(source).toContain("function DangerZoneCard")
+        expect(pageSource).not.toContain("Last Login")
+        expect(pageSource).not.toContain("Permission Overrides")
+        expect(pageSource).not.toContain("Danger Zone")
+        expect(pageSource).not.toContain("displayedOverrides.map")
+    })
+
     it("keeps test-only factories and interview internals private", () => {
         const handlersSource = readSource("tests/mocks/handlers.ts")
         const interviewWrapperSource = readSource("components/surrogates/interviews/SurrogateInterviewTab.tsx")
