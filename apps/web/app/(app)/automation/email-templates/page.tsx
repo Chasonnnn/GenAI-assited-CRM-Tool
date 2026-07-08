@@ -316,6 +316,14 @@ type TextSelectionRef = React.MutableRefObject<{ start: number; end: number } | 
 const PREVIEW_FONT_STACK =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
 
+function hasAdvancedTemplateHtml(body: string | null | undefined) {
+    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body || "")
+}
+
+function getTemplateBodyMode(body: string | null | undefined): EditorMode {
+    return hasAdvancedTemplateHtml(body) ? "html" : "visual"
+}
+
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
     const matches = text.match(/{{\s*([a-zA-Z0-9_]+)\s*}}/g) ?? []
@@ -723,9 +731,8 @@ export default function EmailTemplatesPage() {
     const [editingTemplate, setEditingTemplate] = useState<EmailTemplateListItem | null>(null)
     const [templateName, setTemplateName] = useState("")
     const [templateSubject, setTemplateSubject] = useState("")
-    const [templateBody, setTemplateBody] = useState("")
-    const [templateBodyMode, setTemplateBodyMode] = useState<EditorMode>("visual")
-    const templateBodyModeTouchedRef = useRef(false)
+    const [templateBodyOverride, setTemplateBodyOverride] = useState<string | null>(null)
+    const [templateBodyModeOverride, setTemplateBodyModeOverride] = useState<EditorMode | null>(null)
     const [templateScope, setTemplateScope] = useState<EmailTemplateScope>("personal")
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
@@ -768,8 +775,6 @@ export default function EmailTemplatesPage() {
     const [signatureLinkedin, setSignatureLinkedin] = useState("")
     const [signatureTwitter, setSignatureTwitter] = useState("")
     const [signatureInstagram, setSignatureInstagram] = useState("")
-
-    const hasComplexHtml = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(templateBody)
 
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
@@ -819,6 +824,15 @@ export default function EmailTemplatesPage() {
         testSendTarget?.id || null
     )
     const { data: libraryTemplateDetail } = useEmailTemplateLibraryItem(libraryPreviewId)
+    const templateBody = templateBodyOverride ?? (editingTemplate ? fullTemplate?.body ?? "" : "")
+    const templateBodyMode = templateBodyModeOverride ?? getTemplateBodyMode(editingTemplate ? fullTemplate?.body : null)
+    const hasComplexHtml = hasAdvancedTemplateHtml(templateBody)
+    const setTemplateBodyDraft: React.Dispatch<React.SetStateAction<string>> = (nextValue) => {
+        setTemplateBodyOverride((currentOverride) => {
+            const currentBody = currentOverride ?? (editingTemplate ? fullTemplate?.body ?? "" : "")
+            return typeof nextValue === "function" ? nextValue(currentBody) : nextValue
+        })
+    }
 
     const testSendUsedVariables = testSendTemplateDetail
         ? extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
@@ -890,37 +904,21 @@ export default function EmailTemplatesPage() {
             setEditingTemplate(template)
             setTemplateName(template.name)
             setTemplateSubject(template.subject)
-            setTemplateBody("")
+            setTemplateBodyOverride(null)
             setTemplateScope(template.scope)
-            setTemplateBodyMode("visual")
-            templateBodyModeTouchedRef.current = false
+            setTemplateBodyModeOverride(null)
             activeInsertionTargetRef.current = null
         } else {
             setEditingTemplate(null)
             setTemplateName("")
             setTemplateSubject("")
-            setTemplateBody("")
+            setTemplateBodyOverride(null)
             setTemplateScope(scope)
-            setTemplateBodyMode("visual")
-            templateBodyModeTouchedRef.current = false
+            setTemplateBodyModeOverride(null)
             activeInsertionTargetRef.current = null
         }
         setIsModalOpen(true)
     }
-
-    useEffect(() => {
-        if (!fullTemplate || !editingTemplate || !fullTemplate.body) return
-        React.startTransition(() => {
-            if (!templateBody) {
-                setTemplateBody(fullTemplate.body)
-            }
-            if (!templateBodyModeTouchedRef.current) {
-                const complex = /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(fullTemplate.body)
-                setTemplateBodyMode(complex ? "html" : "visual")
-                activeInsertionTargetRef.current = null
-            }
-        })
-    }, [fullTemplate, editingTemplate, templateBody])
 
     const handleSave = () => {
         if (!templateName.trim() || !templateSubject.trim() || !templateBody.trim()) return
@@ -1128,7 +1126,7 @@ export default function EmailTemplatesPage() {
             return
         }
         if (activeInsertionTarget === "body_html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, token)
+            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBodyDraft, token)
             return
         }
         if (activeInsertionTarget === "body_visual") {
@@ -1137,7 +1135,7 @@ export default function EmailTemplatesPage() {
         }
 
         if (templateBodyMode === "html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, token)
+            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBodyDraft, token)
             return
         }
         visualBodyRef.current?.insertText(token)
@@ -1151,7 +1149,7 @@ export default function EmailTemplatesPage() {
             activeInsertionTargetRef.current = "body_visual"
             return
         }
-        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBody, logo)
+        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBodyDraft, logo)
         activeInsertionTargetRef.current = "body_html"
     }
 
@@ -1876,8 +1874,7 @@ export default function EmailTemplatesPage() {
                                         onValueChange={(value) => {
                                             const next = value[0] as EditorMode | undefined
                                             if (!next) return
-                                            setTemplateBodyMode(next)
-                                            templateBodyModeTouchedRef.current = true
+                                            setTemplateBodyModeOverride(next)
                                             const current = activeInsertionTargetRef.current
                                             activeInsertionTargetRef.current = current === "subject"
                                                 ? current
@@ -1914,7 +1911,7 @@ export default function EmailTemplatesPage() {
                                 <RichTextEditor
                                     ref={visualBodyRef}
                                     content={templateBody}
-                                    onChange={(html) => setTemplateBody(html)}
+                                    onChange={(html) => setTemplateBodyOverride(html)}
                                     onFocus={() => {
                                         activeInsertionTargetRef.current = "body_visual"
                                     }}
@@ -1931,7 +1928,7 @@ export default function EmailTemplatesPage() {
                                     aria-labelledby="template-body-label"
                                     ref={htmlBodyRef}
                                     value={templateBody}
-                                    onChange={(event) => setTemplateBody(event.target.value)}
+                                    onChange={(event) => setTemplateBodyOverride(event.target.value)}
                                     onFocus={(event) => {
                                         activeInsertionTargetRef.current = "body_html"
                                         recordSelection(event.currentTarget, htmlBodySelectionRef)

@@ -4223,7 +4223,7 @@ Full command after Batch 193: `cd apps/web && npx -y react-doctor@latest . --ver
 
 | Rule | Files | Verdict | Confidence | Action | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `react-doctor/no-event-handler` | `app/(app)/surrogates/page.client.tsx:855`, `app/(app)/surrogates/page.client.tsx:913-931`, `app/(app)/surrogates/page.client.tsx:934-946`, `app/(app)/surrogates/page.client.tsx:950` | Valid. The surrogate list mirrored URL params into local filter/search/page/sort state through effects, then pushed debounced search back to the URL from another effect. | High | Added `readSurrogateListUrlState` and canonical search-param normalization, derived committed filter state from the current URL, kept only keyed draft search state, and moved debounced search URL replacement into the search input handler. Removed the old exhaustive-deps suppression because the URL mirror effect is gone. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate list filters"` failed before the refactor. GREEN: `pnpm test --run tests/surrogates.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor no longer reports these `no-event-handler` findings. |
+| `react-doctor/no-event-handler` | `app/(app)/surrogates/page.client.tsx:855`, `app/(app)/surrogates/page.client.tsx:913-931`, `app/(app)/surrogates/page.client.tsx:934-946`, `app/(app)/surrogates/page.client.tsx:950` | Valid. The surrogate list mirrored URL params into local filter/search/page/sort state through effects, then pushed debounced search back to the URL from another effect. | High | Added `readSurrogateListUrlState` and canonical search-param normalization, derived committed filter state from the current URL, kept only keyed draft search state, and moved debounced search URL replacement into the search input handler. Removed the old exhaustive-deps suppression because the URL mirror effect is gone. Follow-up: canceled pending debounced search commits when `currentQuery` changes so browser back/forward cannot be clobbered by stale filter closures. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate list filters"` failed before the refactor. RED follow-up: `pnpm test --run tests/surrogates.test.tsx -t "cancels pending search"` reproduced stale `/surrogates?stage=s1&q=draft` replacement before the cleanup. GREEN: `pnpm test --run tests/surrogates.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor no longer reports these `no-event-handler` findings. |
 
 Changed-scope command after Batch 194: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
 
@@ -4239,3 +4239,47 @@ Full command after Batch 194: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 19 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
 - Removed globally since Batch 193: surrogate list URL/search mirror effects and the surrogate page `prefer-useReducer` warning (`15` total diagnostics removed). Remaining `no-event-handler` diagnostics are now limited to email templates, tasks focus view, and intake draft loading.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b2bdf1e-9578-4463-b7ae-e26e4a7cf095`
+
+## Batch 195
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `app/(app)/automation/email-templates/page.tsx:914` | Valid. The email template modal copied the fetched full template body and body-mode into draft state through an effect, adding an extra render and delaying modal body hydration behind state synchronization. | High | Derived the modal body and editor mode from `fullTemplate` while the user has not edited them, then kept explicit body/body-mode overrides only after user interaction. Modal open now resets those overrides instead of clearing and rehydrating state through an effect. Added behavior coverage for complex fetched template bodies opening directly in HTML mode, plus a source guard preventing the hydration effect from returning. | GREEN: `pnpm test --run tests/email-templates-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor no longer reports this `no-event-handler` finding. |
+
+Changed-scope command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer` in `app/(app)/automation/email-templates/page.tsx:720`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-41ae2b89-f452-4084-aaf8-8319240177df`
+
+Full command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `87 / 100`
+- Total diagnostics: `55`
+- Summary: `Bugs 18 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 194: email-template full-body hydration effect (`1` `no-event-handler` warning). Remaining `no-event-handler` diagnostics are now limited to the tasks focus view and intake draft loading.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8f1dd3b9-7f1d-4cb1-b5b5-e18ffe590bc2`
+
+## Batch 195
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `app/(app)/automation/email-templates/page.tsx:914` | Valid. The template editor copied `fullTemplate.body` and inferred editor mode from loaded detail inside an effect, causing a late render-driven body/mode sync for values that can be derived from current detail data until the user edits them. | High | Added `getTemplateBodyMode`, derived `templateBody` and `templateBodyMode` from the loaded template detail plus explicit user overrides, and removed the detail-hydration effect and touched-mode ref. Variable/logo insertion now writes through the body override setter. Added coverage for opening complex existing templates directly in HTML mode with the loaded detail body. | GREEN: `pnpm test --run tests/email-templates-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reports the email-template `no-event-handler` finding. |
+
+Changed-scope command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100`
+- Total diagnostics in changed files: `2`
+- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer` in `app/(app)/automation/email-templates/page.tsx:720`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-caa7dd47-db06-48ce-abda-256b477304de`
+
+Full command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `87 / 100`
+- Total diagnostics: `55`
+- Summary: `Bugs 18 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 194: email-template detail-body hydration effect (`1` `no-event-handler` warning). Remaining `no-event-handler` diagnostics are now limited to tasks focus view and intake draft loading.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9815905f-b46b-460a-80f9-964b67ed48df`

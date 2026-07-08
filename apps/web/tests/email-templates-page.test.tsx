@@ -213,6 +213,8 @@ describe("EmailTemplatesPage", () => {
         mockUseEmailTemplates.mockClear()
         personalTemplatesFixture = [PERSONAL_TEMPLATE]
         orgTemplatesFixture = [ORG_TEMPLATE]
+        TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body = "<p>Personal Body</p>"
+        TEMPLATE_DETAIL_BY_ID.tpl_org_1.body = "<p>Org Body</p>"
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user_1",
@@ -358,6 +360,22 @@ describe("EmailTemplatesPage", () => {
         expect(await screen.findByText("Email Preview")).toBeInTheDocument()
         expect(screen.getByText("Personal Signature")).toBeInTheDocument()
         expect(screen.queryByText("Org Signature")).not.toBeInTheDocument()
+    })
+
+    it("opens complex existing templates in HTML mode with the loaded detail body", async () => {
+        TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body =
+            "<table><tbody><tr><td>Personal Body</td></tr></tbody></table>"
+
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+
+        const htmlTextarea = await screen.findByLabelText("Email Body")
+        expect(htmlTextarea).toHaveValue(
+            "<table><tbody><tr><td>Personal Body</td></tr></tbody></table>",
+        )
+        expect(screen.queryByTestId("rich-text-editor")).not.toBeInTheDocument()
     })
 
     it("uses org signature in preview for organization templates", async () => {
