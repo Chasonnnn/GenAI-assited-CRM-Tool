@@ -180,10 +180,13 @@ describe('SurrogatesPage', () => {
         mockSearchParams.delete('q')
         mockSearchParams.delete('owner_id')
         mockSearchParams.delete('dynamic_filter')
+        mockSearchParams.delete('priority')
         mockSearchParams.delete('range')
         mockSearchParams.delete('from')
         mockSearchParams.delete('to')
         mockSearchParams.delete('search')
+        mockSearchParams.delete('sort_by')
+        mockSearchParams.delete('sort_order')
         mockUseSurrogates.mockReset()
         mockUseArchiveSurrogate.mockReset()
         mockUseRestoreSurrogate.mockReset()
@@ -321,7 +324,7 @@ describe('SurrogatesPage', () => {
         )
     })
 
-    it('hydrates legacy search params and normalizes them to q', async () => {
+    it('hydrates legacy search params as canonical q filters without mount-time navigation', () => {
         mockSearchParams.set('search', 'Local Warning')
         mockUseSurrogates.mockReturnValue({
             data: { items: [], total: 0, pages: 0 },
@@ -333,10 +336,40 @@ describe('SurrogatesPage', () => {
 
         expect(screen.getByRole('textbox', { name: 'Search surrogates' })).toHaveValue('Local Warning')
         expect(mockUseSurrogates).toHaveBeenCalledWith(expect.objectContaining({ q: 'Local Warning' }))
+        expect(mockRouterReplace).not.toHaveBeenCalled()
+    })
 
-        await waitFor(() =>
-            expect(mockRouterReplace).toHaveBeenCalledWith('/surrogates?q=Local+Warning', { scroll: false })
+    it('derives filters from the current URL on rerender', () => {
+        mockSearchParams.set('stage', 's1')
+        mockSearchParams.set('q', 'alpha')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        const { rerender } = render(<SurrogatesPage />)
+
+        expect(mockUseSurrogates).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                stage_id: 's1',
+                q: 'alpha',
+            })
         )
+
+        mockSearchParams.set('stage', 's2')
+        mockSearchParams.set('q', 'beta')
+        mockUseSurrogates.mockClear()
+
+        rerender(<SurrogatesPage />)
+
+        expect(mockUseSurrogates).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                stage_id: 's2',
+                q: 'beta',
+            })
+        )
+        expect(screen.getByRole('textbox', { name: 'Search surrogates' })).toHaveValue('beta')
     })
 
     it('shows the priority action only for admin and developer users', () => {
@@ -864,10 +897,9 @@ describe('SurrogatesPage', () => {
         render(<SurrogatesPage />)
         fireEvent.click(screen.getByRole('columnheader', { name: /last modified/i }))
 
-        expect(mockUseSurrogates).toHaveBeenLastCalledWith(
-            expect.objectContaining({
-                sort_by: 'last_modified_at',
-            })
+        expect(mockRouterReplace).toHaveBeenCalledWith(
+            '/surrogates?sort_by=last_modified_at&sort_order=desc',
+            { scroll: false },
         )
     })
 

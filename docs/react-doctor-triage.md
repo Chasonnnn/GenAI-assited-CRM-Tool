@@ -4218,3 +4218,24 @@ Full command after Batch 193: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 34 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
 - Removed globally since Batch 192: public booking timezone effect warnings (`2` `no-event-handler` warnings) and the broader public booking giant-component diagnostic. The public booking reducer diagnostic remains valid but separate.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cba3c2aa-1800-4758-8978-74167d277c3d`
+
+## Batch 194
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `app/(app)/surrogates/page.client.tsx:855`, `app/(app)/surrogates/page.client.tsx:913-931`, `app/(app)/surrogates/page.client.tsx:934-946`, `app/(app)/surrogates/page.client.tsx:950` | Valid. The surrogate list mirrored URL params into local filter/search/page/sort state through effects, then pushed debounced search back to the URL from another effect. | High | Added `readSurrogateListUrlState` and canonical search-param normalization, derived committed filter state from the current URL, kept only keyed draft search state, and moved debounced search URL replacement into the search input handler. Removed the old exhaustive-deps suppression because the URL mirror effect is gone. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate list filters"` failed before the refactor. GREEN: `pnpm test --run tests/surrogates.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor no longer reports these `no-event-handler` findings. |
+
+Changed-scope command after Batch 194: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` in `app/(app)/surrogates/page.client.tsx:546`.
+
+Full command after Batch 194: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `87 / 100`
+- Total diagnostics: `56`
+- Summary: `Bugs 19 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 193: surrogate list URL/search mirror effects and the surrogate page `prefer-useReducer` warning (`15` total diagnostics removed). Remaining `no-event-handler` diagnostics are now limited to email templates, tasks focus view, and intake draft loading.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1b2bdf1e-9578-4463-b7ae-e26e4a7cf095`

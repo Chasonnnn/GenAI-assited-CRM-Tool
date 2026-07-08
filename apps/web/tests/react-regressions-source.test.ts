@@ -213,8 +213,8 @@ describe("React regression guards (source)", () => {
         expect(intendedParentMatchesSource).not.toContain("oxlint-disable-line react-doctor/exhaustive-deps")
         expect(intendedParentsSource).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
         expect(intendedParentsSource).not.toContain("oxlint-disable-line react-doctor/exhaustive-deps")
-        expect(surrogatesSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
-        expect(surrogatesSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(surrogatesSource).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(surrogatesSource).not.toContain("oxlint-disable-line react-doctor/exhaustive-deps")
     })
 
     it("keeps automation route search param parsing in the server wrapper", () => {
@@ -665,6 +665,22 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const canFilterByAssignee = canUseOrgAssigneeFilter")
         expect(source).toContain("getAssigneeFilterLabel(value, assigneeFilterOptions)")
         expect(source).not.toContain("getAssigneeFilterLabel(ownerFilter, assignees)")
+    })
+
+    it("keeps surrogate list filters derived from URL state", () => {
+        const source = readSource("app/(app)/surrogates/page.client.tsx")
+
+        expect(source).toContain("function readSurrogateListUrlState")
+        expect(source).toContain("const normalizedSearchParams = getNormalizedSurrogateListSearchParams(searchParams)")
+        expect(source).toContain("const listUrlState = readSurrogateListUrlState(normalizedSearchParams, canFilterByAssignee)")
+        expect(source).toContain("const searchQuery = searchDraft.query === currentQuery ? searchDraft.value : debouncedSearch")
+        expect(source).not.toContain("const [stageFilter, setStageFilter] = useState<string>(urlStage || \"all\")")
+        expect(source).not.toContain("const [debouncedSearch, setDebouncedSearch]")
+        expect(source).not.toContain("hasSyncedSearchRef")
+        expect(source).not.toContain("// Sync debouncedSearch to URL")
+        expect(source).not.toContain("// Sync state when URL changes")
+        expect(source).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(source).not.toContain("oxlint-disable-line react-doctor/exhaustive-deps")
     })
 
     it("does not expose intake pool grants in team settings", () => {
