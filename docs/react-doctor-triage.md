@@ -3785,3 +3785,25 @@ Full command after Batch 172: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 46 warnings`
 - Removed globally since Batch 171: `react-doctor/no-giant-component` for `TasksPage` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4beed628-f38d-4174-bd6f-9b9dcc4425da`
+
+## Batch 173
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/queues/page.tsx` | Valid. `QueuesSettingsPage` owned admin redirect, queue/member hooks, create/edit/member dialog state, table rendering, empty/loading/error states, form markup, and member-management markup in one component body. | High | Kept hook ownership and all mutations in `QueuesSettingsPage`, then split rendering into `QueuesPageHeader`, `QueuesStatusContent`, `QueuesTable`, `QueueFormDialog`, and `QueueMembersDialog`. Added a source guard requiring the split and keeping table/dialog JSX out of the page component body. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "queues settings rendering"` failed on the monolithic page. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "queue edit target\|queues settings rendering"`; `pnpm test --run tests/queues-settings-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues; full React Doctor dropped to `136` issues. |
+| `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-user-integrations.ts`, sampled mutation hooks | Reviewed but unchanged. The sampled warnings were OAuth URL fetches followed by redirect, test/preview/dry-run mutations, staged profile sync, parser preview, and test-send calls. Adding unrelated invalidations would hide warnings without proving stale-cache behavior. | Medium-high | Left unchanged. Future fixes should target a persisted mutation with a concrete stale query key, not validation/auth-url/preview calls. | Read-only source audit only; no files changed for these findings. |
+| `react-doctor/no-event-handler`, `react-doctor/prefer-tag-over-role`, `react-doctor/async-await-in-loop` | `app/(app)/automation/email-templates/page.tsx`, URL-sync pages, rich-text/transcript/calendar integrations, `components/surrogates/interviews/InterviewTab/context.tsx` | Mixed. One email-template preview close handler looks like a safe future event-handler fix, but most reviewed findings are URL/back-forward sync, fetched-data hydration, DOM/editor integration, rich contenteditable/transcript semantics, or sequential upload behavior that need dedicated behavior coverage. | Medium | Left unchanged in this queue-structure batch. Use a separate focused batch for the email-template preview close handler or the appointment-dialog reducer candidate. | Read-only sidecar audit only; no files changed for these findings. |
+
+Changed-scope command after Batch 173: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 173: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `136`
+- Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 45 warnings`
+- Removed globally since Batch 172: `react-doctor/no-giant-component` for `QueuesSettingsPage` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2d2fe314-52bb-4d67-befa-62629f6ea110`

@@ -1755,6 +1755,26 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const resolveErrorMessage = (error: unknown, fallback: string) =>")
     })
 
+    it("keeps queues settings rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/queues/page.tsx")
+        const componentIndex = source.indexOf("export default function QueuesSettingsPage()")
+        const firstHelperIndex = source.indexOf("function QueuesPageHeader")
+        const componentSource = source.slice(
+            componentIndex,
+            firstHelperIndex > componentIndex ? firstHelperIndex : undefined
+        )
+
+        expect(componentIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function QueuesPageHeader")
+        expect(source).toContain("function QueuesStatusContent")
+        expect(source).toContain("function QueuesTable")
+        expect(source).toContain("function QueueFormDialog")
+        expect(source).toContain("function QueueMembersDialog")
+        expect(componentSource).not.toContain("<Table")
+        expect(componentSource).not.toContain("<Dialog")
+        expect(componentSource).not.toContain("No members assigned. Queue is open to all case managers.")
+    })
+
     it("uses stable keys for static loading and recovery-code lists", () => {
         const reportsLoadingSource = readSource("app/(app)/reports/loading.tsx")
         const automationLoadingSource = readSource("app/(app)/automation/loading.tsx")

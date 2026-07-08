@@ -44,9 +44,11 @@ import {
     useAddQueueMember,
     useRemoveQueueMember,
     type Queue,
-    type QueueCreatePayload
+    type QueueCreatePayload,
+    type QueueMember,
 } from "@/lib/hooks/use-queues"
 import { useMembers } from "@/lib/hooks/use-permissions"
+import type { Member } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -169,329 +171,454 @@ export default function QueuesSettingsPage() {
     ) || []
 
     if (!isManager) {
-            return (
-                <div className="flex min-h-screen items-center justify-center">
+        return (
+            <div className="flex min-h-screen items-center justify-center">
                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                </div>
-            )
+            </div>
+        )
     }
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-semibold flex items-center gap-2">
-                        <UsersIcon className="size-6" aria-hidden="true" />
-                        Queue Management
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Manage case queues for your organization
-                    </p>
-                </div>
-                <Button onClick={() => setCreateDialogOpen(true)}>
+            <QueuesPageHeader onCreate={() => setCreateDialogOpen(true)} />
+            <QueuesStatusContent
+                error={error}
+                isLoading={isLoading}
+                queues={queues}
+                onCreate={() => setCreateDialogOpen(true)}
+                onEdit={openEditDialog}
+                onManageMembers={openMembersDialog}
+                onToggleActive={handleToggleActive}
+            />
+            <QueueFormDialog
+                open={createDialogOpen}
+                onOpenChange={setCreateDialogOpen}
+                title="Create Queue"
+                nameId="queue-name"
+                descriptionId="queue-description"
+                nameInputName="queueName"
+                descriptionInputName="queueDescription"
+                formData={formData}
+                onFormDataChange={setFormData}
+                onSubmit={handleCreateQueue}
+                submitDisabled={createQueueMutation.isPending || !formData.name.trim()}
+                submitLabel="Create Queue"
+                pendingLabel="Creating…"
+                isPending={createQueueMutation.isPending}
+                namePlaceholder="e.g., New Leads Queue"
+                descriptionPlaceholder="Brief description of the queue purpose"
+            />
+            <QueueFormDialog
+                open={editDialogOpen}
+                onOpenChange={handleEditDialogOpenChange}
+                title="Edit Queue"
+                nameId="edit-queue-name"
+                descriptionId="edit-queue-description"
+                nameInputName="editQueueName"
+                descriptionInputName="editQueueDescription"
+                formData={formData}
+                onFormDataChange={setFormData}
+                onSubmit={handleUpdateQueue}
+                submitDisabled={updateQueueMutation.isPending || !formData.name.trim()}
+                submitLabel="Save Changes"
+                pendingLabel="Saving…"
+                isPending={updateQueueMutation.isPending}
+            />
+            <QueueMembersDialog
+                open={membersDialogOpen}
+                onOpenChange={setMembersDialogOpen}
+                managingQueue={managingQueue}
+                selectedUserId={selectedUserId}
+                onSelectedUserIdChange={setSelectedUserId}
+                availableMembers={availableMembers}
+                queueMembers={queueMembers}
+                loadingMembers={loadingMembers}
+                addMemberPending={addMemberMutation.isPending}
+                removeMemberPending={removeMemberMutation.isPending}
+                onAddMember={handleAddMember}
+                onRemoveMember={handleRemoveMember}
+            />
+        </div>
+    )
+}
+
+function QueuesPageHeader({ onCreate }: { onCreate: () => void }) {
+    return (
+        <div className="flex items-center justify-between mb-6">
+            <div>
+                <h1 className="text-2xl font-semibold flex items-center gap-2">
+                    <UsersIcon className="size-6" aria-hidden="true" />
+                    Queue Management
+                </h1>
+                <p className="text-muted-foreground">
+                    Manage case queues for your organization
+                </p>
+            </div>
+            <Button onClick={onCreate}>
+                <PlusIcon className="size-4 mr-2" aria-hidden="true" />
+                Create Queue
+            </Button>
+        </div>
+    )
+}
+
+function QueuesStatusContent({
+    error,
+    isLoading,
+    queues,
+    onCreate,
+    onEdit,
+    onManageMembers,
+    onToggleActive,
+}: {
+    error: Error | null | undefined
+    isLoading: boolean
+    queues: Queue[] | undefined
+    onCreate: () => void
+    onEdit: (queue: Queue) => void
+    onManageMembers: (queue: Queue) => void
+    onToggleActive: (queue: Queue) => void | Promise<void>
+}) {
+    if (error) {
+        return (
+            <Card className="p-6 text-center text-destructive mb-6">
+                Error loading queues: {error.message}
+            </Card>
+        )
+    }
+
+    if (isLoading) {
+        return (
+            <Card className="p-12 flex items-center justify-center">
+                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+            </Card>
+        )
+    }
+
+    if (queues?.length === 0) {
+        return (
+            <Card className="p-12 text-center">
+                <UsersIcon className="size-12 mx-auto text-muted-foreground mb-4" aria-hidden="true" />
+                <h3 className="text-lg font-medium mb-2">No queues yet</h3>
+                <p className="text-muted-foreground mb-4">
+                    Create your first queue to organize cases
+                </p>
+                <Button onClick={onCreate}>
                     <PlusIcon className="size-4 mr-2" aria-hidden="true" />
                     Create Queue
                 </Button>
-            </div>
+            </Card>
+        )
+    }
 
-            {/* Error State */}
-            {error && (
-                <Card className="p-6 text-center text-destructive mb-6">
-                    Error loading queues: {error.message}
-                </Card>
-            )}
+    if (!queues?.length) return null
 
-            {/* Loading State */}
-            {isLoading && (
-                <Card className="p-12 flex items-center justify-center">
-                    <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                </Card>
-            )}
+    return (
+        <QueuesTable
+            queues={queues}
+            onEdit={onEdit}
+            onManageMembers={onManageMembers}
+            onToggleActive={onToggleActive}
+        />
+    )
+}
 
-            {/* Empty State */}
-            {!isLoading && !error && queues?.length === 0 && (
-                    <Card className="p-12 text-center">
-                    <UsersIcon className="size-12 mx-auto text-muted-foreground mb-4" aria-hidden="true" />
-                    <h3 className="text-lg font-medium mb-2">No queues yet</h3>
-                    <p className="text-muted-foreground mb-4">
-                        Create your first queue to organize cases
-                    </p>
-                    <Button onClick={() => setCreateDialogOpen(true)}>
-                        <PlusIcon className="size-4 mr-2" aria-hidden="true" />
-                        Create Queue
-                    </Button>
-                </Card>
-            )}
+function QueuesTable({
+    queues,
+    onEdit,
+    onManageMembers,
+    onToggleActive,
+}: {
+    queues: Queue[]
+    onEdit: (queue: Queue) => void
+    onManageMembers: (queue: Queue) => void
+    onToggleActive: (queue: Queue) => void | Promise<void>
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Queues</CardTitle>
+                <CardDescription>
+                    {queues.filter((queue) => queue.is_active).length} active, {queues.filter((queue) => !queue.is_active).length} inactive
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Members</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {queues.map((queue) => (
+                            <TableRow key={queue.id} className={!queue.is_active ? "opacity-50" : ""}>
+                                <TableCell className="font-medium">{queue.name}</TableCell>
+                                <TableCell className="text-muted-foreground max-w-[300px] truncate">
+                                    {queue.description || "—"}
+                                </TableCell>
+                                <TableCell>
+                                    <button
+                                        type="button"
+                                        onClick={() => onManageMembers(queue)}
+                                        className="inline-flex"
+                                        aria-label={`Manage members for ${queue.name}`}
+                                    >
+                                        <Badge variant="outline" className="cursor-pointer">
+                                            <UsersIcon className="size-3 mr-1" aria-hidden="true" />
+                                            {queue.member_ids?.length || 0}
+                                        </Badge>
+                                    </button>
+                                </TableCell>
+                                <TableCell>
+                                    <Badge variant={queue.is_active ? "default" : "secondary"}>
+                                        {queue.is_active ? "Active" : "Inactive"}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                            className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent"
+                                            aria-label={`Queue actions for ${queue.name}`}
+                                        >
+                                            <span className="inline-flex items-center justify-center">
+                                                <MoreVerticalIcon className="size-4" aria-hidden="true" />
+                                            </span>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => onEdit(queue)}>
+                                                Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => onManageMembers(queue)}>
+                                                Manage Members
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => onToggleActive(queue)}>
+                                                {queue.is_active ? "Deactivate" : "Activate"}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    )
+}
 
-            {/* Queues Table */}
-            {!isLoading && !error && queues && queues.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Queues</CardTitle>
-                        <CardDescription>
-                            {queues.filter(q => q.is_active).length} active, {queues.filter(q => !q.is_active).length} inactive
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Members</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="w-[50px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {queues.map((queue) => (
-                                    <TableRow key={queue.id} className={!queue.is_active ? "opacity-50" : ""}>
-                                        <TableCell className="font-medium">{queue.name}</TableCell>
-                                        <TableCell className="text-muted-foreground max-w-[300px] truncate">
-                                            {queue.description || "—"}
-                                        </TableCell>
-                                        <TableCell>
-                                            <button
-                                                type="button"
-                                                onClick={() => openMembersDialog(queue)}
-                                                className="inline-flex"
-                                                aria-label={`Manage members for ${queue.name}`}
-                                            >
-                                                <Badge variant="outline" className="cursor-pointer">
-                                                    <UsersIcon className="size-3 mr-1" aria-hidden="true" />
-                                                    {queue.member_ids?.length || 0}
-                                                </Badge>
-                                            </button>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={queue.is_active ? "default" : "secondary"}>
-                                                {queue.is_active ? "Active" : "Inactive"}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger
-                                                    className="inline-flex items-center justify-center size-8 p-0 rounded-md hover:bg-accent"
-                                                    aria-label={`Queue actions for ${queue.name}`}
-                                                >
-                                                    <span className="inline-flex items-center justify-center">
-                                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
-                                                    </span>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => openEditDialog(queue)}>
-                                                        Edit
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => openMembersDialog(queue)}>
-                                                        Manage Members
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleToggleActive(queue)}>
-                                                        {queue.is_active ? "Deactivate" : "Activate"}
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Create Queue Dialog */}
-            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Create Queue</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleCreateQueue}>
-                        <div className="space-y-4 py-4">
-                            <div>
-                                <Label htmlFor="queue-name">Name</Label>
-                                <Input
-                                    id="queue-name"
-                                    name="queueName"
-                                    autoComplete="off"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData((currentFormData) => ({ ...currentFormData, name: e.target.value }))}
-                                    placeholder="e.g., New Leads Queue"
-                                    className="mt-2"
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="queue-description">Description (optional)</Label>
-                                <Textarea
-                                    id="queue-description"
-                                    name="queueDescription"
-                                    autoComplete="off"
-                                    value={formData.description || ""}
-                                    onChange={(e) =>
-                                        setFormData((currentFormData) => ({
-                                            ...currentFormData,
-                                            description: e.target.value,
-                                        }))
-                                    }
-                                    placeholder="Brief description of the queue purpose"
-                                    className="mt-2"
-                                    rows={3}
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" type="button" onClick={() => setCreateDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={createQueueMutation.isPending || !formData.name.trim()}>
-                                {createQueueMutation.isPending ? "Creating…" : "Create Queue"}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Edit Queue Dialog */}
-            <Dialog open={editDialogOpen} onOpenChange={handleEditDialogOpenChange}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit Queue</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleUpdateQueue}>
-                        <div className="space-y-4 py-4">
-                            <div>
-                                <Label htmlFor="edit-queue-name">Name</Label>
-                                <Input
-                                    id="edit-queue-name"
-                                    name="editQueueName"
-                                    autoComplete="off"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData((currentFormData) => ({ ...currentFormData, name: e.target.value }))}
-                                    className="mt-2"
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="edit-queue-description">Description (optional)</Label>
-                                <Textarea
-                                    id="edit-queue-description"
-                                    name="editQueueDescription"
-                                    autoComplete="off"
-                                    value={formData.description || ""}
-                                    onChange={(e) =>
-                                        setFormData((currentFormData) => ({
-                                            ...currentFormData,
-                                            description: e.target.value,
-                                        }))
-                                    }
-                                    className="mt-2"
-                                    rows={3}
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" type="button" onClick={() => handleEditDialogOpenChange(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={updateQueueMutation.isPending || !formData.name.trim()}>
-                                {updateQueueMutation.isPending ? "Saving…" : "Save Changes"}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Members Dialog */}
-            <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <UsersIcon className="size-5" aria-hidden="true" />
-                            {managingQueue?.name} - Members
-                        </DialogTitle>
-                    </DialogHeader>
+function QueueFormDialog({
+    open,
+    onOpenChange,
+    title,
+    nameId,
+    descriptionId,
+    nameInputName,
+    descriptionInputName,
+    formData,
+    onFormDataChange,
+    onSubmit,
+    submitDisabled,
+    submitLabel,
+    pendingLabel,
+    isPending,
+    namePlaceholder,
+    descriptionPlaceholder,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    title: string
+    nameId: string
+    descriptionId: string
+    nameInputName: string
+    descriptionInputName: string
+    formData: QueueCreatePayload
+    onFormDataChange: React.Dispatch<React.SetStateAction<QueueCreatePayload>>
+    onSubmit: (event: React.FormEvent) => void | Promise<void>
+    submitDisabled: boolean
+    submitLabel: string
+    pendingLabel: string
+    isPending: boolean
+    namePlaceholder?: string
+    descriptionPlaceholder?: string
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={onSubmit}>
                     <div className="space-y-4 py-4">
-                        {/* Add Member */}
-                        <div className="flex gap-2">
-                            <Select value={selectedUserId} onValueChange={(v) => setSelectedUserId(v || "")}>
+                        <div>
+                            <Label htmlFor={nameId}>Name</Label>
+                            <Input
+                                id={nameId}
+                                name={nameInputName}
+                                autoComplete="off"
+                                value={formData.name}
+                                onChange={(event) =>
+                                    onFormDataChange((currentFormData) => ({
+                                        ...currentFormData,
+                                        name: event.target.value,
+                                    }))
+                                }
+                                placeholder={namePlaceholder}
+                                className="mt-2"
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor={descriptionId}>Description (optional)</Label>
+                            <Textarea
+                                id={descriptionId}
+                                name={descriptionInputName}
+                                autoComplete="off"
+                                value={formData.description || ""}
+                                onChange={(event) =>
+                                    onFormDataChange((currentFormData) => ({
+                                        ...currentFormData,
+                                        description: event.target.value,
+                                    }))
+                                }
+                                placeholder={descriptionPlaceholder}
+                                className="mt-2"
+                                rows={3}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={submitDisabled}>
+                            {isPending ? pendingLabel : submitLabel}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function QueueMembersDialog({
+    open,
+    onOpenChange,
+    managingQueue,
+    selectedUserId,
+    onSelectedUserIdChange,
+    availableMembers,
+    queueMembers,
+    loadingMembers,
+    addMemberPending,
+    removeMemberPending,
+    onAddMember,
+    onRemoveMember,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    managingQueue: Queue | null
+    selectedUserId: string
+    onSelectedUserIdChange: (userId: string) => void
+    availableMembers: Member[]
+    queueMembers: QueueMember[] | undefined
+    loadingMembers: boolean
+    addMemberPending: boolean
+    removeMemberPending: boolean
+    onAddMember: () => void | Promise<void>
+    onRemoveMember: (userId: string) => void | Promise<void>
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <UsersIcon className="size-5" aria-hidden="true" />
+                        {managingQueue?.name} - Members
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="flex gap-2">
+                        <Select value={selectedUserId} onValueChange={(value) => onSelectedUserIdChange(value || "")}>
                             <SelectTrigger className="flex-1">
                                 <SelectValue placeholder="Select a user to add…" />
                             </SelectTrigger>
-                                <SelectContent>
-                                    {availableMembers.length === 0 ? (
-                                        <div className="py-2 px-3 text-sm text-muted-foreground">
-                                            All users are already members
-                                        </div>
-                                    ) : (
-                                        availableMembers.map((member) => (
-                                            <SelectItem key={member.user_id} value={member.user_id}>
-                                                {member.display_name || member.email}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                            <Button
-                                onClick={handleAddMember}
-                                disabled={!selectedUserId || addMemberMutation.isPending}
-                                size="icon"
-                                aria-label="Add member to queue"
-                            >
-                                <UserPlusIcon className="size-4" aria-hidden="true" />
-                            </Button>
-                        </div>
-
-                        {/* Member List */}
-                        <div className="space-y-2">
-                            <Label className="text-muted-foreground text-xs uppercase tracking-wider">
-                                Current Members ({queueMembers?.length || 0})
-                            </Label>
-                            {loadingMembers ? (
-                                <div className="flex items-center justify-center py-4">
-                                    <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                </div>
-                            ) : queueMembers?.length === 0 ? (
-                                <div className="text-center py-4 text-sm text-muted-foreground">
-                                    No members assigned. Queue is open to all case managers.
-                                </div>
-                            ) : (
-                                <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                                    {queueMembers?.map((member) => (
-                                        <div
-                                            key={member.id}
-                                            className="flex items-center justify-between p-2 rounded-md bg-muted/50"
-                                        >
-                                            <div>
-                                                <div className="font-medium text-sm">{member.user_name || "Unknown"}</div>
-                                                <div className="text-xs text-muted-foreground">{member.user_email}</div>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="size-7 text-muted-foreground hover:text-destructive"
-                                                onClick={() => handleRemoveMember(member.user_id)}
-                                                disabled={removeMemberMutation.isPending}
-                                                aria-label={`Remove ${member.user_name || member.user_email || "member"} from queue`}
-                                            >
-                                                <XIcon className="size-4" aria-hidden="true" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Help text */}
-                        <p className="text-xs text-muted-foreground">
-                            When a queue has members, only those members can claim surrogates from it.
-                            If no members are assigned, any case manager can claim from the queue.
-                        </p>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setMembersDialogOpen(false)}>
-                            Close member management
+                            <SelectContent>
+                                {availableMembers.length === 0 ? (
+                                    <div className="py-2 px-3 text-sm text-muted-foreground">
+                                        All users are already members
+                                    </div>
+                                ) : (
+                                    availableMembers.map((member) => (
+                                        <SelectItem key={member.user_id} value={member.user_id}>
+                                            {member.display_name || member.email}
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            onClick={onAddMember}
+                            disabled={!selectedUserId || addMemberPending}
+                            size="icon"
+                            aria-label="Add member to queue"
+                        >
+                            <UserPlusIcon className="size-4" aria-hidden="true" />
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label className="text-muted-foreground text-xs uppercase tracking-wider">
+                            Current Members ({queueMembers?.length || 0})
+                        </Label>
+                        {loadingMembers ? (
+                            <div className="flex items-center justify-center py-4">
+                                <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            </div>
+                        ) : queueMembers?.length === 0 ? (
+                            <div className="text-center py-4 text-sm text-muted-foreground">
+                                No members assigned. Queue is open to all case managers.
+                            </div>
+                        ) : (
+                            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                                {queueMembers?.map((member) => (
+                                    <div
+                                        key={member.id}
+                                        className="flex items-center justify-between p-2 rounded-md bg-muted/50"
+                                    >
+                                        <div>
+                                            <div className="font-medium text-sm">{member.user_name || "Unknown"}</div>
+                                            <div className="text-xs text-muted-foreground">{member.user_email}</div>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-7 text-muted-foreground hover:text-destructive"
+                                            onClick={() => onRemoveMember(member.user_id)}
+                                            disabled={removeMemberPending}
+                                            aria-label={`Remove ${member.user_name || member.user_email || "member"} from queue`}
+                                        >
+                                            <XIcon className="size-4" aria-hidden="true" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                        When a queue has members, only those members can claim surrogates from it.
+                        If no members are assigned, any case manager can claim from the queue.
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Close member management
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
