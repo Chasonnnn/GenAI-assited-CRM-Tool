@@ -608,6 +608,19 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("<ExecutionDetailsRow")
     })
 
+    it("keeps public booking selection state reducer-driven", () => {
+        const source = readSource("components/appointments/PublicBookingPage.tsx")
+
+        expect(source).toContain("type BookingSelectionState")
+        expect(source).toContain("function bookingSelectionReducer")
+        expect(source).toContain("bookingSelectionReducer,")
+        expect(source).not.toContain("const [selectedTypeId, setSelectedTypeId]")
+        expect(source).not.toContain("const [selectedDate, setSelectedDate]")
+        expect(source).not.toContain("const [selectedSlot, setSelectedSlot]")
+        expect(source).not.toContain("const [selectedMeetingMode, setSelectedMeetingMode]")
+        expect(source).not.toContain("const [showForm, setShowForm]")
+    })
+
     it("builds journey timeline milestone metadata without mutating a global counter", () => {
         const source = readSource("components/surrogates/journey/JourneyTimeline.tsx")
 

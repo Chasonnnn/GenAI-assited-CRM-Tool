@@ -13,7 +13,7 @@
  * - Confirmation view
  */
 
-import { startTransition, useEffect, useState, useSyncExternalStore } from "react"
+import { useReducer, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -136,6 +136,60 @@ function getMeetingModes(type: AppointmentType | null | undefined): MeetingMode[
         return type.meeting_modes
     }
     return type.meeting_mode ? [type.meeting_mode] : []
+}
+
+type BookingSelectionState = {
+    selectedTypeId: string | null
+    selectedDate: Date | null
+    selectedSlot: TimeSlot | null
+    selectedMeetingMode: MeetingMode | null
+    showForm: boolean
+}
+
+type BookingSelectionAction =
+    | { type: "selectType"; typeId: string; meetingModes: MeetingMode[] }
+    | { type: "selectMeetingMode"; mode: MeetingMode }
+    | { type: "selectDate"; date: Date }
+    | { type: "selectSlot"; slot: TimeSlot }
+    | { type: "showForm" }
+    | { type: "hideForm" }
+
+const initialBookingSelectionState: BookingSelectionState = {
+    selectedTypeId: null,
+    selectedDate: null,
+    selectedSlot: null,
+    selectedMeetingMode: null,
+    showForm: false,
+}
+
+function getInitialSelectedMeetingMode(meetingModes: MeetingMode[]): MeetingMode | null {
+    return meetingModes.length === 1 ? meetingModes[0] ?? null : null
+}
+
+function bookingSelectionReducer(
+    state: BookingSelectionState,
+    action: BookingSelectionAction,
+): BookingSelectionState {
+    switch (action.type) {
+        case "selectType":
+            return {
+                ...initialBookingSelectionState,
+                selectedTypeId: action.typeId,
+                selectedMeetingMode: getInitialSelectedMeetingMode(action.meetingModes),
+            }
+        case "selectMeetingMode":
+            return { ...state, selectedMeetingMode: action.mode, showForm: false }
+        case "selectDate":
+            return { ...state, selectedDate: action.date, selectedSlot: null, showForm: false }
+        case "selectSlot":
+            return { ...state, selectedSlot: action.slot, showForm: false }
+        case "showForm":
+            return { ...state, showForm: true }
+        case "hideForm":
+            return { ...state, showForm: false }
+        default:
+            return state
+    }
 }
 
 type BookingCalendarDay = {
@@ -1028,11 +1082,17 @@ export function PublicBookingPage({
 }) {
     const isPreview = preview === true
     // State
-    const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-    const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
-    const [selectedMeetingMode, setSelectedMeetingMode] = useState<MeetingMode | null>(null)
-    const [showForm, setShowForm] = useState(false)
+    const [bookingSelection, dispatchBookingSelection] = useReducer(
+        bookingSelectionReducer,
+        initialBookingSelectionState,
+    )
+    const {
+        selectedDate,
+        selectedMeetingMode,
+        selectedSlot,
+        selectedTypeId,
+        showForm,
+    } = bookingSelection
     const [confirmation, setConfirmation] = useState<PublicAppointmentView | null>(null)
     const detectedTimezone = useSyncExternalStore(
         subscribeTimezoneSnapshot,
@@ -1083,21 +1143,6 @@ export function PublicBookingPage({
     const selectedTypeModes = getMeetingModes(selectedType)
     const requiresMeetingModeSelection = selectedTypeModes.length > 1
     const meetingModeReady = !requiresMeetingModeSelection || Boolean(selectedMeetingMode)
-
-    useEffect(() => {
-        const nextModes = getMeetingModes(selectedType)
-        startTransition(() => {
-            if (!selectedType) {
-                setSelectedMeetingMode(null)
-                return
-            }
-            if (nextModes.length === 1) {
-                setSelectedMeetingMode(nextModes[0] ?? null)
-            } else {
-                setSelectedMeetingMode(null)
-            }
-        })
-    }, [selectedType])
 
     const availableDates = getAvailableDates(slotsData?.slots, timezone)
     const slotsForDate = getSlotsForDate(selectedDate, slotsData?.slots, timezone)
@@ -1244,7 +1289,7 @@ export function PublicBookingPage({
                                 selectedSlot={selectedSlot}
                                 timezone={timezone}
                                 onSubmit={handleSubmit}
-                                onBack={() => setShowForm(false)}
+                                onBack={() => dispatchBookingSelection({ type: "hideForm" })}
                                 isSubmitting={isPreview ? false : createBookingMutation.isPending}
                             />
                         ) : (
@@ -1255,12 +1300,11 @@ export function PublicBookingPage({
                                     selectedId={selectedTypeId}
                                     onSelect={(id) => {
                                         const nextType = pageData.appointment_types.find((type) => type.id === id)
-                                        const nextModes = getMeetingModes(nextType)
-                                        setSelectedTypeId(id)
-                                        setSelectedMeetingMode(nextModes[0] ?? null)
-                                        setSelectedDate(null)
-                                        setSelectedSlot(null)
-                                        setShowForm(false)
+                                        dispatchBookingSelection({
+                                            type: "selectType",
+                                            typeId: id,
+                                            meetingModes: getMeetingModes(nextType),
+                                        })
                                     }}
                                 />
 
@@ -1269,7 +1313,12 @@ export function PublicBookingPage({
                                     <MeetingModeSelector
                                         meetingModes={selectedTypeModes}
                                         selectedMode={selectedMeetingMode}
-                                        onSelect={(mode) => setSelectedMeetingMode(mode)}
+                                        onSelect={(mode) =>
+                                            dispatchBookingSelection({
+                                                type: "selectMeetingMode",
+                                                mode,
+                                            })
+                                        }
                                         meetingLocation={selectedType.meeting_location}
                                         dialInNumber={selectedType.dial_in_number}
                                     />
@@ -1279,10 +1328,9 @@ export function PublicBookingPage({
                                 {selectedTypeId && meetingModeReady && (
                                     <CalendarView
                                         selectedDate={selectedDate}
-                                        onSelect={(date) => {
-                                            setSelectedDate(date)
-                                            setSelectedSlot(null)
-                                        }}
+                                        onSelect={(date) =>
+                                            dispatchBookingSelection({ type: "selectDate", date })
+                                        }
                                         availableDates={availableDates}
                                         timezone={timezone}
                                     />
@@ -1293,7 +1341,9 @@ export function PublicBookingPage({
                                     <TimeSlotSelector
                                         slots={slotsForDate}
                                         selectedSlot={selectedSlot}
-                                        onSelect={setSelectedSlot}
+                                        onSelect={(slot) =>
+                                            dispatchBookingSelection({ type: "selectSlot", slot })
+                                        }
                                         isLoading={isLoadingSlots}
                                         timezone={timezone}
                                     />
@@ -1304,7 +1354,7 @@ export function PublicBookingPage({
                                     <Button
                                         className="w-full"
                                         size="lg"
-                                        onClick={() => setShowForm(true)}
+                                        onClick={() => dispatchBookingSelection({ type: "showForm" })}
                                     >
                                         Enter contact details
                                     </Button>

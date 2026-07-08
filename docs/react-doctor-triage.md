@@ -4347,3 +4347,23 @@ Full command after Batch 199: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 13 warnings`, `Performance 2 warnings`, `Maintainability 34 warnings`
 - Removed globally since Batch 198: workflow execution details `jsx-max-depth` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d46b05fe-a7d8-42eb-aab7-7f7e29a813a3`
+
+## Batch 200
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `components/appointments/PublicBookingPage.tsx:1028` | Valid. Public booking selection behaves as one state machine: selecting an appointment type resets date/slot/form visibility and chooses a meeting mode only when there is a single format; selecting a date clears stale slots; selecting a slot enables the contact form. The previous implementation split those transitions across five `useState` calls plus a meeting-mode sync effect. | High | Added `BookingSelectionState` plus `bookingSelectionReducer`, replaced the sync effect with explicit type/mode/date/slot/form actions, and preserved existing Google Meet, calendar, timezone, and booking idempotency behavior. Added a source guard rejecting the separate selection setters. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "public booking selection"` failed before the reducer. GREEN: `pnpm test --run tests/appointments-google-meet.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "public booking selection"`; `pnpm tsc --noEmit`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 200: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 200: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `88 / 100`
+- Total diagnostics: `48`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 34 warnings`
+- Removed globally since Batch 199: public booking selection `prefer-useReducer` warning (`1` bug warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-99f0eba9-0b1f-4047-ba3b-b18a3263e72a`
