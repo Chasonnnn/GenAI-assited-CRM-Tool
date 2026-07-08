@@ -595,11 +595,12 @@ function useEmailTemplateController({
         }
     }
     const usedVariableNames = extractTemplateVariables(`${state.subject}\n${state.body}`)
+    const usedVariableNamesSet = new Set(usedVariableNames)
     const unknownVariables = canValidateVariables
         ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
         : []
     const missingRequiredVariables = canValidateVariables
-        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
     const testEditableVariableNames = usedVariableNames.filter((variable) => variable !== "unsubscribe_url")
     const testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")

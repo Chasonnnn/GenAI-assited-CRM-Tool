@@ -4067,3 +4067,23 @@ Full command after Batch 187: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 48 warnings`, `Performance 9 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
 - Removed globally since Batch 185: AI builder template variable Set conversion (`1` warning), AI builder reducer split (`1` warning), and AI builder page split (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-78b1f227-8f0f-4469-a484-b4cc2229896e`
+
+## Batch 188
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/js-set-map-lookups` | `app/ops/templates/email/[id]/page.client.tsx:602` | Valid. Required platform email-template variables were filtered against `usedVariableNames.includes(variable)`. The adjacent `unsubscribe_url` membership check is not inside a loop and remains appropriate as an ordinary one-off lookup. | High | Added `usedVariableNamesSet` and switched the required-variable check to `Set.has`. Added a source guard that keeps the Set conversion while explicitly preserving the one-off `unsubscribe_url` includes check. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "platform email-template edit page"` failed before the Set conversion. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "platform email-template edit page"`; `pnpm test --run tests/platform-email-template-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor reported no issues. |
+
+Changed-scope command after Batch 188: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 188: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `84 / 100`
+- Total diagnostics: `96`
+- Summary: `Bugs 48 warnings`, `Performance 8 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
+- Removed globally since Batch 187: ops platform email template required-variable Set conversion (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-beff8aae-eab2-4bf9-9fd6-5de7fd4481c3`

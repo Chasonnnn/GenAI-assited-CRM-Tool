@@ -2458,9 +2458,13 @@ describe("React regression guards (source)", () => {
 
     it("uses Sets for platform template variable validation membership checks", () => {
         const systemTemplateNewSource = readSource("app/ops/templates/system/new/page.client.tsx")
+        const systemTemplateDetailSource = readSource("app/ops/templates/system/[systemKey]/page.client.tsx")
 
         expect(systemTemplateNewSource).toContain("const usedVariableNamesSet = new Set(usedVariableNames)")
         expect(systemTemplateNewSource).not.toContain("usedVariableNames.includes(")
+        expect(systemTemplateDetailSource).toContain("const usedVariableNamesSet = new Set(usedVariableNames)")
+        expect(systemTemplateDetailSource).toContain("!usedVariableNamesSet.has(variable)")
+        expect(systemTemplateDetailSource).not.toContain("requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))")
     })
 
     it("keeps platform system template creation rendering split into sections", () => {
@@ -3309,6 +3313,10 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("const applyTextInsertion =")
+        expect(source).toContain("const usedVariableNamesSet = new Set(usedVariableNames)")
+        expect(source).toContain("!usedVariableNamesSet.has(variable)")
+        expect(source).toContain('testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")')
+        expect(source).not.toContain("requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))")
     })
 
     it("keeps shared display and navigation components compiler-friendly", () => {
@@ -3375,11 +3383,14 @@ describe("React regression guards (source)", () => {
         expect(emailTemplatesSource).not.toContain("React.useCallback")
         expect(emailTemplatesSource).toContain("const requiredVariableNames: string[] = []")
         expect(emailTemplatesSource).toContain("for (const variable of templateVariables) {")
+        expect(emailTemplatesSource).toContain("const usedVariableNamesSet = new Set(usedVariableNames)")
+        expect(emailTemplatesSource).toContain("!usedVariableNamesSet.has(variable)")
         expect(emailTemplatesSource).toContain("function recordSelection")
         expect(emailTemplatesSource).toContain("function insertIntoTextControl")
         expect(emailTemplatesSource).toContain("async function handleCopySignatureHtml")
         expect(emailTemplatesSource).not.toContain("const handleCopySignatureHtml = async")
         expect(emailTemplatesSource).not.toContain("templateVariables.filter((variable) => variable.required).map")
+        expect(emailTemplatesSource).not.toContain("requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))")
 
         expect(aiBuilderSource).toContain("const requiredTemplateVariableNames: string[] = []")
         expect(aiBuilderSource).toContain("for (const variable of templateVariableCatalog) {")
