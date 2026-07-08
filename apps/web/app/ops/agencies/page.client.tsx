@@ -84,27 +84,24 @@ export default function AgenciesPage() {
     useEffect(() => {
         let isCurrent = true;
 
-        async function fetchAgencies() {
-            dispatch({ type: "load-start" });
-            try {
-                const data = await listOrganizations({
-                    ...(search ? { search } : {}),
-                    ...(statusFilter ? { status: statusFilter } : {}),
-                });
+        dispatch({ type: "load-start" });
+        void listOrganizations({
+            ...(search ? { search } : {}),
+            ...(statusFilter ? { status: statusFilter } : {}),
+        })
+            .then((data) => {
                 if (!isCurrent) return;
                 dispatch({
                     type: "load-success",
                     agencies: data.items.filter((item) => !item.deleted_at),
                     total: data.total,
                 });
-            } catch (error) {
+            })
+            .catch((error) => {
                 if (!isCurrent) return;
                 console.error('Failed to fetch agencies:', error);
                 dispatch({ type: "load-error" });
-            }
-        }
-
-        void fetchAgencies();
+            });
 
         return () => {
             isCurrent = false;

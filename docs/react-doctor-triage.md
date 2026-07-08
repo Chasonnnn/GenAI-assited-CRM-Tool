@@ -3893,3 +3893,28 @@ Full command after Batch 177: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 79 warnings`, `Performance 6 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
 - Removed globally since Batch 176: `react-doctor/no-event-handler` for send-test recipient defaulting (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1856141c-cfab-4576-8494-7952a6309d72`
+
+## Batch 178
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/async-defer-await` | `app/ops/agencies/page.client.tsx:90` | Valid. The stale-response guard ran only after awaiting `listOrganizations`, so React Doctor saw an avoidable await before the early-return path. The guard still must run after the request resolves to protect search races. | High | Replaced the inner `async function fetchAgencies` with a direct `void listOrganizations(...).then(...).catch(...)` continuation. Kept the existing `isCurrent` checks before success/error dispatches. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "smaller ops pages"` failed on `const data = await listOrganizations`. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "smaller ops pages"`; `pnpm test --run tests/ops-agencies-page-race.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues; full React Doctor dropped to `130` issues. |
+| `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx:278-279` | False positive. `manuallyAddedSections` and `optimisticallyHiddenSections` are render-driving state: they feed `visibleKeys`/`hiddenKeys`, and `visibleSections` controls which clinic sections render. | High | Left unchanged. Do not convert these values to refs. | Sidecar read-only inspection plus existing coverage: source guard `uses single-pass intended-parent clinic section derivation`; behavior test `adds an IVF clinic section even when no IVF clinic data exists`. |
+| `react-doctor/rerender-state-only-in-handlers` | `components/surrogates/CombinedMedicalInsuranceCard.tsx:191-192` | False positive. `manuallyAdded` and `optimisticallyHiddenSections` are render-driving state: they feed `visibleKeys`/`hiddenKeys`, and `visibleSections` controls which medical/insurance sections render. | High | Left unchanged. A prior ref conversion was invalid because this visibility is read during render. | Sidecar read-only inspection plus existing source guard `keeps surrogate medical section visibility in render state` and behavior coverage for adding/deleting medical sections. |
+| `react-doctor/prefer-tag-over-role` | `components/email/EmailComposeDialog.tsx:898` | False positive for direct tag replacement. The `div role="textbox"` is a real `contentEditable` rich preview editor backed by an `HTMLDivElement` ref and `innerHTML` sync; the native `<textarea>` is the separate HTML edit mode. | High | Left unchanged. Replacing this with `<input>` or `<textarea>` would break preview-mode rich HTML editing. | Sidecar read-only inspection plus existing coverage: `allows customizing message directly in preview mode without toggling to html editor` and source guard `keeps email compose dialog derived state compiler-friendly`, which intentionally preserves `role="textbox"` and `contentEditable`. |
+| `react-doctor/prefer-tag-over-role` | `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx:106` | Needs human review. The warning is on a transcript wrapper with `role="button"`, not `role="textbox"`. It wraps sanitized rich transcript HTML and drives click, hover, keyboard, and selection-popover behavior; a native `<button>` wrapper would be invalid for paragraphs/lists/code blocks and could harm text selection. | Medium-high | Left unchanged. If product wants different semantics, define whether this is a selectable region or per-highlight keyboard controls first, then update tests and implementation together. | Sidecar read-only inspection plus existing coverage: `adds an aria-label to the interview transcript pane` currently expects the button role, and selection-popover tests cover selected transcript text handling. |
+
+Changed-scope command after Batch 178: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 178: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `130`
+- Summary: `Bugs 79 warnings`, `Performance 5 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
+- Removed globally since Batch 177: `react-doctor/async-defer-await` for the ops agencies list loader (`1` warning).
+- Invalid findings logged: `react-doctor/rerender-state-only-in-handlers` for intended-parent clinic and surrogate medical section visibility, and `react-doctor/prefer-tag-over-role` for rich email preview/transcript interaction surfaces (`4` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c220fc0-58f1-4c43-9205-9173caeb69ad`

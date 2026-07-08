@@ -2995,9 +2995,14 @@ describe("React regression guards (source)", () => {
 
     it("keeps smaller ops pages compiler-compatible", () => {
         const opsDashboardSource = readSource("app/ops/page.client.tsx")
+        const agenciesSource = readSource("app/ops/agencies/page.client.tsx")
         const newAgencySource = readSource("app/ops/agencies/new/page.client.tsx")
 
         expect(opsDashboardSource).not.toContain("finally")
+        expect(agenciesSource).toContain("void listOrganizations(")
+        expect(agenciesSource).toContain("if (!isCurrent) return")
+        expect(agenciesSource).not.toContain("const data = await listOrganizations")
+        expect(agenciesSource).not.toContain("async function fetchAgencies")
         expect(newAgencySource).toContain("function generateSlug(name: string)")
         expect(newAgencySource).not.toContain("const generateSlug =")
         expect(newAgencySource).not.toContain("finally")
