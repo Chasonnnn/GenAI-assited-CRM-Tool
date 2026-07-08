@@ -1739,6 +1739,14 @@ describe("React regression guards (source)", () => {
         expect(campaignDetailSource).not.toContain("checked={editStates.includes(state.value)}")
     })
 
+    it("uses Set membership for surrogate application multiselect values", () => {
+        const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
+
+        expect(source).toContain("const selectedValueSet = new Set(selectedValues)")
+        expect(source).toContain("const checked = selectedValueSet.has(option.value)")
+        expect(source).not.toContain("selectedValues.includes(option.value)")
+    })
+
     it("builds form builder mappings in a single pass", () => {
         const source = readSource("lib/forms/form-builder-document.ts")
 

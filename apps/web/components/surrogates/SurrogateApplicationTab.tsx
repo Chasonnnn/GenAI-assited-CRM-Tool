@@ -828,10 +828,11 @@ export function SurrogateApplicationTab({
 
         if (field.type === "multiselect" || field.type === "checkbox") {
             const selectedValues = Array.isArray(value) ? value : []
+            const selectedValueSet = new Set(selectedValues)
             return (
                 <div className="flex flex-col gap-2">
                     {(field.options || []).map((option) => {
-                        const checked = selectedValues.includes(option.value)
+                        const checked = selectedValueSet.has(option.value)
                         return (
                             <label key={option.value} className="flex items-center gap-2 text-sm">
                                 <Checkbox

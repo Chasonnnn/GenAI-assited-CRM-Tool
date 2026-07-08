@@ -4132,3 +4132,24 @@ Full command after Batch 189: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 48 warnings`, `Performance 3 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
 - Removed globally since Batch 188: campaign create/edit checkbox Set conversions (`3` warnings), leaving one `js-set-map-lookups` warning in `components/surrogates/SurrogateApplicationTab.tsx`.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-987d450a-3cd8-4f62-9b80-89f99957dfd7`
+
+## Batch 190
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/js-set-map-lookups` | `components/surrogates/SurrogateApplicationTab.tsx:834` | Valid. The editable multiselect/checkbox renderer mapped field options while checking every option against `selectedValues.includes(option.value)`. | High | Added `selectedValueSet` next to the existing selected-values array and switched checked-state membership to `Set.has`, while preserving array payload updates. Added a source guard preventing the old `includes` path from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate application multiselect"` failed before the Set conversion. GREEN: same source guard command; `pnpm test --run tests/surrogate-application-tab.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor no longer reported the Set warning. |
+
+Changed-scope command after Batch 190: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining valid but separate in touched files: `react-doctor/no-giant-component` in `components/surrogates/SurrogateApplicationTab.tsx`.
+
+Full command after Batch 190: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `85 / 100`
+- Total diagnostics: `90`
+- Summary: `Bugs 48 warnings`, `Performance 2 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
+- Removed globally since Batch 189: the final `js-set-map-lookups` warning in `components/surrogates/SurrogateApplicationTab.tsx`. No `js-set-map-lookups` diagnostics remain in the full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6dd62997-5f38-492a-be77-126f381a63b2`
