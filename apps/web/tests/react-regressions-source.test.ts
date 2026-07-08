@@ -128,12 +128,39 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
 
         expect(source).not.toContain("useMemo")
+        expect(source).toContain("function workflowGenerationReducer")
+        expect(source).toContain("function templateGenerationReducer")
+        expect(source).toContain("const [workflowState, dispatchWorkflow] = useReducer")
+        expect(source).toContain("const [templateState, dispatchTemplate] = useReducer")
         expect(source).toContain("const sanitizedTemplateBody = DOMPurify.sanitize(templateBody)")
+        expect(source).toContain("const templateVariableNameSet = new Set(templateVariables)")
         expect(source).toContain("const requiredTemplateVariableNames: string[] = []")
         expect(source).toContain("for (const variable of templateVariableCatalog) {")
+        expect(source).not.toContain("templateVariables.includes(")
         expect(source).not.toContain("const allowedTemplateVariableNames = useMemo")
         expect(source).not.toContain("const missingRequiredVariables = useMemo")
         expect(source).not.toContain("const unknownTemplateVariables = useMemo")
+    })
+
+    it("keeps AI builder rendering split into focused sections", () => {
+        const source = readSource("app/(app)/automation/ai-builder/page.client.tsx")
+        const pageIndex = source.indexOf("export default function AIWorkflowBuilderPage()")
+        const firstHelperIndex = source.indexOf("function AIBuilderHeader")
+        const pageSource = source.slice(
+            pageIndex,
+            firstHelperIndex > pageIndex ? firstHelperIndex : undefined
+        )
+
+        expect(pageIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function AIBuilderHeader")
+        expect(source).toContain("function PromptComposerCard")
+        expect(source).toContain("function WorkflowPreviewCard")
+        expect(source).toContain("function EmailTemplatePreviewCard")
+        expect(source).toContain("function AIBuilderInfoCard")
+        expect(pageSource).not.toContain("Describe Your Workflow")
+        expect(pageSource).not.toContain("Generated Workflow Preview")
+        expect(pageSource).not.toContain("Template Name")
+        expect(pageSource).not.toContain("How It Works")
     })
 
     it("keeps AI assistant chat helpers compiler-friendly", () => {
@@ -3416,6 +3443,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("position + 1")
         expect(source).toContain("getStableKeyedItems(workflowErrors, getWorkflowMessageKey)")
         expect(source).toContain("getStableKeyedItems(workflowWarnings, getWorkflowMessageKey)")
+        expect(source).toContain("getStableKeyedItems(templateErrors, getWorkflowMessageKey)")
+        expect(source).toContain("getStableKeyedItems(templateWarnings, getWorkflowMessageKey)")
         expect(source).toContain("getStableKeyedItems(generatedWorkflow.conditions, getWorkflowConditionKey)")
         expect(source).toContain("getStableKeyedItems(generatedWorkflow.actions, getWorkflowActionKey)")
         expect(source).not.toContain("key={getWorkflowMessageKey(error)}")

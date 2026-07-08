@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useReducer, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useCreateEmailTemplate, useEmailTemplateVariables } from "@/lib/hooks/use-email-templates"
+import type { TemplateVariableRead } from "@/lib/types/template-variable"
 import Link from "@/components/app-link"
 
 // Trigger display labels
@@ -128,7 +129,144 @@ function getStableKeyedItems<T>(
     })
 }
 
-export default function AIWorkflowBuilderPage() {
+interface WorkflowGenerationState {
+    generatedWorkflow: GeneratedWorkflow | null
+    explanation: string | null
+    errors: string[]
+    warnings: string[]
+}
+
+type WorkflowGenerationAction =
+    | { type: "reset" }
+    | {
+        type: "success"
+        workflow: GeneratedWorkflow
+        explanation: string | null
+        warnings: string[]
+    }
+    | {
+        type: "invalid"
+        workflow: GeneratedWorkflow | null
+        explanation: string | null
+        errors: string[]
+    }
+    | { type: "discard" }
+
+const initialWorkflowGenerationState: WorkflowGenerationState = {
+    generatedWorkflow: null,
+    explanation: null,
+    errors: [],
+    warnings: [],
+}
+
+function workflowGenerationReducer(
+    _state: WorkflowGenerationState,
+    action: WorkflowGenerationAction
+): WorkflowGenerationState {
+    if (action.type === "reset" || action.type === "discard") {
+        return initialWorkflowGenerationState
+    }
+
+    if (action.type === "success") {
+        return {
+            generatedWorkflow: action.workflow,
+            explanation: action.explanation,
+            errors: [],
+            warnings: action.warnings,
+        }
+    }
+
+    return {
+        generatedWorkflow: action.workflow,
+        explanation: action.explanation,
+        errors: action.errors,
+        warnings: [],
+    }
+}
+
+interface TemplateGenerationState {
+    generatedTemplate: GeneratedEmailTemplate | null
+    name: string
+    subject: string
+    body: string
+    explanation: string | null
+    errors: string[]
+    warnings: string[]
+}
+
+type TemplateGenerationAction =
+    | { type: "reset" }
+    | {
+        type: "success"
+        template: GeneratedEmailTemplate
+        explanation: string | null
+        warnings: string[]
+    }
+    | {
+        type: "invalid"
+        template: GeneratedEmailTemplate | null
+        explanation: string | null
+        errors: string[]
+    }
+    | { type: "setName"; value: string }
+    | { type: "setSubject"; value: string }
+    | { type: "setBody"; value: string }
+    | { type: "discard" }
+
+const initialTemplateGenerationState: TemplateGenerationState = {
+    generatedTemplate: null,
+    name: "",
+    subject: "",
+    body: "",
+    explanation: null,
+    errors: [],
+    warnings: [],
+}
+
+function templateGenerationReducer(
+    state: TemplateGenerationState,
+    action: TemplateGenerationAction
+): TemplateGenerationState {
+    if (action.type === "reset" || action.type === "discard") {
+        return initialTemplateGenerationState
+    }
+
+    if (action.type === "success") {
+        return {
+            generatedTemplate: action.template,
+            name: action.template.name,
+            subject: action.template.subject,
+            body: action.template.body_html,
+            explanation: action.explanation,
+            errors: [],
+            warnings: action.warnings,
+        }
+    }
+
+    if (action.type === "invalid") {
+        return {
+            generatedTemplate: action.template,
+            name: action.template?.name ?? "",
+            subject: action.template?.subject ?? "",
+            body: action.template?.body_html ?? "",
+            explanation: action.explanation,
+            errors: action.errors,
+            warnings: [],
+        }
+    }
+
+    if (action.type === "setName") {
+        return { ...state, name: action.value }
+    }
+
+    if (action.type === "setSubject") {
+        return { ...state, subject: action.value }
+    }
+
+    return { ...state, body: action.value }
+}
+
+function useAIBuilderController() {
     const { push } = useRouter()
     const searchParams = useSearchParams()
     const { user } = useAuth()
@@ -144,25 +282,29 @@ export default function AIWorkflowBuilderPage() {
 
     const [mode, setMode] = useState<"workflow" | "email_template">(initialMode)
     const [requestedWorkflowScope, setRequestedWorkflowScope] = useState<"personal" | "org">(initialScope)
-    const workflowScope =
+    const workflowScope: "personal" | "org" =
         requestedWorkflowScope === "org" && canManageAutomation ? "org" : "personal"
 
     const [isGenerating, setIsGenerating] = useState(false)
     const [isSavingWorkflow, setIsSavingWorkflow] = useState(false)
     const [workflowPrompt, setWorkflowPrompt] = useState("")
-    const [generatedWorkflow, setGeneratedWorkflow] = useState<GeneratedWorkflow | null>(null)
-    const [workflowExplanation, setWorkflowExplanation] = useState<string | null>(null)
-    const [workflowErrors, setWorkflowErrors] = useState<string[]>([])
-    const [workflowWarnings, setWorkflowWarnings] = useState<string[]>([])
+    const [workflowState, dispatchWorkflow] = useReducer(
+        workflowGenerationReducer,
+        initialWorkflowGenerationState
+    )
 
     const [emailPrompt, setEmailPrompt] = useState("")
-    const [generatedTemplate, setGeneratedTemplate] = useState<GeneratedEmailTemplate | null>(null)
-    const [templateName, setTemplateName] = useState("")
-    const [templateSubject, setTemplateSubject] = useState("")
-    const [templateBody, setTemplateBody] = useState("")
-    const [templateExplanation, setTemplateExplanation] = useState<string | null>(null)
-    const [templateErrors, setTemplateErrors] = useState<string[]>([])
-    const [templateWarnings, setTemplateWarnings] = useState<string[]>([])
+    const [templateState, dispatchTemplate] = useReducer(
+        templateGenerationReducer,
+        initialTemplateGenerationState
+    )
+    const { generatedWorkflow } = workflowState
+    const {
+        generatedTemplate,
+        name: templateName,
+        subject: templateSubject,
+        body: templateBody,
+    } = templateState
 
     const sanitizedTemplateBody = DOMPurify.sanitize(templateBody)
 
@@ -174,14 +316,8 @@ export default function AIWorkflowBuilderPage() {
     } = useEmailTemplateVariables()
 
     const resetGeneratedArtifacts = () => {
-        setGeneratedWorkflow(null)
-        setWorkflowExplanation(null)
-        setWorkflowErrors([])
-        setWorkflowWarnings([])
-        setGeneratedTemplate(null)
-        setTemplateExplanation(null)
-        setTemplateErrors([])
-        setTemplateWarnings([])
+        dispatchWorkflow({ type: "reset" })
+        dispatchTemplate({ type: "reset" })
     }
 
     const handleModeChange = (value: string) => {
@@ -197,6 +333,7 @@ export default function AIWorkflowBuilderPage() {
         !templateVariableCatalogError &&
         templateVariableCatalog.length > 0
     const allowedTemplateVariableNames = new Set(templateVariableCatalog.map((variable) => variable.name))
+    const templateVariableNameSet = new Set(templateVariables)
     const requiredTemplateVariableNames: string[] = []
     for (const variable of templateVariableCatalog) {
         if (variable.required) {
@@ -205,7 +342,7 @@ export default function AIWorkflowBuilderPage() {
     }
     const missingRequiredVariables =
         generatedTemplate && canValidateTemplateVariables && requiredTemplateVariableNames.length > 0
-            ? requiredTemplateVariableNames.filter((required) => !templateVariables.includes(required))
+            ? requiredTemplateVariableNames.filter((required) => !templateVariableNameSet.has(required))
             : []
     const hasMissingRequiredVariables = missingRequiredVariables.length > 0
     const unknownTemplateVariables = canValidateTemplateVariables
@@ -220,17 +357,6 @@ export default function AIWorkflowBuilderPage() {
             : null
 
     const activePrompt = mode === "workflow" ? workflowPrompt : emailPrompt
-    const promptPlaceholder =
-        mode === "workflow"
-            ? "Example: When a new lead comes in from Texas, send them a welcome email and create a follow-up task for next week…"
-            : "Example: Create a warm welcome email for new applicants who just submitted their form…"
-    const promptTitle = mode === "workflow" ? "Describe Your Workflow" : "Describe Your Email Template"
-    const promptDescription =
-        mode === "workflow"
-            ? "Tell us what should happen and when. Be specific about triggers, conditions, and actions."
-            : "Describe the email you want to send, including tone, purpose, and any details to include."
-    const suggestionList = mode === "workflow" ? SUGGESTED_PROMPTS : EMAIL_SUGGESTED_PROMPTS
-    const generateLabel = mode === "workflow" ? "Generate Workflow" : "Generate Template"
 
     const handleGenerate = async () => {
         if (!activePrompt.trim() || activePrompt.length < 10) {
@@ -242,24 +368,25 @@ export default function AIWorkflowBuilderPage() {
         const finishGenerating = () => setIsGenerating(false)
 
         if (mode === "workflow") {
-            setGeneratedWorkflow(null)
-            setWorkflowExplanation(null)
-            setWorkflowErrors([])
-            setWorkflowWarnings([])
+            dispatchWorkflow({ type: "reset" })
             try {
                 const result = await generateWorkflow(activePrompt, workflowScope)
 
                 if (result.success && result.workflow) {
-                    setGeneratedWorkflow(result.workflow)
-                    setWorkflowExplanation(result.explanation)
-                    setWorkflowWarnings(result.warnings || [])
+                    dispatchWorkflow({
+                        type: "success",
+                        workflow: result.workflow,
+                        explanation: result.explanation,
+                        warnings: result.warnings || [],
+                    })
                     toast.success("Workflow generated! Review below before saving.")
                 } else {
-                    setWorkflowExplanation(result.explanation)
-                    setWorkflowErrors(result.validation_errors || [])
-                    if (result.workflow) {
-                        setGeneratedWorkflow(result.workflow)
-                    }
+                    dispatchWorkflow({
+                        type: "invalid",
+                        workflow: result.workflow ?? null,
+                        explanation: result.explanation,
+                        errors: result.validation_errors || [],
+                    })
                     toast.error("Could not generate a valid workflow. See details below.")
                 }
             } catch {
@@ -269,31 +396,26 @@ export default function AIWorkflowBuilderPage() {
             return
         }
 
-        setGeneratedTemplate(null)
-        setTemplateExplanation(null)
-        setTemplateErrors([])
-        setTemplateWarnings([])
+        dispatchTemplate({ type: "reset" })
 
         try {
             const result = await generateEmailTemplate(activePrompt)
 
             if (result.success && result.template) {
-                setGeneratedTemplate(result.template)
-                setTemplateName(result.template.name)
-                setTemplateSubject(result.template.subject)
-                setTemplateBody(result.template.body_html)
-                setTemplateExplanation(result.explanation)
-                setTemplateWarnings(result.warnings || [])
+                dispatchTemplate({
+                    type: "success",
+                    template: result.template,
+                    explanation: result.explanation,
+                    warnings: result.warnings || [],
+                })
                 toast.success("Template generated! Review below before saving.")
             } else {
-                setTemplateExplanation(result.explanation)
-                setTemplateErrors(result.validation_errors || [])
-                if (result.template) {
-                    setGeneratedTemplate(result.template)
-                    setTemplateName(result.template.name)
-                    setTemplateSubject(result.template.subject)
-                    setTemplateBody(result.template.body_html)
-                }
+                dispatchTemplate({
+                    type: "invalid",
+                    template: result.template ?? null,
+                    explanation: result.explanation,
+                    errors: result.validation_errors || [],
+                })
                 toast.error("Could not generate a valid template. See details below.")
             }
         } catch {
@@ -363,155 +485,402 @@ export default function AIWorkflowBuilderPage() {
     const backHref =
         mode === "email_template" ? "/automation/email-templates" : "/automation?tab=workflows"
 
+    return {
+        mode,
+        backHref,
+        activePrompt,
+        workflowScope,
+        permissions: { canUseAI, canManageAutomation, disableReason },
+        status: {
+            isGenerating,
+            isSavingWorkflow,
+            isSavingTemplate: createEmailTemplate.isPending,
+        },
+        workflowState,
+        templateState,
+        templateVariables,
+        sanitizedTemplateBody,
+        templateValidation: {
+            missingRequiredVariables,
+            unknownTemplateVariables,
+            hasMissingRequiredVariables,
+            hasUnknownTemplateVariables,
+        },
+        templateCatalog: {
+            variables: templateVariableCatalog,
+            isLoading: templateVariableCatalogLoading,
+        },
+        onModeChange: handleModeChange,
+        onPromptChange: (value: string) =>
+            mode === "workflow" ? setWorkflowPrompt(value) : setEmailPrompt(value),
+        onSuggestionClick: handleSuggestionClick,
+        onWorkflowScopeChange: (value: string) =>
+            setRequestedWorkflowScope(value as "personal" | "org"),
+        onGenerate: handleGenerate,
+        onWorkflowDiscard: () => dispatchWorkflow({ type: "discard" }),
+        onWorkflowSave: handleSaveWorkflow,
+        onTemplateNameChange: (value: string) => dispatchTemplate({ type: "setName", value }),
+        onTemplateSubjectChange: (value: string) => dispatchTemplate({ type: "setSubject", value }),
+        onTemplateBodyChange: (value: string) => dispatchTemplate({ type: "setBody", value }),
+        onTemplateDiscard: () => dispatchTemplate({ type: "discard" }),
+        onTemplateSave: handleSaveEmailTemplate,
+    }
+}
+
+export default function AIWorkflowBuilderPage() {
+    const controller = useAIBuilderController()
+
+    return <AIBuilderPageShell {...controller} />
+}
+
+function AIBuilderPageShell({
+    mode,
+    backHref,
+    activePrompt,
+    workflowScope,
+    permissions,
+    status,
+    workflowState,
+    templateState,
+    templateVariables,
+    sanitizedTemplateBody,
+    templateValidation,
+    templateCatalog,
+    onModeChange,
+    onPromptChange,
+    onSuggestionClick,
+    onWorkflowScopeChange,
+    onGenerate,
+    onWorkflowDiscard,
+    onWorkflowSave,
+    onTemplateNameChange,
+    onTemplateSubjectChange,
+    onTemplateBodyChange,
+    onTemplateDiscard,
+    onTemplateSave,
+}: {
+    mode: "workflow" | "email_template"
+    backHref: string
+    activePrompt: string
+    workflowScope: "personal" | "org"
+    permissions: {
+        canUseAI: boolean
+        canManageAutomation: boolean
+        disableReason: string | null
+    }
+    status: {
+        isGenerating: boolean
+        isSavingWorkflow: boolean
+        isSavingTemplate: boolean
+    }
+    workflowState: WorkflowGenerationState
+    templateState: TemplateGenerationState
+    templateVariables: string[]
+    sanitizedTemplateBody: string
+    templateValidation: {
+        missingRequiredVariables: string[]
+        unknownTemplateVariables: string[]
+        hasMissingRequiredVariables: boolean
+        hasUnknownTemplateVariables: boolean
+    }
+    templateCatalog: {
+        variables: TemplateVariableRead[]
+        isLoading: boolean
+    }
+    onModeChange: (value: string) => void
+    onPromptChange: (value: string) => void
+    onSuggestionClick: (suggestion: string) => void
+    onWorkflowScopeChange: (value: string) => void
+    onGenerate: () => void
+    onWorkflowDiscard: () => void
+    onWorkflowSave: () => void
+    onTemplateNameChange: (value: string) => void
+    onTemplateSubjectChange: (value: string) => void
+    onTemplateBodyChange: (value: string) => void
+    onTemplateDiscard: () => void
+    onTemplateSave: () => void
+}) {
     return (
         <div className="flex min-h-screen flex-col bg-background">
-            {/* Header */}
-            <div className="border-b bg-card">
-                <div className="flex items-center justify-between p-6">
-                    <div className="flex items-center gap-4">
-                        <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={mode === "email_template" ? "Back to email templates" : "Back to workflows"}
-                            render={<Link href={backHref} />}
-                        >
-                            <ArrowLeftIcon className="size-4" />
-                        </Button>
-                        <div>
-                            <div className="flex items-center gap-3">
-                                {mode === "workflow" ? (
-                                    <SparklesIcon className="size-6 text-teal-500" />
-                                ) : (
-                                    <MailIcon className="size-6 text-primary" />
-                                )}
-                                <h1 className="text-2xl font-semibold">
-                                    {mode === "workflow" ? "AI Workflow Builder" : "AI Email Template Builder"}
-                                </h1>
-                                <Badge variant="secondary" className="bg-teal-500/10 text-teal-500 border-teal-500/20">
-                                    Beta
-                                </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">
-                                {mode === "workflow"
-                                    ? "Describe what you want in plain English, and AI will create the workflow for you."
-                                    : "Describe the email template you need, and AI will draft it for you."}
-                            </p>
-                        </div>
-                    </div>
-                    <Tabs value={mode} onValueChange={handleModeChange}>
-                        <TabsList>
-                            <TabsTrigger value="workflow" className="gap-2">
-                                <ZapIcon className="size-4" />
-                                Workflow
-                            </TabsTrigger>
-                            <TabsTrigger value="email_template" className="gap-2">
-                                <MailIcon className="size-4" />
-                                Email Template
-                            </TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-                </div>
-            </div>
+            <AIBuilderHeader mode={mode} backHref={backHref} onModeChange={onModeChange} />
 
-            {/* Main Content */}
             <div className="flex-1 p-6 space-y-6 max-w-4xl mx-auto w-full">
-                {!canUseAI && (
+                {!permissions.canUseAI && (
                     <Alert variant="destructive">
                         <XCircleIcon className="size-4" />
                         <AlertTitle>AI Builder is disabled</AlertTitle>
                         <AlertDescription>
-                            {disableReason || "AI is currently unavailable."}
+                            {permissions.disableReason || "AI is currently unavailable."}
                         </AlertDescription>
                     </Alert>
                 )}
 
-                {/* Prompt Input */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <WandIcon className="size-5" />
-                            {promptTitle}
-                        </CardTitle>
-                        <CardDescription>
-                            {promptDescription}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <Textarea
-                            placeholder={promptPlaceholder}
-                            value={activePrompt}
-                            onChange={(e) =>
-                                mode === "workflow"
-                                    ? setWorkflowPrompt(e.target.value)
-                                    : setEmailPrompt(e.target.value)
-                            }
-                            rows={4}
-                            className="resize-none"
-                        />
+                <PromptComposerCard
+                    mode={mode}
+                    activePrompt={activePrompt}
+                    workflowScope={workflowScope}
+                    canManageAutomation={permissions.canManageAutomation}
+                    isGenerating={status.isGenerating}
+                    canUseAI={permissions.canUseAI}
+                    onPromptChange={onPromptChange}
+                    onSuggestionClick={onSuggestionClick}
+                    onWorkflowScopeChange={onWorkflowScopeChange}
+                    onGenerate={onGenerate}
+                />
 
-                        {/* Suggestions */}
-                        <div className="space-y-2">
-                            <p className="text-sm text-muted-foreground">Try these examples:</p>
-                            <div className="flex flex-wrap gap-2">
-                                {suggestionList.slice(0, 3).map((suggestion) => (
-                                    <button
-                                        type="button"
-                                        key={suggestion}
-                                        onClick={() => handleSuggestionClick(suggestion)}
-                                        className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                                    >
-                                        {suggestion.length > 50 ? suggestion.slice(0, 50) + "…" : suggestion}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                <GenerationAlerts
+                    mode={mode}
+                    workflowErrors={workflowState.errors}
+                    workflowWarnings={workflowState.warnings}
+                    templateErrors={templateState.errors}
+                    templateWarnings={templateState.warnings}
+                />
 
-                        {mode === "workflow" && (
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                <span>Scope:</span>
-                                <Tabs
-                                    value={workflowScope}
-                                    onValueChange={(value) =>
-                                        setRequestedWorkflowScope(value as "personal" | "org")
-                                    }
-                                >
-                                    <TabsList>
-                                        <TabsTrigger value="personal">Personal</TabsTrigger>
-                                        <TabsTrigger value="org" disabled={!canManageAutomation}>
-                                            Org
-                                        </TabsTrigger>
-                                    </TabsList>
-                                </Tabs>
-                                {!canManageAutomation && (
-                                    <span className="text-xs">Org scope requires manage automation</span>
-                                )}
-                            </div>
+                {mode === "workflow" && workflowState.generatedWorkflow && (
+                    <WorkflowPreviewCard
+                        generatedWorkflow={workflowState.generatedWorkflow}
+                        workflowErrors={workflowState.errors}
+                        workflowExplanation={workflowState.explanation}
+                        isSavingWorkflow={status.isSavingWorkflow}
+                        onDiscard={onWorkflowDiscard}
+                        onSave={onWorkflowSave}
+                    />
+                )}
+
+                {mode === "email_template" && templateState.generatedTemplate && (
+                    <EmailTemplatePreviewCard
+                        generatedTemplate={templateState.generatedTemplate}
+                        templateName={templateState.name}
+                        templateSubject={templateState.subject}
+                        templateBody={templateState.body}
+                        templateExplanation={templateState.explanation}
+                        templateErrors={templateState.errors}
+                        templateVariables={templateVariables}
+                        sanitizedTemplateBody={sanitizedTemplateBody}
+                        missingRequiredVariables={templateValidation.missingRequiredVariables}
+                        unknownTemplateVariables={templateValidation.unknownTemplateVariables}
+                        hasMissingRequiredVariables={templateValidation.hasMissingRequiredVariables}
+                        hasUnknownTemplateVariables={templateValidation.hasUnknownTemplateVariables}
+                        isSaving={status.isSavingTemplate}
+                        onNameChange={onTemplateNameChange}
+                        onSubjectChange={onTemplateSubjectChange}
+                        onBodyChange={onTemplateBodyChange}
+                        onDiscard={onTemplateDiscard}
+                        onSave={onTemplateSave}
+                    />
+                )}
+
+                {!status.isGenerating && (
+                    <>
+                        {mode === "workflow" && !workflowState.generatedWorkflow && (
+                            <AIBuilderInfoCard
+                                mode={mode}
+                                templateVariableCatalog={templateCatalog.variables}
+                                templateVariableCatalogLoading={templateCatalog.isLoading}
+                            />
                         )}
+                        {mode === "email_template" && !templateState.generatedTemplate && (
+                            <AIBuilderInfoCard
+                                mode={mode}
+                                templateVariableCatalog={templateCatalog.variables}
+                                templateVariableCatalogLoading={templateCatalog.isLoading}
+                            />
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+    )
+}
 
-                        <div className="flex justify-end">
-                            <Button
-                                onClick={handleGenerate}
-                                disabled={isGenerating || !activePrompt.trim() || !canUseAI}
-                                className="gap-2"
-                            >
-                                {isGenerating ? (
-                                    <>
-                                        <Loader2Icon className="size-4 animate-spin" />
-                                        Generating…
-                                    </>
-                                ) : (
-                                    <>
-                                        <SparklesIcon className="size-4" />
-                                        {generateLabel}
-                                    </>
-                                )}
-                            </Button>
+function AIBuilderHeader({
+    mode,
+    backHref,
+    onModeChange,
+}: {
+    mode: "workflow" | "email_template"
+    backHref: string
+    onModeChange: (value: string) => void
+}) {
+    return (
+        <div className="border-b bg-card">
+            <div className="flex items-center justify-between p-6">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={mode === "email_template" ? "Back to email templates" : "Back to workflows"}
+                        render={<Link href={backHref} />}
+                    >
+                        <ArrowLeftIcon className="size-4" />
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            {mode === "workflow" ? (
+                                <SparklesIcon className="size-6 text-teal-500" />
+                            ) : (
+                                <MailIcon className="size-6 text-primary" />
+                            )}
+                            <h1 className="text-2xl font-semibold">
+                                {mode === "workflow" ? "AI Workflow Builder" : "AI Email Template Builder"}
+                            </h1>
+                            <Badge variant="secondary" className="bg-teal-500/10 text-teal-500 border-teal-500/20">
+                                Beta
+                            </Badge>
                         </div>
-                    </CardContent>
-                </Card>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            {mode === "workflow"
+                                ? "Describe what you want in plain English, and AI will create the workflow for you."
+                                : "Describe the email template you need, and AI will draft it for you."}
+                        </p>
+                    </div>
+                </div>
+                <Tabs value={mode} onValueChange={onModeChange}>
+                    <TabsList>
+                        <TabsTrigger value="workflow" className="gap-2">
+                            <ZapIcon className="size-4" />
+                            Workflow
+                        </TabsTrigger>
+                        <TabsTrigger value="email_template" className="gap-2">
+                            <MailIcon className="size-4" />
+                            Email Template
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
+        </div>
+    )
+}
 
-                {/* Validation Errors */}
-                {mode === "workflow" && workflowErrors.length > 0 && (
+function PromptComposerCard({
+    mode,
+    activePrompt,
+    workflowScope,
+    canManageAutomation,
+    isGenerating,
+    canUseAI,
+    onPromptChange,
+    onSuggestionClick,
+    onWorkflowScopeChange,
+    onGenerate,
+}: {
+    mode: "workflow" | "email_template"
+    activePrompt: string
+    workflowScope: "personal" | "org"
+    canManageAutomation: boolean
+    isGenerating: boolean
+    canUseAI: boolean
+    onPromptChange: (value: string) => void
+    onSuggestionClick: (suggestion: string) => void
+    onWorkflowScopeChange: (value: string) => void
+    onGenerate: () => void
+}) {
+    const promptPlaceholder =
+        mode === "workflow"
+            ? "Example: When a new lead comes in from Texas, send them a welcome email and create a follow-up task for next week…"
+            : "Example: Create a warm welcome email for new applicants who just submitted their form…"
+    const promptTitle = mode === "workflow" ? "Describe Your Workflow" : "Describe Your Email Template"
+    const promptDescription =
+        mode === "workflow"
+            ? "Tell us what should happen and when. Be specific about triggers, conditions, and actions."
+            : "Describe the email you want to send, including tone, purpose, and any details to include."
+    const suggestionList = mode === "workflow" ? SUGGESTED_PROMPTS : EMAIL_SUGGESTED_PROMPTS
+    const generateLabel = mode === "workflow" ? "Generate Workflow" : "Generate Template"
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <WandIcon className="size-5" />
+                    {promptTitle}
+                </CardTitle>
+                <CardDescription>
+                    {promptDescription}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <Textarea
+                    placeholder={promptPlaceholder}
+                    value={activePrompt}
+                    onChange={(e) => onPromptChange(e.target.value)}
+                    rows={4}
+                    className="resize-none"
+                />
+
+                <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Try these examples:</p>
+                    <div className="flex flex-wrap gap-2">
+                        {suggestionList.slice(0, 3).map((suggestion) => (
+                            <button
+                                type="button"
+                                key={suggestion}
+                                onClick={() => onSuggestionClick(suggestion)}
+                                className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                {suggestion.length > 50 ? suggestion.slice(0, 50) + "…" : suggestion}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {mode === "workflow" && (
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <span>Scope:</span>
+                        <Tabs value={workflowScope} onValueChange={onWorkflowScopeChange}>
+                            <TabsList>
+                                <TabsTrigger value="personal">Personal</TabsTrigger>
+                                <TabsTrigger value="org" disabled={!canManageAutomation}>
+                                    Org
+                                </TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                        {!canManageAutomation && (
+                            <span className="text-xs">Org scope requires manage automation</span>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex justify-end">
+                    <Button
+                        onClick={onGenerate}
+                        disabled={isGenerating || !activePrompt.trim() || !canUseAI}
+                        className="gap-2"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <Loader2Icon className="size-4 animate-spin" />
+                                Generating…
+                            </>
+                        ) : (
+                            <>
+                                <SparklesIcon className="size-4" />
+                                {generateLabel}
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function GenerationAlerts({
+    mode,
+    workflowErrors,
+    workflowWarnings,
+    templateErrors,
+    templateWarnings,
+}: {
+    mode: "workflow" | "email_template"
+    workflowErrors: string[]
+    workflowWarnings: string[]
+    templateErrors: string[]
+    templateWarnings: string[]
+}) {
+    if (mode === "workflow") {
+        return (
+            <>
+                {workflowErrors.length > 0 && (
                     <Alert variant="destructive">
                         <XCircleIcon className="size-4" />
                         <AlertTitle>Validation Errors</AlertTitle>
@@ -525,8 +894,7 @@ export default function AIWorkflowBuilderPage() {
                     </Alert>
                 )}
 
-                {/* Warnings */}
-                {mode === "workflow" && workflowWarnings.length > 0 && (
+                {workflowWarnings.length > 0 && (
                     <Alert>
                         <AlertTriangleIcon className="size-4" />
                         <AlertTitle>Warnings</AlertTitle>
@@ -539,360 +907,413 @@ export default function AIWorkflowBuilderPage() {
                         </AlertDescription>
                     </Alert>
                 )}
+            </>
+        )
+    }
 
-                {/* Generated Workflow Preview */}
-                {mode === "workflow" && generatedWorkflow && (
-                    <Card className="border-teal-500/30">
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <ZapIcon className="size-5 text-teal-500" />
-                                        {generatedWorkflow.name}
-                                    </CardTitle>
-                                    {generatedWorkflow.description && (
-                                        <CardDescription className="mt-1">
-                                            {generatedWorkflow.description}
-                                        </CardDescription>
-                                    )}
-                                </div>
-                                {workflowErrors.length === 0 && (
-                                    <Badge variant="outline" className="border-green-500 text-green-600">
-                                        <CheckCircleIcon className="size-3 mr-1" />
-                                        Valid
-                                    </Badge>
-                                )}
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            {/* Trigger */}
-                            <div className="bg-muted/50 rounded-lg p-4">
-                                <p className="text-sm font-medium text-muted-foreground mb-1">Trigger</p>
-                                <p className="font-medium">
-                                    {TRIGGER_LABELS[generatedWorkflow.trigger_type] || generatedWorkflow.trigger_type}
-                                </p>
-                                {Object.keys(generatedWorkflow.trigger_config).length > 0 && (
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Config: {JSON.stringify(generatedWorkflow.trigger_config)}
-                                    </p>
-                                )}
-                            </div>
+    return (
+        <>
+            {templateErrors.length > 0 && (
+                <Alert variant="destructive">
+                    <XCircleIcon className="size-4" />
+                    <AlertTitle>Validation Errors</AlertTitle>
+                    <AlertDescription>
+                        <ul className="list-disc list-inside space-y-1 mt-2">
+                            {getStableKeyedItems(templateErrors, getWorkflowMessageKey).map(({ item: error, key }) => (
+                                <li key={key}>{error}</li>
+                            ))}
+                        </ul>
+                    </AlertDescription>
+                </Alert>
+            )}
 
-                            {/* Conditions */}
-                            {generatedWorkflow.conditions.length > 0 && (
-                                <div className="bg-muted/50 rounded-lg p-4">
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">
-                                        Conditions ({generatedWorkflow.condition_logic})
-                                    </p>
-                                    <ul className="space-y-1">
-                                        {getStableKeyedItems(generatedWorkflow.conditions, getWorkflowConditionKey).map(({ item: cond, key }) => (
-                                            <li key={key} className="text-sm">
-                                                <span className="font-mono bg-background px-1 rounded">{cond.field}</span>
-                                                {" "}{cond.operator}{" "}
-                                                <span className="font-mono bg-background px-1 rounded">
-                                                    {String(cond.value)}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
+            {templateWarnings.length > 0 && (
+                <Alert>
+                    <AlertTriangleIcon className="size-4" />
+                    <AlertTitle>Warnings</AlertTitle>
+                    <AlertDescription>
+                        <ul className="list-disc list-inside space-y-1 mt-2">
+                            {getStableKeyedItems(templateWarnings, getWorkflowMessageKey).map(({ item: warning, key }) => (
+                                <li key={key}>{warning}</li>
+                            ))}
+                        </ul>
+                    </AlertDescription>
+                </Alert>
+            )}
+        </>
+    )
+}
 
-                            {/* Actions */}
-                            <div className="bg-muted/50 rounded-lg p-4">
-                                <p className="text-sm font-medium text-muted-foreground mb-2">Actions</p>
-                                <ul className="space-y-2">
-                                    {getStableKeyedItems(generatedWorkflow.actions, getWorkflowActionKey).map(({ item: action, key, position }) => {
-                                        const workflowActionDetails = Object.entries(action).flatMap(([k, v]) =>
-                                            k === "action_type" ? [] : [`${k}: ${v}`]
-                                        )
-                                        return (
-                                            <li key={key} className="flex items-start gap-2">
-                                                <Badge variant="secondary" className="shrink-0">
-                                                    {position + 1}
-                                                </Badge>
-                                                <div>
-                                                    <p className="font-medium">
-                                                        {ACTION_LABELS[action.action_type] || action.action_type}
-                                                    </p>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {workflowActionDetails.join(", ")}
-                                                    </p>
-                                                </div>
-                                            </li>
-                                        )
-                                    })}
-                                </ul>
-                            </div>
+function WorkflowPreviewCard({
+    generatedWorkflow,
+    workflowErrors,
+    workflowExplanation,
+    isSavingWorkflow,
+    onDiscard,
+    onSave,
+}: {
+    generatedWorkflow: GeneratedWorkflow
+    workflowErrors: string[]
+    workflowExplanation: string | null
+    isSavingWorkflow: boolean
+    onDiscard: () => void
+    onSave: () => void
+}) {
+    return (
+        <Card className="border-teal-500/30">
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <ZapIcon className="size-5 text-teal-500" />
+                            {generatedWorkflow.name}
+                        </CardTitle>
+                        {generatedWorkflow.description && (
+                            <CardDescription className="mt-1">
+                                {generatedWorkflow.description}
+                            </CardDescription>
+                        )}
+                    </div>
+                    {workflowErrors.length === 0 && (
+                        <Badge variant="outline" className="border-green-500 text-green-600">
+                            <CheckCircleIcon className="size-3 mr-1" />
+                            Valid
+                        </Badge>
+                    )}
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Trigger</p>
+                    <p className="font-medium">
+                        {TRIGGER_LABELS[generatedWorkflow.trigger_type] || generatedWorkflow.trigger_type}
+                    </p>
+                    {Object.keys(generatedWorkflow.trigger_config).length > 0 && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                            Config: {JSON.stringify(generatedWorkflow.trigger_config)}
+                        </p>
+                    )}
+                </div>
 
-                            {/* Explanation */}
-                            {workflowExplanation && (
-                                <p className="text-sm text-muted-foreground italic">{workflowExplanation}</p>
-                            )}
-
-                            {/* Save Button */}
-                            {workflowErrors.length === 0 && (
-                                <div className="flex justify-end gap-3 pt-4 border-t">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => {
-                                            setGeneratedWorkflow(null)
-                                            setWorkflowExplanation(null)
-                                        }}
-                                    >
-                                        Discard
-                                    </Button>
-                                    <Button onClick={handleSaveWorkflow} disabled={isSavingWorkflow}>
-                                        {isSavingWorkflow ? (
-                                            <>
-                                                <Loader2Icon className="size-4 animate-spin mr-2" />
-                                                Saving…
-                                            </>
-                                        ) : (
-                                            <>
-                                                <CheckCircleIcon className="size-4 mr-2" />
-                                                Save Workflow
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                {generatedWorkflow.conditions.length > 0 && (
+                    <div className="bg-muted/50 rounded-lg p-4">
+                        <p className="text-sm font-medium text-muted-foreground mb-2">
+                            Conditions ({generatedWorkflow.condition_logic})
+                        </p>
+                        <ul className="space-y-1">
+                            {getStableKeyedItems(generatedWorkflow.conditions, getWorkflowConditionKey).map(({ item: cond, key }) => (
+                                <li key={key} className="text-sm">
+                                    <span className="font-mono bg-background px-1 rounded">{cond.field}</span>
+                                    {" "}{cond.operator}{" "}
+                                    <span className="font-mono bg-background px-1 rounded">
+                                        {String(cond.value)}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
                 )}
 
-                {mode === "email_template" && templateErrors.length > 0 && (
+                <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">Actions</p>
+                    <ul className="space-y-2">
+                        {getStableKeyedItems(generatedWorkflow.actions, getWorkflowActionKey).map(({ item: action, key, position }) => {
+                            const workflowActionDetails = Object.entries(action).flatMap(([k, v]) =>
+                                k === "action_type" ? [] : [`${k}: ${v}`]
+                            )
+                            return (
+                                <li key={key} className="flex items-start gap-2">
+                                    <Badge variant="secondary" className="shrink-0">
+                                        {position + 1}
+                                    </Badge>
+                                    <div>
+                                        <p className="font-medium">
+                                            {ACTION_LABELS[action.action_type] || action.action_type}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {workflowActionDetails.join(", ")}
+                                        </p>
+                                    </div>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+
+                {workflowExplanation && (
+                    <p className="text-sm text-muted-foreground italic">{workflowExplanation}</p>
+                )}
+
+                {workflowErrors.length === 0 && (
+                    <div className="flex justify-end gap-3 pt-4 border-t">
+                        <Button variant="outline" onClick={onDiscard}>
+                            Discard
+                        </Button>
+                        <Button onClick={onSave} disabled={isSavingWorkflow}>
+                            {isSavingWorkflow ? (
+                                <>
+                                    <Loader2Icon className="size-4 animate-spin mr-2" />
+                                    Saving…
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircleIcon className="size-4 mr-2" />
+                                    Save Workflow
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function EmailTemplatePreviewCard({
+    generatedTemplate,
+    templateName,
+    templateSubject,
+    templateBody,
+    templateExplanation,
+    templateErrors,
+    templateVariables,
+    sanitizedTemplateBody,
+    missingRequiredVariables,
+    unknownTemplateVariables,
+    hasMissingRequiredVariables,
+    hasUnknownTemplateVariables,
+    isSaving,
+    onNameChange,
+    onSubjectChange,
+    onBodyChange,
+    onDiscard,
+    onSave,
+}: {
+    generatedTemplate: GeneratedEmailTemplate
+    templateName: string
+    templateSubject: string
+    templateBody: string
+    templateExplanation: string | null
+    templateErrors: string[]
+    templateVariables: string[]
+    sanitizedTemplateBody: string
+    missingRequiredVariables: string[]
+    unknownTemplateVariables: string[]
+    hasMissingRequiredVariables: boolean
+    hasUnknownTemplateVariables: boolean
+    isSaving: boolean
+    onNameChange: (value: string) => void
+    onSubjectChange: (value: string) => void
+    onBodyChange: (value: string) => void
+    onDiscard: () => void
+    onSave: () => void
+}) {
+    return (
+        <Card className="border-primary/30">
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <MailIcon className="size-5 text-primary" />
+                            {templateName || generatedTemplate.name}
+                        </CardTitle>
+                        {templateExplanation && (
+                            <CardDescription className="mt-1">
+                                {templateExplanation}
+                            </CardDescription>
+                        )}
+                    </div>
+                    {templateErrors.length === 0 && !hasMissingRequiredVariables && (
+                        <Badge variant="outline" className="border-green-500 text-green-600">
+                            <CheckCircleIcon className="size-3 mr-1" />
+                            Valid
+                        </Badge>
+                    )}
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-3">
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">Template Name</p>
+                        <Input
+                            value={templateName}
+                            onChange={(e) => onNameChange(e.target.value)}
+                            placeholder="Template name"
+                        />
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">Subject</p>
+                        <Input
+                            value={templateSubject}
+                            onChange={(e) => onSubjectChange(e.target.value)}
+                            placeholder="Subject line"
+                        />
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">Body (HTML)</p>
+                        <Textarea
+                            value={templateBody}
+                            onChange={(e) => onBodyChange(e.target.value)}
+                            rows={6}
+                            className="font-mono text-xs"
+                        />
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">Preview</p>
+                        <TrustedSanitizedHtmlContent
+                            html={sanitizedTemplateBody}
+                            className="prose prose-sm max-w-none"
+                        />
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">
+                            Variables detected
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {templateVariables.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">None</span>
+                            ) : (
+                                templateVariables.map((variable) => (
+                                    <Badge key={variable} variant="secondary">
+                                        {variable}
+                                    </Badge>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {hasMissingRequiredVariables && (
                     <Alert variant="destructive">
                         <XCircleIcon className="size-4" />
-                        <AlertTitle>Validation Errors</AlertTitle>
+                        <AlertTitle>Missing required variables</AlertTitle>
                         <AlertDescription>
-                            <ul className="list-disc list-inside space-y-1 mt-2">
-                                {getStableKeyedItems(templateErrors, getWorkflowMessageKey).map(({ item: error, key }) => (
-                                    <li key={key}>{error}</li>
-                                ))}
-                            </ul>
+                            Add{" "}
+                            <span className="font-mono">
+                                {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
+                            </span>{" "}
+                            to the template before saving.
                         </AlertDescription>
                     </Alert>
                 )}
 
-                {mode === "email_template" && templateWarnings.length > 0 && (
-                    <Alert>
-                        <AlertTriangleIcon className="size-4" />
-                        <AlertTitle>Warnings</AlertTitle>
+                {hasUnknownTemplateVariables && (
+                    <Alert variant="destructive">
+                        <XCircleIcon className="size-4" />
+                        <AlertTitle>Unknown variables</AlertTitle>
                         <AlertDescription>
-                            <ul className="list-disc list-inside space-y-1 mt-2">
-                                {getStableKeyedItems(templateWarnings, getWorkflowMessageKey).map(({ item: warning, key }) => (
-                                    <li key={key}>{warning}</li>
-                                ))}
-                            </ul>
+                            {unknownTemplateVariables.join(", ")}
                         </AlertDescription>
                     </Alert>
                 )}
 
-                {mode === "email_template" && generatedTemplate && (
-                    <Card className="border-primary/30">
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <MailIcon className="size-5 text-primary" />
-                                        {templateName || generatedTemplate.name}
-                                    </CardTitle>
-                                {templateExplanation && (
-                                    <CardDescription className="mt-1">
-                                        {templateExplanation}
-                                    </CardDescription>
-                                )}
-                            </div>
-                                {templateErrors.length === 0 && !hasMissingRequiredVariables && (
-                                    <Badge variant="outline" className="border-green-500 text-green-600">
-                                        <CheckCircleIcon className="size-3 mr-1" />
-                                        Valid
-                                    </Badge>
-                                )}
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="space-y-3">
-                                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                                    <p className="text-sm font-medium text-muted-foreground">Template Name</p>
-                                    <Input
-                                        value={templateName}
-                                        onChange={(e) => setTemplateName(e.target.value)}
-                                        placeholder="Template name"
-                                    />
-                                </div>
-                                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                                    <p className="text-sm font-medium text-muted-foreground">Subject</p>
-                                    <Input
-                                        value={templateSubject}
-                                        onChange={(e) => setTemplateSubject(e.target.value)}
-                                        placeholder="Subject line"
-                                    />
-                                </div>
-                                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                                    <p className="text-sm font-medium text-muted-foreground">Body (HTML)</p>
-                                    <Textarea
-                                        value={templateBody}
-                                        onChange={(e) => setTemplateBody(e.target.value)}
-                                        rows={6}
-                                        className="font-mono text-xs"
-                                    />
-                                </div>
-                                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                                    <p className="text-sm font-medium text-muted-foreground">Preview</p>
-                                    <TrustedSanitizedHtmlContent
-                                        html={sanitizedTemplateBody}
-                                        className="prose prose-sm max-w-none"
-                                    />
-                                </div>
-                                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                                    <p className="text-sm font-medium text-muted-foreground">
-                                        Variables detected
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {templateVariables.length === 0 ? (
-                                            <span className="text-xs text-muted-foreground">None</span>
-                                        ) : (
-                                            templateVariables.map((variable) => (
-                                                <Badge key={variable} variant="secondary">
-                                                    {variable}
-                                                </Badge>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                    <Button variant="outline" onClick={onDiscard}>
+                        Discard
+                    </Button>
+                    <Button
+                        onClick={onSave}
+                        disabled={
+                            isSaving ||
+                            hasMissingRequiredVariables ||
+                            hasUnknownTemplateVariables ||
+                            templateErrors.length > 0
+                        }
+                    >
+                        {isSaving ? (
+                            <>
+                                <Loader2Icon className="size-4 animate-spin mr-2" />
+                                Saving…
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircleIcon className="size-4 mr-2" />
+                                Save Template
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
 
-                            {hasMissingRequiredVariables && (
-                                <Alert variant="destructive">
-                                    <XCircleIcon className="size-4" />
-                                    <AlertTitle>Missing required variables</AlertTitle>
-                                    <AlertDescription>
-                                        Add{" "}
-                                        <span className="font-mono">
-                                            {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
-                                        </span>{" "}
-                                        to the template before saving.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
+function AIBuilderInfoCard({
+    mode,
+    templateVariableCatalog,
+    templateVariableCatalogLoading,
+}: {
+    mode: "workflow" | "email_template"
+    templateVariableCatalog: TemplateVariableRead[]
+    templateVariableCatalogLoading: boolean
+}) {
+    if (mode === "workflow") {
+        return (
+            <Card className="bg-muted/30 border-dashed">
+                <CardContent className="py-8">
+                    <div className="flex flex-col items-center text-center gap-y-4">
+                        <div className="size-16 rounded-full bg-teal-500/10 flex items-center justify-center">
+                            <SparklesIcon className="size-8 text-teal-500" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-lg">How It Works</h3>
+                            <p className="text-sm text-muted-foreground max-w-md mt-2">
+                                Describe your automation in plain English. Our AI will understand your intent
+                                and create a workflow with the right triggers, conditions, and actions.
+                                You can review and modify before saving.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 justify-center">
+                            <Badge variant="outline">Natural Language</Badge>
+                            <Badge variant="outline">Safe by Default</Badge>
+                            <Badge variant="outline">Review Before Saving</Badge>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
 
-                            {hasUnknownTemplateVariables && (
-                                <Alert variant="destructive">
-                                    <XCircleIcon className="size-4" />
-                                    <AlertTitle>Unknown variables</AlertTitle>
-                                    <AlertDescription>
-                                        {unknownTemplateVariables.join(", ")}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            <div className="flex justify-end gap-3 pt-4 border-t">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        setGeneratedTemplate(null)
-                                        setTemplateExplanation(null)
-                                    }}
-                                >
-                                    Discard
-                                </Button>
-                                <Button
-                                    onClick={handleSaveEmailTemplate}
-                                    disabled={
-                                        createEmailTemplate.isPending ||
-                                        hasMissingRequiredVariables ||
-                                        hasUnknownTemplateVariables ||
-                                        templateErrors.length > 0
-                                    }
-                                >
-                                    {createEmailTemplate.isPending ? (
-                                        <>
-                                            <Loader2Icon className="size-4 animate-spin mr-2" />
-                                            Saving…
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircleIcon className="size-4 mr-2" />
-                                            Save Template
-                                        </>
+    return (
+        <Card className="bg-muted/30 border-dashed">
+            <CardContent className="py-8">
+                <div className="flex flex-col items-center text-center gap-y-4">
+                    <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center">
+                        <MailIcon className="size-8 text-primary" />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-lg">How It Works</h3>
+                        <p className="text-sm text-muted-foreground max-w-md mt-2">
+                            Describe the email you want to send. AI will draft an HTML template using
+                            approved variables so you can reuse it across workflows and campaigns.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                        {templateVariableCatalogLoading && (
+                            <Badge variant="outline">Loading variables…</Badge>
+                        )}
+                        {!templateVariableCatalogLoading &&
+                            templateVariableCatalog.length > 0 && (
+                                <>
+                                    {templateVariableCatalog.slice(0, 6).map((variable) => (
+                                        <Badge key={variable.name} variant="outline">
+                                            {variable.name}
+                                        </Badge>
+                                    ))}
+                                    {templateVariableCatalog.length > 6 && (
+                                        <Badge variant="outline">
+                                            +{templateVariableCatalog.length - 6} more
+                                        </Badge>
                                     )}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Info Card */}
-                {mode === "workflow" && !generatedWorkflow && !isGenerating && (
-                    <Card className="bg-muted/30 border-dashed">
-                        <CardContent className="py-8">
-                            <div className="flex flex-col items-center text-center gap-y-4">
-                                <div className="size-16 rounded-full bg-teal-500/10 flex items-center justify-center">
-                                    <SparklesIcon className="size-8 text-teal-500" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-lg">How It Works</h3>
-                                    <p className="text-sm text-muted-foreground max-w-md mt-2">
-                                        Describe your automation in plain English. Our AI will understand your intent
-                                        and create a workflow with the right triggers, conditions, and actions.
-                                        You can review and modify before saving.
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                    <Badge variant="outline">Natural Language</Badge>
-                                    <Badge variant="outline">Safe by Default</Badge>
-                                    <Badge variant="outline">Review Before Saving</Badge>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {mode === "email_template" && !generatedTemplate && !isGenerating && (
-                    <Card className="bg-muted/30 border-dashed">
-                        <CardContent className="py-8">
-                            <div className="flex flex-col items-center text-center gap-y-4">
-                                <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <MailIcon className="size-8 text-primary" />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-lg">How It Works</h3>
-                                    <p className="text-sm text-muted-foreground max-w-md mt-2">
-                                        Describe the email you want to send. AI will draft an HTML template using
-                                        approved variables so you can reuse it across workflows and campaigns.
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                    {templateVariableCatalogLoading && (
-                                        <Badge variant="outline">Loading variables…</Badge>
-                                    )}
-                                    {!templateVariableCatalogLoading &&
-                                        templateVariableCatalog.length > 0 && (
-                                            <>
-                                                {templateVariableCatalog.slice(0, 6).map((variable) => (
-                                                    <Badge key={variable.name} variant="outline">
-                                                        {variable.name}
-                                                    </Badge>
-                                                ))}
-                                                {templateVariableCatalog.length > 6 && (
-                                                    <Badge variant="outline">
-                                                        +{templateVariableCatalog.length - 6} more
-                                                    </Badge>
-                                                )}
-                                            </>
-                                        )}
-                                    {!templateVariableCatalogLoading &&
-                                        templateVariableCatalog.length === 0 && (
-                                            <Badge variant="outline">Variables unavailable</Badge>
-                                        )}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
-        </div>
+                                </>
+                            )}
+                        {!templateVariableCatalogLoading &&
+                            templateVariableCatalog.length === 0 && (
+                                <Badge variant="outline">Variables unavailable</Badge>
+                            )}
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
     )
 }

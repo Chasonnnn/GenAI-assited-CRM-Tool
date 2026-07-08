@@ -4045,3 +4045,25 @@ Full command after Batch 185: `cd apps/web && npx -y react-doctor@latest . --ver
 | `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-platform-templates.ts:348` | False positive. `useSendPlatformSystemEmailCampaign` sends an email/log action but does not mutate template/detail/branding caches, and there is no owned query-backed campaign/log cache here. | Medium-high | Left unchanged. | Read-only hook/source inspection by sidecar agent. Suggested regression surface if edited later: `pnpm test --run tests/platform-system-email-template-page.test.tsx`. |
 | `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-profile.ts:29` | False positive. `useSyncProfile` returns a staged diff only; the later save mutation persists and invalidates `profileKeys.detail`. | High | Left unchanged. | Read-only hook/source inspection by sidecar agent. Suggested regression surface if edited later: `pnpm test --run tests/use-mutation-invalidations.test.ts tests/react-regressions-source.test.ts`. |
 | `react-doctor/query-mutation-missing-invalidation` | `lib/hooks/use-schedule-parser.ts:17` | False positive. `useParseSchedule` parses text into proposed tasks; `useCreateBulkTasks` is the actual write and already invalidates task/surrogate caches. | High | Left unchanged. | Read-only hook/source inspection by sidecar agent. Suggested regression surface if edited later: `pnpm test --run tests/schedule-parser-dialog.test.tsx tests/use-mutation-invalidations.test.ts`. |
+
+## Batch 187
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/js-set-map-lookups` | `app/(app)/automation/ai-builder/page.client.tsx:208` | Valid. Required template variables were filtered against `templateVariables.includes(required)` while validating generated template output. | High | Added `templateVariableNameSet` and switched the membership check to `Set.has`. Extended the AI builder source guard to keep the Set conversion. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI builder template derivations"` failed before the Set conversion. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "AI builder"`; `pnpm test --run tests/ai-builder-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor reported no issues after the full split. |
+| `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `app/(app)/automation/ai-builder/page.client.tsx:131` | Valid. `AIWorkflowBuilderPage` reset and populated workflow/template generation fields in related setter clusters, then rendered the header, prompt card, alerts, workflow preview, template preview, and empty-state guidance in one component body. | High | Added `workflowGenerationReducer` and `templateGenerationReducer`; split rendering into `AIBuilderHeader`, `PromptComposerCard`, `GenerationAlerts`, `WorkflowPreviewCard`, `EmailTemplatePreviewCard`, and `AIBuilderInfoCard`; then moved shell wiring to `AIBuilderPageShell`. Updated source guards for the reducer split and stable-key assertions after the alert helper renamed local arrays. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI builder"` failed on missing reducer/helper boundaries. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "AI builder"`; `pnpm test --run tests/ai-builder-page.test.tsx`; `pnpm tsc --noEmit`; `git diff --check`; changed-scope React Doctor reported no issues. |
+| `react-doctor/no-many-boolean-props` | `app/(app)/automation/ai-builder/page.client.tsx:538` | Valid transient finding introduced during the shell extraction. `AIBuilderPageShell` initially received separate permission, loading, saving, and validation booleans. | High | Grouped those flags into named `permissions`, `status`, `templateValidation`, and `templateCatalog` objects. | Changed-scope React Doctor went from `1` boolean-props warning to no issues after grouping. |
+
+Changed-scope command after Batch 187: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 187: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `84 / 100`
+- Total diagnostics: `97`
+- Summary: `Bugs 48 warnings`, `Performance 9 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
+- Removed globally since Batch 185: AI builder template variable Set conversion (`1` warning), AI builder reducer split (`1` warning), and AI builder page split (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-78b1f227-8f0f-4469-a484-b4cc2229896e`
