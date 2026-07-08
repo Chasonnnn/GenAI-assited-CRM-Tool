@@ -4389,3 +4389,23 @@ Full command after Batch 201: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 33 warnings`
 - Removed globally since Batch 200: platform system template campaign recipient `jsx-max-depth` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-aea09741-5a1e-4452-91a3-949c96bdd42a`
+
+## Batch 202
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/reports/page.tsx:238` | Valid. `ReportsPage` owned date/campaign controls, export controls, summary cards, AI insight cards, chart composition, Meta spend, and individual performance rendering in one large component. | High | Extracted `ReportsPageHeader`, `ReportsQuickStatsGrid`, `ReportsAiSummaryCard`, and `ReportsPerformanceSection` while leaving data fetching, export behavior, and chart transforms in the page controller. Added a source guard requiring the split and fixed the adjacent performance-mode `SelectValue` so the trigger renders friendly labels instead of raw enum values. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "reports page rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "reports page rendering\|report summary\|reports PDF"`; `pnpm test --run tests/reports-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 202: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 202: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `46`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 32 warnings`
+- Removed globally since Batch 201: reports page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ab32c910-3af6-4016-a10a-9e870e840c96`

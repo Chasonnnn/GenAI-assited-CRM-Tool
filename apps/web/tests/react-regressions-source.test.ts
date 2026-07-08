@@ -2858,6 +2858,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("Exporting...")
     })
 
+    it("keeps reports page rendering split into focused sections", () => {
+        const source = readSource("app/(app)/reports/page.tsx")
+        const pageSource = readFunctionSource(source, "ReportsPage")
+
+        expect(source).toContain("function ReportsPageHeader")
+        expect(source).toContain("function ReportsQuickStatsGrid")
+        expect(source).toContain("function ReportsAiSummaryCard")
+        expect(source).toContain("function getPerformanceModeLabel")
+        expect(pageSource).not.toContain("Total Surrogates")
+        expect(pageSource).not.toContain("AI Summary")
+        expect(source).not.toContain("<SelectValue />")
+    })
+
     it("keeps reports PDF export compiler-compatible", () => {
         const source = readSource("app/(app)/reports/page.tsx")
 

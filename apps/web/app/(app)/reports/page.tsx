@@ -18,6 +18,7 @@ import { buildFunnelChartData, buildStatusChartData } from "@/lib/reports-stage-
 import { toast } from "sonner"
 import { formatLocalDate } from "@/lib/utils/date"
 import { getCsrfHeaders } from "@/lib/csrf"
+import type { AnalyticsSummary, Campaign, MetaPerformance, PerformanceByUserResponse, SpendTotals } from "@/lib/api/analytics"
 
 const ReportsChartsGrid = dynamic(
     () => import("./components/ReportsChartsGrid").then((mod) => mod.ReportsChartsGrid),
@@ -70,7 +71,6 @@ type ReportDateRange = { fromDate: string | undefined; toDate: string | undefine
 type CountPoint = { count: number }
 type TrendPoint = { date: string; count: number }
 type StatusChartPoint = { status: string; count: number }
-type CampaignOption = { ad_id: string; ad_name: string; lead_count: number }
 
 function formatTokens(num: number) {
     if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
@@ -80,6 +80,11 @@ function formatTokens(num: number) {
 
 function isPerformanceMode(value: string | null): value is PerformanceMode {
     return value === "cohort" || value === "activity"
+}
+
+function getPerformanceModeLabel(value: string | null) {
+    if (value === "activity") return "Activity Window"
+    return "Created Cohort"
 }
 
 function getReportDateRange(dateRange: DateRangePreset, customRange: ReportCustomRange): ReportDateRange {
@@ -195,7 +200,7 @@ function buildInsightSummary(
     }
 }
 
-function buildCampaignLabelById(campaigns: CampaignOption[] | undefined) {
+function buildCampaignLabelById(campaigns: Campaign[] | undefined) {
     const map = new Map<string, string>()
     campaigns?.forEach((campaign) => {
         map.set(campaign.ad_id, `${campaign.ad_name} (${campaign.lead_count})`)
@@ -230,6 +235,368 @@ function AIUsageStats() {
             <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">Est. cost:</span>
                 <span className="font-medium">${usage.total_cost_usd.toFixed(2)}</span>
+            </div>
+        </div>
+    )
+}
+
+type ReportsPageHeaderProps = {
+    dateRange: DateRangePreset
+    onDateRangeChange: (value: DateRangePreset) => void
+    customRange: ReportCustomRange
+    onCustomRangeChange: (value: ReportCustomRange) => void
+    selectedCampaign: string
+    onCampaignChange: (value: string) => void
+    campaignLabelById: Map<string, string>
+    campaigns: Campaign[] | undefined
+    campaignsLoading: boolean
+    campaignsError: boolean
+    isExporting: boolean
+    onExportPDF: () => void
+}
+
+function ReportsPageHeader({
+    dateRange,
+    onDateRangeChange,
+    customRange,
+    onCustomRangeChange,
+    selectedCampaign,
+    onCampaignChange,
+    campaignLabelById,
+    campaigns,
+    campaignsLoading,
+    campaignsError,
+    isExporting,
+    onExportPDF,
+}: ReportsPageHeaderProps) {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <h1 className="text-2xl font-semibold">Reports</h1>
+                <div className="flex items-center gap-3">
+                    <DateRangePicker
+                        preset={dateRange}
+                        onPresetChange={onDateRangeChange}
+                        customRange={customRange}
+                        onCustomRangeChange={onCustomRangeChange}
+                    />
+                    <Select value={selectedCampaign} onValueChange={(value) => onCampaignChange(value || '')}>
+                        <SelectTrigger className="w-48">
+                            <SelectValue placeholder="All">
+                                {(value: string | null) => {
+                                    if (!value) return "All"
+                                    return campaignLabelById.get(value) ?? "Unknown campaign"
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">All</SelectItem>
+                            {campaignsLoading && (
+                                <SelectItem value="__loading__" disabled>
+                                    Loading campaigns…
+                                </SelectItem>
+                            )}
+                            {campaignsError && (
+                                <SelectItem value="__error__" disabled>
+                                    Unable to load campaigns
+                                </SelectItem>
+                            )}
+                            {campaigns?.map(campaign => (
+                                <SelectItem key={campaign.ad_id} value={campaign.ad_id}>
+                                    {campaign.ad_name} ({campaign.lead_count})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        onClick={onExportPDF}
+                        disabled={isExporting}
+                    >
+                        {isExporting ? (
+                            <>
+                                <Loader2Icon className="size-4 animate-spin" />
+                                Exporting…
+                            </>
+                        ) : (
+                            'Export PDF'
+                        )}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+type ReportsQuickStatsGridProps = {
+    summary: AnalyticsSummary | undefined
+    summaryLoading: boolean
+    summaryError: boolean
+    metaPerf: MetaPerformance | undefined
+    metaLoading: boolean
+    metaError: boolean
+    spendTotals: SpendTotals | undefined
+    spendLoading: boolean
+    spendError: boolean
+    aiEnabled: boolean
+}
+
+function ReportsQuickStatsGrid({
+    summary,
+    summaryLoading,
+    summaryError,
+    metaPerf,
+    metaLoading,
+    metaError,
+    spendTotals,
+    spendLoading,
+    spendError,
+    aiEnabled,
+}: ReportsQuickStatsGridProps) {
+    return (
+        <div className="grid gap-4 md:grid-cols-4">
+            <Card className="animate-in fade-in-50 duration-500">
+                <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Surrogates</CardTitle>
+                    <TrendingUpIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    {summaryLoading ? (
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    ) : summaryError ? (
+                        <div className="flex items-center text-xs text-destructive">
+                            <AlertCircleIcon className="mr-1 size-4" />
+                            Unable to load
+                        </div>
+                    ) : (
+                        <>
+                            <div className="text-2xl font-bold">{summary?.total_surrogates ?? 0}</div>
+                            <p className="text-xs text-muted-foreground">Active surrogates</p>
+                        </>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card className="animate-in fade-in-50 duration-500 delay-100">
+                <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">New This Period</CardTitle>
+                    <UsersIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    {summaryLoading ? (
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    ) : summaryError ? (
+                        <div className="flex items-center text-xs text-destructive">
+                            <AlertCircleIcon className="mr-1 size-4" />
+                            Unable to load
+                        </div>
+                    ) : (
+                        <>
+                            <div className="text-2xl font-bold">{summary?.new_this_period ?? 0}</div>
+                            <p className="text-xs text-muted-foreground">Last 30 days</p>
+                        </>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card className="animate-in fade-in-50 duration-500 delay-200">
+                <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Qualification Rate</CardTitle>
+                    <CheckCircle2Icon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    {summaryLoading ? (
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    ) : summaryError ? (
+                        <div className="flex items-center text-xs text-destructive">
+                            <AlertCircleIcon className="mr-1 size-4" />
+                            Unable to load
+                        </div>
+                    ) : (
+                        <>
+                            <div className="text-2xl font-bold">{summary?.qualification_rate ?? 0}%</div>
+                            <p className="text-xs text-muted-foreground">Reached the qualification stage or later</p>
+                        </>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card className="animate-in fade-in-50 duration-500 delay-300">
+                <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
+                    <MegaphoneIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    {metaLoading ? (
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    ) : metaError ? (
+                        <div className="flex items-center text-xs text-destructive">
+                            <AlertCircleIcon className="mr-1 size-4" />
+                            Unable to load
+                        </div>
+                    ) : (
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">Qualified</span>
+                                <span className="text-sm font-semibold">{metaPerf?.qualified_rate ?? 0}%</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">Converted</span>
+                                <span className="text-sm font-semibold text-green-600">{metaPerf?.conversion_rate ?? 0}%</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground pt-1">
+                                {metaPerf?.leads_received ?? 0} leads received
+                            </p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card className="animate-in fade-in-50 duration-500 delay-400">
+                <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
+                    <DollarSignIcon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    {spendLoading ? (
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                    ) : spendError ? (
+                        <div className="flex items-center text-xs text-destructive">
+                            <AlertCircleIcon className="mr-1 size-4" />
+                            Unable to load
+                        </div>
+                    ) : (
+                        <>
+                            <div className="text-2xl font-bold">
+                                ${spendTotals?.total_spend?.toLocaleString() ?? '0'}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                CPL: ${spendTotals?.cost_per_lead?.toFixed(2) ?? 'N/A'}
+                            </p>
+                            {spendTotals?.sync_status === 'never' && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                    No sync data yet
+                                </p>
+                            )}
+                        </>
+                    )}
+                </CardContent>
+            </Card>
+
+            {aiEnabled && (
+                <Card className="animate-in fade-in-50 duration-500 delay-500">
+                    <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">AI Usage</CardTitle>
+                        <SparklesIcon className="size-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <AIUsageStats />
+                    </CardContent>
+                </Card>
+            )}
+        </div>
+    )
+}
+
+type ReportsAiSummaryCardProps = {
+    insightSummary: ReturnType<typeof buildInsightSummary>
+}
+
+function ReportsAiSummaryCard({ insightSummary }: ReportsAiSummaryCardProps) {
+    return (
+        <Card className="animate-in fade-in-50 duration-500">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <SparklesIcon className="size-4 text-muted-foreground" />
+                    AI Summary
+                </CardTitle>
+                <CardDescription>Lightweight insights from the current report data.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Trend Shift</p>
+                        <p className="mt-1 text-sm font-medium">{insightSummary.trend}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Anomalies</p>
+                        <p className="mt-1 text-sm font-medium">{insightSummary.anomaly}</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Bottlenecks</p>
+                        <p className="mt-1 text-sm font-medium">{insightSummary.bottleneck}</p>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+type ReportsPerformanceSectionProps = {
+    performanceMode: PerformanceMode
+    onPerformanceModeChange: (value: PerformanceMode) => void
+    performanceData: PerformanceByUserResponse | undefined
+    performanceLoading: boolean
+    performanceError: boolean
+}
+
+function ReportsPerformanceSection({
+    performanceMode,
+    onPerformanceModeChange,
+    performanceData,
+    performanceLoading,
+    performanceError,
+}: ReportsPerformanceSectionProps) {
+    return (
+        <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Individual Performance</h2>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Mode:</span>
+                    <Select
+                        value={performanceMode}
+                        onValueChange={(value) => {
+                            if (isPerformanceMode(value)) {
+                                onPerformanceModeChange(value)
+                            }
+                        }}
+                    >
+                        <SelectTrigger className="w-40">
+                            <SelectValue>
+                                {(value: string | null) => getPerformanceModeLabel(value)}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="cohort">Created Cohort</SelectItem>
+                            <SelectItem value="activity">Activity Window</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+                {performanceMode === 'cohort'
+                    ? 'Showing metrics for surrogates created within the selected date range, grouped by current owner.'
+                    : 'Showing metrics for surrogates with status transitions within the selected date range.'}
+            </p>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <TeamPerformanceChart
+                    data={performanceData?.data}
+                    isLoading={performanceLoading}
+                    isError={performanceError}
+                    {...(performanceData?.conversion_stage_key !== undefined
+                        ? { conversionStageKey: performanceData.conversion_stage_key }
+                        : {})}
+                />
+                <TeamPerformanceTable
+                    columns={performanceData?.columns ?? []}
+                    data={performanceData?.data}
+                    unassigned={performanceData?.unassigned}
+                    isLoading={performanceLoading}
+                    isError={performanceError}
+                    {...(performanceData?.conversion_stage_key !== undefined
+                        ? { conversionStageKey: performanceData.conversion_stage_key }
+                        : {})}
+                    {...(performanceData?.as_of ? { asOf: performanceData.as_of } : {})}
+                />
             </div>
         </div>
     )
@@ -377,233 +744,37 @@ export default function ReportsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Reports</h1>
-                    <div className="flex items-center gap-3">
-                        <DateRangePicker
-                            preset={dateRange}
-                            onPresetChange={setDateRange}
-                            customRange={customRange}
-                            onCustomRangeChange={setCustomRange}
-                        />
-                        <Select value={selectedCampaign} onValueChange={(v) => setSelectedCampaign(v || '')}>
-                            <SelectTrigger className="w-48">
-                                <SelectValue placeholder="All">
-                                    {(value: string | null) => {
-                                        if (!value) return "All"
-                                        return campaignLabelById.get(value) ?? "Unknown campaign"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="">All</SelectItem>
-                                {campaignsLoading && (
-                                    <SelectItem value="__loading__" disabled>
-                                        Loading campaigns…
-                                    </SelectItem>
-                                )}
-                                {campaignsError && (
-                                    <SelectItem value="__error__" disabled>
-                                        Unable to load campaigns
-                                    </SelectItem>
-                                )}
-                                {campaigns?.map(c => (
-                                    <SelectItem key={c.ad_id} value={c.ad_id}>
-                                        {c.ad_name} ({c.lead_count})
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button
-                            onClick={handleExportPDF}
-                            disabled={isExporting}
-                        >
-                            {isExporting ? (
-                                <>
-                                    <Loader2Icon className="size-4 animate-spin" />
-                                    Exporting…
-                                </>
-                            ) : (
-                                'Export PDF'
-                            )}
-                        </Button>
-                    </div>
-                </div>
-            </div>
+            <ReportsPageHeader
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
+                customRange={customRange}
+                onCustomRangeChange={setCustomRange}
+                selectedCampaign={selectedCampaign}
+                onCampaignChange={setSelectedCampaign}
+                campaignLabelById={campaignLabelById}
+                campaigns={campaigns}
+                campaignsLoading={campaignsLoading}
+                campaignsError={campaignsError}
+                isExporting={isExporting}
+                onExportPDF={handleExportPDF}
+            />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
-                {/* Quick Stats Row */}
-                <div className="grid gap-4 md:grid-cols-4">
-                    <Card className="animate-in fade-in-50 duration-500">
-                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Surrogates</CardTitle>
-                            <TrendingUpIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : summaryError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{summary?.total_surrogates ?? 0}</div>
-                                    <p className="text-xs text-muted-foreground">Active surrogates</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
+                <ReportsQuickStatsGrid
+                    summary={summary}
+                    summaryLoading={summaryLoading}
+                    summaryError={summaryError}
+                    metaPerf={metaPerf}
+                    metaLoading={metaLoading}
+                    metaError={metaError}
+                    spendTotals={spendTotals}
+                    spendLoading={spendLoading}
+                    spendError={spendError}
+                    aiEnabled={aiEnabled}
+                />
 
-                    <Card className="animate-in fade-in-50 duration-500 delay-100">
-                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">New This Period</CardTitle>
-                            <UsersIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : summaryError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{summary?.new_this_period ?? 0}</div>
-                                    <p className="text-xs text-muted-foreground">Last 30 days</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-200">
-                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Qualification Rate</CardTitle>
-                            <CheckCircle2Icon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {summaryLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : summaryError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">{summary?.qualification_rate ?? 0}%</div>
-                                    <p className="text-xs text-muted-foreground">Reached the qualification stage or later</p>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-300">
-                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Meta Funnel</CardTitle>
-                            <MegaphoneIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {metaLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : metaError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <div className="space-y-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Qualified</span>
-                                        <span className="text-sm font-semibold">{metaPerf?.qualified_rate ?? 0}%</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Converted</span>
-                                        <span className="text-sm font-semibold text-green-600">{metaPerf?.conversion_rate ?? 0}%</span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground pt-1">
-                                        {metaPerf?.leads_received ?? 0} leads received
-                                    </p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card className="animate-in fade-in-50 duration-500 delay-400">
-                        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Ad Spend</CardTitle>
-                            <DollarSignIcon className="size-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            {spendLoading ? (
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                            ) : spendError ? (
-                                <div className="flex items-center text-xs text-destructive">
-                                    <AlertCircleIcon className="mr-1 size-4" />
-                                    Unable to load
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="text-2xl font-bold">
-                                        ${spendTotals?.total_spend?.toLocaleString() ?? '0'}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        CPL: ${spendTotals?.cost_per_lead?.toFixed(2) ?? 'N/A'}
-                                    </p>
-                                    {spendTotals?.sync_status === 'never' && (
-                                        <p className="text-xs text-amber-600 mt-1">
-                                            No sync data yet
-                                        </p>
-                                    )}
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* AI Usage Card - only show if AI is enabled */}
-                    {aiEnabled && (
-                        <Card className="animate-in fade-in-50 duration-500 delay-500">
-                            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">AI Usage</CardTitle>
-                                <SparklesIcon className="size-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <AIUsageStats />
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
-
-                <Card className="animate-in fade-in-50 duration-500">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <SparklesIcon className="size-4 text-muted-foreground" />
-                            AI Summary
-                        </CardTitle>
-                        <CardDescription>Lightweight insights from the current report data.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-3 md:grid-cols-3">
-                            <div className="rounded-lg border border-border bg-background p-3">
-                                <p className="text-xs font-semibold uppercase text-muted-foreground">Trend Shift</p>
-                                <p className="mt-1 text-sm font-medium">{insightSummary.trend}</p>
-                            </div>
-                            <div className="rounded-lg border border-border bg-background p-3">
-                                <p className="text-xs font-semibold uppercase text-muted-foreground">Anomalies</p>
-                                <p className="mt-1 text-sm font-medium">{insightSummary.anomaly}</p>
-                            </div>
-                            <div className="rounded-lg border border-border bg-background p-3">
-                                <p className="text-xs font-semibold uppercase text-muted-foreground">Bottlenecks</p>
-                                <p className="mt-1 text-sm font-medium">{insightSummary.bottleneck}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                <ReportsAiSummaryCard insightSummary={insightSummary} />
 
                 <ReportsChartsGrid
                     aiEnabled={aiEnabled}
@@ -646,57 +817,13 @@ export default function ReportsPage() {
                     <MetaSpendDashboard dateParams={dateParams} />
                 </div>
 
-                {/* Individual Performance Section */}
-                <div className="mt-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-semibold">Individual Performance</h2>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Mode:</span>
-                            <Select
-                                value={performanceMode}
-                                onValueChange={(value) => {
-                                    if (isPerformanceMode(value)) {
-                                        setPerformanceMode(value)
-                                    }
-                                }}
-                            >
-                                <SelectTrigger className="w-40">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="cohort">Created Cohort</SelectItem>
-                                    <SelectItem value="activity">Activity Window</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                        {performanceMode === 'cohort'
-                            ? 'Showing metrics for surrogates created within the selected date range, grouped by current owner.'
-                            : 'Showing metrics for surrogates with status transitions within the selected date range.'}
-                    </p>
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        <TeamPerformanceChart
-                            data={performanceData?.data}
-                            isLoading={performanceLoading}
-                            isError={performanceError}
-                            {...(performanceData?.conversion_stage_key !== undefined
-                                ? { conversionStageKey: performanceData.conversion_stage_key }
-                                : {})}
-                        />
-                        <TeamPerformanceTable
-                            columns={performanceData?.columns ?? []}
-                            data={performanceData?.data}
-                            unassigned={performanceData?.unassigned}
-                            isLoading={performanceLoading}
-                            isError={performanceError}
-                            {...(performanceData?.conversion_stage_key !== undefined
-                                ? { conversionStageKey: performanceData.conversion_stage_key }
-                                : {})}
-                            {...(performanceData?.as_of ? { asOf: performanceData.as_of } : {})}
-                        />
-                    </div>
-                </div>
+                <ReportsPerformanceSection
+                    performanceMode={performanceMode}
+                    onPerformanceModeChange={setPerformanceMode}
+                    performanceData={performanceData}
+                    performanceLoading={performanceLoading}
+                    performanceError={performanceError}
+                />
             </div>
         </div>
     )
