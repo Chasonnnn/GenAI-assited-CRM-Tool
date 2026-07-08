@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { SurrogatesPageClient as SurrogatesPage } from '../app/(app)/surrogates/page.client'
 
 // ============================================================================
@@ -372,6 +372,41 @@ describe('SurrogatesPage', () => {
         expect(screen.getByRole('textbox', { name: 'Search surrogates' })).toHaveValue('beta')
     })
 
+    it('cancels pending search commits when the URL changes before debounce', () => {
+        vi.useFakeTimers()
+        try {
+            mockSearchParams.set('stage', 's1')
+            mockSearchParams.set('q', 'alpha')
+            mockUseSurrogates.mockReturnValue({
+                data: { items: [], total: 0, pages: 0 },
+                isLoading: false,
+                error: null,
+            })
+
+            const { rerender } = render(<SurrogatesPage />)
+
+            fireEvent.change(screen.getByRole('textbox', { name: 'Search surrogates' }), {
+                target: { value: 'draft' },
+            })
+            expect(screen.getByRole('textbox', { name: 'Search surrogates' })).toHaveValue('draft')
+
+            mockSearchParams.set('stage', 's2')
+            mockSearchParams.set('q', 'beta')
+            rerender(<SurrogatesPage />)
+
+            expect(screen.getByRole('textbox', { name: 'Search surrogates' })).toHaveValue('beta')
+
+            act(() => {
+                vi.advanceTimersByTime(300)
+            })
+
+            expect(mockRouterReplace).not.toHaveBeenCalled()
+        } finally {
+            vi.clearAllTimers()
+            vi.useRealTimers()
+        }
+    })
+
     it('shows the priority action only for admin and developer users', () => {
         const mockSurrogates = [buildSurrogateListItem()]
 
@@ -549,6 +584,25 @@ describe('SurrogatesPage', () => {
                 owner_id: 'user-123',
             })
         )
+    })
+
+    it('ignores owner_id URL params for intake users', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        mockSearchParams.set('owner_id', 'user-123')
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        const latestSurrogateFilters = mockUseSurrogates.mock.calls.at(-1)?.[0] as Record<string, unknown>
+        expect(latestSurrogateFilters).not.toHaveProperty('owner_id')
+
+        const latestCreatedDateFilters = mockUseSurrogateCreatedDates.mock.calls.at(-1)?.[0] as Record<string, unknown>
+        expect(latestCreatedDateFilters).not.toHaveProperty('owner_id')
+        expect(mockMassEditStageModal).not.toHaveBeenCalled()
     })
 
     it('keeps assignee filtering behind More Filters', () => {
@@ -894,12 +948,25 @@ describe('SurrogatesPage', () => {
             error: null,
         })
 
-        render(<SurrogatesPage />)
+        const { rerender } = render(<SurrogatesPage />)
         fireEvent.click(screen.getByRole('columnheader', { name: /last modified/i }))
 
         expect(mockRouterReplace).toHaveBeenCalledWith(
             '/surrogates?sort_by=last_modified_at&sort_order=desc',
             { scroll: false },
+        )
+
+        mockSearchParams.set('sort_by', 'last_modified_at')
+        mockSearchParams.set('sort_order', 'desc')
+        mockUseSurrogates.mockClear()
+
+        rerender(<SurrogatesPage />)
+
+        expect(mockUseSurrogates).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                sort_by: 'last_modified_at',
+                sort_order: 'desc',
+            }),
         )
     })
 

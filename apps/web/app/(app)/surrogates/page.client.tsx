@@ -595,9 +595,10 @@ export function SurrogatesPageClient() {
         return () => {
             if (searchDebounceRef.current) {
                 clearTimeout(searchDebounceRef.current)
+                searchDebounceRef.current = null
             }
         }
-    }, [])
+    }, [currentQuery])
 
     // Sync state changes back to URL
     const updateUrlParams = (
