@@ -415,4 +415,52 @@ describe("PublicFormFieldRenderer", () => {
         expect(screen.getByText("Preeclampsia")).toBeInTheDocument()
         expect(screen.getAllByText("If yes, explain").length).toBeGreaterThan(0)
     })
+
+    it("associates fixed table select columns with their visible labels", () => {
+        const updateField = vi.fn()
+        const setDatePickerOpen = vi.fn()
+        const field: FormField = {
+            key: "medical_history",
+            label: "Medical history",
+            type: "table",
+            rows: [{ key: "surgeries", label: "Surgeries" }],
+            columns: [
+                {
+                    key: "status",
+                    label: "Response",
+                    type: "select",
+                    required: true,
+                    options: [
+                        { label: "No", value: "no" },
+                        { label: "Yes", value: "yes" },
+                    ],
+                },
+            ],
+        }
+
+        render(
+            <PublicFormFieldRenderer
+                field={field}
+                value={[{ row_key: "surgeries", status: "" }]}
+                updateField={updateField}
+                datePickerOpen={{}}
+                setDatePickerOpen={setDatePickerOpen}
+            />,
+        )
+
+        const row = screen.getByRole("group", { name: /surgeries row/i })
+        const responseSelect = within(row).getByRole("combobox", { name: /response/i })
+
+        fireEvent.change(responseSelect, { target: { value: "yes" } })
+
+        expect(updateField).toHaveBeenCalledWith(
+            "medical_history",
+            expect.arrayContaining([
+                expect.objectContaining({
+                    row_key: "surgeries",
+                    status: "yes",
+                }),
+            ]),
+        )
+    })
 })

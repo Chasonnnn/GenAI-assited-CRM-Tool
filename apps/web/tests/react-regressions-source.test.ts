@@ -3664,6 +3664,26 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
     })
 
+    it("keeps React Doctor-reported select controls associated with visible labels", () => {
+        const hostedIntakeSource = readSource("app/intake/[slug]/page.client.tsx")
+        const publicFieldRendererSource = readSource("components/forms/PublicFormFieldRenderer.tsx")
+        const intendedParentFieldsSource = readSource("components/intended-parents/IntendedParentFormFields.tsx")
+
+        expect(hostedIntakeSource).toContain("const fieldInputId = `${field.key}-${rowIndex}-${column.key}`")
+        expect(hostedIntakeSource).toContain("<Label htmlFor={fieldInputId} className=\"text-xs font-medium\">")
+        expect(hostedIntakeSource).toMatch(/<select\s+id=\{fieldInputId\}\s+name=\{fieldInputName\}/)
+
+        expect(publicFieldRendererSource).toContain("const fieldInputId = `${field.key}-${rowKey}-${column.key}`")
+        expect(publicFieldRendererSource).toContain("const fieldInputLabelId = `${fieldInputId}-label`")
+        expect(publicFieldRendererSource).toMatch(/<Label[\s\S]*?htmlFor=\{fieldInputId\}/)
+        expect(publicFieldRendererSource).toMatch(/<select\s+id=\{fieldInputId\}\s+aria-labelledby=\{fieldInputLabelId\}/)
+        expect(publicFieldRendererSource).toContain("const selectedValueSet = new Set(selectedValues)")
+        expect(publicFieldRendererSource).not.toContain("selectedValues.includes(")
+
+        expect(intendedParentFieldsSource).toContain("<Label htmlFor={id}>{label}</Label>")
+        expect(intendedParentFieldsSource).toMatch(/<select\s+id=\{id\}/)
+    })
+
     it("delegates match detail tab rendering to a dedicated component", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/page.client.tsx")
 

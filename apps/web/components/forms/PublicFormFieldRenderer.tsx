@@ -336,6 +336,8 @@ function FixedTableFieldInput({
                                 const cellValue = row[column.key]
                                 const normalizedValue =
                                     cellValue === null || cellValue === undefined ? "" : String(cellValue)
+                                const fieldInputId = `${field.key}-${rowKey}-${column.key}`
+                                const fieldInputLabelId = `${fieldInputId}-label`
                                 const options =
                                     column.options && column.options.length > 0
                                         ? column.options
@@ -348,7 +350,11 @@ function FixedTableFieldInput({
 
                                 return (
                                     <div key={column.key} className="space-y-2 @xl/table-row:min-w-0">
-                                        <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">
+                                        <Label
+                                            id={fieldInputLabelId}
+                                            htmlFor={fieldInputId}
+                                            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500"
+                                        >
                                             {column.label}
                                             {column.required ? <span className="text-red-500"> *</span> : null}
                                         </Label>
@@ -367,6 +373,8 @@ function FixedTableFieldInput({
                                             </div>
                                         ) : column.type === "select" ? (
                                             <select
+                                                id={fieldInputId}
+                                                aria-labelledby={fieldInputLabelId}
                                                 className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
                                                 value={normalizedValue}
                                                 onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
@@ -380,6 +388,7 @@ function FixedTableFieldInput({
                                             </select>
                                         ) : column.type === "textarea" ? (
                                             <Input
+                                                id={fieldInputId}
                                                 type="text"
                                                 value={normalizedValue}
                                                 onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
@@ -388,6 +397,7 @@ function FixedTableFieldInput({
                                             />
                                         ) : (
                                             <Input
+                                                id={fieldInputId}
                                                 type={
                                                     column.type === "number"
                                                         ? "number"
@@ -694,6 +704,7 @@ export function PublicFormFieldRenderer({
         const selectedValues = Array.isArray(value)
             ? value.filter((item): item is string => typeof item === "string")
             : []
+        const selectedValueSet = new Set(selectedValues)
 
         return (
             <fieldset key={field.key} className={densityStyles.fieldShellClassName}>
@@ -705,7 +716,7 @@ export function PublicFormFieldRenderer({
                 ) : (
                     <div aria-labelledby={legendId} className={gridClassName}>
                         {options.map((option) => {
-                            const selected = selectedValues.includes(option.value)
+                            const selected = selectedValueSet.has(option.value)
                             return (
                                 <OptionCard
                                     key={option.value}
