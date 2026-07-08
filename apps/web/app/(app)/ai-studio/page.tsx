@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { type ClipboardEvent, useRef, useState } from "react"
+import { type ClipboardEvent, useReducer, useRef, useState } from "react"
 import {
     AlertCircleIcon,
     CheckIcon,
@@ -162,6 +162,18 @@ type SettingsFormState = {
     saved: boolean
 }
 
+type AIStudioSettingsDialogState = SettingsFormState & {
+    open: boolean
+}
+
+type AIStudioSettingsDialogAction =
+    | { type: "open"; settings: AIStudioSettings | undefined }
+    | { type: "close" }
+    | { type: "setApiKey"; value: string }
+    | { type: "setAgentsMd"; value: string }
+    | { type: "setSkillsMd"; value: string }
+    | { type: "saveSucceeded" }
+
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Something went wrong."
 }
@@ -172,6 +184,36 @@ function buildSettingsFormState(settings: AIStudioSettings | undefined): Setting
         agentsMd: settings?.agents_md ?? "",
         skillsMd: settings?.skills_md ?? "",
         saved: false,
+    }
+}
+
+const initialAIStudioSettingsDialogState: AIStudioSettingsDialogState = {
+    open: false,
+    ...buildSettingsFormState(undefined),
+}
+
+function aiStudioSettingsDialogReducer(
+    state: AIStudioSettingsDialogState,
+    action: AIStudioSettingsDialogAction,
+): AIStudioSettingsDialogState {
+    switch (action.type) {
+        case "open":
+            return {
+                open: true,
+                ...buildSettingsFormState(action.settings),
+            }
+        case "close":
+            return { ...state, open: false }
+        case "setApiKey":
+            return { ...state, apiKey: action.value, saved: false }
+        case "setAgentsMd":
+            return { ...state, agentsMd: action.value, saved: false }
+        case "setSkillsMd":
+            return { ...state, skillsMd: action.value, saved: false }
+        case "saveSucceeded":
+            return { ...state, apiKey: "", open: false, saved: true }
+        default:
+            return state
     }
 }
 
@@ -560,11 +602,10 @@ export default function AIStudioPage() {
     const [referenceImageError, setReferenceImageError] = useState("")
     const [isAddingReferenceImage, setIsAddingReferenceImage] = useState(false)
     const [errorMessage, setErrorMessage] = useState("")
-    const [settingsOpen, setSettingsOpen] = useState(false)
-    const [settingsApiKey, setSettingsApiKey] = useState("")
-    const [agentsMd, setAgentsMd] = useState("")
-    const [skillsMd, setSkillsMd] = useState("")
-    const [settingsSaved, setSettingsSaved] = useState(false)
+    const [settingsDialog, dispatchSettingsDialog] = useReducer(
+        aiStudioSettingsDialogReducer,
+        initialAIStudioSettingsDialogState,
+    )
 
     const permissionSet = new Set(permissionsQuery.data?.permissions ?? [])
     const isDeveloper = user?.role === "developer"
@@ -572,14 +613,16 @@ export default function AIStudioPage() {
     const canManageSettings = isDeveloper || permissionSet.has("manage_ai_settings")
     const aiAvailable = Boolean(user?.ai_enabled && canUseAI)
     const settings = settingsQuery.data
+    const {
+        agentsMd,
+        apiKey: settingsApiKey,
+        open: settingsOpen,
+        saved: settingsSaved,
+        skillsMd,
+    } = settingsDialog
 
     const openSettingsDialog = () => {
-        const nextSettingsForm = buildSettingsFormState(settings)
-        setSettingsApiKey(nextSettingsForm.apiKey)
-        setAgentsMd(nextSettingsForm.agentsMd)
-        setSkillsMd(nextSettingsForm.skillsMd)
-        setSettingsSaved(nextSettingsForm.saved)
-        setSettingsOpen(true)
+        dispatchSettingsDialog({ type: "open", settings })
     }
 
     const canGenerate = Boolean(
@@ -678,9 +721,7 @@ export default function AIStudioPage() {
         }
         try {
             await updateSettings.mutateAsync(payload)
-            setSettingsSaved(true)
-            setSettingsApiKey("")
-            setSettingsOpen(false)
+            dispatchSettingsDialog({ type: "saveSucceeded" })
         } catch (error) {
             setErrorMessage(getErrorMessage(error))
         }
@@ -1079,7 +1120,7 @@ export default function AIStudioPage() {
                         openSettingsDialog()
                         return
                     }
-                    setSettingsOpen(false)
+                    dispatchSettingsDialog({ type: "close" })
                 }}
             >
                 <DialogContent className="sm:max-w-2xl">
@@ -1095,7 +1136,12 @@ export default function AIStudioPage() {
                             <Input
                                 id="ai-studio-api-key"
                                 value={settingsApiKey}
-                                onChange={(event) => setSettingsApiKey(event.target.value)}
+                                onChange={(event) =>
+                                    dispatchSettingsDialog({
+                                        type: "setApiKey",
+                                        value: event.target.value,
+                                    })
+                                }
                                 placeholder={settings?.api_key_masked ?? "sk-..."}
                                 type="password"
                                 autoComplete="off"
@@ -1109,7 +1155,12 @@ export default function AIStudioPage() {
                             <Textarea
                                 id="ai-studio-agents-md"
                                 value={agentsMd}
-                                onChange={(event) => setAgentsMd(event.target.value)}
+                                onChange={(event) =>
+                                    dispatchSettingsDialog({
+                                        type: "setAgentsMd",
+                                        value: event.target.value,
+                                    })
+                                }
                                 className="min-h-32 resize-y"
                             />
                         </Field>
@@ -1118,7 +1169,12 @@ export default function AIStudioPage() {
                             <Textarea
                                 id="ai-studio-skills-md"
                                 value={skillsMd}
-                                onChange={(event) => setSkillsMd(event.target.value)}
+                                onChange={(event) =>
+                                    dispatchSettingsDialog({
+                                        type: "setSkillsMd",
+                                        value: event.target.value,
+                                    })
+                                }
                                 className="min-h-32 resize-y"
                             />
                         </Field>
@@ -1133,7 +1189,7 @@ export default function AIStudioPage() {
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={() => setSettingsOpen(false)}
+                            onClick={() => dispatchSettingsDialog({ type: "close" })}
                         >
                             Cancel
                         </Button>

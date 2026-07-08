@@ -4294,7 +4294,7 @@ Changed-scope command after Batch 197: `cd apps/web && npx -y react-doctor@lates
 - Total diagnostics in changed files: `1`
 - Summary: `Maintainability 1 warning`
 - Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` in `app/intake/[slug]/page.client.tsx:993`.
-- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-725d8d52-c150-4818-a895-7d6907d54520`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4de295c3-2a58-45a0-89d1-3fa0fee73dbe`
 
 Full command after Batch 197: `cd apps/web && npx -y react-doctor@latest . --verbose`
 
@@ -4302,4 +4302,26 @@ Full command after Batch 197: `cd apps/web && npx -y react-doctor@latest . --ver
 - Total diagnostics: `51`
 - Summary: `Bugs 14 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
 - Removed globally since Batch 196: hosted-intake bootstrap state/effect findings (`2` `no-event-handler` warnings from the same line and `1` `prefer-useReducer` warning). No `no-event-handler` diagnostics remain in the current full scan.
-- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-042bca3c-0d3d-4fa3-81fc-1f7f53f25403`
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a53a9af9-809d-4763-bb9b-7edc61f41bde`
+
+## Batch 198
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `app/(app)/ai-studio/page.tsx:540` | Valid. Opening and saving Studio settings updated dialog visibility, secret-key input, guidance textareas, and saved-state as one settings-dialog transition, but those values were split across five separate `useState` calls. | High | Added `AIStudioSettingsDialogState` plus `aiStudioSettingsDialogReducer`, routed open/close/edit/save transitions through dispatch actions, and kept the API key write-only by clearing the input after save. Extended AI Studio behavior coverage for saving an entered API key, closing after save, and reopening with a blank secret field. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI Studio settings"` failed before the reducer. GREEN: `pnpm test --run tests/ai-studio-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "AI Studio settings"`; `pnpm tsc --noEmit`; changed-scope React Doctor reports only the pre-existing giant-component finding in the touched file. |
+
+Changed-scope command after Batch 198: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` in `app/(app)/ai-studio/page.tsx:582`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-509ea0c0-fdf6-404c-9a8c-d012f1c913f2`
+
+Full command after Batch 198: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `88 / 100`
+- Total diagnostics: `50`
+- Summary: `Bugs 13 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 197: AI Studio settings dialog `prefer-useReducer` warning (`1` bug warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9829acd9-d964-49d0-9b25-e1d003aca0e9`

@@ -218,13 +218,26 @@ describe("AIStudioPage", () => {
         fireEvent.change(within(dialog).getByLabelText(/skills\.md/i), {
             target: { value: "Updated skills" },
         })
+        fireEvent.change(within(dialog).getByLabelText(/openai api key/i), {
+            target: { value: "sk-updated" },
+        })
         fireEvent.click(within(dialog).getByRole("button", { name: /save settings/i }))
 
         await waitFor(() => {
             expect(mockUpdateSettings).toHaveBeenCalledWith({
+                api_key: "sk-updated",
                 agents_md: "Updated agents",
                 skills_md: "Updated skills",
             })
         })
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: /studio settings/i }))
+
+        const reopenedDialog = screen.getByRole("dialog")
+        expect(within(reopenedDialog).getByLabelText(/openai api key/i)).toHaveValue("")
+        expect(within(reopenedDialog).getByLabelText(/agents\.md/i)).toHaveValue("Studio agents")
     })
 })
