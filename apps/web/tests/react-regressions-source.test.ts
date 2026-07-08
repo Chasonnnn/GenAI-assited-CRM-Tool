@@ -3821,8 +3821,9 @@ describe("React regression guards (source)", () => {
         const intendedParentFieldsSource = readSource("components/intended-parents/IntendedParentFormFields.tsx")
 
         expect(hostedIntakeSource).toContain("const fieldInputId = `${field.key}-${rowIndex}-${column.key}`")
-        expect(hostedIntakeSource).toContain("<Label htmlFor={fieldInputId} className=\"text-xs font-medium\">")
-        expect(hostedIntakeSource).toMatch(/<select\s+id=\{fieldInputId\}\s+name=\{fieldInputName\}/)
+        expect(hostedIntakeSource).toContain("const fieldInputLabelId = `${fieldInputId}-label`")
+        expect(hostedIntakeSource).toMatch(/<Label[\s\S]*?id=\{fieldInputLabelId\}[\s\S]*?htmlFor=\{fieldInputId\}/)
+        expect(hostedIntakeSource).toMatch(/<select\s+id=\{fieldInputId\}\s+aria-labelledby=\{fieldInputLabelId\}/)
 
         expect(publicFieldRendererSource).toContain("const fieldInputId = `${field.key}-${rowKey}-${column.key}`")
         expect(publicFieldRendererSource).toContain("const fieldInputLabelId = `${fieldInputId}-label`")
@@ -3831,8 +3832,20 @@ describe("React regression guards (source)", () => {
         expect(publicFieldRendererSource).toContain("const selectedValueSet = new Set(selectedValues)")
         expect(publicFieldRendererSource).not.toContain("selectedValues.includes(")
 
-        expect(intendedParentFieldsSource).toContain("<Label htmlFor={id}>{label}</Label>")
-        expect(intendedParentFieldsSource).toMatch(/<select\s+id=\{id\}/)
+        expect(intendedParentFieldsSource).toContain("const labelId = `${id}-label`")
+        expect(intendedParentFieldsSource).toContain("<Label id={labelId} htmlFor={id}>{label}</Label>")
+        expect(intendedParentFieldsSource).toMatch(/<select\s+id=\{id\}\s+aria-labelledby=\{labelId\}/)
+    })
+
+    it("keeps the interview transcript pane on a native labeled region", () => {
+        const source = readSource("components/surrogates/interviews/InterviewComments/TranscriptPane.tsx")
+
+        expect(source).toContain("<section")
+        expect(source).toContain('aria-label="Interview Transcript"')
+        expect(source).not.toContain('role="button"')
+        expect(source).not.toContain('role="region"')
+        expect(source).not.toContain("onClick={")
+        expect(source).not.toContain("onKeyDown={")
     })
 
     it("delegates match detail tab rendering to a dedicated component", () => {

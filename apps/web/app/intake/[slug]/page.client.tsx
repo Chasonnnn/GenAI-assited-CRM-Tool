@@ -1285,10 +1285,11 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                         <div className="grid gap-3 md:grid-cols-2">
                                             {columns.map((column) => {
                                                 const fieldInputId = `${field.key}-${rowIndex}-${column.key}`
+                                                const fieldInputLabelId = `${fieldInputId}-label`
                                                 const fieldInputName = `${field.key}[${rowIndex}][${column.key}]`
                                                 return (
                                                     <div key={column.key} className="space-y-2">
-                                                        <Label htmlFor={fieldInputId} className="text-xs font-medium">
+                                                        <Label id={fieldInputLabelId} htmlFor={fieldInputId} className="text-xs font-medium">
                                                             {column.label}
                                                             {column.required && (
                                                                 <span className="text-red-500"> *</span>
@@ -1297,6 +1298,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                                         {column.type === "select" ? (
                                                             <select
                                                                 id={fieldInputId}
+                                                                aria-labelledby={fieldInputLabelId}
                                                                 name={fieldInputName}
                                                                 className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
                                                                 value={String(row[column.key] ?? "")}

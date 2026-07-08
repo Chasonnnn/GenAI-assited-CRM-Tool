@@ -47,7 +47,7 @@ export interface InterviewCommentsContextValue {
     layoutMinHeight: number
 
     // Refs
-    transcriptRef: React.RefObject<HTMLDivElement | null>
+    transcriptRef: React.RefObject<HTMLElement | null>
     commentSidebarRef: React.RefObject<HTMLDivElement | null>
     layoutRef: React.RefObject<HTMLDivElement | null>
     scrollContainerRef: React.RefObject<HTMLDivElement | null>
@@ -163,7 +163,7 @@ export function InterviewCommentsProvider({
     children,
 }: InterviewCommentsProviderProps) {
     // Refs
-    const transcriptRef = useRef<HTMLDivElement>(null)
+    const transcriptRef = useRef<HTMLElement>(null)
     const commentSidebarRef = useRef<HTMLDivElement>(null)
     const layoutRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)

@@ -4175,3 +4175,25 @@ Full command after Batch 191: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 36 warnings`, `Performance 2 warnings`, `Maintainability 36 warnings`
 - Removed globally since Batch 190: intended-parent list and match list URL mirror effects (`12` `no-event-handler` warnings). The current full scan also no longer shows the prior accessibility cluster, but this batch only changed URL/filter state flow.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-92f6bbdf-2d63-470e-a242-d48a3a4aed6a`
+
+## Batch 192
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/control-has-associated-label` | `app/intake/[slug]/page.client.tsx:1298`, `components/intended-parents/IntendedParentFormFields.tsx:38`, `components/intended-parents/IntendedParentFormFields.tsx:69` | Valid. React Doctor did not associate the plain HTML selects with their visible labels in the fixed-table intake fields and intended-parent pronoun/state controls. | High | Added stable label ids and `aria-labelledby` on the matching selects. Updated source guards to keep the explicit label association. | GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "select controls\|interview transcript pane"`; `pnpm test --run tests/intended-parents-page.test.tsx tests/forms-shared-intake.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reported these label findings. |
+| `react-doctor/prefer-tag-over-role` | `components/surrogates/interviews/InterviewComments/TranscriptPane.tsx:106` | Valid, but a region with JSX click/keyboard handlers introduced `react-doctor/no-noninteractive-element-interactions`. | High | Replaced the role-based container with a native labeled `<section>` and moved delegated transcript highlight listeners into DOM listeners registered with cleanup, so JSX no longer presents a faux button or handler-bearing non-interactive element. Kept the transcript ref typed as `HTMLElement`. Updated interaction/accessibility tests and source guards to reject role-based and JSX-handler variants. | GREEN: `pnpm test --run tests/surrogate-interview-accessibility.test.tsx`; source guard command above; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reported `prefer-tag-over-role` or the transient non-interactive handler warning. |
+
+Changed-scope command after Batch 192: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `91 / 100`
+- Total diagnostics in changed files: `4`
+- Summary: `Bugs 3 warnings`, `Maintainability 1 warning`
+- Remaining changed-scope findings are unrelated pre-existing intake page warnings from earlier local commits.
+
+Full command after Batch 192: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `86 / 100`
+- Total diagnostics: `74`
+- Summary: `Bugs 36 warnings`, `Performance 2 warnings`, `Maintainability 36 warnings`
+- Full diagnostics remain dominated by `query-mutation-missing-invalidation`, `no-event-handler`, `no-giant-component`, and `prefer-useReducer`; no accessibility diagnostics remain in the current full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c2c796b2-6fa4-4b39-bcc4-75f9842fbdaf`

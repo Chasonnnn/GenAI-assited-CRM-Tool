@@ -8,7 +8,7 @@ const COMMENT_FOCUS_CLASSES =
     "bg-amber-300 dark:bg-amber-700/60 ring-2 ring-amber-400 ring-offset-1"
 
 function toggleSpanClasses(
-    transcriptRef: React.RefObject<HTMLDivElement | null>,
+    transcriptRef: React.RefObject<HTMLElement | null>,
     commentId: string,
     classNames: string,
     enabled: boolean
@@ -32,7 +32,7 @@ function toggleSpanClasses(
  * Handles adding/removing hover and focus classes from comment spans.
  */
 export function useInteractionClasses(
-    transcriptRef: React.RefObject<HTMLDivElement | null>,
+    transcriptRef: React.RefObject<HTMLElement | null>,
     interaction: CommentInteraction
 ) {
     const prevHoveredRef = useRef<string | null>(null)

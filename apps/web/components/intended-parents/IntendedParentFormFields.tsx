@@ -32,11 +32,14 @@ function PronounsField({
     value: string
     onChange: (value: string) => void
 }) {
+    const labelId = `${id}-label`
+
     return (
         <div className="space-y-2">
-            <Label htmlFor={id}>{label}</Label>
+            <Label id={labelId} htmlFor={id}>{label}</Label>
             <select
                 id={id}
+                aria-labelledby={labelId}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
@@ -63,11 +66,14 @@ function StateField({
     value: string
     onChange: (value: string) => void
 }) {
+    const labelId = `${id}-label`
+
     return (
         <div className="space-y-2">
-            <Label htmlFor={id}>{label}</Label>
+            <Label id={labelId} htmlFor={id}>{label}</Label>
             <select
                 id={id}
+                aria-labelledby={labelId}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"

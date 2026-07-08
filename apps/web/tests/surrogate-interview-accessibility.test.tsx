@@ -49,9 +49,9 @@ describe("Surrogate interview accessibility labels", () => {
         })
     })
 
-    it("adds an aria-label to the interview transcript pane", () => {
+    it("presents the interview transcript pane as a labeled region", () => {
         render(<TranscriptPane />)
-        expect(screen.getByRole("button", { name: "Interview Transcript" })).toBeInTheDocument()
+        expect(screen.getByRole("region", { name: "Interview Transcript" })).toBeInTheDocument()
     })
 
     it("updates transcript highlight hover state on keyboard focus", () => {
