@@ -155,6 +155,8 @@ type ReferenceImageDraft = AIStudioReferenceImageInput & {
     size_bytes: number
 }
 
+type AIStudioTab = "create" | "gallery"
+
 type SettingsFormState = {
     apiKey: string
     agentsMd: string
@@ -579,6 +581,480 @@ function BriefComposer({
     )
 }
 
+type AIStudioSelectOption<TValue extends string> = { value: TValue; label: string }
+
+function AIStudioSelectField<TValue extends string>({
+    id,
+    label,
+    value,
+    onChange,
+    options,
+    labels,
+}: {
+    id: string
+    label: string
+    value: TValue
+    onChange: (value: TValue) => void
+    options: Array<AIStudioSelectOption<TValue>>
+    labels: Record<TValue, string>
+}) {
+    return (
+        <Field>
+            <FieldLabel htmlFor={id}>{label}</FieldLabel>
+            <Select
+                value={value}
+                onValueChange={(nextValue) => {
+                    if (nextValue) onChange(nextValue as TValue)
+                }}
+            >
+                <SelectTrigger id={id}>
+                    <SelectValue>
+                        {(nextValue: string | null) => labels[(nextValue || value) as TValue]}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectGroup>
+                        {options.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectGroup>
+                </SelectContent>
+            </Select>
+        </Field>
+    )
+}
+
+function AIStudioHeader({
+    canManageSettings,
+    onOpenSettings,
+}: {
+    canManageSettings: boolean
+    onOpenSettings: () => void
+}) {
+    return (
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex max-w-3xl flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-semibold tracking-tight">
+                        AI Studio Preview
+                    </h1>
+                    <Badge variant="outline">Balanced</Badge>
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">
+                    Create review-ready social copy and visuals. Nothing posts directly.
+                </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">Copy: gpt-5.5</Badge>
+                <Badge variant="outline">Image: gpt-image-2</Badge>
+                {canManageSettings && (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onOpenSettings}
+                    >
+                        <Settings2Icon data-icon="inline-start" aria-hidden="true" />
+                        Studio settings
+                    </Button>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function AIStudioAlerts({
+    aiAvailable,
+    settingsError,
+    errorMessage,
+}: {
+    aiAvailable: boolean
+    settingsError: unknown
+    errorMessage: string
+}) {
+    return (
+        <>
+            {!aiAvailable && (
+                <Alert variant="destructive">
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertTitle>AI Studio is unavailable</AlertTitle>
+                    <AlertDescription>
+                        Your organization or role does not currently have AI access.
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {settingsError && (
+                <Alert variant="destructive">
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertTitle>Settings could not load</AlertTitle>
+                    <AlertDescription>{getErrorMessage(settingsError)}</AlertDescription>
+                </Alert>
+            )}
+
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertCircleIcon aria-hidden="true" />
+                    <AlertTitle>AI Studio needs attention</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
+        </>
+    )
+}
+
+function AIStudioLoadingShell() {
+    return (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+            <Skeleton className="h-[620px] w-full" />
+            <Skeleton className="h-[620px] w-full" />
+        </div>
+    )
+}
+
+type DraftGeneratorCardProps = {
+    settings: AIStudioSettings | undefined
+    brief: string
+    onBriefChange: (value: string) => void
+    referenceImages: ReferenceImageDraft[]
+    isAddingReferenceImage: boolean
+    referenceImageError: string
+    onReferenceFiles: (files: File[]) => void | Promise<void>
+    onRemoveReferenceImage: (id: string) => void
+    platform: AIStudioPlatform
+    onPlatformChange: (value: AIStudioPlatform) => void
+    format: AIStudioFormat
+    onFormatChange: (value: AIStudioFormat) => void
+    tone: AIStudioTone
+    onToneChange: (value: AIStudioTone) => void
+    audience: string
+    onAudienceChange: (value: string) => void
+    imageSize: AIStudioImageSize
+    onImageSizeChange: (value: AIStudioImageSize) => void
+    imageQuality: AIStudioImageQuality
+    onImageQualityChange: (value: AIStudioImageQuality) => void
+    canGenerate: boolean
+    isGenerating: boolean
+    onGenerate: () => void
+}
+
+function DraftGeneratorCard({
+    settings,
+    brief,
+    onBriefChange,
+    referenceImages,
+    isAddingReferenceImage,
+    referenceImageError,
+    onReferenceFiles,
+    onRemoveReferenceImage,
+    platform,
+    onPlatformChange,
+    format,
+    onFormatChange,
+    tone,
+    onToneChange,
+    audience,
+    onAudienceChange,
+    imageSize,
+    onImageSizeChange,
+    imageQuality,
+    onImageQualityChange,
+    canGenerate,
+    isGenerating,
+    onGenerate,
+}: DraftGeneratorCardProps) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Draft generator</CardTitle>
+                <CardDescription>
+                    Start with a brief. AI Studio returns one caption and one image for review.
+                </CardDescription>
+                {!settings?.has_api_key && (
+                    <CardAction>
+                        <Badge variant="destructive">Key required</Badge>
+                    </CardAction>
+                )}
+            </CardHeader>
+            <CardContent>
+                <FieldGroup>
+                    <BriefComposer
+                        value={brief}
+                        onChange={onBriefChange}
+                        images={referenceImages}
+                        isAdding={isAddingReferenceImage}
+                        errorMessage={referenceImageError}
+                        onFiles={onReferenceFiles}
+                        onRemove={onRemoveReferenceImage}
+                    />
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <AIStudioSelectField
+                            id="ai-studio-platform"
+                            label="Platform"
+                            value={platform}
+                            onChange={onPlatformChange}
+                            options={platformOptions}
+                            labels={platformLabels}
+                        />
+                        <AIStudioSelectField
+                            id="ai-studio-format"
+                            label="Format"
+                            value={format}
+                            onChange={onFormatChange}
+                            options={formatOptions}
+                            labels={formatLabels}
+                        />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <AIStudioSelectField
+                            id="ai-studio-tone"
+                            label="Tone"
+                            value={tone}
+                            onChange={onToneChange}
+                            options={toneOptions}
+                            labels={toneLabels}
+                        />
+                        <Field>
+                            <FieldLabel htmlFor="ai-studio-audience">Audience</FieldLabel>
+                            <Input
+                                id="ai-studio-audience"
+                                value={audience}
+                                onChange={(event) => onAudienceChange(event.target.value)}
+                                placeholder="Auto-detect"
+                            />
+                            <FieldDescription>
+                                Leave blank to detect from the brief and samples.
+                            </FieldDescription>
+                        </Field>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <AIStudioSelectField
+                            id="ai-studio-image-size"
+                            label="Size"
+                            value={imageSize}
+                            onChange={onImageSizeChange}
+                            options={imageSizeOptions}
+                            labels={imageSizeLabels}
+                        />
+                        <AIStudioSelectField
+                            id="ai-studio-image-quality"
+                            label="Quality"
+                            value={imageQuality}
+                            onChange={onImageQualityChange}
+                            options={imageQualityOptions}
+                            labels={imageQualityLabels}
+                        />
+                    </div>
+
+                    {!settings?.has_api_key && (
+                        <Alert>
+                            <AlertCircleIcon aria-hidden="true" />
+                            <AlertTitle>Connect OpenAI</AlertTitle>
+                            <AlertDescription>
+                                Admins can add an organization API key in Studio settings. Keys are stored
+                                server-side only.
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    <Button
+                        type="button"
+                        onClick={onGenerate}
+                        disabled={!canGenerate}
+                        className="w-full"
+                    >
+                        {isGenerating ? (
+                            <Spinner data-icon="inline-start" aria-hidden="true" />
+                        ) : (
+                            <SparklesIcon data-icon="inline-start" aria-hidden="true" />
+                        )}
+                        Generate draft
+                    </Button>
+                    {brief.trim().length > 0 && brief.trim().length < 8 && (
+                        <FieldError>Brief must be at least 8 characters.</FieldError>
+                    )}
+                </FieldGroup>
+            </CardContent>
+        </Card>
+    )
+}
+
+type AIStudioCreateTabProps = DraftGeneratorCardProps & {
+    activeTab: AIStudioTab
+    previewDraft: AIStudioDraft | null
+    isSavingDraft: boolean
+    onSaveDraft: () => void
+}
+
+function AIStudioCreateTab({
+    activeTab,
+    previewDraft,
+    isSavingDraft,
+    onSaveDraft,
+    ...generatorProps
+}: AIStudioCreateTabProps) {
+    return (
+        <TabsContent value="create" className="mt-0">
+            {activeTab === "create" && (
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+                    <DraftGeneratorCard {...generatorProps} />
+                    <DraftPreview
+                        draft={previewDraft}
+                        isSaving={isSavingDraft}
+                        onSave={onSaveDraft}
+                        onRegenerate={generatorProps.onGenerate}
+                    />
+                </div>
+            )}
+        </TabsContent>
+    )
+}
+
+function AIStudioGalleryTab({
+    activeTab,
+    savedDrafts,
+    draftsLoading,
+    selectedGalleryDraft,
+    onSelectDraft,
+}: {
+    activeTab: AIStudioTab
+    savedDrafts: AIStudioDraft[]
+    draftsLoading: boolean
+    selectedGalleryDraft: AIStudioDraft | null
+    onSelectDraft: (draft: AIStudioDraft) => void
+}) {
+    return (
+        <TabsContent value="gallery" className="mt-0">
+            {activeTab === "gallery" && (
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+                    <SavedDraftsPanel
+                        drafts={savedDrafts}
+                        isLoading={draftsLoading}
+                        onSelect={onSelectDraft}
+                    />
+                    <DraftPreview
+                        draft={selectedGalleryDraft}
+                        isSaving={false}
+                        onSave={() => undefined}
+                        onRegenerate={() => undefined}
+                        showActions={false}
+                    />
+                </div>
+            )}
+        </TabsContent>
+    )
+}
+
+function AIStudioSettingsDialog({
+    open,
+    settings,
+    apiKey,
+    agentsMd,
+    skillsMd,
+    saved,
+    isSaving,
+    onOpen,
+    onClose,
+    onApiKeyChange,
+    onAgentsMdChange,
+    onSkillsMdChange,
+    onSave,
+}: {
+    open: boolean
+    settings: AIStudioSettings | undefined
+    apiKey: string
+    agentsMd: string
+    skillsMd: string
+    saved: boolean
+    isSaving: boolean
+    onOpen: () => void
+    onClose: () => void
+    onApiKeyChange: (value: string) => void
+    onAgentsMdChange: (value: string) => void
+    onSkillsMdChange: (value: string) => void
+    onSave: () => void
+}) {
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+                if (nextOpen) {
+                    onOpen()
+                    return
+                }
+                onClose()
+            }}
+        >
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Studio settings</DialogTitle>
+                    <DialogDescription>
+                        OpenAI BYOK and guidance are scoped to AI Studio only.
+                    </DialogDescription>
+                </DialogHeader>
+                <FieldGroup>
+                    <Field>
+                        <FieldLabel htmlFor="ai-studio-api-key">OpenAI API key</FieldLabel>
+                        <Input
+                            id="ai-studio-api-key"
+                            value={apiKey}
+                            onChange={(event) => onApiKeyChange(event.target.value)}
+                            placeholder={settings?.api_key_masked ?? "sk-..."}
+                            type="password"
+                            autoComplete="off"
+                        />
+                        <FieldDescription>
+                            Leave blank to keep the remembered key unchanged.
+                        </FieldDescription>
+                    </Field>
+                    <Field>
+                        <FieldLabel htmlFor="ai-studio-agents-md">Agents.md</FieldLabel>
+                        <Textarea
+                            id="ai-studio-agents-md"
+                            value={agentsMd}
+                            onChange={(event) => onAgentsMdChange(event.target.value)}
+                            className="min-h-32 resize-y"
+                        />
+                    </Field>
+                    <Field>
+                        <FieldLabel htmlFor="ai-studio-skills-md">Skills.md</FieldLabel>
+                        <Textarea
+                            id="ai-studio-skills-md"
+                            value={skillsMd}
+                            onChange={(event) => onSkillsMdChange(event.target.value)}
+                            className="min-h-32 resize-y"
+                        />
+                    </Field>
+                    {saved && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <CheckIcon className="size-4" aria-hidden="true" />
+                            Saved
+                        </div>
+                    )}
+                </FieldGroup>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        Cancel
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={onSave}
+                        disabled={isSaving}
+                        className={cn(isSaving && "cursor-wait")}
+                    >
+                        {isSaving && <Spinner data-icon="inline-start" aria-hidden="true" />}
+                        Save settings
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 export default function AIStudioPage() {
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
@@ -597,7 +1073,7 @@ export default function AIStudioPage() {
     const [imageQuality, setImageQuality] = useState<AIStudioImageQuality>("auto")
     const [previewDraft, setPreviewDraft] = useState<AIStudioDraft | null>(null)
     const [galleryDraft, setGalleryDraft] = useState<AIStudioDraft | null>(null)
-    const [activeTab, setActiveTab] = useState<"create" | "gallery">("create")
+    const [activeTab, setActiveTab] = useState<AIStudioTab>("create")
     const [referenceImages, setReferenceImages] = useState<ReferenceImageDraft[]>([])
     const [referenceImageError, setReferenceImageError] = useState("")
     const [isAddingReferenceImage, setIsAddingReferenceImage] = useState(false)
@@ -733,69 +1209,23 @@ export default function AIStudioPage() {
     return (
         <div className="h-full overflow-y-auto bg-muted/20">
             <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex max-w-3xl flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                                AI Studio Preview
-                            </h1>
-                            <Badge variant="outline">Balanced</Badge>
-                        </div>
-                        <p className="text-sm leading-6 text-muted-foreground">
-                            Create review-ready social copy and visuals. Nothing posts directly.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">Copy: gpt-5.5</Badge>
-                        <Badge variant="outline">Image: gpt-image-2</Badge>
-                        {canManageSettings && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={openSettingsDialog}
-                            >
-                                <Settings2Icon data-icon="inline-start" aria-hidden="true" />
-                                Studio settings
-                            </Button>
-                        )}
-                    </div>
-                </div>
+                <AIStudioHeader
+                    canManageSettings={canManageSettings}
+                    onOpenSettings={openSettingsDialog}
+                />
 
-                {!aiAvailable && (
-                    <Alert variant="destructive">
-                        <AlertCircleIcon aria-hidden="true" />
-                        <AlertTitle>AI Studio is unavailable</AlertTitle>
-                        <AlertDescription>
-                            Your organization or role does not currently have AI access.
-                        </AlertDescription>
-                    </Alert>
-                )}
-
-                {settingsQuery.isError && (
-                    <Alert variant="destructive">
-                        <AlertCircleIcon aria-hidden="true" />
-                        <AlertTitle>Settings could not load</AlertTitle>
-                        <AlertDescription>{getErrorMessage(settingsQuery.error)}</AlertDescription>
-                    </Alert>
-                )}
-
-                {errorMessage && (
-                    <Alert variant="destructive">
-                        <AlertCircleIcon aria-hidden="true" />
-                        <AlertTitle>AI Studio needs attention</AlertTitle>
-                        <AlertDescription>{errorMessage}</AlertDescription>
-                    </Alert>
-                )}
+                <AIStudioAlerts
+                    aiAvailable={aiAvailable}
+                    settingsError={settingsQuery.isError ? settingsQuery.error : null}
+                    errorMessage={errorMessage}
+                />
 
                 {settingsQuery.isLoading ? (
-                    <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
-                        <Skeleton className="h-[620px] w-full" />
-                        <Skeleton className="h-[620px] w-full" />
-                    </div>
+                    <AIStudioLoadingShell />
                 ) : (
                     <Tabs
                         value={activeTab}
-                        onValueChange={(value) => setActiveTab(value as "create" | "gallery")}
+                        onValueChange={(value) => setActiveTab(value as AIStudioTab)}
                         className="gap-6"
                     >
                         <TabsList aria-label="AI Studio sections">
@@ -803,408 +1233,62 @@ export default function AIStudioPage() {
                             <TabsTrigger value="gallery">Gallery</TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="create" className="mt-0">
-                            {activeTab === "create" && (
-                                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle>Draft generator</CardTitle>
-                                            <CardDescription>
-                                                Start with a brief. AI Studio returns one caption
-                                                and one image for review.
-                                            </CardDescription>
-                                            {!settings?.has_api_key && (
-                                                <CardAction>
-                                                    <Badge variant="destructive">Key required</Badge>
-                                                </CardAction>
-                                            )}
-                                        </CardHeader>
-                                        <CardContent>
-                                            <FieldGroup>
-                                                <BriefComposer
-                                                    value={brief}
-                                                    onChange={setBrief}
-                                                    images={referenceImages}
-                                                    isAdding={isAddingReferenceImage}
-                                                    errorMessage={referenceImageError}
-                                                    onFiles={handleReferenceFiles}
-                                                    onRemove={handleRemoveReferenceImage}
-                                                />
+                        <AIStudioCreateTab
+                            activeTab={activeTab}
+                            settings={settings}
+                            brief={brief}
+                            onBriefChange={setBrief}
+                            referenceImages={referenceImages}
+                            isAddingReferenceImage={isAddingReferenceImage}
+                            referenceImageError={referenceImageError}
+                            onReferenceFiles={handleReferenceFiles}
+                            onRemoveReferenceImage={handleRemoveReferenceImage}
+                            platform={platform}
+                            onPlatformChange={setPlatform}
+                            format={format}
+                            onFormatChange={setFormat}
+                            tone={tone}
+                            onToneChange={setTone}
+                            audience={audience}
+                            onAudienceChange={setAudience}
+                            imageSize={imageSize}
+                            onImageSizeChange={setImageSize}
+                            imageQuality={imageQuality}
+                            onImageQualityChange={setImageQuality}
+                            canGenerate={canGenerate}
+                            isGenerating={generateDraft.isPending}
+                            onGenerate={handleGenerate}
+                            previewDraft={previewDraft}
+                            isSavingDraft={saveDraft.isPending}
+                            onSaveDraft={handleSaveDraft}
+                        />
 
-                                                <div className="grid gap-4 sm:grid-cols-2">
-                                                    <Field>
-                                                        <FieldLabel htmlFor="ai-studio-platform">
-                                                            Platform
-                                                        </FieldLabel>
-                                                        <Select
-                                                            value={platform}
-                                                            onValueChange={(value) => {
-                                                                if (value) {
-                                                                    setPlatform(
-                                                                        value as AIStudioPlatform
-                                                                    )
-                                                                }
-                                                            }}
-                                                        >
-                                                            <SelectTrigger id="ai-studio-platform">
-                                                                <SelectValue>
-                                                                    {(value: string | null) =>
-                                                                        platformLabels[
-                                                                            (value ||
-                                                                                platform) as AIStudioPlatform
-                                                                        ]
-                                                                    }
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectGroup>
-                                                                    {platformOptions.map((option) => (
-                                                                        <SelectItem
-                                                                            key={option.value}
-                                                                            value={option.value}
-                                                                        >
-                                                                            {option.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </Field>
-
-                                                    <Field>
-                                                        <FieldLabel htmlFor="ai-studio-format">
-                                                            Format
-                                                        </FieldLabel>
-                                                        <Select
-                                                            value={format}
-                                                            onValueChange={(value) => {
-                                                                if (value) {
-                                                                    setFormat(value as AIStudioFormat)
-                                                                }
-                                                            }}
-                                                        >
-                                                            <SelectTrigger id="ai-studio-format">
-                                                                <SelectValue>
-                                                                    {(value: string | null) =>
-                                                                        formatLabels[
-                                                                            (value ||
-                                                                                format) as AIStudioFormat
-                                                                        ]
-                                                                    }
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectGroup>
-                                                                    {formatOptions.map((option) => (
-                                                                        <SelectItem
-                                                                            key={option.value}
-                                                                            value={option.value}
-                                                                        >
-                                                                            {option.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </Field>
-                                                </div>
-
-                                                <div className="grid gap-4 sm:grid-cols-2">
-                                                    <Field>
-                                                        <FieldLabel htmlFor="ai-studio-tone">
-                                                            Tone
-                                                        </FieldLabel>
-                                                        <Select
-                                                            value={tone}
-                                                            onValueChange={(value) => {
-                                                                if (value) {
-                                                                    setTone(value as AIStudioTone)
-                                                                }
-                                                            }}
-                                                        >
-                                                            <SelectTrigger id="ai-studio-tone">
-                                                                <SelectValue>
-                                                                    {(value: string | null) =>
-                                                                        toneLabels[
-                                                                            (value ||
-                                                                                tone) as AIStudioTone
-                                                                        ]
-                                                                    }
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectGroup>
-                                                                    {toneOptions.map((option) => (
-                                                                        <SelectItem
-                                                                            key={option.value}
-                                                                            value={option.value}
-                                                                        >
-                                                                            {option.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </Field>
-
-                                                    <Field>
-                                                        <FieldLabel htmlFor="ai-studio-audience">
-                                                            Audience
-                                                        </FieldLabel>
-                                                        <Input
-                                                            id="ai-studio-audience"
-                                                            value={audience}
-                                                            onChange={(event) =>
-                                                                setAudience(event.target.value)
-                                                            }
-                                                            placeholder="Auto-detect"
-                                                        />
-                                                        <FieldDescription>
-                                                            Leave blank to detect from the brief and
-                                                            samples.
-                                                        </FieldDescription>
-                                                    </Field>
-                                                </div>
-
-                                                <div className="grid gap-4 sm:grid-cols-2">
-                                                    <Field>
-                                                        <FieldLabel htmlFor="ai-studio-image-size">
-                                                            Size
-                                                        </FieldLabel>
-                                                        <Select
-                                                            value={imageSize}
-                                                            onValueChange={(value) => {
-                                                                if (value) {
-                                                                    setImageSize(
-                                                                        value as AIStudioImageSize
-                                                                    )
-                                                                }
-                                                            }}
-                                                        >
-                                                            <SelectTrigger id="ai-studio-image-size">
-                                                                <SelectValue>
-                                                                    {(value: string | null) =>
-                                                                        imageSizeLabels[
-                                                                            (value ||
-                                                                                imageSize) as AIStudioImageSize
-                                                                        ]
-                                                                    }
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectGroup>
-                                                                    {imageSizeOptions.map((option) => (
-                                                                        <SelectItem
-                                                                            key={option.value}
-                                                                            value={option.value}
-                                                                        >
-                                                                            {option.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </Field>
-
-                                                    <Field>
-                                                        <FieldLabel htmlFor="ai-studio-image-quality">
-                                                            Quality
-                                                        </FieldLabel>
-                                                        <Select
-                                                            value={imageQuality}
-                                                            onValueChange={(value) => {
-                                                                if (value) {
-                                                                    setImageQuality(
-                                                                        value as AIStudioImageQuality
-                                                                    )
-                                                                }
-                                                            }}
-                                                        >
-                                                            <SelectTrigger id="ai-studio-image-quality">
-                                                                <SelectValue>
-                                                                    {(value: string | null) =>
-                                                                        imageQualityLabels[
-                                                                            (value ||
-                                                                                imageQuality) as AIStudioImageQuality
-                                                                        ]
-                                                                    }
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectGroup>
-                                                                    {imageQualityOptions.map((option) => (
-                                                                        <SelectItem
-                                                                            key={option.value}
-                                                                            value={option.value}
-                                                                        >
-                                                                            {option.label}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </Field>
-                                                </div>
-
-                                                {!settings?.has_api_key && (
-                                                    <Alert>
-                                                        <AlertCircleIcon aria-hidden="true" />
-                                                        <AlertTitle>Connect OpenAI</AlertTitle>
-                                                        <AlertDescription>
-                                                            Admins can add an organization API key in
-                                                            Studio settings. Keys are stored
-                                                            server-side only.
-                                                        </AlertDescription>
-                                                    </Alert>
-                                                )}
-
-                                                <Button
-                                                    type="button"
-                                                    onClick={handleGenerate}
-                                                    disabled={!canGenerate}
-                                                    className="w-full"
-                                                >
-                                                    {generateDraft.isPending ? (
-                                                        <Spinner data-icon="inline-start" aria-hidden="true" />
-                                                    ) : (
-                                                        <SparklesIcon data-icon="inline-start" aria-hidden="true" />
-                                                    )}
-                                                    Generate draft
-                                                </Button>
-                                                {brief.trim().length > 0 &&
-                                                    brief.trim().length < 8 && (
-                                                        <FieldError>
-                                                            Brief must be at least 8 characters.
-                                                        </FieldError>
-                                                    )}
-                                            </FieldGroup>
-                                        </CardContent>
-                                    </Card>
-
-                                    <DraftPreview
-                                        draft={previewDraft}
-                                        isSaving={saveDraft.isPending}
-                                        onSave={handleSaveDraft}
-                                        onRegenerate={handleGenerate}
-                                    />
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        <TabsContent value="gallery" className="mt-0">
-                            {activeTab === "gallery" && (
-                                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
-                                    <SavedDraftsPanel
-                                        drafts={savedDrafts}
-                                        isLoading={draftsQuery.isLoading}
-                                        onSelect={setGalleryDraft}
-                                    />
-                                    <DraftPreview
-                                        draft={selectedGalleryDraft}
-                                        isSaving={false}
-                                        onSave={() => undefined}
-                                        onRegenerate={() => undefined}
-                                        showActions={false}
-                                    />
-                                </div>
-                            )}
-                        </TabsContent>
+                        <AIStudioGalleryTab
+                            activeTab={activeTab}
+                            savedDrafts={savedDrafts}
+                            draftsLoading={draftsQuery.isLoading}
+                            selectedGalleryDraft={selectedGalleryDraft}
+                            onSelectDraft={setGalleryDraft}
+                        />
                     </Tabs>
                 )}
             </div>
 
-            <Dialog
+            <AIStudioSettingsDialog
                 open={settingsOpen}
-                onOpenChange={(open) => {
-                    if (open) {
-                        openSettingsDialog()
-                        return
-                    }
-                    dispatchSettingsDialog({ type: "close" })
-                }}
-            >
-                <DialogContent className="sm:max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Studio settings</DialogTitle>
-                        <DialogDescription>
-                            OpenAI BYOK and guidance are scoped to AI Studio only.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="ai-studio-api-key">OpenAI API key</FieldLabel>
-                            <Input
-                                id="ai-studio-api-key"
-                                value={settingsApiKey}
-                                onChange={(event) =>
-                                    dispatchSettingsDialog({
-                                        type: "setApiKey",
-                                        value: event.target.value,
-                                    })
-                                }
-                                placeholder={settings?.api_key_masked ?? "sk-..."}
-                                type="password"
-                                autoComplete="off"
-                            />
-                            <FieldDescription>
-                                Leave blank to keep the remembered key unchanged.
-                            </FieldDescription>
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="ai-studio-agents-md">Agents.md</FieldLabel>
-                            <Textarea
-                                id="ai-studio-agents-md"
-                                value={agentsMd}
-                                onChange={(event) =>
-                                    dispatchSettingsDialog({
-                                        type: "setAgentsMd",
-                                        value: event.target.value,
-                                    })
-                                }
-                                className="min-h-32 resize-y"
-                            />
-                        </Field>
-                        <Field>
-                            <FieldLabel htmlFor="ai-studio-skills-md">Skills.md</FieldLabel>
-                            <Textarea
-                                id="ai-studio-skills-md"
-                                value={skillsMd}
-                                onChange={(event) =>
-                                    dispatchSettingsDialog({
-                                        type: "setSkillsMd",
-                                        value: event.target.value,
-                                    })
-                                }
-                                className="min-h-32 resize-y"
-                            />
-                        </Field>
-                        {settingsSaved && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <CheckIcon className="size-4" aria-hidden="true" />
-                                Saved
-                            </div>
-                        )}
-                    </FieldGroup>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => dispatchSettingsDialog({ type: "close" })}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={handleSaveSettings}
-                            disabled={updateSettings.isPending}
-                            className={cn(updateSettings.isPending && "cursor-wait")}
-                        >
-                            {updateSettings.isPending && <Spinner data-icon="inline-start" aria-hidden="true" />}
-                            Save settings
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                settings={settings}
+                apiKey={settingsApiKey}
+                agentsMd={agentsMd}
+                skillsMd={skillsMd}
+                saved={settingsSaved}
+                isSaving={updateSettings.isPending}
+                onOpen={openSettingsDialog}
+                onClose={() => dispatchSettingsDialog({ type: "close" })}
+                onApiKeyChange={(value) => dispatchSettingsDialog({ type: "setApiKey", value })}
+                onAgentsMdChange={(value) => dispatchSettingsDialog({ type: "setAgentsMd", value })}
+                onSkillsMdChange={(value) => dispatchSettingsDialog({ type: "setSkillsMd", value })}
+                onSave={handleSaveSettings}
+            />
         </div>
     )
 }

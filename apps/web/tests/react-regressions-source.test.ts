@@ -582,12 +582,23 @@ describe("React regression guards (source)", () => {
 
     it("keeps AI Studio settings and reference images compiler-friendly", () => {
         const source = readSource("app/(app)/ai-studio/page.tsx")
+        const pageSource = readFunctionSource(source, "AIStudioPage")
 
         expect(source).toContain("function buildSettingsFormState")
         expect(source).toContain("type AIStudioSettingsDialogState")
         expect(source).toContain("function aiStudioSettingsDialogReducer")
+        expect(source).toContain("function AIStudioHeader")
+        expect(source).toContain("function AIStudioAlerts")
+        expect(source).toContain("function AIStudioLoadingShell")
+        expect(source).toContain("function DraftGeneratorCard")
+        expect(source).toContain("function AIStudioCreateTab")
+        expect(source).toContain("function AIStudioGalleryTab")
+        expect(source).toContain("function AIStudioSettingsDialog")
         expect(source).toContain("aiStudioSettingsDialogReducer,")
         expect(source).toContain("const openSettingsDialog =")
+        expect(pageSource).not.toContain("AI Studio Preview")
+        expect(pageSource).not.toContain("Draft generator")
+        expect(pageSource).not.toContain("Studio settings")
         expect(source).not.toContain("const [settingsOpen, setSettingsOpen]")
         expect(source).not.toContain("const [settingsApiKey, setSettingsApiKey]")
         expect(source).not.toContain("const [agentsMd, setAgentsMd]")

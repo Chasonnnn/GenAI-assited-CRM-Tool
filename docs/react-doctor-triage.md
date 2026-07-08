@@ -4429,3 +4429,23 @@ Full command after Batch 203: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 31 warnings`
 - Removed globally since Batch 202: workflow executions page `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a7bc7840-8fce-4026-878d-4acafd43458f`
+
+## Batch 204
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/ai-studio/page.tsx:582` | Valid. `AIStudioPage` owned the header, alerts, loading shell, draft generator, create/gallery tabs, preview composition, and settings dialog rendering in one component. | High | Extracted `AIStudioHeader`, `AIStudioAlerts`, `AIStudioLoadingShell`, `DraftGeneratorCard`, `AIStudioCreateTab`, `AIStudioGalleryTab`, and `AIStudioSettingsDialog` while keeping query state, draft state, reference-image state, and mutation handlers in the page controller. Extended the existing source guard to require the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI Studio settings"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "AI Studio settings"`; `pnpm test --run tests/ai-studio-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 204: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 204: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `44`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 30 warnings`
+- Removed globally since Batch 203: AI Studio page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c5160557-f656-4de8-8b0e-8dedb839b3e7`
