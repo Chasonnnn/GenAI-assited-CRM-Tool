@@ -4470,3 +4470,23 @@ Full command after Batch 205: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 29 warnings`
 - Removed globally since Batch 204: audit settings page `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ebb9c679-f297-4c19-8db0-4b21ef7ebcd7`
+
+## Batch 206
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/automation/forms/page.tsx:144` | Valid. `FormsListPage` owned the page header, form tab, template tab, form/template cards, create dialog, delete confirmations, and share dialog in one component. | High | Extracted `FormsPageHeader`, `FormsPageTabs`, `FormsGrid`, `FormCard`, `FormTemplatesGrid`, `FormTemplateCard`, `CreateFormDialog`, `DeleteFormDialog`, and `ShareFormDialog` while keeping query/mutation state, navigation, and share/download handlers in the page controller. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "forms list page sections"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "forms list page sections"`; `pnpm test --run tests/forms-delete.test.tsx`; `pnpm test --run tests/forms-builder-template.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 206: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 206: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `42`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 28 warnings`
+- Removed globally since Batch 205: forms list page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fee734b7-75be-423c-b65c-3882d0546f7d`

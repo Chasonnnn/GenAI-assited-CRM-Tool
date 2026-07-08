@@ -163,6 +163,24 @@ describe("React regression guards (source)", () => {
         expect(pageSource).not.toContain("How It Works")
     })
 
+    it("keeps forms list page sections split into focused helpers", () => {
+        const source = readSource("app/(app)/automation/forms/page.tsx")
+        const pageSource = readFunctionSource(source, "FormsListPage")
+
+        expect(source).toContain("function FormsPageHeader")
+        expect(source).toContain("function FormsPageTabs")
+        expect(source).toContain("function FormsGrid")
+        expect(source).toContain("function FormCard")
+        expect(source).toContain("function FormTemplatesGrid")
+        expect(source).toContain("function FormTemplateCard")
+        expect(source).toContain("function CreateFormDialog")
+        expect(source).toContain("function DeleteFormDialog")
+        expect(source).toContain("function ShareFormDialog")
+        expect(pageSource).not.toContain("No forms yet")
+        expect(pageSource).not.toContain("No templates yet")
+        expect(pageSource).not.toContain("Share Application Form")
+    })
+
     it("keeps AI assistant chat helpers compiler-friendly", () => {
         const source = readSource("app/(app)/ai-assistant/page.tsx")
 
