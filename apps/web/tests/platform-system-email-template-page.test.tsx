@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import * as React from "react"
 import PlatformSystemEmailTemplatePage from "../app/ops/templates/system/[systemKey]/page.client"
 
@@ -171,6 +171,52 @@ describe("PlatformSystemEmailTemplatePage", () => {
 
         await waitFor(() => expect(mocks.listOrganizations).toHaveBeenCalledWith({ limit: 200 }))
         expect(await screen.findByText("Acme Surrogacy")).toBeInTheDocument()
+    })
+
+    it("sends campaign to selected active organization members", async () => {
+        mocks.listMembers.mockResolvedValue([
+            {
+                id: "member-1",
+                user_id: "user-active",
+                email: "active@example.com",
+                display_name: "Active Member",
+                role: "admin",
+                is_active: true,
+                created_at: "2026-01-01T00:00:00Z",
+            },
+            {
+                id: "member-2",
+                user_id: "user-inactive",
+                email: "inactive@example.com",
+                display_name: "Inactive Member",
+                role: "viewer",
+                is_active: false,
+                created_at: "2026-01-01T00:00:00Z",
+            },
+        ])
+        mocks.sendCampaign.mockResolvedValue({ sent: 1, suppressed: 0, failed: 0 })
+
+        render(<PlatformSystemEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
+        await screen.findByText("Acme Surrogacy")
+        fireEvent.click(screen.getByText("Acme Surrogacy"))
+
+        await waitFor(() => expect(mocks.listMembers).toHaveBeenCalledWith("org-1"))
+        expect(await screen.findByText("Active Member")).toBeInTheDocument()
+        expect(screen.getByText("Inactive Member")).toBeInTheDocument()
+
+        const dialog = screen.getByRole("dialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+
+        await waitFor(() =>
+            expect(mocks.sendCampaign).toHaveBeenCalledWith({
+                systemKey: "org_invite",
+                payload: {
+                    targets: [{ org_id: "org-1", user_ids: ["user-active"] }],
+                },
+            })
+        )
     })
 
     it("reenables test send after a failure", async () => {

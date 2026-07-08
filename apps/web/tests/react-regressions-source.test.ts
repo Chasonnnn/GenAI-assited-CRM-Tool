@@ -621,6 +621,15 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [showForm, setShowForm]")
     })
 
+    it("keeps platform system campaign recipients split into focused helpers", () => {
+        const source = readSource("app/ops/templates/system/[systemKey]/page.client.tsx")
+
+        expect(source).toContain("function SystemTemplateCampaignRecipients")
+        expect(source).toContain("function SystemTemplateCampaignRecipientCard")
+        expect(source).toContain("<SystemTemplateCampaignRecipients")
+        expect(source).not.toContain("selectedOrgIds.map((orgId) => {")
+    })
+
     it("builds journey timeline milestone metadata without mutating a global counter", () => {
         const source = readSource("components/surrogates/journey/JourneyTimeline.tsx")
 

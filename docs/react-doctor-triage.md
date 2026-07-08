@@ -4367,3 +4367,25 @@ Full command after Batch 200: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 34 warnings`
 - Removed globally since Batch 199: public booking selection `prefer-useReducer` warning (`1` bug warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-99f0eba9-0b1f-4047-ba3b-b18a3263e72a`
+
+## Batch 201
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/jsx-max-depth` | `app/ops/templates/system/[systemKey]/page.client.tsx:989` | Valid. The system-template campaign dialog rendered organization selection, selected-org recipient cards, per-member checkboxes, loading states, and inactive badges inline in the page body. | High | Extracted `SystemTemplateCampaignRecipients` and `SystemTemplateCampaignRecipientCard`, preserving active-member auto-selection and selected-recipient campaign payloads. Added behavior coverage for sending to selected active organization members and a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "platform system campaign"` failed before the split. GREEN: `pnpm test --run tests/platform-system-email-template-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "platform system campaign"`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports only the pre-existing giant-component finding in the touched file. |
+
+Changed-scope command after Batch 201: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` in `app/ops/templates/system/[systemKey]/page.client.tsx:466`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-88a45883-27af-4e72-a01c-9c56c9a00de4`
+
+Full command after Batch 201: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `47`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 33 warnings`
+- Removed globally since Batch 200: platform system template campaign recipient `jsx-max-depth` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-aea09741-5a1e-4452-91a3-949c96bdd42a`

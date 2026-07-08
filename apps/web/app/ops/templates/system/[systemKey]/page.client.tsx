@@ -325,6 +325,144 @@ function insertIntoTextControl(
     })
 }
 
+function SystemTemplateCampaignRecipientCard({
+    isMembersLoading,
+    members,
+    onToggleSelectAllUsers,
+    onToggleUserSelection,
+    org,
+    orgId,
+    selectedUsers,
+}: {
+    isMembersLoading: boolean
+    members: OrgMember[]
+    onToggleSelectAllUsers: (orgId: string, next: boolean) => void
+    onToggleUserSelection: (orgId: string, userId: string, next: boolean) => void
+    org: OrganizationSummary | undefined
+    orgId: string
+    selectedUsers: Set<string>
+}) {
+    const activeMembers = members.filter((member) => member.is_active)
+    const selectionLabel = isMembersLoading
+        ? "Loading members\u2026"
+        : activeMembers.length === 0
+          ? "No active members found."
+          : `${selectedUsers.size} of ${activeMembers.length} selected`
+    const allSelected =
+        activeMembers.length > 0 &&
+        activeMembers.every((member) => selectedUsers.has(member.user_id))
+
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <CardTitle className="text-base">{org?.name || "Organization"}</CardTitle>
+                <CardDescription>{selectionLabel}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                    <Label className="flex items-center gap-2">
+                        <Checkbox
+                            checked={allSelected}
+                            onCheckedChange={(next) => onToggleSelectAllUsers(orgId, next === true)}
+                        />
+                        Select all active users
+                    </Label>
+                    {isMembersLoading && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2Icon className="size-3 animate-spin" />
+                            Loading users&hellip;
+                        </span>
+                    )}
+                </div>
+                <div className="rounded-md border">
+                    <ScrollArea className="h-40">
+                        <div className="divide-y">
+                            {members.map((member) => (
+                                <label
+                                    key={member.id}
+                                    className="flex items-center justify-between gap-3 p-3 text-sm"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <Checkbox
+                                            checked={selectedUsers.has(member.user_id)}
+                                            disabled={!member.is_active}
+                                            onCheckedChange={(next) =>
+                                                onToggleUserSelection(
+                                                    orgId,
+                                                    member.user_id,
+                                                    next === true
+                                                )
+                                            }
+                                        />
+                                        <div>
+                                            <div className="font-medium text-stone-900 dark:text-stone-100">
+                                                {member.display_name || member.email}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {member.email}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {!member.is_active && (
+                                        <Badge variant="outline" className="text-xs">
+                                            Inactive
+                                        </Badge>
+                                    )}
+                                </label>
+                            ))}
+                            {members.length === 0 && !isMembersLoading && (
+                                <div className="p-3 text-xs text-muted-foreground">
+                                    No members found.
+                                </div>
+                            )}
+                        </div>
+                    </ScrollArea>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function SystemTemplateCampaignRecipients({
+    membersLoading,
+    onToggleSelectAllUsers,
+    onToggleUserSelection,
+    orgMembers,
+    orgs,
+    selectedOrgIds,
+    selectedUsersByOrg,
+}: {
+    membersLoading: Record<string, boolean>
+    onToggleSelectAllUsers: (orgId: string, next: boolean) => void
+    onToggleUserSelection: (orgId: string, userId: string, next: boolean) => void
+    orgMembers: Record<string, OrgMember[]>
+    orgs: OrganizationSummary[]
+    selectedOrgIds: string[]
+    selectedUsersByOrg: Record<string, string[]>
+}) {
+    if (selectedOrgIds.length === 0) return null
+
+    return (
+        <div className="space-y-3">
+            <Label>Recipients</Label>
+            <div className="space-y-4">
+                {selectedOrgIds.map((selectedOrgId) => (
+                    <SystemTemplateCampaignRecipientCard
+                        key={selectedOrgId}
+                        orgId={selectedOrgId}
+                        org={orgs.find((org) => org.id === selectedOrgId)}
+                        members={orgMembers[selectedOrgId] || []}
+                        selectedUsers={new Set(selectedUsersByOrg[selectedOrgId] || [])}
+                        isMembersLoading={membersLoading[selectedOrgId] === true}
+                        onToggleSelectAllUsers={onToggleSelectAllUsers}
+                        onToggleUserSelection={onToggleUserSelection}
+                    />
+                ))}
+            </div>
+        </div>
+    )
+}
+
 export default function PlatformSystemEmailTemplatePage() {
     const { push } = useRouter()
     const params = useParams()
@@ -917,105 +1055,15 @@ export default function PlatformSystemEmailTemplatePage() {
                                     </div>
                                 </div>
 
-                                {selectedOrgIds.length > 0 && (
-                                    <div className="space-y-3">
-                                        <Label>Recipients</Label>
-                                        <div className="space-y-4">
-                                            {selectedOrgIds.map((orgId) => {
-                                                const org = orgs.find((o) => o.id === orgId)
-                                                const members = orgMembers[orgId] || []
-                                                const selectedUsers = new Set(selectedUsersByOrg[orgId] || [])
-                                                const activeMembers = members.filter((m) => m.is_active)
-                                                const isMembersLoading = membersLoading[orgId]
-                                                const selectionLabel = isMembersLoading
-                                                    ? "Loading members\u2026"
-                                                    : activeMembers.length === 0
-                                                        ? "No active members found."
-                                                        : `${selectedUsers.size} of ${activeMembers.length} selected`
-                                                const allSelected =
-                                                    activeMembers.length > 0 &&
-                                                    activeMembers.every((m) => selectedUsers.has(m.user_id))
-                                                return (
-                                                    <Card key={orgId}>
-                                                        <CardHeader className="pb-3">
-                                                            <CardTitle className="text-base">
-                                                                {org?.name || "Organization"}
-                                                            </CardTitle>
-                                                            <CardDescription>
-                                                                {selectionLabel}
-                                                            </CardDescription>
-                                                        </CardHeader>
-                                                        <CardContent className="space-y-3">
-                                                            <div className="flex items-center justify-between text-sm">
-                                                                <Label className="flex items-center gap-2">
-                                                                    <Checkbox
-                                                                        checked={allSelected}
-                                                                        onCheckedChange={(next) =>
-                                                                            toggleSelectAllUsers(orgId, next === true)
-                                                                        }
-                                                                    />
-                                                                    Select all active users
-                                                                </Label>
-                                                                {membersLoading[orgId] && (
-                                                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                                                        <Loader2Icon className="size-3 animate-spin" />
-                                                                        Loading users&hellip;
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="rounded-md border">
-                                                                <ScrollArea className="h-40">
-                                                                    <div className="divide-y">
-                                                                        {members.map((member) => (
-                                                                            <label
-                                                                                key={member.id}
-                                                                                className="flex items-center justify-between gap-3 p-3 text-sm"
-                                                                            >
-                                                                                <div className="flex items-center gap-3">
-                                                                                    <Checkbox
-                                                                                        checked={selectedUsers.has(
-                                                                                            member.user_id
-                                                                                        )}
-                                                                                        disabled={!member.is_active}
-                                                                                        onCheckedChange={(next) =>
-                                                                                            toggleUserSelection(
-                                                                                                orgId,
-                                                                                                member.user_id,
-                                                                                                next === true
-                                                                                            )
-                                                                                        }
-                                                                                    />
-                                                                                    <div>
-                                                                                        <div className="font-medium text-stone-900 dark:text-stone-100">
-                                                                                            {member.display_name || member.email}
-                                                                                        </div>
-                                                                                        <div className="text-xs text-muted-foreground">
-                                                                                            {member.email}
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                                {!member.is_active && (
-                                                                                    <Badge variant="outline" className="text-xs">
-                                                                                        Inactive
-                                                                                    </Badge>
-                                                                                )}
-                                                                            </label>
-                                                                        ))}
-                                                                        {members.length === 0 && !membersLoading[orgId] && (
-                                                                            <div className="p-3 text-xs text-muted-foreground">
-                                                                                No members found.
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </ScrollArea>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
+                                <SystemTemplateCampaignRecipients
+                                    selectedOrgIds={selectedOrgIds}
+                                    orgs={orgs}
+                                    orgMembers={orgMembers}
+                                    membersLoading={membersLoading}
+                                    selectedUsersByOrg={selectedUsersByOrg}
+                                    onToggleSelectAllUsers={toggleSelectAllUsers}
+                                    onToggleUserSelection={toggleUserSelection}
+                                />
                             </div>
                             <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
                                 <span className="text-xs text-muted-foreground">
