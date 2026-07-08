@@ -3365,11 +3365,15 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/tasks/page.client.tsx")
 
         expect(source).toContain("const handledFocusRef = useRef<FocusTarget | null>(null)")
+        expect(source).toContain("const [manualViewFocusTarget, setManualViewFocusTarget] = useState<FocusTarget | null>(null)")
+        expect(source).toContain("const activeView = shouldUseListViewForFocus ? \"list\" : view")
         expect(source).toContain("handledFocusRef.current === focusTarget")
         expect(source).toContain("handledFocusRef.current = focusTarget")
         expect(source).not.toContain("const [pendingFocus, setPendingFocus]")
         expect(source).not.toContain("const pendingFocus =")
         expect(source).not.toContain("setPendingFocus(")
+        expect(source).not.toContain("setView(\"list\")")
+        expect(source).not.toContain("if (view === \"calendar\")")
     })
 
     it("keeps Tasks page handlers compiler-friendly", () => {

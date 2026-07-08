@@ -4262,24 +4262,22 @@ Full command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --ver
 - Removed globally since Batch 194: email-template full-body hydration effect (`1` `no-event-handler` warning). Remaining `no-event-handler` diagnostics are now limited to the tasks focus view and intake draft loading.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8f1dd3b9-7f1d-4cb1-b5b5-e18ffe590bc2`
 
-## Batch 195
+## Batch 196
 
 | Rule | Files | Verdict | Confidence | Action | Verification |
 | --- | --- | --- | --- | --- | --- |
-| `react-doctor/no-event-handler` | `app/(app)/automation/email-templates/page.tsx:914` | Valid. The template editor copied `fullTemplate.body` and inferred editor mode from loaded detail inside an effect, causing a late render-driven body/mode sync for values that can be derived from current detail data until the user edits them. | High | Added `getTemplateBodyMode`, derived `templateBody` and `templateBodyMode` from the loaded template detail plus explicit user overrides, and removed the detail-hydration effect and touched-mode ref. Variable/logo insertion now writes through the body override setter. Added coverage for opening complex existing templates directly in HTML mode with the loaded detail body. | GREEN: `pnpm test --run tests/email-templates-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reports the email-template `no-event-handler` finding. |
+| `react-doctor/no-event-handler` | `app/(app)/tasks/page.client.tsx:326` | Valid. A focused Tasks URL rendered the saved calendar view first, then an effect changed `view` to `list` and persisted the list preference before a second effect could scroll to the target. That was event-style focus routing expressed as state plus effects. | High | Added render-time `activeView` derivation for non-approval focus targets so focused task URLs render the list immediately. Kept the imperative scroll in the existing effect, retained user view-toggle control with explicit `manualViewFocusTarget` state, and preserved the list preference after the focused target is handled. Added first-render behavior coverage and a source guard rejecting the old `setView("list")` focus effect. | RED: `pnpm test --run tests/tasks-page.test.tsx -t "focused task URLs"` and `pnpm test --run tests/react-regressions-source.test.ts -t "Tasks page focus coordination"` failed before the refactor. GREEN: `pnpm test --run tests/tasks-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
 
-Changed-scope command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+Changed-scope command after Batch 196: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
 
-- Score: `92 / 100`
-- Total diagnostics in changed files: `2`
-- Summary: `Bugs 1 warning`, `Maintainability 1 warning`
-- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer` in `app/(app)/automation/email-templates/page.tsx:720`.
-- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-caa7dd47-db06-48ce-abda-256b477304de`
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
 
-Full command after Batch 195: `cd apps/web && npx -y react-doctor@latest . --verbose`
+Full command after Batch 196: `cd apps/web && npx -y react-doctor@latest . --verbose`
 
 - Score: `87 / 100`
-- Total diagnostics: `55`
-- Summary: `Bugs 18 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
-- Removed globally since Batch 194: email-template detail-body hydration effect (`1` `no-event-handler` warning). Remaining `no-event-handler` diagnostics are now limited to tasks focus view and intake draft loading.
-- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9815905f-b46b-460a-80f9-964b67ed48df`
+- Total diagnostics: `54`
+- Summary: `Bugs 17 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 195: Tasks page focus-view state effect (`1` `no-event-handler` warning). Remaining `no-event-handler` diagnostics are now limited to intake draft loading.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e379beed-736e-4752-924a-c864a495bd61`

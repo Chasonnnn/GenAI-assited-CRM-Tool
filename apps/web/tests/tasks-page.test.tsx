@@ -9,6 +9,12 @@ import type { TaskListItem } from '@/lib/types/task'
 import type { StatusChangeRequestDetail } from '@/lib/api/status-change-requests'
 import type { ImportApprovalItem } from '@/lib/api/import'
 
+const mockNavigation = vi.hoisted(() => ({
+    searchParams: new URLSearchParams(),
+    push: vi.fn(),
+    replace: vi.fn(),
+}))
+
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
         <a href={href}>{children}</a>
@@ -18,12 +24,12 @@ vi.mock('next/link', () => ({
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
     useSearchParams: () => ({
-        get: () => null,
-        toString: () => '',
+        get: (key: string) => mockNavigation.searchParams.get(key),
+        toString: () => mockNavigation.searchParams.toString(),
     }),
     useRouter: () => ({
-        push: vi.fn(),
-        replace: vi.fn(),
+        push: mockNavigation.push,
+        replace: mockNavigation.replace,
     }),
 }))
 
@@ -103,6 +109,15 @@ vi.mock('@/components/appointments/UnifiedCalendar', () => ({
 
 describe('TasksPage', () => {
     beforeEach(() => {
+        mockNavigation.searchParams = new URLSearchParams()
+        mockNavigation.push.mockReset()
+        mockNavigation.replace.mockReset()
+        vi.mocked(window.localStorage.getItem).mockReturnValue('list')
+        vi.mocked(window.localStorage.setItem).mockClear()
+        Object.defineProperty(Element.prototype, 'scrollIntoView', {
+            configurable: true,
+            value: vi.fn(),
+        })
         mockCurrentUser.role = 'case_manager'
         mockUseTasks.mockImplementation((params: { is_completed?: boolean; task_type?: string; exclude_approvals?: boolean }) => {
             // Return workflow approvals for approval query
@@ -190,6 +205,28 @@ describe('TasksPage', () => {
         fireEvent.click(checkbox)
 
         expect(mockCompleteTask).toHaveBeenCalledWith('t1')
+    })
+
+    it('renders the list immediately for focused task URLs even when calendar is saved', async () => {
+        mockNavigation.searchParams = new URLSearchParams('focus=tasks')
+        vi.mocked(window.localStorage.getItem).mockReturnValue('calendar')
+
+        const firstRenderHtml = renderToString(<TasksPage />)
+        expect(firstRenderHtml).not.toContain('Calendar View')
+        expect(firstRenderHtml).toContain('Follow up with surrogate')
+
+        render(<TasksPage />)
+
+        expect(screen.queryByText('Calendar View')).not.toBeInTheDocument()
+        expect(screen.getByText('Follow up with surrogate')).toBeInTheDocument()
+
+        await waitFor(() => {
+            expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+                behavior: 'smooth',
+                block: 'start',
+            })
+        })
+        expect(window.localStorage.setItem).toHaveBeenCalledWith('tasks-view', 'list')
     })
 
     it('renders pending approvals section when approvals exist', () => {

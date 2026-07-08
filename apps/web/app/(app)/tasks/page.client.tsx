@@ -93,12 +93,18 @@ function useTasksPageController() {
         }
         return "calendar"
     })
+    const [manualViewFocusTarget, setManualViewFocusTarget] = useState<FocusTarget | null>(null)
 
     useEffect(() => {
         if (!focusTarget) {
             handledFocusRef.current = null
         }
     }, [focusTarget])
+
+    const focusRequiresListView = focusTarget !== null && focusTarget !== "approvals"
+    const shouldUseListViewForFocus =
+        focusRequiresListView && manualViewFocusTarget !== focusTarget
+    const activeView = shouldUseListViewForFocus ? "list" : view
 
     // Sync state changes back to URL
     const updateUrlParams = (filterValue: FilterType) => {
@@ -124,6 +130,9 @@ function useTasksPageController() {
     }
 
     const handleViewChange = (newView: ViewType) => {
+        if (focusTarget) {
+            setManualViewFocusTarget(focusTarget)
+        }
         setView(newView)
         localStorage.setItem("tasks-view", newView)
     }
@@ -320,20 +329,8 @@ function useTasksPageController() {
     }
 
     useEffect(() => {
-        if (!focusTarget || handledFocusRef.current === focusTarget || focusTarget === "approvals") {
-            return
-        }
-        if (view === "calendar") {
-            startTransition(() => {
-                setView("list")
-                localStorage.setItem("tasks-view", "list")
-            })
-        }
-    }, [focusTarget, view])
-
-    useEffect(() => {
         if (!focusTarget || handledFocusRef.current === focusTarget) return
-        if (focusTarget !== "approvals" && view !== "list") return
+        if (focusTarget !== "approvals" && activeView !== "list") return
         if (isLoading) return
         if (focusTarget === "approvals" && (loadingApprovals || loadingStatusRequests || loadingImportApprovals)) return
 
@@ -348,8 +345,11 @@ function useTasksPageController() {
         if (!target) return
 
         target.scrollIntoView({ behavior: "smooth", block: "start" })
+        if (focusTarget !== "approvals") {
+            localStorage.setItem("tasks-view", "list")
+        }
         handledFocusRef.current = focusTarget
-    }, [focusTarget, view, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
+    }, [focusTarget, activeView, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
 
     useEffect(() => {
         const visibleIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
@@ -400,7 +400,7 @@ function useTasksPageController() {
         pendingStatusRequests: pendingStatusRequests?.items ?? [],
         selectedTaskIds,
         showCompleted,
-        view,
+        view: activeView,
         bulkCompletePending: bulkCompleteTasks.isPending,
         handleAddTask,
         handleBulkCompleteSelected,
