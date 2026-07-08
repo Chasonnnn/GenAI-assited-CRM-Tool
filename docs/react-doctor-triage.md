@@ -4072,6 +4072,29 @@ Full command after Batch 187: `cd apps/web && npx -y react-doctor@latest . --ver
 
 | Rule | Files | Verdict | Confidence | Action | Verification |
 | --- | --- | --- | --- | --- | --- |
+| `react-doctor/js-set-map-lookups` | `app/(app)/automation/email-templates/page.tsx:870` | Valid. Required template variables were filtered with `usedVariableNames.includes(variable)` while validating the email template modal. | High | Added `usedVariableNamesSet` and switched required-variable membership checks to `Set.has`. Extended the automation derived-list source guard. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "platform template variable validation\|automation and AI derived lists\|platform email-template edit"` failed before the Set conversion. GREEN: same source guard command; `pnpm test --run tests/email-templates-page.test.tsx tests/platform-system-email-template-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+| `react-doctor/js-set-map-lookups` | `app/ops/templates/system/[systemKey]/page.client.tsx:433` | Valid. Required system-template variables were filtered with `usedVariableNames.includes(variable)`, the same pattern already fixed in the system-template create page. | High | Added `usedVariableNamesSet` and switched required-variable membership checks to `Set.has`. Extended the platform template source guard. | GREEN: source guards, platform system template page tests, TypeScript, lint, and diff check as above. |
+| `react-doctor/js-set-map-lookups` | `app/ops/templates/email/[id]/page.client.tsx:602` | False positive in the current tree. Required-variable validation already used `usedVariableNamesSet.has(variable)`; the remaining `usedVariableNames.includes("unsubscribe_url")` is a single standalone check, not a lookup inside a loop. | High | Left unchanged and kept the existing source guard preserving the Set conversion while allowing the standalone unsubscribe check. | Full React Doctor after the batch no longer listed this file under `js-set-map-lookups`. |
+
+Changed-scope command after Batch 188: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `91 / 100`
+- Total diagnostics in changed files: `5`
+- Summary: `Bugs 2 warnings`, `Maintainability 3 warnings`
+- Remaining valid but separate in touched files: `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer`, and `react-doctor/jsx-max-depth` in the broader email-template/system-template pages.
+
+Full command after Batch 188: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `84 / 100`
+- Total diagnostics: `94`
+- Summary: `Bugs 48 warnings`, `Performance 6 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
+- Removed globally since Batch 187: required-variable Set conversions for automation email templates and system-template detail, plus the now-cleared platform email-template detail Set false positive (`3` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-df39d82f-7cd4-41cf-b479-05508486796e`
+
+## Batch 188
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
 | `react-doctor/js-set-map-lookups` | `app/ops/templates/email/[id]/page.client.tsx:602` | Valid. Required platform email-template variables were filtered against `usedVariableNames.includes(variable)`. The adjacent `unsubscribe_url` membership check is not inside a loop and remains appropriate as an ordinary one-off lookup. | High | Added `usedVariableNamesSet` and switched the required-variable check to `Set.has`. Added a source guard that keeps the Set conversion while explicitly preserving the one-off `unsubscribe_url` includes check. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "platform email-template edit page"` failed before the Set conversion. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "platform email-template edit page"`; `pnpm test --run tests/platform-email-template-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor reported no issues. |
 
 Changed-scope command after Batch 188: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`

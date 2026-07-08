@@ -426,11 +426,12 @@ export default function PlatformSystemEmailTemplatePage() {
         }
     }
     const usedVariableNames = extractTemplateVariables(`${subject}\n${body}`)
+    const usedVariableNamesSet = new Set(usedVariableNames)
     const unknownVariables = canValidateVariables
         ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
         : []
     const missingRequiredVariables = canValidateVariables
-        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
     const fromEmailError = getFromEmailError(fromEmail)
     const logoPreviewUrl = getLogoPreviewUrl(logoUrl)

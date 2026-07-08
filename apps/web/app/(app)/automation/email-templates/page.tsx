@@ -863,11 +863,12 @@ export default function EmailTemplatesPage() {
         }
     }
     const usedVariableNames = extractTemplateVariables(`${templateSubject}\n${templateBody}`)
+    const usedVariableNamesSet = new Set(usedVariableNames)
     const unknownVariables = canValidateVariables
         ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
         : []
     const missingRequiredVariables = canValidateVariables
-        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
 
     // Load signature data on mount
