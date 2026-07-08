@@ -3941,3 +3941,23 @@ Full command after Batch 179: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 79 warnings`, `Performance 4 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
 - Removed globally since Batch 178: `react-doctor/async-await-in-loop` for interview attachment uploads (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5cec0925-f83e-4055-a430-0b95e89c2189`
+
+## Batch 180
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/tickets/[ticketId]/page.tsx` | Valid. `TicketDetailPage` owned developer gating, data/mutations, status/priority/link state, reply form, notes form/list, and message attachment rendering in one component body. | High | Kept data loading, state, and mutation handlers in `TicketDetailPage`, then split rendering into `TicketOverviewCard`, `TicketReplyCard`, `TicketNotesCard`, and `TicketMessagesCard`. Added a source guard keeping the section JSX out of the page body. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "ticket detail page rendering"` failed on the monolithic page. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "ticket detail page rendering"`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues; full React Doctor dropped to `128` issues. |
+
+Changed-scope command after Batch 180: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 180: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `128`
+- Summary: `Bugs 79 warnings`, `Performance 4 warnings`, `Accessibility 2 warnings`, `Maintainability 43 warnings`
+- Removed globally since Batch 179: `react-doctor/no-giant-component` for `TicketDetailPage` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-791514f6-5775-4322-a096-69d538f2641a`

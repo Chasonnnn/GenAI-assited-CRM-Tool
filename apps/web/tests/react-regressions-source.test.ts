@@ -2969,6 +2969,27 @@ describe("React regression guards (source)", () => {
         expect(publishDialogSource).not.toContain("Loading organizations...")
     })
 
+    it("keeps ticket detail page rendering split into focused sections", () => {
+        const source = readSource("app/(app)/tickets/[ticketId]/page.tsx")
+        const pageIndex = source.indexOf("export default function TicketDetailPage()")
+        const firstHelperIndex = source.indexOf("function TicketOverviewCard")
+        const pageSource = source.slice(
+            pageIndex,
+            firstHelperIndex > pageIndex ? firstHelperIndex : undefined
+        )
+
+        expect(pageIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function TicketOverviewCard")
+        expect(source).toContain("function TicketReplyCard")
+        expect(source).toContain("function TicketNotesCard")
+        expect(source).toContain("function TicketMessagesCard")
+        expect(pageSource).not.toContain("Internal Notes")
+        expect(pageSource).not.toContain("<CardTitle>Messages</CardTitle>")
+        expect(pageSource).not.toContain("message.attachments.map")
+        expect(pageSource).not.toContain("Surrogate ID (manual link)")
+        expect(pageSource).not.toContain("Write your reply")
+    })
+
     it("keeps publish dialog state reset and derivations compiler-friendly", () => {
         const source = readSource("components/ops/templates/PublishDialog.tsx")
 

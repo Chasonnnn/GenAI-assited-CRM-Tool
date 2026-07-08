@@ -51,6 +51,11 @@ function getTicketPriorityLabel(value: TicketPriority | null | undefined): strin
     return value ? TICKET_PRIORITY_LABELS[value] ?? 'Unknown priority' : 'Priority'
 }
 
+type TicketDetailData = NonNullable<ReturnType<typeof useTicket>['data']>
+type TicketDetailTicket = TicketDetailData['ticket']
+type TicketDetailNote = TicketDetailData['notes'][number]
+type TicketDetailMessage = TicketDetailData['messages'][number]
+
 export default function TicketDetailPage() {
     const params = useParams<{ ticketId: string }>()
     const ticketId = params.ticketId
@@ -192,172 +197,277 @@ export default function TicketDetailPage() {
 
     return (
         <div className="space-y-6 p-4 md:p-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle>{data.ticket.ticket_code}</CardTitle>
-                    <CardDescription>{data.ticket.subject || '(No subject)'}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary">{getTicketStatusLabel(data.ticket.status)}</Badge>
-                        <Badge variant="outline">{getTicketPriorityLabel(data.ticket.priority)}</Badge>
-                        {data.ticket.surrogate_link_status === 'needs_review' && (
-                            <Badge variant="destructive">Needs review</Badge>
-                        )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                        Requester: {data.ticket.requester_email || 'Unknown sender'}
-                    </p>
+            <TicketOverviewCard
+                ticket={data.ticket}
+                statusValue={statusValue}
+                priorityValue={priorityValue}
+                surrogateId={surrogateId}
+                isSaving={patchMutation.isPending}
+                isLinking={linkMutation.isPending}
+                onStatusChange={setStatusValue}
+                onPriorityChange={setPriorityValue}
+                onSurrogateIdChange={setSurrogateId}
+                onUpdate={handleUpdate}
+                onLink={handleLink}
+            />
+            <TicketReplyCard
+                replyTo={replyTo}
+                replyBody={replyBody}
+                isSending={replyMutation.isPending}
+                onReplyToChange={setReplyTo}
+                onReplyBodyChange={setReplyBody}
+                onReply={handleReply}
+            />
+            <TicketNotesCard
+                notes={data.notes}
+                noteBody={noteBody}
+                isSaving={addNoteMutation.isPending}
+                onNoteBodyChange={setNoteBody}
+                onAddNote={handleAddNote}
+            />
+            <TicketMessagesCard
+                messages={data.messages}
+                onAttachmentDownload={handleAttachmentDownload}
+            />
+        </div>
+    )
+}
 
-                    <div className="grid gap-3 md:grid-cols-3">
-                        <Select
-                            value={statusValue}
-                            onValueChange={(value) => setStatusValue((value ?? 'new') as TicketStatus)}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Status">
-                                    {(value: string | null) => getTicketStatusLabel((value ?? 'new') as TicketStatus)}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {STATUS_OPTIONS.map((value) => (
-                                    <SelectItem key={value} value={value}>
-                                        {getTicketStatusLabel(value)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Select
-                            value={priorityValue}
-                            onValueChange={(value) =>
-                                setPriorityValue((value ?? 'normal') as TicketPriority)
-                            }
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Priority">
-                                    {(value: string | null) =>
-                                        getTicketPriorityLabel((value ?? 'normal') as TicketPriority)
-                                    }
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {PRIORITY_OPTIONS.map((value) => (
-                                    <SelectItem key={value} value={value}>
-                                        {getTicketPriorityLabel(value)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button onClick={handleUpdate} disabled={patchMutation.isPending}>
-                            {patchMutation.isPending ? 'Saving…' : 'Save'}
-                        </Button>
-                    </div>
+function TicketOverviewCard({
+    ticket,
+    statusValue,
+    priorityValue,
+    surrogateId,
+    isSaving,
+    isLinking,
+    onStatusChange,
+    onPriorityChange,
+    onSurrogateIdChange,
+    onUpdate,
+    onLink,
+}: {
+    ticket: TicketDetailTicket
+    statusValue: TicketStatus
+    priorityValue: TicketPriority
+    surrogateId: string
+    isSaving: boolean
+    isLinking: boolean
+    onStatusChange: (value: TicketStatus) => void
+    onPriorityChange: (value: TicketPriority) => void
+    onSurrogateIdChange: (value: string) => void
+    onUpdate: () => void
+    onLink: () => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{ticket.ticket_code}</CardTitle>
+                <CardDescription>{ticket.subject || '(No subject)'}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{getTicketStatusLabel(ticket.status)}</Badge>
+                    <Badge variant="outline">{getTicketPriorityLabel(ticket.priority)}</Badge>
+                    {ticket.surrogate_link_status === 'needs_review' && (
+                        <Badge variant="destructive">Needs review</Badge>
+                    )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    Requester: {ticket.requester_email || 'Unknown sender'}
+                </p>
 
-                    <div className="grid gap-3 md:grid-cols-3">
-                        <Input
-                            placeholder="Surrogate ID (manual link)"
-                            value={surrogateId}
-                            onChange={(event) => setSurrogateId(event.target.value)}
-                        />
-                        <Button
-                            variant="outline"
-                            onClick={handleLink}
-                            disabled={linkMutation.isPending}
-                            className="md:col-span-2"
-                        >
-                            {linkMutation.isPending ? 'Updating link…' : 'Update Surrogate Link'}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+                <div className="grid gap-3 md:grid-cols-3">
+                    <Select
+                        value={statusValue}
+                        onValueChange={(value) => onStatusChange((value ?? 'new') as TicketStatus)}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Status">
+                                {(value: string | null) => getTicketStatusLabel((value ?? 'new') as TicketStatus)}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {STATUS_OPTIONS.map((value) => (
+                                <SelectItem key={value} value={value}>
+                                    {getTicketStatusLabel(value)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={priorityValue}
+                        onValueChange={(value) =>
+                            onPriorityChange((value ?? 'normal') as TicketPriority)
+                        }
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Priority">
+                                {(value: string | null) =>
+                                    getTicketPriorityLabel((value ?? 'normal') as TicketPriority)
+                                }
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {PRIORITY_OPTIONS.map((value) => (
+                                <SelectItem key={value} value={value}>
+                                    {getTicketPriorityLabel(value)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button onClick={onUpdate} disabled={isSaving}>
+                        {isSaving ? 'Saving…' : 'Save'}
+                    </Button>
+                </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Reply</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-3">
                     <Input
-                        placeholder="Recipient"
-                        value={replyTo}
-                        onChange={(event) => setReplyTo(event.target.value)}
+                        placeholder="Surrogate ID (manual link)"
+                        value={surrogateId}
+                        onChange={(event) => onSurrogateIdChange(event.target.value)}
                     />
-                    <Textarea
-                        placeholder="Write your reply"
-                        value={replyBody}
-                        onChange={(event) => setReplyBody(event.target.value)}
-                        rows={4}
-                    />
-                    <Button onClick={handleReply} disabled={replyMutation.isPending}>
-                        {replyMutation.isPending ? 'Sending…' : 'Send reply'}
+                    <Button
+                        variant="outline"
+                        onClick={onLink}
+                        disabled={isLinking}
+                        className="md:col-span-2"
+                    >
+                        {isLinking ? 'Updating link…' : 'Update Surrogate Link'}
                     </Button>
-                </CardContent>
-            </Card>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Internal Notes</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <Textarea
-                        placeholder="Add internal note"
-                        value={noteBody}
-                        onChange={(event) => setNoteBody(event.target.value)}
-                        rows={3}
-                    />
-                    <Button onClick={handleAddNote} disabled={addNoteMutation.isPending}>
-                        {addNoteMutation.isPending ? 'Saving…' : 'Add note'}
-                    </Button>
-                    <div className="space-y-2">
-                        {data.notes.map((note) => (
-                            <div key={note.id} className="rounded border p-2 text-sm">
-                                <p>{note.body_markdown}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    {formatDateTime(note.created_at)}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
+function TicketReplyCard({
+    replyTo,
+    replyBody,
+    isSending,
+    onReplyToChange,
+    onReplyBodyChange,
+    onReply,
+}: {
+    replyTo: string
+    replyBody: string
+    isSending: boolean
+    onReplyToChange: (value: string) => void
+    onReplyBodyChange: (value: string) => void
+    onReply: () => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Reply</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <Input
+                    placeholder="Recipient"
+                    value={replyTo}
+                    onChange={(event) => onReplyToChange(event.target.value)}
+                />
+                <Textarea
+                    placeholder="Write your reply"
+                    value={replyBody}
+                    onChange={(event) => onReplyBodyChange(event.target.value)}
+                    rows={4}
+                />
+                <Button onClick={onReply} disabled={isSending}>
+                    {isSending ? 'Sending…' : 'Send reply'}
+                </Button>
+            </CardContent>
+        </Card>
+    )
+}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Messages</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    {data.messages.map((message) => (
-                        <div key={message.id} className="rounded border p-3">
-                            <div className="mb-2 flex flex-wrap items-center gap-2">
-                                <Badge variant="outline">{message.direction}</Badge>
-                                <span className="text-xs text-muted-foreground">
-                                    {message.date_header
-                                        ? formatDateTime(message.date_header)
-                                        : 'Unknown time'}
-                                </span>
-                            </div>
-                            <p className="text-sm font-medium">{message.subject || '(No subject)'}</p>
-                            <p className="text-xs text-muted-foreground">From: {message.from_email || 'Unknown'}</p>
-                            {message.body_text && (
-                                <p className="mt-2 whitespace-pre-wrap text-sm">{message.body_text}</p>
-                            )}
-                            {!!message.attachments.length && (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                    {message.attachments.map((attachment) => (
-                                        <Button
-                                            key={attachment.id}
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleAttachmentDownload(attachment.attachment_id)}
-                                        >
-                                            {attachment.filename || 'Attachment'}
-                                        </Button>
-                                    ))}
-                                </div>
-                            )}
+function TicketNotesCard({
+    notes,
+    noteBody,
+    isSaving,
+    onNoteBodyChange,
+    onAddNote,
+}: {
+    notes: TicketDetailNote[]
+    noteBody: string
+    isSaving: boolean
+    onNoteBodyChange: (value: string) => void
+    onAddNote: () => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Internal Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <Textarea
+                    placeholder="Add internal note"
+                    value={noteBody}
+                    onChange={(event) => onNoteBodyChange(event.target.value)}
+                    rows={3}
+                />
+                <Button onClick={onAddNote} disabled={isSaving}>
+                    {isSaving ? 'Saving…' : 'Add note'}
+                </Button>
+                <div className="space-y-2">
+                    {notes.map((note) => (
+                        <div key={note.id} className="rounded border p-2 text-sm">
+                            <p>{note.body_markdown}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {formatDateTime(note.created_at)}
+                            </p>
                         </div>
                     ))}
-                </CardContent>
-            </Card>
-        </div>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function TicketMessagesCard({
+    messages,
+    onAttachmentDownload,
+}: {
+    messages: TicketDetailMessage[]
+    onAttachmentDownload: (attachmentId: string) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Messages</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                {messages.map((message) => (
+                    <div key={message.id} className="rounded border p-3">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{message.direction}</Badge>
+                            <span className="text-xs text-muted-foreground">
+                                {message.date_header
+                                    ? formatDateTime(message.date_header)
+                                    : 'Unknown time'}
+                            </span>
+                        </div>
+                        <p className="text-sm font-medium">{message.subject || '(No subject)'}</p>
+                        <p className="text-xs text-muted-foreground">From: {message.from_email || 'Unknown'}</p>
+                        {message.body_text && (
+                            <p className="mt-2 whitespace-pre-wrap text-sm">{message.body_text}</p>
+                        )}
+                        {!!message.attachments.length && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {message.attachments.map((attachment) => (
+                                    <Button
+                                        key={attachment.id}
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onAttachmentDownload(attachment.attachment_id)}
+                                    >
+                                        {attachment.filename || 'Attachment'}
+                                    </Button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </CardContent>
+        </Card>
     )
 }
