@@ -316,6 +316,24 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByText("Unsubscribe")).toBeInTheDocument()
     })
 
+    it("clears library preview state when the preview dialog closes", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("button", { name: "Preview" }))
+
+        expect(await screen.findByText("Hi there")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Close" }))
+
+        fireEvent.click(screen.getByRole("tab", { name: "My Email Templates" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Preview" }))
+
+        expect(await screen.findByText("Personal Body")).toBeInTheDocument()
+        expect(screen.queryByText("Hi there")).not.toBeInTheDocument()
+    })
+
     it("enables emoji picker for visual template editing", () => {
         render(<EmailTemplatesPage />)
         fireEvent.click(screen.getByRole("button", { name: /Create Template/i }))

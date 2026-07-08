@@ -1741,6 +1741,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [libraryCopyTarget, setLibraryCopyTarget] = useState")
     })
 
+    it("clears email library preview state from the preview close handler", () => {
+        const source = readSource("app/(app)/automation/email-templates/page.tsx")
+
+        expect(source).toContain("const handlePreviewOpenChange = (open: boolean) =>")
+        expect(source).toContain("setShowPreview(open)")
+        expect(source).toContain("if (!open) {")
+        expect(source).toContain("setLibraryPreviewId(null)")
+        expect(source).toContain("onOpenChange={handlePreviewOpenChange}")
+        expect(source).not.toContain(`if (!showPreview) {
+            React.startTransition(() => {
+                setLibraryPreviewId(null)`)
+    })
+
     it("keeps queue edit target out of render state", () => {
         const source = readSource("app/(app)/settings/queues/page.tsx")
         const helperIndex = source.indexOf("function resolveErrorMessage(")

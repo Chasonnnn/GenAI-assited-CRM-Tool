@@ -820,14 +820,6 @@ export default function EmailTemplatesPage() {
     )
     const { data: libraryTemplateDetail } = useEmailTemplateLibraryItem(libraryPreviewId)
 
-    useEffect(() => {
-        if (!showPreview) {
-            React.startTransition(() => {
-                setLibraryPreviewId(null)
-            })
-        }
-    }, [showPreview])
-
     const testSendUsedVariables = testSendTemplateDetail
         ? extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
             .slice()
@@ -1109,6 +1101,13 @@ export default function EmailTemplatesPage() {
     const handleLibraryPreview = (templateId: string) => {
         setLibraryPreviewId(templateId)
         setShowPreview(true)
+    }
+
+    const handlePreviewOpenChange = (open: boolean) => {
+        setShowPreview(open)
+        if (!open) {
+            setLibraryPreviewId(null)
+        }
     }
 
     const handleLibraryCopy = () => {
@@ -2244,7 +2243,7 @@ export default function EmailTemplatesPage() {
             </Dialog>
 
             {/* Preview Modal */}
-            <Dialog open={showPreview} onOpenChange={setShowPreview}>
+            <Dialog open={showPreview} onOpenChange={handlePreviewOpenChange}>
                 <DialogContent className="max-w-2xl max-h-[80vh]">
                     <DialogHeader>
                         <DialogTitle>Email Preview</DialogTitle>

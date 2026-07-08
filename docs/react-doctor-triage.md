@@ -3807,3 +3807,26 @@ Full command after Batch 173: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 82 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 45 warnings`
 - Removed globally since Batch 172: `react-doctor/no-giant-component` for `QueuesSettingsPage` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2d2fe314-52bb-4d67-befa-62629f6ea110`
+
+## Batch 174
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `app/(app)/automation/email-templates/page.tsx:824` | Valid. Closing the email preview used `onOpenChange={setShowPreview}` and a `useEffect` watching `showPreview` to clear `libraryPreviewId`, so library-preview cleanup ran one render late. | High | Added `handlePreviewOpenChange`, moved `setLibraryPreviewId(null)` into the preview close handler, and removed the close-cleanup effect. Added behavior coverage that closes a platform-library preview and then opens a personal-template preview without reusing library content, plus a source guard preventing the effect pattern from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "email library preview"` failed on the effect-driven cleanup. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "email library preview"`; `pnpm test --run tests/email-templates-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full React Doctor dropped to `135` issues. |
+| `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/automation/email-templates/page.tsx` | Valid but broader than this batch. Changed-scope still reports the page-level structural/reducer warnings and two other effect-driven paths for test-send defaults/template variable hydration, which require a separate state-model pass. | Medium-high | Left unchanged to keep this commit focused on the preview-close event path. | Changed-scope React Doctor after the fix reports `4` existing warnings in the changed file: `no-giant-component`, `prefer-useReducer`, and `no-event-handler` at the remaining effect paths. |
+
+Changed-scope command after Batch 174: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `4`
+- Summary: `Bugs 3 warnings`, `Maintainability 1 warning`
+- Remaining reviewed but unchanged: `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer`, and two existing `react-doctor/no-event-handler` warnings in `EmailTemplatesPage`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-735ed8ba-73cb-4610-a77a-2ef1d2843d34`
+
+Full command after Batch 174: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `135`
+- Summary: `Bugs 81 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 45 warnings`
+- Removed globally since Batch 173: `react-doctor/no-event-handler` for the email library preview close cleanup (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fdbd55de-2ad9-4e1f-99f3-9afd226f0143`
