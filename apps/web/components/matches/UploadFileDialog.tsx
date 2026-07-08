@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { UploadIcon, FileIcon, XIcon } from "lucide-react"
+import { UploadIcon, FileIcon, XIcon, Loader2Icon } from "lucide-react"
 
 interface UploadFileDialogProps {
     open: boolean
@@ -171,7 +171,14 @@ export function UploadFileDialog({
                         onClick={handleSubmit}
                         disabled={isPending || !selectedFile}
                     >
-                        {isPending ? "Uploading..." : "Upload"}
+                        {isPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Uploading...
+                            </>
+                        ) : (
+                            "Upload"
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>
