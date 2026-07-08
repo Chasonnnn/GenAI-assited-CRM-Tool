@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import UploadFile
 from pydantic import EmailStr, TypeAdapter
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -315,15 +316,22 @@ def add_submission_file(
     resolved_field_key = resolved_keys[0] if resolved_keys else None
 
     if resolved_field_key:
-        existing_field_count = (
-            db.query(FormSubmissionFile)
-            .filter(
+        # Performance optimization: Use conditional aggregation to fetch both total
+        # submission files and specific field-key files in a single DB query.
+        existing_count, existing_field_count = db.execute(
+            select(
+                func.count(FormSubmissionFile.id),
+                func.coalesce(
+                    func.sum(
+                        case((FormSubmissionFile.field_key == resolved_field_key, 1), else_=0)
+                    ),
+                    0,
+                ),
+            ).where(
                 FormSubmissionFile.submission_id == submission.id,
-                FormSubmissionFile.field_key == resolved_field_key,
                 FormSubmissionFile.deleted_at.is_(None),
             )
-            .count()
-        )
+        ).one()
         if existing_field_count >= PER_FILE_FIELD_MAX_COUNT:
             # Use direct indexing so static type checkers don't treat `.get()` as optional.
             label = (
@@ -331,15 +339,13 @@ def add_submission_file(
             )
             label_text = label or resolved_field_key
             raise ValueError(f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}")
-
-    existing_count = (
-        db.query(FormSubmissionFile)
-        .filter(
-            FormSubmissionFile.submission_id == submission.id,
-            FormSubmissionFile.deleted_at.is_(None),
+    else:
+        existing_count = db.scalar(
+            select(func.count(FormSubmissionFile.id)).where(
+                FormSubmissionFile.submission_id == submission.id,
+                FormSubmissionFile.deleted_at.is_(None),
+            )
         )
-        .count()
-    )
     max_count = form.max_file_count or DEFAULT_MAX_FILE_COUNT
     if existing_count >= max_count:
         raise ValueError(f"Maximum {max_count} files allowed")
@@ -755,7 +761,9 @@ def update_submission_answers(
             surrogate_field = mapping_by_key[field_key]
             if surrogate_field in SURROGATE_FIELD_TYPES:
                 try:
-                    coerced = coerce_surrogate_field_value(surrogate_field, value) if value else None
+                    coerced = (
+                        coerce_surrogate_field_value(surrogate_field, value) if value else None
+                    )
                     surrogate_updates[surrogate_field] = coerced
                     updated_surrogate_fields.append(surrogate_field)
                 except ValueError:
