@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useReducer, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -66,6 +66,61 @@ import {
 import { useAdminMetaAdAccounts, useDeleteMetaAdAccount, useUpdateMetaAdAccount } from "@/lib/hooks/use-admin-meta"
 import type { MetaAdAccount, MetaAdAccountUpdate } from "@/lib/api/admin-meta"
 import { formatRelativeTime } from "@/lib/formatters"
+
+interface MetaAccountEditState {
+    account: MetaAdAccount | null
+    formError: string
+    adAccountName: string
+    pixelId: string
+    capiEnabled: boolean
+    accountActive: boolean
+}
+
+type MetaAccountEditAction =
+    | { type: "open"; account: MetaAdAccount }
+    | { type: "close" }
+    | { type: "setField"; field: "adAccountName" | "pixelId"; value: string }
+    | { type: "setBoolean"; field: "capiEnabled" | "accountActive"; value: boolean }
+    | { type: "setFormError"; message: string }
+
+const initialMetaAccountEditState: MetaAccountEditState = {
+    account: null,
+    formError: "",
+    adAccountName: "",
+    pixelId: "",
+    capiEnabled: false,
+    accountActive: true,
+}
+
+function metaAccountEditReducer(
+    state: MetaAccountEditState,
+    action: MetaAccountEditAction
+): MetaAccountEditState {
+    if (action.type === "open") {
+        return {
+            account: action.account,
+            formError: "",
+            adAccountName: action.account.ad_account_name || "",
+            pixelId: action.account.pixel_id || "",
+            capiEnabled: action.account.capi_enabled,
+            accountActive: action.account.is_active,
+        }
+    }
+
+    if (action.type === "close") {
+        return initialMetaAccountEditState
+    }
+
+    if (action.type === "setField") {
+        return { ...state, [action.field]: action.value }
+    }
+
+    if (action.type === "setBoolean") {
+        return { ...state, [action.field]: action.value }
+    }
+
+    return { ...state, formError: action.message }
+}
 
 // Connection health badge component
 function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection }) {
@@ -174,6 +229,8 @@ function MetaAssetSelection({
             pages: data.pages.flatMap((p) => p.pages),
         }
         : { ad_accounts: [], pages: [] }
+    const selectedAdAccountIds = new Set(selectedAdAccounts)
+    const selectedPageIds = new Set(selectedPages)
 
     const toggleAdAccount = (id: string, checked: boolean) => {
         if (checked) {
@@ -196,13 +253,13 @@ function MetaAssetSelection({
             const conflicting = [
                 ...allAssets.ad_accounts.filter(
                     (a) =>
-                        selectedAdAccounts.includes(a.id) &&
+                        selectedAdAccountIds.has(a.id) &&
                         a.connected_by_connection_id &&
                         a.connected_by_connection_id !== connectionId
                 ),
                 ...allAssets.pages.filter(
                     (p) =>
-                        selectedPages.includes(p.id) &&
+                        selectedPageIds.has(p.id) &&
                         p.connected_by_connection_id &&
                         p.connected_by_connection_id !== connectionId
                 ),
@@ -266,7 +323,7 @@ function MetaAssetSelection({
                                     {allAssets.ad_accounts.map((account) => (
                                         <div key={account.id} className="flex items-center gap-2">
                                             <Checkbox
-                                                checked={selectedAdAccounts.includes(account.id)}
+                                                checked={selectedAdAccountIds.has(account.id)}
                                                 onCheckedChange={(checked) =>
                                                     toggleAdAccount(account.id, !!checked)
                                                 }
@@ -298,7 +355,7 @@ function MetaAssetSelection({
                                     {allAssets.pages.map((page) => (
                                         <div key={page.id} className="flex items-center gap-2">
                                             <Checkbox
-                                                checked={selectedPages.includes(page.id)}
+                                                checked={selectedPageIds.has(page.id)}
                                                 onCheckedChange={(checked) =>
                                                     togglePage(page.id, !!checked)
                                                 }
@@ -394,15 +451,14 @@ export default function MetaIntegrationPage() {
     const updateAccountMutation = useUpdateMetaAdAccount()
     const deleteAccountMutation = useDeleteMetaAdAccount()
 
-    const [editAccount, setEditAccount] = useState<MetaAdAccount | null>(null)
+    const [accountEditState, dispatchAccountEdit] = useReducer(
+        metaAccountEditReducer,
+        initialMetaAccountEditState
+    )
     const [disconnectConnectionId, setDisconnectConnectionId] = useState<string | null>(null)
-    const [accountFormError, setAccountFormError] = useState("")
-    const [adAccountName, setAdAccountName] = useState("")
-    const [pixelId, setPixelId] = useState("")
-    const [capiEnabled, setCapiEnabled] = useState(false)
-    const [accountActive, setAccountActive] = useState(true)
 
     const activeConnection = connections.find((c) => c.id === activeConnectionId)
+    const editAccount = accountEditState.account
 
     const handleConnectWithFacebook = async () => {
         try {
@@ -423,28 +479,23 @@ export default function MetaIntegrationPage() {
     }
 
     const openEditAccount = (account: MetaAdAccount) => {
-        setEditAccount(account)
-        setAdAccountName(account.ad_account_name || "")
-        setPixelId(account.pixel_id || "")
-        setCapiEnabled(account.capi_enabled)
-        setAccountActive(account.is_active)
-        setAccountFormError("")
+        dispatchAccountEdit({ type: "open", account })
     }
 
-    const handleUpdateAdAccount = async (e: React.FormEvent) => {
+    const handleUpdateAdAccount = async (e: FormEvent) => {
         e.preventDefault()
         if (!editAccount) return
-        setAccountFormError("")
+        dispatchAccountEdit({ type: "setFormError", message: "" })
 
         const payload: MetaAdAccountUpdate = {
-            capi_enabled: capiEnabled,
-            is_active: accountActive,
+            capi_enabled: accountEditState.capiEnabled,
+            is_active: accountEditState.accountActive,
         }
-        if (adAccountName.trim() !== (editAccount.ad_account_name || "")) {
-            payload.ad_account_name = adAccountName.trim()
+        if (accountEditState.adAccountName.trim() !== (editAccount.ad_account_name || "")) {
+            payload.ad_account_name = accountEditState.adAccountName.trim()
         }
-        if (pixelId.trim() !== (editAccount.pixel_id || "")) {
-            payload.pixel_id = pixelId.trim()
+        if (accountEditState.pixelId.trim() !== (editAccount.pixel_id || "")) {
+            payload.pixel_id = accountEditState.pixelId.trim()
         }
 
         try {
@@ -452,10 +503,10 @@ export default function MetaIntegrationPage() {
                 accountId: editAccount.id,
                 data: payload,
             })
-            setEditAccount(null)
+            dispatchAccountEdit({ type: "close" })
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Failed to update ad account"
-            setAccountFormError(message)
+            dispatchAccountEdit({ type: "setFormError", message })
         }
     }
 
@@ -469,138 +520,26 @@ export default function MetaIntegrationPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div>
-                        <h1 className="text-2xl font-semibold">Meta Integration</h1>
-                        <p className="text-sm text-muted-foreground">
-                            Connect Meta accounts to sync lead forms and conversions.
-                        </p>
-                    </div>
-                    <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline">
-                        Manage lead forms
-                    </Button>
-                </div>
-            </div>
+            <MetaIntegrationHeader />
 
             <div className="flex-1 space-y-6 p-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-y-0">
-                        <div>
-                            <CardTitle>Connections</CardTitle>
-                            <CardDescription>
-                                Connect Meta accounts and manage assets for lead ads.
-                            </CardDescription>
-                        </div>
-                        <Button onClick={handleConnectWithFacebook} disabled={connectUrlMutation.isPending}>
-                            {connectUrlMutation.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                            ) : (
-                                <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
-                            )}
-                            Connect with Facebook
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                        {connectionsLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                            </div>
-                        ) : connections.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">No connections yet.</div>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Account</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Last validated</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {connections.map((connection) => (
-                                        <TableRow key={connection.id}>
-                                            <TableCell>
-                                                <div className="font-medium">
-                                                    {connection.meta_user_name || "Meta user"}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {connection.meta_user_id}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <ConnectionHealthBadge connection={connection} />
-                                            </TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {connection.last_validated_at
-                                                    ? formatRelativeTime(connection.last_validated_at, "—")
-                                                    : "—"}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        push(
-                                                            `/settings/integrations/meta?step=select-assets&connection=${connection.id}`
-                                                        )
-                                                    }
-                                                >
-                                                    Manage assets
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => setDisconnectConnectionId(connection.id)}
-                                                    aria-label="Disconnect connection"
-                                                >
-                                                    <UnlinkIcon className="size-4" aria-hidden="true" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
+                <MetaConnectionsCard
+                    connections={connections}
+                    connectionsLoading={connectionsLoading}
+                    connectUrlPending={connectUrlMutation.isPending}
+                    onConnect={handleConnectWithFacebook}
+                    onManageAssets={(connectionId) =>
+                        push(`/settings/integrations/meta?step=select-assets&connection=${connectionId}`)
+                    }
+                    onDisconnectRequest={setDisconnectConnectionId}
+                />
 
-                {connectionsNeedingReauth.length > 0 && (
-                    <Alert>
-                        <AlertTitle>Reconnect required</AlertTitle>
-                        <AlertDescription>
-                            <div className="space-y-3">
-                                <p>
-                                    Some connections need reauthorization. Click Connect with Facebook to refresh
-                                    tokens.
-                                </p>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleConnectWithFacebook}
-                                    disabled={connectUrlMutation.isPending}
-                                >
-                                    {connectUrlMutation.isPending ? (
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    ) : (
-                                        <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
-                                    )}
-                                    Reconnect
-                                </Button>
-                            </div>
-                        </AlertDescription>
-                    </Alert>
-                )}
-
-                {connectionsWithErrors.length > 0 && (
-                    <Alert variant="destructive">
-                        <AlertTitle>Connection errors</AlertTitle>
-                        <AlertDescription>
-                            Some connections are returning errors. Review their status and reconnect if needed.
-                        </AlertDescription>
-                    </Alert>
-                )}
+                <MetaConnectionAlerts
+                    connectionsNeedingReauth={connectionsNeedingReauth}
+                    connectionsWithErrors={connectionsWithErrors}
+                    connectUrlPending={connectUrlMutation.isPending}
+                    onReconnect={handleConnectWithFacebook}
+                />
 
                 {step === "select-assets" && activeConnection && (
                     <MetaAssetSelection
@@ -610,191 +549,438 @@ export default function MetaIntegrationPage() {
                     />
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Ad Accounts</CardTitle>
-                        <CardDescription>Configure CAPI settings and sync visibility.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {adAccountsLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                            </div>
-                        ) : adAccounts.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">No ad accounts connected yet.</div>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Ad Account</TableHead>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>CAPI</TableHead>
-                                        <TableHead>Sync</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {adAccounts.map((account) => (
-                                        <TableRow key={account.id}>
-                                            <TableCell className="font-mono">
-                                                {account.ad_account_external_id}
-                                            </TableCell>
-                                            <TableCell>{account.ad_account_name || "—"}</TableCell>
-                                            <TableCell>
-                                                <Badge variant={account.capi_enabled ? "default" : "secondary"}>
-                                                    {account.capi_enabled ? "Enabled" : "Disabled"}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="text-sm text-muted-foreground">
-                                                    <div>
-                                                        Hierarchy:{" "}
-                                                        {account.hierarchy_synced_at
-                                                            ? formatRelativeTime(account.hierarchy_synced_at, "—")
-                                                            : "—"}
-                                                    </div>
-                                                    <div>
-                                                        Spend:{" "}
-                                                        {account.spend_synced_at
-                                                            ? formatRelativeTime(account.spend_synced_at, "—")
-                                                            : "—"}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
-                                                    {account.is_active ? (
-                                                        <CheckCircleIcon className="size-3" aria-hidden="true" />
-                                                    ) : (
-                                                        <AlertTriangleIcon className="size-3" aria-hidden="true" />
-                                                    )}
-                                                    {account.is_active ? "Active" : "Inactive"}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => openEditAccount(account)}
-                                                    aria-label="Edit ad account"
-                                                >
-                                                    <PencilIcon className="size-4" aria-hidden="true" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteAdAccount(account.id)}
-                                                    disabled={deleteAccountMutation.isPending}
-                                                    aria-label="Delete ad account"
-                                                >
-                                                    <TrashIcon className="size-4" aria-hidden="true" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
+                <MetaAdAccountsCard
+                    adAccounts={adAccounts}
+                    adAccountsLoading={adAccountsLoading}
+                    deletePending={deleteAccountMutation.isPending}
+                    onEditAccount={openEditAccount}
+                    onDeleteAdAccount={handleDeleteAdAccount}
+                />
             </div>
 
-            <Dialog open={!!editAccount} onOpenChange={(open) => !open && setEditAccount(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit Ad Account</DialogTitle>
-                        <DialogDescription>Update CAPI and account settings.</DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleUpdateAdAccount}>
-                        <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="adAccountName">Ad account name</Label>
-                                <Input
-                                    id="adAccountName"
-                                    value={adAccountName}
-                                    onChange={(e) => setAdAccountName(e.target.value)}
-                                    name="ad-account-name"
-                                    autoComplete="off"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="pixelId">Pixel ID</Label>
-                                <Input
-                                    id="pixelId"
-                                    value={pixelId}
-                                    onChange={(e) => setPixelId(e.target.value)}
-                                    name="pixel-id"
-                                    autoComplete="off"
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <Label htmlFor="capiEnabled">Enable CAPI</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Send lead status updates to Meta.
-                                    </p>
-                                </div>
-                                <Checkbox
-                                    checked={capiEnabled}
-                                    onCheckedChange={(checked) => setCapiEnabled(!!checked)}
-                                    id="capiEnabled"
-                                />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <Label htmlFor="accountActive">Active</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Disable to pause sync and CAPI for this account.
-                                    </p>
-                                </div>
-                                <Checkbox
-                                    checked={accountActive}
-                                    onCheckedChange={(checked) => setAccountActive(!!checked)}
-                                    id="accountActive"
-                                />
-                            </div>
-                            {accountFormError && (
-                                <p className="text-sm text-destructive">{accountFormError}</p>
-                            )}
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setEditAccount(null)} type="button">
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={updateAccountMutation.isPending}>
-                                {updateAccountMutation.isPending ? (
-                                    <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Saving…
-                                    </>
-                                ) : (
-                                    "Save changes"
-                                )}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            <EditAdAccountDialog
+                state={accountEditState}
+                isSaving={updateAccountMutation.isPending}
+                onClose={() => dispatchAccountEdit({ type: "close" })}
+                onSubmit={handleUpdateAdAccount}
+                onNameChange={(value) =>
+                    dispatchAccountEdit({ type: "setField", field: "adAccountName", value })
+                }
+                onPixelChange={(value) =>
+                    dispatchAccountEdit({ type: "setField", field: "pixelId", value })
+                }
+                onCapiEnabledChange={(value) =>
+                    dispatchAccountEdit({ type: "setBoolean", field: "capiEnabled", value })
+                }
+                onAccountActiveChange={(value) =>
+                    dispatchAccountEdit({ type: "setBoolean", field: "accountActive", value })
+                }
+            />
 
-            <AlertDialog open={!!disconnectConnectionId} onOpenChange={(open) => !open && setDisconnectConnectionId(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will unlink all ad accounts and pages connected through this Facebook account.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => disconnectConnectionId && handleDisconnect(disconnectConnectionId)}
-                        >
-                            Disconnect
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <DisconnectMetaConnectionDialog
+                connectionId={disconnectConnectionId}
+                onClose={() => setDisconnectConnectionId(null)}
+                onDisconnect={handleDisconnect}
+            />
         </div>
+    )
+}
+
+function MetaIntegrationHeader() {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <div>
+                    <h1 className="text-2xl font-semibold">Meta Integration</h1>
+                    <p className="text-sm text-muted-foreground">
+                        Connect Meta accounts to sync lead forms and conversions.
+                    </p>
+                </div>
+                <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline">
+                    Manage lead forms
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function MetaConnectionsCard({
+    connections,
+    connectionsLoading,
+    connectUrlPending,
+    onConnect,
+    onManageAssets,
+    onDisconnectRequest,
+}: {
+    connections: MetaOAuthConnection[]
+    connectionsLoading: boolean
+    connectUrlPending: boolean
+    onConnect: () => void
+    onManageAssets: (connectionId: string) => void
+    onDisconnectRequest: (connectionId: string) => void
+}) {
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0">
+                <div>
+                    <CardTitle>Connections</CardTitle>
+                    <CardDescription>
+                        Connect Meta accounts and manage assets for lead ads.
+                    </CardDescription>
+                </div>
+                <Button onClick={onConnect} disabled={connectUrlPending}>
+                    {connectUrlPending ? (
+                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    ) : (
+                        <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
+                    )}
+                    Connect with Facebook
+                </Button>
+            </CardHeader>
+            <CardContent>
+                {connectionsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                    </div>
+                ) : connections.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No connections yet.</div>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Account</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Last validated</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {connections.map((connection) => (
+                                <TableRow key={connection.id}>
+                                    <TableCell>
+                                        <div className="font-medium">
+                                            {connection.meta_user_name || "Meta user"}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {connection.meta_user_id}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <ConnectionHealthBadge connection={connection} />
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {connection.last_validated_at
+                                            ? formatRelativeTime(connection.last_validated_at, "—")
+                                            : "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onManageAssets(connection.id)}
+                                        >
+                                            Manage assets
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onDisconnectRequest(connection.id)}
+                                            aria-label="Disconnect connection"
+                                        >
+                                            <UnlinkIcon className="size-4" aria-hidden="true" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function MetaConnectionAlerts({
+    connectionsNeedingReauth,
+    connectionsWithErrors,
+    connectUrlPending,
+    onReconnect,
+}: {
+    connectionsNeedingReauth: MetaOAuthConnection[]
+    connectionsWithErrors: MetaOAuthConnection[]
+    connectUrlPending: boolean
+    onReconnect: () => void
+}) {
+    return (
+        <>
+            {connectionsNeedingReauth.length > 0 && (
+                <Alert>
+                    <AlertTitle>Reconnect required</AlertTitle>
+                    <AlertDescription>
+                        <div className="space-y-3">
+                            <p>
+                                Some connections need reauthorization. Click Connect with Facebook to refresh
+                                tokens.
+                            </p>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={onReconnect}
+                                disabled={connectUrlPending}
+                            >
+                                {connectUrlPending ? (
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                ) : (
+                                    <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
+                                )}
+                                Reconnect
+                            </Button>
+                        </div>
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {connectionsWithErrors.length > 0 && (
+                <Alert variant="destructive">
+                    <AlertTitle>Connection errors</AlertTitle>
+                    <AlertDescription>
+                        Some connections are returning errors. Review their status and reconnect if needed.
+                    </AlertDescription>
+                </Alert>
+            )}
+        </>
+    )
+}
+
+function MetaAdAccountsCard({
+    adAccounts,
+    adAccountsLoading,
+    deletePending,
+    onEditAccount,
+    onDeleteAdAccount,
+}: {
+    adAccounts: MetaAdAccount[]
+    adAccountsLoading: boolean
+    deletePending: boolean
+    onEditAccount: (account: MetaAdAccount) => void
+    onDeleteAdAccount: (accountId: string) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Ad Accounts</CardTitle>
+                <CardDescription>Configure CAPI settings and sync visibility.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {adAccountsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                    </div>
+                ) : adAccounts.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No ad accounts connected yet.</div>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Ad Account</TableHead>
+                                <TableHead>Name</TableHead>
+                                <TableHead>CAPI</TableHead>
+                                <TableHead>Sync</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {adAccounts.map((account) => (
+                                <TableRow key={account.id}>
+                                    <TableCell className="font-mono">
+                                        {account.ad_account_external_id}
+                                    </TableCell>
+                                    <TableCell>{account.ad_account_name || "—"}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={account.capi_enabled ? "default" : "secondary"}>
+                                            {account.capi_enabled ? "Enabled" : "Disabled"}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="text-sm text-muted-foreground">
+                                            <div>
+                                                Hierarchy:{" "}
+                                                {account.hierarchy_synced_at
+                                                    ? formatRelativeTime(account.hierarchy_synced_at, "—")
+                                                    : "—"}
+                                            </div>
+                                            <div>
+                                                Spend:{" "}
+                                                {account.spend_synced_at
+                                                    ? formatRelativeTime(account.spend_synced_at, "—")
+                                                    : "—"}
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant={account.is_active ? "default" : "secondary"} className="gap-1">
+                                            {account.is_active ? (
+                                                <CheckCircleIcon className="size-3" aria-hidden="true" />
+                                            ) : (
+                                                <AlertTriangleIcon className="size-3" aria-hidden="true" />
+                                            )}
+                                            {account.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onEditAccount(account)}
+                                            aria-label="Edit ad account"
+                                        >
+                                            <PencilIcon className="size-4" aria-hidden="true" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onDeleteAdAccount(account.id)}
+                                            disabled={deletePending}
+                                            aria-label="Delete ad account"
+                                        >
+                                            <TrashIcon className="size-4" aria-hidden="true" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function EditAdAccountDialog({
+    state,
+    isSaving,
+    onClose,
+    onSubmit,
+    onNameChange,
+    onPixelChange,
+    onCapiEnabledChange,
+    onAccountActiveChange,
+}: {
+    state: MetaAccountEditState
+    isSaving: boolean
+    onClose: () => void
+    onSubmit: (event: FormEvent) => void
+    onNameChange: (value: string) => void
+    onPixelChange: (value: string) => void
+    onCapiEnabledChange: (value: boolean) => void
+    onAccountActiveChange: (value: boolean) => void
+}) {
+    return (
+        <Dialog open={!!state.account} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edit Ad Account</DialogTitle>
+                    <DialogDescription>Update CAPI and account settings.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={onSubmit}>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="adAccountName">Ad account name</Label>
+                            <Input
+                                id="adAccountName"
+                                value={state.adAccountName}
+                                onChange={(e) => onNameChange(e.target.value)}
+                                name="ad-account-name"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="pixelId">Pixel ID</Label>
+                            <Input
+                                id="pixelId"
+                                value={state.pixelId}
+                                onChange={(e) => onPixelChange(e.target.value)}
+                                name="pixel-id"
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <Label htmlFor="capiEnabled">Enable CAPI</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Send lead status updates to Meta.
+                                </p>
+                            </div>
+                            <Checkbox
+                                checked={state.capiEnabled}
+                                onCheckedChange={(checked) => onCapiEnabledChange(!!checked)}
+                                id="capiEnabled"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <Label htmlFor="accountActive">Active</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Disable to pause sync and CAPI for this account.
+                                </p>
+                            </div>
+                            <Checkbox
+                                checked={state.accountActive}
+                                onCheckedChange={(checked) => onAccountActiveChange(!!checked)}
+                                id="accountActive"
+                            />
+                        </div>
+                        {state.formError && (
+                            <p className="text-sm text-destructive">{state.formError}</p>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={onClose} type="button">
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={isSaving}>
+                            {isSaving ? (
+                                <>
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Saving…
+                                </>
+                            ) : (
+                                "Save changes"
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function DisconnectMetaConnectionDialog({
+    connectionId,
+    onClose,
+    onDisconnect,
+}: {
+    connectionId: string | null
+    onClose: () => void
+    onDisconnect: (connectionId: string) => void
+}) {
+    return (
+        <AlertDialog open={!!connectionId} onOpenChange={(open) => !open && onClose()}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will unlink all ad accounts and pages connected through this Facebook account.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => connectionId && onDisconnect(connectionId)}>
+                        Disconnect
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     )
 }

@@ -2721,6 +2721,45 @@ describe("React regression guards (source)", () => {
         expect(aiBuilderSource).not.toContain("flex flex-col items-center text-center space-y-4")
     })
 
+    it("uses Sets for Meta asset selection membership checks", () => {
+        const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
+        const assetSelectionSource = readFunctionSource(source, "MetaAssetSelection")
+
+        expect(assetSelectionSource).toContain("const selectedAdAccountIds = new Set(selectedAdAccounts)")
+        expect(assetSelectionSource).toContain("const selectedPageIds = new Set(selectedPages)")
+        expect(assetSelectionSource).toContain("selectedAdAccountIds.has(a.id)")
+        expect(assetSelectionSource).toContain("selectedPageIds.has(p.id)")
+        expect(assetSelectionSource).toContain("checked={selectedAdAccountIds.has(account.id)}")
+        expect(assetSelectionSource).toContain("checked={selectedPageIds.has(page.id)}")
+        expect(assetSelectionSource).not.toContain("selectedAdAccounts.includes(")
+        expect(assetSelectionSource).not.toContain("selectedPages.includes(")
+    })
+
+    it("keeps Meta integration page state and rendering split into focused sections", () => {
+        const source = readSource("app/(app)/settings/integrations/meta/page.client.tsx")
+        const pageIndex = source.indexOf("export default function MetaIntegrationPage()")
+        const firstHelperIndex = source.indexOf("function MetaIntegrationHeader")
+        const pageSource = source.slice(
+            pageIndex,
+            firstHelperIndex > pageIndex ? firstHelperIndex : undefined
+        )
+
+        expect(pageIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function metaAccountEditReducer")
+        expect(source).toContain("const [accountEditState, dispatchAccountEdit] = useReducer")
+        expect(source).toContain("function MetaIntegrationHeader")
+        expect(source).toContain("function MetaConnectionsCard")
+        expect(source).toContain("function MetaConnectionAlerts")
+        expect(source).toContain("function MetaAdAccountsCard")
+        expect(source).toContain("function EditAdAccountDialog")
+        expect(source).toContain("function DisconnectMetaConnectionDialog")
+        expect(pageSource).not.toContain("setAdAccountName")
+        expect(pageSource).not.toContain("setPixelId")
+        expect(pageSource).not.toContain("Connections</CardTitle>")
+        expect(pageSource).not.toContain("Ad Accounts</CardTitle>")
+        expect(pageSource).not.toContain("Edit Ad Account")
+    })
+
     it("uses warm neutral field-library colors instead of default slate text tokens", () => {
         const source = readSource("components/forms/builder/FieldLibrarySheet.tsx")
 
