@@ -135,9 +135,10 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
             BarChart,
             CartesianGrid,
             Cell,
+            Tooltip,
             XAxis,
             YAxis,
-        }, { ChartContainer, ChartTooltip }]) => {
+        }, { ChartContainer }]) => {
             function MetaSpendChartCanvasComponent(props: MetaSpendChartCanvasProps) {
                 if (props.kind === "breakdown") {
                     const data = props.data as BreakdownChartDatum[]
@@ -147,7 +148,7 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
                                 <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `$${formatCompact(v)}`} />
                                 <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={80} fontSize={11} />
-                                <ChartTooltip
+                                <Tooltip
                                     content={({ payload }) => {
                                         if (!payload?.length) return null
                                         const entry = payload[0]
@@ -186,7 +187,7 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.5} />
                                 <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} />
                                 <YAxis tickLine={false} axisLine={false} fontSize={11} tickFormatter={(v) => `$${formatCompact(v)}`} />
-                                <ChartTooltip
+                                <Tooltip
                                     content={({ payload }) => {
                                         if (!payload?.length) return null
                                         const entry = payload[0]
@@ -221,7 +222,7 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
                                 <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
                                 <YAxis dataKey="platform" type="category" tickLine={false} axisLine={false} width={110} fontSize={11} />
-                                <ChartTooltip
+                                <Tooltip
                                     content={({ payload }) => {
                                         if (!payload?.length) return null
                                         const entry = payload[0]
@@ -258,7 +259,7 @@ const MetaSpendChartCanvas = dynamic<MetaSpendChartCanvasProps>(
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.5} />
                             <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} />
                             <YAxis dataKey="ad" type="category" tickLine={false} axisLine={false} width={140} fontSize={11} />
-                            <ChartTooltip
+                            <Tooltip
                                 content={({ payload }) => {
                                     if (!payload?.length) return null
                                     const entry = payload[0]

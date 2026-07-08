@@ -100,13 +100,13 @@ const ReportsChartCanvas = dynamic<ReportsChartCanvasProps>(
             LineChart,
             Pie,
             PieChart,
+            Legend,
+            Tooltip,
             XAxis,
             YAxis,
         }, {
             ChartContainer,
-            ChartTooltip,
             ChartTooltipContent,
-            ChartLegend,
             ChartLegendContent,
         }]) => {
             function ReportsChartCanvasComponent(props: ReportsChartCanvasProps) {
@@ -117,7 +117,7 @@ const ReportsChartCanvas = dynamic<ReportsChartCanvasProps>(
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="status" tickLine={false} axisLine={false} fontSize={12} />
                                 <YAxis tickLine={false} axisLine={false} />
-                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Tooltip content={<ChartTooltipContent />} />
                                 <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                                     {props.data.map((item) => (
                                         <Cell key={`${item.status}-${item.fill}`} fill={item.fill ?? "#94a3b8"} />
@@ -135,7 +135,7 @@ const ReportsChartCanvas = dynamic<ReportsChartCanvasProps>(
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
                                 <YAxis tickLine={false} axisLine={false} />
-                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Tooltip content={<ChartTooltipContent />} />
                                 <Line
                                     type="monotone"
                                     dataKey="count"
@@ -162,7 +162,7 @@ const ReportsChartCanvas = dynamic<ReportsChartCanvasProps>(
                                     width={100}
                                     fontSize={12}
                                 />
-                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Tooltip content={<ChartTooltipContent />} />
                                 <Bar dataKey="count" radius={[0, 8, 8, 0]}>
                                     {props.data.map((item) => {
                                         const fill = item.fill || "#3b82f6"
@@ -185,7 +185,7 @@ const ReportsChartCanvas = dynamic<ReportsChartCanvasProps>(
                         className="h-[300px] w-full"
                     >
                         <PieChart>
-                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <Tooltip content={<ChartTooltipContent />} />
                             <Pie
                                 data={[
                                     {
@@ -225,7 +225,7 @@ const ReportsChartCanvas = dynamic<ReportsChartCanvasProps>(
                                     return numericValue > 0 ? `${labelName}: ${numericValue}` : ""
                                 }}
                             />
-                            <ChartLegend content={<ChartLegendContent />} />
+                            <Legend content={<ChartLegendContent />} />
                         </PieChart>
                     </ChartContainer>
                 )

@@ -52,9 +52,10 @@ const SurrogatesTrendChart = dynamic<SurrogatesTrendChartProps>(
             Area,
             AreaChart,
             CartesianGrid,
+            Tooltip,
             XAxis,
             YAxis,
-        }, { ChartContainer, ChartTooltip, ChartTooltipContent }]) => {
+        }, { ChartContainer, ChartTooltipContent }]) => {
             function SurrogatesTrendChartComponent({ chartData }: SurrogatesTrendChartProps) {
                 return (
                     <ChartContainer
@@ -101,7 +102,7 @@ const SurrogatesTrendChart = dynamic<SurrogatesTrendChartProps>(
                                 tick={{ fontSize: 12 }}
                                 allowDecimals={false}
                             />
-                            <ChartTooltip
+                            <Tooltip
                                 cursor={{ stroke: "var(--border)" }}
                                 content={<ChartTooltipContent indicator="line" />}
                             />

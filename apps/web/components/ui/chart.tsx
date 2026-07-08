@@ -1,7 +1,7 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import * as React from "react"
-import * as RechartsPrimitive from "recharts"
 
 import { cn } from '@/lib/utils'
 
@@ -24,6 +24,23 @@ type ChartContextProps = {
 
 const ChartContext = React.createContext<ChartContextProps | null>(null)
 
+type ChartResponsiveContainerProps = {
+  width: string | number
+  height: string | number
+  minHeight?: number
+  minWidth?: number
+  children?: React.ReactNode
+}
+
+const ChartResponsiveContainer = dynamic<ChartResponsiveContainerProps>(
+  () =>
+    import("recharts").then(
+      ({ ResponsiveContainer }) =>
+        ResponsiveContainer as React.ComponentType<ChartResponsiveContainerProps>
+    ),
+  { ssr: false }
+)
+
 function useChart() {
   const context = React.use(ChartContext)
 
@@ -42,9 +59,7 @@ function ChartContainer({
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig
-  children: React.ComponentProps<
-    typeof RechartsPrimitive.ResponsiveContainer
-  >["children"]
+  children: React.ReactNode
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
@@ -61,14 +76,14 @@ function ChartContainer({
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer
+        <ChartResponsiveContainer
           width="100%"
           height="100%"
           minHeight={1}
           minWidth={1}
         >
           {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        </ChartResponsiveContainer>
       </div>
     </ChartContext.Provider>
   )
@@ -102,8 +117,6 @@ ${colorConfig
 
   return <style>{css}</style>
 }
-
-const ChartTooltip = RechartsPrimitive.Tooltip
 
 // Types for tooltip content following recharts 3 patterns
 interface ChartTooltipContentProps {
@@ -254,8 +267,6 @@ function ChartTooltipContent({
   )
 }
 
-const ChartLegend = RechartsPrimitive.Legend
-
 // Types for legend content following recharts 3 patterns
 interface ChartLegendContentProps {
   className?: string
@@ -361,8 +372,6 @@ function getPayloadConfigFromPayload(
 
 export {
   ChartContainer,
-  ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
   ChartLegendContent,
 }

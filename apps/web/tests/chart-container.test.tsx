@@ -1,10 +1,37 @@
 import type { PropsWithChildren } from "react"
+import * as React from "react"
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 import { render, waitFor } from "@testing-library/react"
 import { ChartContainer } from "@/components/ui/chart"
 
 const responsiveSpy = vi.fn()
 let rectSpy: ReturnType<typeof vi.spyOn> | null = null
+
+type DynamicComponent = React.ComponentType<Record<string, unknown>>
+
+vi.mock("next/dynamic", () => ({
+    __esModule: true,
+    default: (loader: () => Promise<DynamicComponent>) => {
+        return function DynamicComponentWrapper(props: Record<string, unknown>) {
+            const [Component, setComponent] = React.useState<DynamicComponent | null>(null)
+
+            React.useEffect(() => {
+                let mounted = true
+                loader().then((Resolved) => {
+                    if (mounted) {
+                        setComponent(() => Resolved)
+                    }
+                })
+                return () => {
+                    mounted = false
+                }
+            }, [])
+
+            if (!Component) return null
+            return <Component {...props} />
+        }
+    },
+}))
 
 vi.mock("recharts", () => ({
     ResponsiveContainer: ({

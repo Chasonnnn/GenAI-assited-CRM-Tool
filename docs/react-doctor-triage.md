@@ -3850,3 +3850,23 @@ Full command after Batch 175: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 80 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
 - Removed globally since Batch 174: `react-doctor/prefer-useReducer` and `react-doctor/no-giant-component` for `AppointmentDetailDialog` (`2` warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-dc75d3ef-9558-4cf2-bf0c-4d473536a0f6`
+
+## Batch 176
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-dynamic-import` | `components/ui/chart.tsx` | Valid. The shared chart wrapper eagerly imported all of `recharts`, even though chart-heavy dashboard and reporting surfaces already load their canvases dynamically. | High | Replaced the static `RechartsPrimitive` import with a dynamic `ChartResponsiveContainer`. Kept Recharts `Tooltip` and `Legend` as direct children inside each already-dynamic chart canvas so Recharts child detection remains intact, and removed the shared eager tooltip/legend exports. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Recharts own responsive chart sizing"` failed on the static import. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Recharts own responsive chart sizing"`; `pnpm test --run tests/chart-container.test.tsx`; `pnpm test --run tests/dashboard.test.tsx tests/reports-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "chart"`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues; full React Doctor dropped to `132` issues. |
+
+Changed-scope command after Batch 176: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 176: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `132`
+- Summary: `Bugs 80 warnings`, `Performance 6 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
+- Removed globally since Batch 175: `react-doctor/prefer-dynamic-import` for `components/ui/chart.tsx` (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c9894e0-70a0-4e24-ad8e-3f679e6c4bae`

@@ -51,7 +51,8 @@ const TeamPerformanceBars = dynamic<TeamPerformanceBarsProps>(
             XAxis,
             YAxis,
             Cell,
-        }, { ChartContainer, ChartTooltip, ChartTooltipContent }]) => {
+            Tooltip,
+        }, { ChartContainer, ChartTooltipContent }]) => {
             function TeamPerformanceBarsComponent({ chartData }: TeamPerformanceBarsProps) {
                 return (
                     <ChartContainer config={chartConfig} className="h-[300px] w-full">
@@ -72,7 +73,7 @@ const TeamPerformanceBars = dynamic<TeamPerformanceBarsProps>(
                                 width={80}
                                 fontSize={12}
                             />
-                            <ChartTooltip
+                            <Tooltip
                                 content={<ChartTooltipContent />}
                                 cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
                             />
