@@ -1720,6 +1720,25 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("US_STATES.find((state) => state.value === stateCode)")
     })
 
+    it("uses Sets for campaign selection checkbox membership checks", () => {
+        const campaignCreateSource = readSource("app/(app)/automation/campaigns/page.tsx")
+        const campaignDetailSource = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
+
+        expect(campaignCreateSource).toContain("const selectedStageIdSet = new Set(selectedStages)")
+        expect(campaignCreateSource).toContain("const selectedStateCodeSet = new Set(selectedStates)")
+        expect(campaignCreateSource).toContain("checked={selectedStageIdSet.has(stage.id)}")
+        expect(campaignCreateSource).toContain("checked={selectedStateCodeSet.has(state.value)}")
+        expect(campaignCreateSource).not.toContain("checked={selectedStages.includes(stage.id)}")
+        expect(campaignCreateSource).not.toContain("checked={selectedStates.includes(state.value)}")
+
+        expect(campaignDetailSource).toContain("const editStageIdSet = new Set(editStages)")
+        expect(campaignDetailSource).toContain("const editStateCodeSet = new Set(editStates)")
+        expect(campaignDetailSource).toContain("checked={editStageIdSet.has(stage.id)}")
+        expect(campaignDetailSource).toContain("checked={editStateCodeSet.has(state.value)}")
+        expect(campaignDetailSource).not.toContain("checked={editStages.includes(stage.id)}")
+        expect(campaignDetailSource).not.toContain("checked={editStates.includes(state.value)}")
+    })
+
     it("builds form builder mappings in a single pass", () => {
         const source = readSource("lib/forms/form-builder-document.ts")
 

@@ -4110,3 +4110,25 @@ Full command after Batch 188: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 48 warnings`, `Performance 8 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
 - Removed globally since Batch 187: ops platform email template required-variable Set conversion (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-beff8aae-eab2-4bf9-9fd6-5de7fd4481c3`
+
+## Batch 189
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/js-set-map-lookups` | `app/(app)/automation/campaigns/page.tsx:877`, `app/(app)/automation/campaigns/page.tsx:994` | Valid. The campaign create wizard rendered stage and state checkbox lists while checking selected array membership inside each loop. | High | Added `selectedStageIdSet` and `selectedStateCodeSet`, then switched the checkbox checked state to `Set.has`. Added a source guard preventing the old `includes` checks from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "campaign selection checkbox"` failed before the Set conversion. GREEN: same source guard command; `pnpm test --run tests/campaign-detail-page.test.tsx`; `pnpm tsc --noEmit`; changed-scope React Doctor no longer reported the Set warnings. |
+| `react-doctor/js-set-map-lookups` | `app/(app)/automation/campaigns/[id]/page.client.tsx:822` | Valid. The campaign edit dialog rendered stage checkboxes while checking `editStages.includes(stage.id)` inside the loop; sibling state checkbox membership used the same pattern. | High | Added `editStageIdSet` and `editStateCodeSet`, then switched edit stage and state checkbox checked state to `Set.has`. Added a source guard covering both loops. | GREEN: source guard, campaign detail page test, TypeScript, and changed-scope React Doctor as above. |
+
+Changed-scope command after Batch 189: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `92 / 100`
+- Total diagnostics in changed files: `3`
+- Summary: `Bugs 1 warning`, `Maintainability 2 warnings`
+- Remaining valid but separate in touched files: `react-doctor/no-giant-component` and `react-doctor/prefer-useReducer` in the broader campaign pages.
+
+Full command after Batch 189: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `84 / 100`
+- Total diagnostics: `91`
+- Summary: `Bugs 48 warnings`, `Performance 3 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
+- Removed globally since Batch 188: campaign create/edit checkbox Set conversions (`3` warnings), leaving one `js-set-map-lookups` warning in `components/surrogates/SurrogateApplicationTab.tsx`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-987d450a-3cd8-4f62-9b80-89f99957dfd7`

@@ -384,6 +384,8 @@ export default function CampaignDetailPage() {
     const stateLabelsForFilter = getSelectedLabels(US_STATES, selectedStateFilters, (state) => state.value)
     const createdAfter = filterCriteria.created_after ? new Date(filterCriteria.created_after) : null
     const createdBefore = filterCriteria.created_before ? new Date(filterCriteria.created_before) : null
+    const editStageIdSet = new Set(editStages)
+    const editStateCodeSet = new Set(editStates)
 
     return (
         <div className="flex min-h-screen flex-col bg-background">
@@ -819,7 +821,7 @@ export default function CampaignDetailPage() {
                                     <div key={stage.id} className="flex items-center gap-x-2">
                                         <Checkbox
                                             id={`edit-stage-${stage.id}`}
-                                            checked={editStages.includes(stage.id)}
+                                            checked={editStageIdSet.has(stage.id)}
                                             onCheckedChange={(checked) => {
                                                 setEditStages((currentStages) =>
                                                     checked
@@ -843,7 +845,7 @@ export default function CampaignDetailPage() {
                                         <div key={state.value} className="flex items-center gap-x-2">
                                         <Checkbox
                                             id={`edit-state-${state.value}`}
-                                            checked={editStates.includes(state.value)}
+                                            checked={editStateCodeSet.has(state.value)}
                                             onCheckedChange={(checked) => {
                                                 setEditStates((currentStates) =>
                                                     checked

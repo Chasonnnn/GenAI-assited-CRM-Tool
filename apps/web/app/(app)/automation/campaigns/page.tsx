@@ -334,6 +334,8 @@ export default function CampaignsPage() {
         const label = stateLabelByCode.get(stateCode)
         if (label) selectedStateLabels.push(label)
     }
+    const selectedStageIdSet = new Set(selectedStages)
+    const selectedStateCodeSet = new Set(selectedStates)
 
     // Filtered campaigns
     const filteredCampaigns = campaigns || []
@@ -874,7 +876,7 @@ export default function CampaignsPage() {
                                             <div key={stage.id} className="flex items-center gap-x-2">
                                                 <Checkbox
                                                     id={stage.id}
-                                                    checked={selectedStages.includes(stage.id)}
+                                                    checked={selectedStageIdSet.has(stage.id)}
                                                     onCheckedChange={(checked) => {
                                                         setSelectedStages((prev) =>
                                                             checked
@@ -991,7 +993,7 @@ export default function CampaignsPage() {
                                         <div key={state.value} className="flex items-center gap-x-2">
                                             <Checkbox
                                                 id={`state-${state.value}`}
-                                                checked={selectedStates.includes(state.value)}
+                                                checked={selectedStateCodeSet.has(state.value)}
                                                 onCheckedChange={(checked) => {
                                                     setSelectedStates((prev) =>
                                                         checked
