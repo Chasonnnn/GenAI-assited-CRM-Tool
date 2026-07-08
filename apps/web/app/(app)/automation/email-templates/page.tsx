@@ -830,15 +830,6 @@ export default function EmailTemplatesPage() {
 
     useEffect(() => {
         if (!testSendOpen) return
-        if (!testSendToEmail.trim() && user?.email) {
-            React.startTransition(() => {
-                setTestSendToEmail(user.email)
-            })
-        }
-    }, [testSendOpen, testSendToEmail, user?.email])
-
-    useEffect(() => {
-        if (!testSendOpen) return
         if (!testSendTemplateDetail) return
         const editableVariables = extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
             .slice()

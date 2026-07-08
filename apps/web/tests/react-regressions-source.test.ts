@@ -1758,6 +1758,15 @@ describe("React regression guards (source)", () => {
                 setLibraryPreviewId(null)`)
     })
 
+    it("sets the email test recipient from the test dialog open handler", () => {
+        const source = readSource("app/(app)/automation/email-templates/page.tsx")
+
+        expect(source).toContain("const handleOpenTestDialog = (template: EmailTemplateListItem) =>")
+        expect(source).toContain('setTestSendToEmail(user?.email || "")')
+        expect(source).not.toContain("setTestSendToEmail(user.email)")
+        expect(source).not.toContain("[testSendOpen, testSendToEmail, user?.email]")
+    })
+
     it("keeps queue edit target out of render state", () => {
         const source = readSource("app/(app)/settings/queues/page.tsx")
         const helperIndex = source.indexOf("function resolveErrorMessage(")

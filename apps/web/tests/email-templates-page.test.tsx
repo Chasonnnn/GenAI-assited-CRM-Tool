@@ -243,7 +243,9 @@ describe("EmailTemplatesPage", () => {
         expect(sendTestAction).toBeInTheDocument()
         fireEvent.click(sendTestAction)
 
-        expect(await screen.findByLabelText("To email")).toBeInTheDocument()
+        const toEmailInput = await screen.findByLabelText("To email")
+        expect(toEmailInput).toBeInTheDocument()
+        expect((toEmailInput as HTMLInputElement).value).toBe("admin@example.com")
     })
 
     it("labels organization template action menus with template context", async () => {

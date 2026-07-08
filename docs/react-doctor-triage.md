@@ -3870,3 +3870,26 @@ Full command after Batch 176: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 80 warnings`, `Performance 6 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
 - Removed globally since Batch 175: `react-doctor/prefer-dynamic-import` for `components/ui/chart.tsx` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c9894e0-70a0-4e24-ad8e-3f679e6c4bae`
+
+## Batch 177
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `app/(app)/automation/email-templates/page.tsx:833` | Valid but redundant with the open handler. `handleOpenTestDialog` already set `testSendToEmail` from `user?.email`, while a later effect watched dialog state and set the same field one render late when empty. | High | Strengthened the send-test dialog test to assert the visible `To email` default, added a source guard requiring the default to stay in `handleOpenTestDialog`, and removed the redundant effect. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "email test recipient"` failed on `setTestSendToEmail(user.email)` in the effect. GREEN: `pnpm test --run tests/email-templates-page.test.tsx -t "shows send test email action"`; `pnpm test --run tests/react-regressions-source.test.ts -t "email test recipient"`; `pnpm test --run tests/email-templates-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; full React Doctor dropped to `131` issues. |
+| `react-doctor/no-event-handler`, `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer` | `app/(app)/automation/email-templates/page.tsx` | Valid but separate. Changed-scope still reports the template variable hydration effect and the page-level structure/reducer warnings, which need a broader state-model split. | Medium-high | Left unchanged to keep this commit scoped to the visible test-recipient default. | Changed-scope React Doctor after the fix reports `3` existing warnings in the changed file: `no-giant-component`, `prefer-useReducer`, and `no-event-handler` at the variable hydration effect. |
+
+Changed-scope command after Batch 177: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `3`
+- Summary: `Bugs 2 warnings`, `Maintainability 1 warning`
+- Remaining reviewed but unchanged: `react-doctor/no-giant-component`, `react-doctor/prefer-useReducer`, and the separate `react-doctor/no-event-handler` warning for test variable hydration.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-485a49a9-025c-4944-ab94-faaae73a5bff`
+
+Full command after Batch 177: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `131`
+- Summary: `Bugs 79 warnings`, `Performance 6 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
+- Removed globally since Batch 176: `react-doctor/no-event-handler` for send-test recipient defaulting (`1` warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-1856141c-cfab-4576-8494-7952a6309d72`
