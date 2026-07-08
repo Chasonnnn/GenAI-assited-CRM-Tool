@@ -4409,3 +4409,23 @@ Full command after Batch 202: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 32 warnings`
 - Removed globally since Batch 201: reports page `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ab32c910-3af6-4016-a10a-9e870e840c96`
+
+## Batch 203
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/automation/executions/page.tsx:327` | Valid. `WorkflowExecutionsPage` owned the header, stats cards, filters, execution table, pagination, expanded rows, and retry confirmation dialog in one component. | High | Extracted `WorkflowExecutionsHeader`, `WorkflowExecutionStatsGrid`, `WorkflowExecutionFilters`, `WorkflowExecutionsTable`, and `WorkflowExecutionRetryDialog` while keeping query state, pagination state, expansion state, and retry mutation behavior in the page controller. Extended the source guard that already covered execution detail helpers. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "workflow execution details"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "workflow execution details"`; `pnpm test --run tests/automation-executions-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 203: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 203: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `45`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 31 warnings`
+- Removed globally since Batch 202: workflow executions page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a7bc7840-8fce-4026-878d-4acafd43458f`

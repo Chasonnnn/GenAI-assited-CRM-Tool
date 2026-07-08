@@ -324,6 +324,371 @@ function ExecutionDetailsRow({
     )
 }
 
+function WorkflowExecutionsHeader({ totalExecutions }: { totalExecutions: number }) {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <div>
+                    <h1 className="text-2xl font-semibold">Workflow Executions</h1>
+                    <p className="text-xs text-muted-foreground">
+                        {totalExecutions.toLocaleString()} executions in last 24 hours
+                    </p>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function WorkflowExecutionStatsGrid({
+    stats,
+    statsLoading,
+}: {
+    stats: ExecutionStats | undefined
+    statsLoading: boolean
+}) {
+    return (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-teal-500/10">
+                            <ActivityIcon className="size-5 text-teal-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Total 24h</p>
+                            {statsLoading ? (
+                                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                            ) : (
+                                <p className="text-2xl font-bold">{stats?.total_24h || 0}</p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-green-500/10">
+                            <TrendingUpIcon className="size-5 text-green-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Success Rate</p>
+                            {statsLoading ? (
+                                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                            ) : (
+                                <p className="text-2xl font-bold">{stats?.success_rate?.toFixed(1) || 0}%</p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-red-500/10">
+                            <XCircleIcon className="size-5 text-red-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Failed 24h</p>
+                            {statsLoading ? (
+                                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                            ) : (
+                                <p className="text-2xl font-bold">{stats?.failed_24h || 0}</p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-blue-500/10">
+                            <ClockIcon className="size-5 text-blue-500" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Avg Duration</p>
+                            {statsLoading ? (
+                                <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+                            ) : (
+                                <p className="text-2xl font-bold">{formatDuration(stats?.avg_duration_ms || 0)}</p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+function WorkflowExecutionFilters({
+    statusFilter,
+    onStatusFilterChange,
+    workflowFilter,
+    onWorkflowFilterChange,
+    workflows,
+}: {
+    statusFilter: string
+    onStatusFilterChange: (value: string) => void
+    workflowFilter: string
+    onWorkflowFilterChange: (value: string) => void
+    workflows: { id: string; name: string }[] | undefined
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-3">
+            <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                    if (value) onStatusFilterChange(value)
+                }}
+            >
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="All Statuses">
+                        {(value: string | null) => {
+                            if (!value || value === "all") return "All Statuses"
+                            if (isStatusKey(value)) {
+                                return statusConfig[value].label
+                            }
+                            return value
+                        }}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="success">Success</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="skipped">Skipped</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                </SelectContent>
+            </Select>
+
+            <Select
+                value={workflowFilter}
+                onValueChange={(value) => {
+                    if (value) onWorkflowFilterChange(value)
+                }}
+            >
+                <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="All Workflows">
+                        {(value: string | null) => {
+                            if (!value || value === "all") return "All Workflows"
+                            const workflow = workflows?.find((item) => item.id === value)
+                            return workflow?.name ?? "Unknown workflow"
+                        }}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Workflows</SelectItem>
+                    {workflows?.map((workflow) => (
+                        <SelectItem key={workflow.id} value={workflow.id}>
+                            {workflow.name}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+}
+
+function WorkflowExecutionsTable({
+    executions,
+    executionsLoading,
+    expandedRows,
+    onToggleRow,
+    isRetryPending,
+    onRetry,
+    page,
+    totalPages,
+    totalExecutions,
+    onPreviousPage,
+    onNextPage,
+}: {
+    executions: Execution[]
+    executionsLoading: boolean
+    expandedRows: Set<string>
+    onToggleRow: (id: string) => void
+    isRetryPending: boolean
+    onRetry: (execution: Execution) => void
+    page: number
+    totalPages: number
+    totalExecutions: number
+    onPreviousPage: () => void
+    onNextPage: () => void
+}) {
+    return (
+        <Card className="py-0">
+            <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[50px]"></TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Workflow</TableHead>
+                            <TableHead>Entity</TableHead>
+                            <TableHead>Actions</TableHead>
+                            <TableHead>Duration</TableHead>
+                            <TableHead>Executed At</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {executionsLoading ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="py-12 text-center">
+                                    <Loader2Icon className="mx-auto size-6 animate-spin text-muted-foreground" />
+                                    <p className="mt-2 text-sm text-muted-foreground">Loading executions</p>
+                                </TableCell>
+                            </TableRow>
+                        ) : executions.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="py-12 text-center">
+                                    <ActivityIcon className="mx-auto size-8 text-muted-foreground/50" />
+                                    <p className="mt-2 text-sm text-muted-foreground">No executions found</p>
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            executions.map((execution) => {
+                                const StatusIcon = statusConfig[execution.status]?.icon || AlertCircleIcon
+                                const isExpanded = expandedRows.has(execution.id)
+                                const entityLink = getEntityLink(execution.entity_type, execution.entity_id)
+
+                                return (
+                                    <Fragment key={execution.id}>
+                                        <TableRow
+                                            className="cursor-pointer hover:bg-muted/50"
+                                            onClick={() => onToggleRow(execution.id)}
+                                        >
+                                            <TableCell>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="size-8 p-0"
+                                                    aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                                                >
+                                                    {isExpanded ? (
+                                                        <ChevronDownIcon className="size-4" />
+                                                    ) : (
+                                                        <ChevronRightIcon className="size-4" />
+                                                    )}
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className={statusConfig[execution.status]?.color || ""}
+                                                >
+                                                    <StatusIcon className="mr-1 size-3" />
+                                                    {statusConfig[execution.status]?.label || execution.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="font-medium">{execution.workflow_name}</TableCell>
+                                            <TableCell>
+                                                {execution.entity_type === "System" ? (
+                                                    <span className="text-muted-foreground">System</span>
+                                                ) : entityLink ? (
+                                                    <Link
+                                                        href={entityLink}
+                                                        className="text-primary hover:underline"
+                                                        onClick={(event: React.MouseEvent<HTMLAnchorElement>) => event.stopPropagation()}
+                                                    >
+                                                        {formatEntityLabel(execution)}
+                                                    </Link>
+                                                ) : (
+                                                    <span className="text-muted-foreground">
+                                                        {formatEntityLabel(execution)}
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="secondary">{execution.action_count} actions</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">
+                                                {formatDuration(execution.duration_ms)}
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">
+                                                {formatRelativeTime(execution.executed_at)}
+                                            </TableCell>
+                                        </TableRow>
+
+                                        {isExpanded && (
+                                            <ExecutionDetailsRow
+                                                execution={execution}
+                                                isRetryPending={isRetryPending}
+                                                onRetry={onRetry}
+                                            />
+                                        )}
+                                    </Fragment>
+                                )
+                            })
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-border px-6 py-4">
+                    <div className="text-sm text-muted-foreground">
+                        Page {page} of {totalPages} ({totalExecutions.toLocaleString()} executions)
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onPreviousPage}
+                            disabled={page === 1}
+                        >
+                            Previous
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onNextPage}
+                            disabled={page >= totalPages}
+                        >
+                            Next
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </Card>
+    )
+}
+
+function WorkflowExecutionRetryDialog({
+    retryTarget,
+    isRetryPending,
+    onOpenChange,
+    onConfirmRetry,
+}: {
+    retryTarget: Execution | null
+    isRetryPending: boolean
+    onOpenChange: (open: boolean) => void
+    onConfirmRetry: () => void
+}) {
+    return (
+        <AlertDialog open={!!retryTarget} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Retry workflow execution?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will re-run the workflow and may duplicate actions (emails, tasks, notes).
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isRetryPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={onConfirmRetry} disabled={isRetryPending}>
+                        {isRetryPending && (
+                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                        )}
+                        Retry
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
+}
+
 export default function WorkflowExecutionsPage() {
     const [statusFilter, setStatusFilter] = useState("all")
     const [workflowFilter, setWorkflowFilter] = useState("all")
@@ -364,6 +729,16 @@ export default function WorkflowExecutionsPage() {
     const totalExecutions = executionsData?.total || 0
     const totalPages = Math.ceil(totalExecutions / 20)
 
+    const handleStatusFilterChange = (value: string) => {
+        setStatusFilter(value)
+        setPage(1)
+    }
+
+    const handleWorkflowFilterChange = (value: string) => {
+        setWorkflowFilter(value)
+        setPage(1)
+    }
+
     const confirmRetry = async () => {
         if (!retryTarget || retryExecutionMutation.isPending) return
         try {
@@ -383,311 +758,46 @@ export default function WorkflowExecutionsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div>
-                        <h1 className="text-2xl font-semibold">Workflow Executions</h1>
-                        <p className="text-xs text-muted-foreground">
-                            {totalExecutions.toLocaleString()} executions in last 24 hours
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <WorkflowExecutionsHeader totalExecutions={totalExecutions} />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
+                <WorkflowExecutionStatsGrid
+                    stats={stats}
+                    statsLoading={statsLoading}
+                />
 
-            {/* Stats Cards */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-10 items-center justify-center rounded-lg bg-teal-500/10">
-                                <ActivityIcon className="size-5 text-teal-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Total 24h</p>
-                                {statsLoading ? (
-                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                                ) : (
-                                    <p className="text-2xl font-bold">{stats?.total_24h || 0}</p>
-                                )}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                <WorkflowExecutionFilters
+                    statusFilter={statusFilter}
+                    onStatusFilterChange={handleStatusFilterChange}
+                    workflowFilter={workflowFilter}
+                    onWorkflowFilterChange={handleWorkflowFilterChange}
+                    workflows={workflows}
+                />
 
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-10 items-center justify-center rounded-lg bg-green-500/10">
-                                <TrendingUpIcon className="size-5 text-green-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Success Rate</p>
-                                {statsLoading ? (
-                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                                ) : (
-                                    <p className="text-2xl font-bold">{stats?.success_rate?.toFixed(1) || 0}%</p>
-                                )}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-10 items-center justify-center rounded-lg bg-red-500/10">
-                                <XCircleIcon className="size-5 text-red-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Failed 24h</p>
-                                {statsLoading ? (
-                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                                ) : (
-                                    <p className="text-2xl font-bold">{stats?.failed_24h || 0}</p>
-                                )}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-10 items-center justify-center rounded-lg bg-blue-500/10">
-                                <ClockIcon className="size-5 text-blue-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Avg Duration</p>
-                                {statsLoading ? (
-                                    <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                                ) : (
-                                    <p className="text-2xl font-bold">{formatDuration(stats?.avg_duration_ms || 0)}</p>
-                                )}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                <WorkflowExecutionsTable
+                    executions={executions}
+                    executionsLoading={executionsLoading}
+                    expandedRows={expandedRows}
+                    onToggleRow={toggleRow}
+                    isRetryPending={retryExecutionMutation.isPending}
+                    onRetry={setRetryTarget}
+                    page={page}
+                    totalPages={totalPages}
+                    totalExecutions={totalExecutions}
+                    onPreviousPage={() => setPage((current) => Math.max(1, current - 1))}
+                    onNextPage={() => setPage((current) => Math.min(totalPages, current + 1))}
+                />
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3">
-                <Select
-                    value={statusFilter}
-                    onValueChange={(v) => {
-                        if (!v) return
-                        setStatusFilter(v)
-                        setPage(1)
-                    }}
-                >
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All Statuses">
-                            {(value: string | null) => {
-                                if (!value || value === "all") return "All Statuses"
-                                if (value && isStatusKey(value)) {
-                                    return statusConfig[value].label
-                                }
-                                return value
-                            }}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="success">Success</SelectItem>
-                        <SelectItem value="failed">Failed</SelectItem>
-                        <SelectItem value="skipped">Skipped</SelectItem>
-                        <SelectItem value="partial">Partial</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                <Select
-                    value={workflowFilter}
-                    onValueChange={(v) => {
-                        if (!v) return
-                        setWorkflowFilter(v)
-                        setPage(1)
-                    }}
-                >
-                    <SelectTrigger className="w-[220px]">
-                        <SelectValue placeholder="All Workflows">
-                            {(value: string | null) => {
-                                if (!value || value === "all") return "All Workflows"
-                                const workflow = workflows?.find(w => w.id === value)
-                                return workflow?.name ?? "Unknown workflow"
-                            }}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Workflows</SelectItem>
-                        {workflows?.map((wf) => (
-                            <SelectItem key={wf.id} value={wf.id}>
-                                {wf.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-
-            {/* Table */}
-            <Card className="py-0">
-                <div className="overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[50px]"></TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Workflow</TableHead>
-                                <TableHead>Entity</TableHead>
-                                <TableHead>Actions</TableHead>
-                                <TableHead>Duration</TableHead>
-                                <TableHead>Executed At</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {executionsLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="py-12 text-center">
-                                        <Loader2Icon className="mx-auto size-6 animate-spin text-muted-foreground" />
-                                        <p className="mt-2 text-sm text-muted-foreground">Loading executions</p>
-                                    </TableCell>
-                                </TableRow>
-                            ) : executions.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="py-12 text-center">
-                                        <ActivityIcon className="mx-auto size-8 text-muted-foreground/50" />
-                                        <p className="mt-2 text-sm text-muted-foreground">No executions found</p>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                executions.map((execution) => {
-                                    const StatusIcon = statusConfig[execution.status]?.icon || AlertCircleIcon
-                                    const isExpanded = expandedRows.has(execution.id)
-                                    const entityLink = getEntityLink(execution.entity_type, execution.entity_id)
-
-                                    return (
-                                        <Fragment key={execution.id}>
-                                            <TableRow
-                                                className="cursor-pointer hover:bg-muted/50"
-                                                onClick={() => toggleRow(execution.id)}
-                                            >
-                                                <TableCell>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="size-8 p-0"
-                                                        aria-label={isExpanded ? "Collapse row" : "Expand row"}
-                                                    >
-                                                        {isExpanded ? (
-                                                            <ChevronDownIcon className="size-4" />
-                                                        ) : (
-                                                            <ChevronRightIcon className="size-4" />
-                                                        )}
-                                                    </Button>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className={statusConfig[execution.status]?.color || ""}
-                                                    >
-                                                        <StatusIcon className="mr-1 size-3" />
-                                                        {statusConfig[execution.status]?.label || execution.status}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="font-medium">{execution.workflow_name}</TableCell>
-                                                <TableCell>
-                                                    {execution.entity_type === "System" ? (
-                                                        <span className="text-muted-foreground">System</span>
-                                                    ) : entityLink ? (
-                                                        <Link
-                                                            href={entityLink}
-                                                            className="text-primary hover:underline"
-                                                            onClick={(e: React.MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
-                                                        >
-                                                            {formatEntityLabel(execution)}
-                                                        </Link>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">
-                                                            {formatEntityLabel(execution)}
-                                                        </span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="secondary">{execution.action_count} actions</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {formatDuration(execution.duration_ms)}
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {formatRelativeTime(execution.executed_at)}
-                                                </TableCell>
-                                            </TableRow>
-
-                                            {isExpanded && (
-                                                <ExecutionDetailsRow
-                                                    execution={execution}
-                                                    isRetryPending={retryExecutionMutation.isPending}
-                                                    onRetry={setRetryTarget}
-                                                />
-                                            )}
-                                        </Fragment>
-                                    )
-                                })
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-border px-6 py-4">
-                        <div className="text-sm text-muted-foreground">
-                            Page {page} of {totalPages} ({totalExecutions.toLocaleString()} executions)
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                disabled={page === 1}
-                            >
-                                Previous
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                disabled={page >= totalPages}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    </div>
-                )}
-            </Card>
-            </div>
-
-            <AlertDialog open={!!retryTarget} onOpenChange={(open) => !open && setRetryTarget(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Retry workflow execution?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will re-run the workflow and may duplicate actions (emails, tasks, notes).
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={retryExecutionMutation.isPending}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmRetry} disabled={retryExecutionMutation.isPending}>
-                            {retryExecutionMutation.isPending && (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            )}
-                            Retry
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <WorkflowExecutionRetryDialog
+                retryTarget={retryTarget}
+                isRetryPending={retryExecutionMutation.isPending}
+                onOpenChange={(open) => {
+                    if (!open) setRetryTarget(null)
+                }}
+                onConfirmRetry={confirmRetry}
+            />
         </div>
     )
 }

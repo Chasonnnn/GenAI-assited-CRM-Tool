@@ -600,12 +600,21 @@ describe("React regression guards (source)", () => {
 
     it("keeps workflow execution details split into focused helpers", () => {
         const source = readSource("app/(app)/automation/executions/page.tsx")
+        const pageSource = readFunctionSource(source, "WorkflowExecutionsPage")
 
         expect(source).toContain("function ExecutionDetailsRow")
         expect(source).toContain("function ExecutionActionsTimeline")
         expect(source).toContain("function ExecutionErrorPanel")
         expect(source).toContain("function ExecutionTriggerEventDetails")
         expect(source).toContain("<ExecutionDetailsRow")
+        expect(source).toContain("function WorkflowExecutionsHeader")
+        expect(source).toContain("function WorkflowExecutionStatsGrid")
+        expect(source).toContain("function WorkflowExecutionFilters")
+        expect(source).toContain("function WorkflowExecutionsTable")
+        expect(source).toContain("function WorkflowExecutionRetryDialog")
+        expect(pageSource).not.toContain("Total 24h")
+        expect(pageSource).not.toContain("All Statuses")
+        expect(pageSource).not.toContain("Retry workflow execution?")
     })
 
     it("keeps public booking selection state reducer-driven", () => {
