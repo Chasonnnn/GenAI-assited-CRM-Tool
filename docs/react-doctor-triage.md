@@ -3961,3 +3961,46 @@ Full command after Batch 180: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 79 warnings`, `Performance 4 warnings`, `Accessibility 2 warnings`, `Maintainability 43 warnings`
 - Removed globally since Batch 179: `react-doctor/no-giant-component` for `TicketDetailPage` (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-791514f6-5775-4322-a096-69d538f2641a`
+
+## Batch 181
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/js-set-map-lookups` | `app/(app)/settings/team/members/[id]/page.client.tsx:62`, `:68`, `:71`, `:268` | Valid. The add-override dialog checked the same override/effective-permission arrays while filtering permissions, and the page checked pending removals while deriving displayed overrides. | High | Converted membership checks to `Set.has` via `existingOverrideKeys`, `effectivePermissionKeys`, and `pendingOverrideRemovals`. Added a source guard preventing the old `includes` calls from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "team member permission membership"` failed on missing Set derivations. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "team member"`; `pnpm tsc --noEmit`; combined changed-scope React Doctor after Batch 183 reported no issues. |
+| `react-doctor/no-giant-component` | `app/(app)/settings/team/members/[id]/page.client.tsx:173` | Valid. `MemberDetailPage` owned route params, member mutations, pending role/override state, profile rendering, permission override rendering, and danger-zone rendering in one component body. | High | Kept route/data/mutation state in `MemberDetailPage`, then split rendering into `MemberDetailToolbar`, `MemberProfileCard`, `PermissionOverridesCard`, and `DangerZoneCard`. Added a source guard keeping section JSX out of the page body. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "team member detail rendering"` failed on the monolithic render. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "team member"`; `pnpm tsc --noEmit`; combined changed-scope React Doctor after Batch 183 reported no issues. |
+
+Commit: `f7c9d16d refactor: Split team member detail`
+
+## Batch 182
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-array-index-as-key` | `components/email/EmailComposeDialog.tsx:199`, `:203` | Valid. Template-highlight spans were keyed with `${index}:${part}`, so repeated template fragments could still depend on list position. | High | Replaced split/map rendering with `getHighlightedTemplateParts`, which tokenizes variable and text spans with source-position keys such as `text:0:12` and `variable:12:26`. Added a source guard preventing index-key rendering from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "keeps email compose dialog derived state compiler-friendly"` failed before the fix. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "email compose dialog"`; `pnpm test --run tests/email-compose-dialog.test.tsx`; `pnpm tsc --noEmit`; combined changed-scope React Doctor after Batch 183 reported no issues. |
+
+Commit: `d59e6446 fix: Stabilize email template highlight keys`
+
+## Batch 183
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/control-has-associated-label` | `components/forms/PublicFormFieldRenderer.tsx:369` | Valid. Fixed-table select controls had visible column text, but the label was not associated with the native `select`. | High | Added stable `fieldInputId`/`fieldInputLabelId`, wired `Label htmlFor`, `select id`, and `aria-labelledby`, and gave sibling text inputs the same id for consistency. Added a behavior test that finds the select by its visible `Response` label and changes it. | GREEN: `pnpm test --run tests/public-form-field-renderer.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "React Doctor-reported select controls"`; `pnpm tsc --noEmit`; combined changed-scope React Doctor reported no issues. |
+| `react-doctor/control-has-associated-label` | `app/intake/[slug]/page.client.tsx:1298` | False positive. The hosted intake fixed-table select already has `Label htmlFor={fieldInputId}` and `<select id={fieldInputId} name={fieldInputName}>`. | High | Left unchanged and added a source guard documenting the existing label association. | Verified by source inspection and `pnpm test --run tests/react-regressions-source.test.ts -t "React Doctor-reported select controls"`. |
+| `react-doctor/control-has-associated-label` | `components/intended-parents/IntendedParentFormFields.tsx:38`, `:69` | False positive. Both select wrappers render `<Label htmlFor={id}>` with a matching `<select id={id}>`. | High | Left unchanged and added a source guard documenting the existing label association. | Verified by source inspection and `pnpm test --run tests/react-regressions-source.test.ts -t "React Doctor-reported select controls"`. |
+| `react-doctor/js-set-map-lookups` | `components/forms/PublicFormFieldRenderer.tsx:718` | Valid. Multiselect options checked `selectedValues.includes(option.value)` inside the options loop. | High | Added `selectedValueSet` and switched the loop membership check to `selectedValueSet.has(option.value)`. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "React Doctor-reported select controls"` failed on the old `includes` path. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "React Doctor-reported select controls"`; `pnpm test --run tests/public-form-field-renderer.test.tsx`; combined changed-scope React Doctor reported no issues. |
+
+Commit: `8488e393 fix: Label public form table selects`
+
+Changed-scope command after Batch 183: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 183: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `84 / 100`
+- Total diagnostics: `108`
+- Summary: `Bugs 50 warnings`, `Performance 15 warnings`, `Accessibility 4 warnings`, `Maintainability 39 warnings`
+- Removed globally since the current-pass baseline: `react-doctor/no-array-index-as-key` for email template highlights (`2` warnings), `react-doctor/control-has-associated-label` for public fixed-table selects (`1` warning), `react-doctor/js-set-map-lookups` for team-member/public-form membership checks (`5` warnings), and `react-doctor/no-giant-component` for `MemberDetailPage` (`1` warning).
+- Invalid findings logged: hosted intake fixed-table select label, intended-parent role/state select labels (`3` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-098bcf65-385f-4202-a662-3e072d5971bb`
