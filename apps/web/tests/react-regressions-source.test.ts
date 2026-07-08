@@ -1654,6 +1654,10 @@ describe("React regression guards (source)", () => {
 
         expect(source).not.toContain("React.useMemo")
         expect(source).not.toContain("React.useCallback")
+        expect(source).toContain("function getHighlightedTemplateParts")
+        expect(source).toContain("key={part.key}")
+        expect(source).not.toContain("parts.map((part, index)")
+        expect(source).not.toContain("const key = `${index}:${part}`")
         expect(source).toContain('role="textbox"')
         expect(source).toContain("contentEditable")
     })

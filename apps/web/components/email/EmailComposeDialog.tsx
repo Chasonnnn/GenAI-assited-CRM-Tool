@@ -186,23 +186,62 @@ function escapeHtml(raw: string): string {
         .replace(/'/g, "&#39;")
 }
 
+interface HighlightedTemplatePart {
+    key: string
+    text: string
+    isVariable: boolean
+}
+
+function getHighlightedTemplateParts(text: string): HighlightedTemplatePart[] {
+    const parts: HighlightedTemplatePart[] = []
+    let cursor = 0
+
+    for (const match of text.matchAll(TEMPLATE_HIGHLIGHT_RE)) {
+        const token = match[0]
+        const start = match.index ?? cursor
+
+        if (start > cursor) {
+            parts.push({
+                key: `text:${cursor}:${start}`,
+                text: text.slice(cursor, start),
+                isVariable: false,
+            })
+        }
+
+        const end = start + token.length
+        parts.push({
+            key: `variable:${start}:${end}`,
+            text: token,
+            isVariable: true,
+        })
+        cursor = end
+    }
+
+    if (cursor < text.length) {
+        parts.push({
+            key: `text:${cursor}:${text.length}`,
+            text: text.slice(cursor),
+            isVariable: false,
+        })
+    }
+
+    return parts
+}
+
 function HighlightedTemplateText({ text }: { text: string }) {
-    const parts = text.split(TEMPLATE_HIGHLIGHT_RE).filter(Boolean)
+    const parts = getHighlightedTemplateParts(text)
 
     return (
         <>
-            {parts.map((part, index) => {
-                const key = `${index}:${part}`
-                const isVariable = /^\{\{[^}]+\}\}$/.test(part)
-
-                return isVariable ? (
-                    <span key={key} className="bg-teal-500/20 text-teal-400 px-1 py-0.5 rounded font-medium">
-                        {part}
+            {parts.map((part) =>
+                part.isVariable ? (
+                    <span key={part.key} className="bg-teal-500/20 text-teal-400 px-1 py-0.5 rounded font-medium">
+                        {part.text}
                     </span>
                 ) : (
-                    <span key={key}>{part}</span>
+                    <span key={part.key}>{part.text}</span>
                 )
-            })}
+            )}
         </>
     )
 }
