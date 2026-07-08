@@ -3830,3 +3830,23 @@ Full command after Batch 174: `cd apps/web && node /Users/chason/.npm/_npx/81e83
 - Summary: `Bugs 81 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 45 warnings`
 - Removed globally since Batch 173: `react-doctor/no-event-handler` for the email library preview close cleanup (`1` warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-fdbd55de-2ad9-4e1f-99f3-9afd226f0143`
+
+## Batch 175
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer`, `react-doctor/no-giant-component` | `components/appointments/AppointmentsList.tsx` | Valid. `AppointmentDetailDialog` reset six related draft fields together on open, then also owned detail status/date/format/client rendering, cancel form, reschedule slot picker, and action footer in one component body. | High | Added `appointmentDetailDialogReducer` for cancel/reschedule draft state and split rendering into `AppointmentStatusSummary`, `AppointmentTimeSummary`, `AppointmentFormatSummary`, `AppointmentClientInfo`, `AppointmentCancelForm`, `AppointmentRescheduleForm`, and `AppointmentDetailActions`. Kept appointment data fetching and mutations in the exported dialog. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "appointment detail dialog state"` failed on the separate state fields and missing helpers. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "appointment detail dialog state"`; `pnpm test --run tests/appointments-google-meet.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor reported no issues; full React Doctor dropped to `133` issues. |
+
+Changed-scope command after Batch 175: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose --scope changed`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 175: `cd apps/web && node /Users/chason/.npm/_npx/81e833f6d16d6127/node_modules/react-doctor/bin/react-doctor.js . --verbose`
+
+- Score: unavailable because the score API was unreachable.
+- Total diagnostics: `133`
+- Summary: `Bugs 80 warnings`, `Performance 7 warnings`, `Accessibility 2 warnings`, `Maintainability 44 warnings`
+- Removed globally since Batch 174: `react-doctor/prefer-useReducer` and `react-doctor/no-giant-component` for `AppointmentDetailDialog` (`2` warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-dc75d3ef-9558-4cf2-bf0c-4d473536a0f6`

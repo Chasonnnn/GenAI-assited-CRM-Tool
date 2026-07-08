@@ -2226,6 +2226,28 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setLogOutcomeOpen\(false\)[\s\S]*\}, \[appointment, open\]\)/)
     })
 
+    it("keeps appointment detail dialog state and rendering split", () => {
+        const source = readSource("components/appointments/AppointmentsList.tsx")
+        const dialogIndex = source.indexOf("export function AppointmentDetailDialog(")
+        const firstHelperIndex = source.indexOf("function AppointmentStatusSummary")
+        const dialogSource = source.slice(
+            dialogIndex,
+            firstHelperIndex > dialogIndex ? firstHelperIndex : undefined
+        )
+
+        expect(dialogIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function appointmentDetailDialogReducer")
+        expect(source).toContain("function AppointmentStatusSummary")
+        expect(source).toContain("function AppointmentClientInfo")
+        expect(source).toContain("function AppointmentRescheduleForm")
+        expect(source).toContain("function AppointmentDetailActions")
+        expect(dialogSource).not.toContain("const [cancelReason")
+        expect(dialogSource).not.toContain("const [showCancelForm")
+        expect(dialogSource).not.toContain("const [showRescheduleForm")
+        expect(dialogSource).not.toContain("Client Information")
+        expect(dialogSource).not.toContain("Available Times")
+    })
+
     it("uses immutable sorting for stage and intake link ordering", () => {
         const intendedParentStageSource = readSource("lib/intended-parent-stage-utils.ts")
         const formBuilderSource = readSource("lib/forms/use-automation-form-builder-page.ts")

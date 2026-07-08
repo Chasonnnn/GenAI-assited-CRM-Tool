@@ -10,7 +10,7 @@
  * - Detail side panel
  */
 
-import { startTransition, useEffect, useState, type ReactNode } from "react"
+import { startTransition, useEffect, useReducer, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -46,7 +46,7 @@ import {
     useRescheduleAppointment,
     useCancelAppointment,
 } from "@/lib/hooks/use-appointments"
-import type { AppointmentListItem } from "@/lib/api/appointments"
+import type { Appointment, AppointmentListItem, TimeSlot } from "@/lib/api/appointments"
 import { format, parseISO } from "date-fns"
 
 // Status badge colors
@@ -67,6 +67,80 @@ const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
     google_meet: VideoIcon,
     phone: PhoneIcon,
     in_person: MapPinIcon,
+}
+
+type AppointmentDetailDialogState = {
+    cancelReason: string
+    showCancelForm: boolean
+    showRescheduleForm: boolean
+    rescheduleDate: string
+    selectedSlotStart: string | null
+    rescheduleError: string | null
+}
+
+type AppointmentDetailDialogAction =
+    | { type: "reset"; rescheduleDate: string; showRescheduleForm: boolean }
+    | { type: "set-cancel-reason"; value: string }
+    | { type: "open-cancel-form" }
+    | { type: "close-cancel-form" }
+    | { type: "open-reschedule-form"; rescheduleDate: string }
+    | { type: "close-reschedule-form" }
+    | { type: "set-reschedule-date"; value: string }
+    | { type: "select-reschedule-slot"; value: string }
+    | { type: "set-reschedule-error"; value: string | null }
+
+const appointmentDetailDialogInitialState: AppointmentDetailDialogState = {
+    cancelReason: "",
+    showCancelForm: false,
+    showRescheduleForm: false,
+    rescheduleDate: "",
+    selectedSlotStart: null,
+    rescheduleError: null,
+}
+
+function appointmentDetailDialogReducer(
+    state: AppointmentDetailDialogState,
+    action: AppointmentDetailDialogAction
+): AppointmentDetailDialogState {
+    switch (action.type) {
+        case "reset":
+            return {
+                cancelReason: "",
+                showCancelForm: false,
+                showRescheduleForm: action.showRescheduleForm,
+                rescheduleDate: action.rescheduleDate,
+                selectedSlotStart: null,
+                rescheduleError: null,
+            }
+        case "set-cancel-reason":
+            return { ...state, cancelReason: action.value }
+        case "open-cancel-form":
+            return { ...state, showCancelForm: true, showRescheduleForm: false }
+        case "close-cancel-form":
+            return { ...state, showCancelForm: false }
+        case "open-reschedule-form":
+            return {
+                ...state,
+                showCancelForm: false,
+                showRescheduleForm: true,
+                rescheduleDate: action.rescheduleDate,
+                selectedSlotStart: null,
+                rescheduleError: null,
+            }
+        case "close-reschedule-form":
+            return { ...state, showRescheduleForm: false, rescheduleError: null }
+        case "set-reschedule-date":
+            return {
+                ...state,
+                rescheduleDate: action.value,
+                selectedSlotStart: null,
+                rescheduleError: null,
+            }
+        case "select-reschedule-slot":
+            return { ...state, selectedSlotStart: action.value, rescheduleError: null }
+        case "set-reschedule-error":
+            return { ...state, rescheduleError: action.value }
+    }
 }
 
 // =============================================================================
@@ -168,19 +242,17 @@ export function AppointmentDetailDialog({
     const approveMutation = useApproveAppointment()
     const rescheduleMutation = useRescheduleAppointment()
     const cancelMutation = useCancelAppointment()
-    const [cancelReason, setCancelReason] = useState("")
-    const [showCancelForm, setShowCancelForm] = useState(false)
-    const [showRescheduleForm, setShowRescheduleForm] = useState(false)
-    const [rescheduleDate, setRescheduleDate] = useState("")
-    const [selectedSlotStart, setSelectedSlotStart] = useState<string | null>(null)
-    const [rescheduleError, setRescheduleError] = useState<string | null>(null)
+    const [dialogState, dispatchDialogState] = useReducer(
+        appointmentDetailDialogReducer,
+        appointmentDetailDialogInitialState
+    )
 
     const slotsQuery = useRescheduleSlots(
         appointmentId || "",
-        rescheduleDate,
-        rescheduleDate,
+        dialogState.rescheduleDate,
+        dialogState.rescheduleDate,
         appointment?.client_timezone,
-        showRescheduleForm && !!rescheduleDate,
+        dialogState.showRescheduleForm && !!dialogState.rescheduleDate,
     )
 
     useEffect(() => {
@@ -190,12 +262,11 @@ export function AppointmentDetailDialog({
         const defaultRescheduleDate = format(parseISO(appointment.scheduled_start), "yyyy-MM-dd")
 
         startTransition(() => {
-            setCancelReason("")
-            setShowCancelForm(false)
-            setShowRescheduleForm(canStartInRescheduleMode)
-            setRescheduleError(null)
-            setRescheduleDate(initialRescheduleDate || defaultRescheduleDate)
-            setSelectedSlotStart(null)
+            dispatchDialogState({
+                type: "reset",
+                showRescheduleForm: canStartInRescheduleMode,
+                rescheduleDate: initialRescheduleDate || defaultRescheduleDate,
+            })
         })
     }, [appointment, open, initialRescheduleDate, startInRescheduleMode])
 
@@ -208,16 +279,19 @@ export function AppointmentDetailDialog({
     }
 
     const handleReschedule = () => {
-        if (!selectedSlotStart) {
-            setRescheduleError("Please choose an available time slot.")
+        if (!dialogState.selectedSlotStart) {
+            dispatchDialogState({
+                type: "set-reschedule-error",
+                value: "Please choose an available time slot.",
+            })
             return
         }
 
-        setRescheduleError(null)
+        dispatchDialogState({ type: "set-reschedule-error", value: null })
         rescheduleMutation.mutate(
             {
                 appointmentId,
-                scheduledStart: selectedSlotStart,
+                scheduledStart: dialogState.selectedSlotStart,
             },
             {
                 onSuccess: () => onOpenChange(false),
@@ -226,7 +300,7 @@ export function AppointmentDetailDialog({
                         error instanceof Error && error.message
                             ? error.message
                             : "Failed to reschedule appointment. Please try another time."
-                    setRescheduleError(message)
+                    dispatchDialogState({ type: "set-reschedule-error", value: message })
                 },
             }
         )
@@ -235,7 +309,7 @@ export function AppointmentDetailDialog({
     const handleCancel = () => {
         const payload = {
             appointmentId,
-            ...(cancelReason.trim() ? { reason: cancelReason.trim() } : {}),
+            ...(dialogState.cancelReason.trim() ? { reason: dialogState.cancelReason.trim() } : {}),
         }
         cancelMutation.mutate(payload, { onSuccess: () => onOpenChange(false) })
     }
@@ -273,7 +347,6 @@ export function AppointmentDetailDialog({
 
     if (!appointment) return null
 
-    const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
     const isReschedulable = RESCHEDULABLE_STATUSES.has(appointment.status)
 
     return (
@@ -287,264 +360,376 @@ export function AppointmentDetailDialog({
                 </DialogHeader>
 
                 <div className="space-y-6 py-4">
-                    {/* Status Badge */}
-                    <div className="flex items-center gap-2">
-                        <Badge className={`${STATUS_STYLES[appointment.status]} text-sm px-3 py-1`}>
-                            {appointment.status.replace("_", " ").toUpperCase()}
-                        </Badge>
-                        {appointment.status === "pending" && appointment.pending_expires_at && (
-                            <span className="text-sm text-muted-foreground">
-                                Expires {format(parseISO(appointment.pending_expires_at), "h:mm a")}
-                            </span>
-                        )}
-                    </div>
-
-                    {/* Date/Time */}
-                    <div className="flex items-start gap-3">
-                        <CalendarIcon className="size-5 text-muted-foreground mt-0.5" />
-                        <div>
-                            <p className="font-medium">
-                                {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                                {format(parseISO(appointment.scheduled_start), "h:mm a")} –{" "}
-                                {format(parseISO(appointment.scheduled_end), "h:mm a")}
-                                <span className="ml-2">({appointment.duration_minutes} min)</span>
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Appointment Format */}
-                    <div className="flex items-center gap-3">
-                        <ModeIcon className="size-5 text-muted-foreground" />
-                        <p className="font-medium capitalize">{appointment.meeting_mode.replace("_", " ")}</p>
-                        {appointment.zoom_join_url && (
-                            <a
-                                href={appointment.zoom_join_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary underline text-sm"
-                            >
-                                Join Zoom
-                            </a>
-                        )}
-                        {appointment.google_meet_url && (
-                            <a
-                                href={appointment.google_meet_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary underline text-sm"
-                            >
-                                Join Google Meet
-                            </a>
-                        )}
-                    </div>
-                    {appointment.meeting_location && (
-                        <div className="flex items-center gap-3">
-                            <MapPinIcon className="size-5 text-muted-foreground" />
-                            <p className="font-medium">{appointment.meeting_location}</p>
-                        </div>
+                    <AppointmentStatusSummary appointment={appointment} />
+                    <AppointmentTimeSummary appointment={appointment} />
+                    <AppointmentFormatSummary appointment={appointment} />
+                    <AppointmentClientInfo appointment={appointment} />
+                    {dialogState.showCancelForm && (
+                        <AppointmentCancelForm
+                            cancelReason={dialogState.cancelReason}
+                            onCancelReasonChange={(value) =>
+                                dispatchDialogState({ type: "set-cancel-reason", value })
+                            }
+                        />
                     )}
-                    {appointment.dial_in_number && (
-                        <div className="flex items-center gap-3">
-                            <PhoneIcon className="size-5 text-muted-foreground" />
-                            <p className="font-medium">{appointment.dial_in_number}</p>
-                        </div>
-                    )}
-
-                    {/* Client Info */}
-                    <div className="border-t border-border pt-4">
-                        <h4 className="text-sm font-medium text-muted-foreground mb-3">Client Information</h4>
-                        <div className="space-y-2">
-                            <p className="font-medium">{appointment.client_name}</p>
-                            <p className="text-sm flex items-center gap-2">
-                                <MailIcon className="size-4 text-muted-foreground" />
-                                <a href={`mailto:${appointment.client_email}`} className="text-primary hover:underline">
-                                    {appointment.client_email}
-                                </a>
-                            </p>
-                            <p className="text-sm flex items-center gap-2">
-                                <PhoneIcon className="size-4 text-muted-foreground" />
-                                <a href={`tel:${appointment.client_phone}`} className="text-primary hover:underline">
-                                    {appointment.client_phone}
-                                </a>
-                            </p>
-                            {appointment.client_notes && (
-                                <div className="mt-3 p-3 rounded-lg bg-muted">
-                                    <p className="text-sm text-muted-foreground font-medium mb-1">Notes</p>
-                                    <p className="text-sm">{appointment.client_notes}</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Cancel Form */}
-                    {showCancelForm && (
-                        <div className="border-t border-border pt-4">
-                            <Label className="mb-2">Cancellation Reason (optional)</Label>
-                            <Textarea
-                                value={cancelReason}
-                                onChange={(e) => setCancelReason(e.target.value)}
-                                placeholder="Enter reason for cancellation…"
-                                rows={3}
-                            />
-                        </div>
-                    )}
-                    {showRescheduleForm && (
-                        <div className="border-t border-border pt-4 space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="reschedule-date">New Date</Label>
-                                <Input
-                                    id="reschedule-date"
-                                    type="date"
-                                    value={rescheduleDate}
-                                    onChange={(e) => {
-                                        setRescheduleDate(e.target.value)
-                                        setSelectedSlotStart(null)
-                                        if (rescheduleError) setRescheduleError(null)
-                                    }}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Available Times</Label>
-                                {slotsQuery.isLoading ? (
-                                    <div className="py-2 flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Loader2Icon className="size-4 animate-spin" />
-                                        Loading available slots…
-                                    </div>
-                                ) : slotsQuery.data?.slots?.length ? (
-                                    <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">
-                                        {slotsQuery.data.slots.map((slot) => {
-                                            const selected = selectedSlotStart === slot.start
-                                            return (
-                                                <Button
-                                                    key={slot.start}
-                                                    variant={selected ? "default" : "outline"}
-                                                    size="sm"
-                                                    aria-label={`Reschedule slot ${slot.start}`}
-                                                    onClick={() => {
-                                                        setSelectedSlotStart(slot.start)
-                                                        if (rescheduleError) setRescheduleError(null)
-                                                    }}
-                                                    className="h-auto py-2"
-                                                >
-                                                    {format(parseISO(slot.start), "h:mm a")}
-                                                </Button>
-                                            )
-                                        })}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                        No available times for this date.
-                                    </p>
-                                )}
-                            </div>
-
-                            <p className="text-xs text-muted-foreground">
-                                Times shown in your local timezone.
-                            </p>
-                            {slotsQuery.isError && (
-                                <p className="text-sm text-destructive">
-                                    Failed to load availability. Try a different date.
-                                </p>
-                            )}
-                            {rescheduleError && (
-                                <p role="alert" className="text-sm text-destructive">
-                                    {rescheduleError}
-                                </p>
-                            )}
-                        </div>
+                    {dialogState.showRescheduleForm && (
+                        <AppointmentRescheduleForm
+                            rescheduleDate={dialogState.rescheduleDate}
+                            selectedSlotStart={dialogState.selectedSlotStart}
+                            rescheduleError={dialogState.rescheduleError}
+                            slots={slotsQuery.data?.slots}
+                            slotsLoading={slotsQuery.isLoading}
+                            slotsError={slotsQuery.isError}
+                            onRescheduleDateChange={(value) =>
+                                dispatchDialogState({ type: "set-reschedule-date", value })
+                            }
+                            onSlotSelect={(value) =>
+                                dispatchDialogState({ type: "select-reschedule-slot", value })
+                            }
+                        />
                     )}
                 </div>
 
-                {/* Actions */}
-                {(appointment.status === "pending" || appointment.status === "confirmed") && (
-                    <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-border">
-                        {showRescheduleForm ? (
-                            <>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        setShowRescheduleForm(false)
-                                        setRescheduleError(null)
-                                    }}
-                                    disabled={rescheduleMutation.isPending}
-                                >
-                                    Back
-                                </Button>
-                                <Button
-                                    onClick={handleReschedule}
-                                    disabled={rescheduleMutation.isPending || !selectedSlotStart}
-                                >
-                                    {rescheduleMutation.isPending && (
-                                        <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                    )}
-                                    Confirm Reschedule
-                                </Button>
-                            </>
-                        ) : showCancelForm ? (
-                            <>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setShowCancelForm(false)}
-                                    disabled={cancelMutation.isPending}
-                                >
-                                    Back
-                                </Button>
-                                <Button
-                                    variant="destructive"
-                                    onClick={handleCancel}
-                                    disabled={cancelMutation.isPending}
-                                >
-                                    {cancelMutation.isPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
-                                    Confirm Cancel
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                {isReschedulable && (
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => {
-                                            setShowCancelForm(false)
-                                            setRescheduleError(null)
-                                            setRescheduleDate(
-                                                format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"),
-                                            )
-                                            setSelectedSlotStart(null)
-                                            setShowRescheduleForm(true)
-                                        }}
-                                    >
-                                        Reschedule Appointment
-                                    </Button>
-                                )}
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        setShowRescheduleForm(false)
-                                        setShowCancelForm(true)
-                                    }}
-                                    className="text-destructive"
-                                >
-                                    {appointment.status === "pending" ? "Decline" : "Cancel Appointment"}
-                                </Button>
-                                {appointment.status === "pending" && (
-                                    <Button
-                                        onClick={handleApprove}
-                                        disabled={approveMutation.isPending}
-                                        className="bg-green-600 hover:bg-green-700"
-                                    >
-                                        {approveMutation.isPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
-                                        Approve
-                                    </Button>
-                                )}
-                            </>
-                        )}
-                    </div>
-                )}
+                <AppointmentDetailActions
+                    appointment={appointment}
+                    isReschedulable={isReschedulable}
+                    showCancelForm={dialogState.showCancelForm}
+                    showRescheduleForm={dialogState.showRescheduleForm}
+                    selectedSlotStart={dialogState.selectedSlotStart}
+                    approvePending={approveMutation.isPending}
+                    cancelPending={cancelMutation.isPending}
+                    reschedulePending={rescheduleMutation.isPending}
+                    onApprove={handleApprove}
+                    onCancel={handleCancel}
+                    onReschedule={handleReschedule}
+                    onCloseCancel={() => dispatchDialogState({ type: "close-cancel-form" })}
+                    onCloseReschedule={() => dispatchDialogState({ type: "close-reschedule-form" })}
+                    onOpenCancel={() => dispatchDialogState({ type: "open-cancel-form" })}
+                    onOpenReschedule={() =>
+                        dispatchDialogState({
+                            type: "open-reschedule-form",
+                            rescheduleDate: format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"),
+                        })
+                    }
+                />
             </DialogContent>
         </Dialog>
+    )
+}
+
+function AppointmentStatusSummary({ appointment }: { appointment: Appointment }) {
+    return (
+        <div className="flex items-center gap-2">
+            <Badge className={`${STATUS_STYLES[appointment.status]} text-sm px-3 py-1`}>
+                {appointment.status.replace("_", " ").toUpperCase()}
+            </Badge>
+            {appointment.status === "pending" && appointment.pending_expires_at && (
+                <span className="text-sm text-muted-foreground">
+                    Expires {format(parseISO(appointment.pending_expires_at), "h:mm a")}
+                </span>
+            )}
+        </div>
+    )
+}
+
+function AppointmentTimeSummary({ appointment }: { appointment: Appointment }) {
+    return (
+        <div className="flex items-start gap-3">
+            <CalendarIcon className="size-5 text-muted-foreground mt-0.5" />
+            <div>
+                <p className="font-medium">
+                    {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                    {format(parseISO(appointment.scheduled_start), "h:mm a")} –{" "}
+                    {format(parseISO(appointment.scheduled_end), "h:mm a")}
+                    <span className="ml-2">({appointment.duration_minutes} min)</span>
+                </p>
+            </div>
+        </div>
+    )
+}
+
+function AppointmentFormatSummary({ appointment }: { appointment: Appointment }) {
+    const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
+
+    return (
+        <>
+            <div className="flex items-center gap-3">
+                <ModeIcon className="size-5 text-muted-foreground" />
+                <p className="font-medium capitalize">{appointment.meeting_mode.replace("_", " ")}</p>
+                {appointment.zoom_join_url && (
+                    <a
+                        href={appointment.zoom_join_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline text-sm"
+                    >
+                        Join Zoom
+                    </a>
+                )}
+                {appointment.google_meet_url && (
+                    <a
+                        href={appointment.google_meet_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline text-sm"
+                    >
+                        Join Google Meet
+                    </a>
+                )}
+            </div>
+            {appointment.meeting_location && (
+                <div className="flex items-center gap-3">
+                    <MapPinIcon className="size-5 text-muted-foreground" />
+                    <p className="font-medium">{appointment.meeting_location}</p>
+                </div>
+            )}
+            {appointment.dial_in_number && (
+                <div className="flex items-center gap-3">
+                    <PhoneIcon className="size-5 text-muted-foreground" />
+                    <p className="font-medium">{appointment.dial_in_number}</p>
+                </div>
+            )}
+        </>
+    )
+}
+
+function AppointmentClientInfo({ appointment }: { appointment: Appointment }) {
+    return (
+        <div className="border-t border-border pt-4">
+            <h4 className="text-sm font-medium text-muted-foreground mb-3">Client Information</h4>
+            <div className="space-y-2">
+                <p className="font-medium">{appointment.client_name}</p>
+                <p className="text-sm flex items-center gap-2">
+                    <MailIcon className="size-4 text-muted-foreground" />
+                    <a href={`mailto:${appointment.client_email}`} className="text-primary hover:underline">
+                        {appointment.client_email}
+                    </a>
+                </p>
+                <p className="text-sm flex items-center gap-2">
+                    <PhoneIcon className="size-4 text-muted-foreground" />
+                    <a href={`tel:${appointment.client_phone}`} className="text-primary hover:underline">
+                        {appointment.client_phone}
+                    </a>
+                </p>
+                {appointment.client_notes && (
+                    <div className="mt-3 p-3 rounded-lg bg-muted">
+                        <p className="text-sm text-muted-foreground font-medium mb-1">Notes</p>
+                        <p className="text-sm">{appointment.client_notes}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function AppointmentCancelForm({
+    cancelReason,
+    onCancelReasonChange,
+}: {
+    cancelReason: string
+    onCancelReasonChange: (value: string) => void
+}) {
+    return (
+        <div className="border-t border-border pt-4">
+            <Label className="mb-2">Cancellation Reason (optional)</Label>
+            <Textarea
+                value={cancelReason}
+                onChange={(event) => onCancelReasonChange(event.target.value)}
+                placeholder="Enter reason for cancellation…"
+                rows={3}
+            />
+        </div>
+    )
+}
+
+function AppointmentRescheduleForm({
+    rescheduleDate,
+    selectedSlotStart,
+    rescheduleError,
+    slots,
+    slotsLoading,
+    slotsError,
+    onRescheduleDateChange,
+    onSlotSelect,
+}: {
+    rescheduleDate: string
+    selectedSlotStart: string | null
+    rescheduleError: string | null
+    slots: TimeSlot[] | undefined
+    slotsLoading: boolean
+    slotsError: boolean
+    onRescheduleDateChange: (value: string) => void
+    onSlotSelect: (value: string) => void
+}) {
+    return (
+        <div className="border-t border-border pt-4 space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="reschedule-date">New Date</Label>
+                <Input
+                    id="reschedule-date"
+                    type="date"
+                    value={rescheduleDate}
+                    onChange={(event) => onRescheduleDateChange(event.target.value)}
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Label>Available Times</Label>
+                {slotsLoading ? (
+                    <div className="py-2 flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2Icon className="size-4 animate-spin" />
+                        Loading available slots…
+                    </div>
+                ) : slots?.length ? (
+                    <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">
+                        {slots.map((slot) => {
+                            const selected = selectedSlotStart === slot.start
+                            return (
+                                <Button
+                                    key={slot.start}
+                                    variant={selected ? "default" : "outline"}
+                                    size="sm"
+                                    aria-label={`Reschedule slot ${slot.start}`}
+                                    onClick={() => onSlotSelect(slot.start)}
+                                    className="h-auto py-2"
+                                >
+                                    {format(parseISO(slot.start), "h:mm a")}
+                                </Button>
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        No available times for this date.
+                    </p>
+                )}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+                Times shown in your local timezone.
+            </p>
+            {slotsError && (
+                <p className="text-sm text-destructive">
+                    Failed to load availability. Try a different date.
+                </p>
+            )}
+            {rescheduleError && (
+                <p role="alert" className="text-sm text-destructive">
+                    {rescheduleError}
+                </p>
+            )}
+        </div>
+    )
+}
+
+function AppointmentDetailActions({
+    appointment,
+    isReschedulable,
+    showCancelForm,
+    showRescheduleForm,
+    selectedSlotStart,
+    approvePending,
+    cancelPending,
+    reschedulePending,
+    onApprove,
+    onCancel,
+    onReschedule,
+    onCloseCancel,
+    onCloseReschedule,
+    onOpenCancel,
+    onOpenReschedule,
+}: {
+    appointment: Appointment
+    isReschedulable: boolean
+    showCancelForm: boolean
+    showRescheduleForm: boolean
+    selectedSlotStart: string | null
+    approvePending: boolean
+    cancelPending: boolean
+    reschedulePending: boolean
+    onApprove: () => void
+    onCancel: () => void
+    onReschedule: () => void
+    onCloseCancel: () => void
+    onCloseReschedule: () => void
+    onOpenCancel: () => void
+    onOpenReschedule: () => void
+}) {
+    if (appointment.status !== "pending" && appointment.status !== "confirmed") {
+        return null
+    }
+
+    return (
+        <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-border">
+            {showRescheduleForm ? (
+                <>
+                    <Button
+                        variant="outline"
+                        onClick={onCloseReschedule}
+                        disabled={reschedulePending}
+                    >
+                        Back
+                    </Button>
+                    <Button
+                        onClick={onReschedule}
+                        disabled={reschedulePending || !selectedSlotStart}
+                    >
+                        {reschedulePending && (
+                            <Loader2Icon className="size-4 mr-2 animate-spin" />
+                        )}
+                        Confirm Reschedule
+                    </Button>
+                </>
+            ) : showCancelForm ? (
+                <>
+                    <Button
+                        variant="outline"
+                        onClick={onCloseCancel}
+                        disabled={cancelPending}
+                    >
+                        Back
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={onCancel}
+                        disabled={cancelPending}
+                    >
+                        {cancelPending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                        Confirm Cancel
+                    </Button>
+                </>
+            ) : (
+                <>
+                    {isReschedulable && (
+                        <Button
+                            variant="outline"
+                            onClick={onOpenReschedule}
+                        >
+                            Reschedule Appointment
+                        </Button>
+                    )}
+                    <Button
+                        variant="outline"
+                        onClick={onOpenCancel}
+                        className="text-destructive"
+                    >
+                        {appointment.status === "pending" ? "Decline" : "Cancel Appointment"}
+                    </Button>
+                    {appointment.status === "pending" && (
+                        <Button
+                            onClick={onApprove}
+                            disabled={approvePending}
+                            className="bg-green-600 hover:bg-green-700"
+                        >
+                            {approvePending && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                            Approve
+                        </Button>
+                    )}
+                </>
+            )}
+        </div>
     )
 }
 
