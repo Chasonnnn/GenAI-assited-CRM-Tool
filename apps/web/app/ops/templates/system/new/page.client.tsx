@@ -26,6 +26,8 @@ import {
 type EditorMode = "visual" | "html"
 
 type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+type TextSelectionRef = MutableRefObject<{ start: number; end: number } | null>
+type TemplateVariable = NonNullable<ReturnType<typeof usePlatformSystemEmailTemplateVariables>["data"]>[number]
 
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
@@ -235,8 +237,9 @@ export default function PlatformSystemEmailTemplateNewPage() {
     const unknownVariables = canValidateVariables
         ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
         : []
+    const usedVariableNamesSet = new Set(usedVariableNames)
     const missingRequiredVariables = canValidateVariables
-        ? requiredVariableNames.filter((variable) => !usedVariableNames.includes(variable))
+        ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
     const previewHtml = buildPreviewHtml(body)
 
@@ -309,251 +312,432 @@ export default function PlatformSystemEmailTemplateNewPage() {
 
     return (
         <div className="p-6 space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <Button variant="ghost" onClick={() => push("/ops/templates?tab=system")}>
-                        <ArrowLeftIcon className="mr-2 size-4" />
-                        Back to templates
-                    </Button>
-                    <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-                        New System Email
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Create a new platform system email template. Use a stable system key for future sends.
-                    </p>
-                </div>
-                <Button onClick={handleCreate} disabled={!canSubmit}>
-                    {saving ? (
-                        <Loader2Icon className="mr-2 size-4 animate-spin" />
-                    ) : (
-                        <PlusIcon className="mr-2 size-4" />
-                    )}
-                    Create
-                </Button>
-            </div>
+            <TemplateCreateHeader
+                saving={saving}
+                canSubmit={canSubmit}
+                onBack={() => push("/ops/templates?tab=system")}
+                onCreate={handleCreate}
+            />
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Template settings</CardTitle>
-                            <CardDescription>
-                                System keys must be unique and cannot be changed later.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="system-key">System key</Label>
-                                <Input
-                                    id="system-key"
-                                    value={systemKey}
-                                    onChange={(event) => {
-                                        setManualSystemKey(event.target.value)
-                                    }}
-                                    placeholder="e.g. password_reset"
-                                    className={systemKeyError ? "border-red-500" : ""}
-                                />
-                                {systemKeyError ? (
-                                    <p className="text-xs text-red-600">{systemKeyError}</p>
-                                ) : (
-                                    <p className="text-xs text-muted-foreground">
-                                        Lowercase letters, numbers, and underscores only.
-                                    </p>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Name</Label>
-                                <Input
-                                    id="name"
-                                    value={name}
-                                    onChange={(event) => setName(event.target.value)}
-                                    placeholder="Human-friendly label"
-                                    className={nameError ? "border-red-500" : ""}
-                                />
-                                {nameError && <p className="text-xs text-red-600">{nameError}</p>}
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                                <Label htmlFor="subject">Subject</Label>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Input
-                                        ref={subjectRef}
-                                        id="subject"
-                                        value={subject}
-                                        onChange={(event) => setSubject(event.target.value)}
-                                        onFocus={() => setActiveInsertionTarget("subject")}
-                                        onKeyUp={(event) =>
-                                            recordSelection(event.currentTarget, subjectSelectionRef)
-                                        }
-                                        onMouseUp={(event) =>
-                                            recordSelection(event.currentTarget, subjectSelectionRef)
-                                        }
-                                        onSelect={(event) =>
-                                            recordSelection(event.currentTarget, subjectSelectionRef)
-                                        }
-                                        placeholder="Email subject..."
-                                        className={subjectError ? "border-red-500" : ""}
-                                    />
-                                    <TemplateVariablePicker
-                                        variables={templateVariables}
-                                        disabled={variablesLoading || templateVariables.length === 0}
-                                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
-                                    />
-                                </div>
-                                {subjectError && <p className="text-xs text-red-600">{subjectError}</p>}
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                                <Label htmlFor="from-email">From email (optional)</Label>
-                                <Input
-                                    id="from-email"
-                                    value={fromEmail}
-                                    onChange={(event) => setFromEmail(event.target.value)}
-                                    placeholder="e.g. Surrogacy Force <no-reply@surrogacyforce.com>"
-                                    className={fromEmailError ? "border-red-500" : ""}
-                                />
-                                {fromEmailError && <p className="text-xs text-red-600">{fromEmailError}</p>}
-                            </div>
-                            <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
-                                <div>
-                                    <p className="text-sm font-medium">Active</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Inactive templates cannot be used for campaigns or transactional sends.
-                                    </p>
-                                </div>
-                                <Switch checked={isActive} onCheckedChange={setIsActive} />
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <TemplateSettingsCard
+                        systemKey={systemKey}
+                        systemKeyError={systemKeyError}
+                        name={name}
+                        nameError={nameError}
+                        subject={subject}
+                        subjectError={subjectError}
+                        fromEmail={fromEmail}
+                        fromEmailError={fromEmailError}
+                        isActive={isActive}
+                        templateVariables={templateVariables}
+                        variablesLoading={variablesLoading}
+                        subjectRef={subjectRef}
+                        subjectSelectionRef={subjectSelectionRef}
+                        onSystemKeyChange={setManualSystemKey}
+                        onNameChange={setName}
+                        onSubjectChange={setSubject}
+                        onFromEmailChange={setFromEmail}
+                        onActiveChange={setIsActive}
+                        onInsertToken={insertToken}
+                        onActiveInsertionTargetChange={setActiveInsertionTarget}
+                    />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Template content</CardTitle>
-                            <CardDescription>
-                                Write the HTML body for this system email. Variables render at send time.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <ToggleGroup
-                                    multiple={false}
-                                    value={effectiveEditorMode ? [effectiveEditorMode] : []}
-                                    onValueChange={(value) => {
-                                        const next = value[0] as EditorMode | undefined
-                                        if (!next) return
-                                        setEditorMode(next)
-                                        setEditorModeTouched(true)
-                                        const currentTarget = activeInsertionTargetRef.current
-                                        setActiveInsertionTarget(
-                                            currentTarget === "subject"
-                                                ? currentTarget
-                                                : next === "html"
-                                                  ? "body_html"
-                                                  : "body_visual"
-                                        )
-                                    }}
-                                >
-                                    <ToggleGroupItem value="visual" className="h-8">
-                                        Visual
-                                    </ToggleGroupItem>
-                                    <ToggleGroupItem value="html" className="h-8">
-                                        HTML
-                                    </ToggleGroupItem>
-                                </ToggleGroup>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <TemplateVariablePicker
-                                        variables={templateVariables}
-                                        disabled={variablesLoading || templateVariables.length === 0}
-                                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
-                                    />
-                                    <Button type="button" variant="ghost" size="sm" onClick={insertPlatformLogo}>
-                                        Insert Logo
-                                    </Button>
-                                </div>
-                                {bodyError && <p className="text-xs text-red-600">{bodyError}</p>}
-                            </div>
-
-                            {effectiveEditorMode === "visual" ? (
-                                <RichTextEditor
-                                    ref={visualBodyRef}
-                                    content={body}
-                                    onChange={(html) => setBody(html)}
-                                    onFocus={() => setActiveInsertionTarget("body_visual")}
-                                    placeholder="Write your system email content here..."
-                                    minHeight="240px"
-                                    maxHeight="480px"
-                                    enableImages
-                                    enableEmojiPicker
-                                />
-                            ) : (
-                                <Textarea
-                                    ref={htmlBodyRef}
-                                    value={body}
-                                    onChange={(event) => setBody(event.target.value)}
-                                    onFocus={(event) => {
-                                        setActiveInsertionTarget("body_html")
-                                        recordSelection(event.currentTarget, htmlBodySelectionRef)
-                                    }}
-                                    onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    placeholder="Paste or edit the HTML for this template..."
-                                    className="min-h-[280px] font-mono text-xs leading-relaxed"
-                                />
-                            )}
-
-                            {effectiveEditorMode === "visual" && hasComplexHtml && (
-                                <p className="text-xs text-amber-600">
-                                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
-                                </p>
-                            )}
-
-                            {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
-                                (subject.trim() || body.trim()) && (
-                                    <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
-                                        <AlertTitle>Template variables</AlertTitle>
-                                        <AlertDescription className="text-amber-800 dark:text-amber-100">
-                                            {unknownVariables.length > 0 && (
-                                                <p>
-                                                    Unknown:{" "}
-                                                    <span className="font-mono">
-                                                        {unknownVariables.map((v) => `{{${v}}}`).join(", ")}
-                                                    </span>
-                                                </p>
-                                            )}
-                                            {missingRequiredVariables.length > 0 && (
-                                                <p>
-                                                    Missing required:{" "}
-                                                    <span className="font-mono">
-                                                        {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
-                                                    </span>
-                                                </p>
-                                            )}
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-                        </CardContent>
-                    </Card>
+                    <TemplateContentCard
+                        effectiveEditorMode={effectiveEditorMode}
+                        hasComplexHtml={hasComplexHtml}
+                        body={body}
+                        bodyError={bodyError}
+                        templateVariables={templateVariables}
+                        variablesLoading={variablesLoading}
+                        visualBodyRef={visualBodyRef}
+                        htmlBodyRef={htmlBodyRef}
+                        htmlBodySelectionRef={htmlBodySelectionRef}
+                        activeInsertionTargetRef={activeInsertionTargetRef}
+                        unknownVariables={unknownVariables}
+                        missingRequiredVariables={missingRequiredVariables}
+                        showVariableWarnings={Boolean(subject.trim() || body.trim())}
+                        onBodyChange={setBody}
+                        onEditorModeChange={setEditorMode}
+                        onEditorModeTouchedChange={setEditorModeTouched}
+                        onInsertToken={insertToken}
+                        onInsertPlatformLogo={insertPlatformLogo}
+                        onActiveInsertionTargetChange={setActiveInsertionTarget}
+                    />
                 </div>
 
-                <Card className="h-fit">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <EyeIcon className="size-4" />
-                            Preview
-                        </CardTitle>
-                        <CardDescription>Rendered using sample values.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="rounded-md border border-stone-200 bg-white shadow-sm">
-                            <TrustedSanitizedHtmlContent
-                                html={previewHtml}
-                                className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
+                <TemplatePreviewCard previewHtml={previewHtml} />
             </div>
         </div>
+    )
+}
+
+function TemplateCreateHeader({
+    saving,
+    canSubmit,
+    onBack,
+    onCreate,
+}: {
+    saving: boolean
+    canSubmit: boolean
+    onBack: () => void
+    onCreate: () => void
+}) {
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <Button variant="ghost" onClick={onBack}>
+                    <ArrowLeftIcon className="mr-2 size-4" />
+                    Back to templates
+                </Button>
+                <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+                    New System Email
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                    Create a new platform system email template. Use a stable system key for future sends.
+                </p>
+            </div>
+            <Button onClick={onCreate} disabled={!canSubmit}>
+                {saving ? (
+                    <Loader2Icon className="mr-2 size-4 animate-spin" />
+                ) : (
+                    <PlusIcon className="mr-2 size-4" />
+                )}
+                Create
+            </Button>
+        </div>
+    )
+}
+
+function TemplateSettingsCard({
+    systemKey,
+    systemKeyError,
+    name,
+    nameError,
+    subject,
+    subjectError,
+    fromEmail,
+    fromEmailError,
+    isActive,
+    templateVariables,
+    variablesLoading,
+    subjectRef,
+    subjectSelectionRef,
+    onSystemKeyChange,
+    onNameChange,
+    onSubjectChange,
+    onFromEmailChange,
+    onActiveChange,
+    onInsertToken,
+    onActiveInsertionTargetChange,
+}: {
+    systemKey: string
+    systemKeyError: string | null
+    name: string
+    nameError: string | null
+    subject: string
+    subjectError: string | null
+    fromEmail: string
+    fromEmailError: string | null
+    isActive: boolean
+    templateVariables: TemplateVariable[]
+    variablesLoading: boolean
+    subjectRef: MutableRefObject<HTMLInputElement | null>
+    subjectSelectionRef: TextSelectionRef
+    onSystemKeyChange: Dispatch<SetStateAction<string | null>>
+    onNameChange: Dispatch<SetStateAction<string>>
+    onSubjectChange: Dispatch<SetStateAction<string>>
+    onFromEmailChange: Dispatch<SetStateAction<string>>
+    onActiveChange: Dispatch<SetStateAction<boolean>>
+    onInsertToken: (token: string) => void
+    onActiveInsertionTargetChange: (target: ActiveInsertionTarget) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Template settings</CardTitle>
+                <CardDescription>
+                    System keys must be unique and cannot be changed later.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                    <Label htmlFor="system-key">System key</Label>
+                    <Input
+                        id="system-key"
+                        value={systemKey}
+                        onChange={(event) => {
+                            onSystemKeyChange(event.target.value)
+                        }}
+                        placeholder="e.g. password_reset"
+                        className={systemKeyError ? "border-red-500" : ""}
+                    />
+                    {systemKeyError ? (
+                        <p className="text-xs text-red-600">{systemKeyError}</p>
+                    ) : (
+                        <p className="text-xs text-muted-foreground">
+                            Lowercase letters, numbers, and underscores only.
+                        </p>
+                    )}
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                        id="name"
+                        value={name}
+                        onChange={(event) => onNameChange(event.target.value)}
+                        placeholder="Human-friendly label"
+                        className={nameError ? "border-red-500" : ""}
+                    />
+                    {nameError && <p className="text-xs text-red-600">{nameError}</p>}
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="subject">Subject</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                            ref={subjectRef}
+                            id="subject"
+                            value={subject}
+                            onChange={(event) => onSubjectChange(event.target.value)}
+                            onFocus={() => onActiveInsertionTargetChange("subject")}
+                            onKeyUp={(event) =>
+                                recordSelection(event.currentTarget, subjectSelectionRef)
+                            }
+                            onMouseUp={(event) =>
+                                recordSelection(event.currentTarget, subjectSelectionRef)
+                            }
+                            onSelect={(event) =>
+                                recordSelection(event.currentTarget, subjectSelectionRef)
+                            }
+                            placeholder="Email subject..."
+                            className={subjectError ? "border-red-500" : ""}
+                        />
+                        <TemplateVariablePicker
+                            variables={templateVariables}
+                            disabled={variablesLoading || templateVariables.length === 0}
+                            triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
+                            onSelect={(variable) => onInsertToken(`{{${variable.name}}}`)}
+                        />
+                    </div>
+                    {subjectError && <p className="text-xs text-red-600">{subjectError}</p>}
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="from-email">From email (optional)</Label>
+                    <Input
+                        id="from-email"
+                        value={fromEmail}
+                        onChange={(event) => onFromEmailChange(event.target.value)}
+                        placeholder="e.g. Surrogacy Force <no-reply@surrogacyforce.com>"
+                        className={fromEmailError ? "border-red-500" : ""}
+                    />
+                    {fromEmailError && <p className="text-xs text-red-600">{fromEmailError}</p>}
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
+                    <div>
+                        <p className="text-sm font-medium">Active</p>
+                        <p className="text-xs text-muted-foreground">
+                            Inactive templates cannot be used for campaigns or transactional sends.
+                        </p>
+                    </div>
+                    <Switch checked={isActive} onCheckedChange={onActiveChange} />
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function TemplateContentCard({
+    effectiveEditorMode,
+    hasComplexHtml,
+    body,
+    bodyError,
+    templateVariables,
+    variablesLoading,
+    visualBodyRef,
+    htmlBodyRef,
+    htmlBodySelectionRef,
+    activeInsertionTargetRef,
+    unknownVariables,
+    missingRequiredVariables,
+    showVariableWarnings,
+    onBodyChange,
+    onEditorModeChange,
+    onEditorModeTouchedChange,
+    onInsertToken,
+    onInsertPlatformLogo,
+    onActiveInsertionTargetChange,
+}: {
+    effectiveEditorMode: EditorMode
+    hasComplexHtml: boolean
+    body: string
+    bodyError: string | null
+    templateVariables: TemplateVariable[]
+    variablesLoading: boolean
+    visualBodyRef: MutableRefObject<RichTextEditorHandle | null>
+    htmlBodyRef: MutableRefObject<HTMLTextAreaElement | null>
+    htmlBodySelectionRef: TextSelectionRef
+    activeInsertionTargetRef: MutableRefObject<ActiveInsertionTarget>
+    unknownVariables: string[]
+    missingRequiredVariables: string[]
+    showVariableWarnings: boolean
+    onBodyChange: Dispatch<SetStateAction<string>>
+    onEditorModeChange: Dispatch<SetStateAction<EditorMode>>
+    onEditorModeTouchedChange: Dispatch<SetStateAction<boolean>>
+    onInsertToken: (token: string) => void
+    onInsertPlatformLogo: () => void
+    onActiveInsertionTargetChange: (target: ActiveInsertionTarget) => void
+}) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Template content</CardTitle>
+                <CardDescription>
+                    Write the HTML body for this system email. Variables render at send time.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <ToggleGroup
+                        multiple={false}
+                        value={effectiveEditorMode ? [effectiveEditorMode] : []}
+                        onValueChange={(value) => {
+                            const next = value[0] as EditorMode | undefined
+                            if (!next) return
+                            onEditorModeChange(next)
+                            onEditorModeTouchedChange(true)
+                            const currentTarget = activeInsertionTargetRef.current
+                            onActiveInsertionTargetChange(
+                                currentTarget === "subject"
+                                    ? currentTarget
+                                    : next === "html"
+                                      ? "body_html"
+                                      : "body_visual"
+                            )
+                        }}
+                    >
+                        <ToggleGroupItem value="visual" className="h-8">
+                            Visual
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="html" className="h-8">
+                            HTML
+                        </ToggleGroupItem>
+                    </ToggleGroup>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <TemplateVariablePicker
+                            variables={templateVariables}
+                            disabled={variablesLoading || templateVariables.length === 0}
+                            triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
+                            onSelect={(variable) => onInsertToken(`{{${variable.name}}}`)}
+                        />
+                        <Button type="button" variant="ghost" size="sm" onClick={onInsertPlatformLogo}>
+                            Insert Logo
+                        </Button>
+                    </div>
+                    {bodyError && <p className="text-xs text-red-600">{bodyError}</p>}
+                </div>
+
+                {effectiveEditorMode === "visual" ? (
+                    <RichTextEditor
+                        ref={visualBodyRef}
+                        content={body}
+                        onChange={(html) => onBodyChange(html)}
+                        onFocus={() => onActiveInsertionTargetChange("body_visual")}
+                        placeholder="Write your system email content here..."
+                        minHeight="240px"
+                        maxHeight="480px"
+                        enableImages
+                        enableEmojiPicker
+                    />
+                ) : (
+                    <Textarea
+                        ref={htmlBodyRef}
+                        value={body}
+                        onChange={(event) => onBodyChange(event.target.value)}
+                        onFocus={(event) => {
+                            onActiveInsertionTargetChange("body_html")
+                            recordSelection(event.currentTarget, htmlBodySelectionRef)
+                        }}
+                        onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                        onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                        onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                        placeholder="Paste or edit the HTML for this template..."
+                        className="min-h-[280px] font-mono text-xs leading-relaxed"
+                    />
+                )}
+
+                {effectiveEditorMode === "visual" && hasComplexHtml && (
+                    <p className="text-xs text-amber-600">
+                        This template contains advanced HTML. Switch to HTML mode to preserve layout.
+                    </p>
+                )}
+
+                <TemplateVariableWarnings
+                    unknownVariables={unknownVariables}
+                    missingRequiredVariables={missingRequiredVariables}
+                    show={showVariableWarnings}
+                />
+            </CardContent>
+        </Card>
+    )
+}
+
+function TemplateVariableWarnings({
+    unknownVariables,
+    missingRequiredVariables,
+    show,
+}: {
+    unknownVariables: string[]
+    missingRequiredVariables: string[]
+    show: boolean
+}) {
+    if (!show || (unknownVariables.length === 0 && missingRequiredVariables.length === 0)) {
+        return null
+    }
+
+    return (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
+            <AlertTitle>Template variables</AlertTitle>
+            <AlertDescription className="text-amber-800 dark:text-amber-100">
+                {unknownVariables.length > 0 && (
+                    <p>
+                        Unknown:{" "}
+                        <span className="font-mono">
+                            {unknownVariables.map((v) => `{{${v}}}`).join(", ")}
+                        </span>
+                    </p>
+                )}
+                {missingRequiredVariables.length > 0 && (
+                    <p>
+                        Missing required:{" "}
+                        <span className="font-mono">
+                            {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
+                        </span>
+                    </p>
+                )}
+            </AlertDescription>
+        </Alert>
+    )
+}
+
+function TemplatePreviewCard({ previewHtml }: { previewHtml: string }) {
+    return (
+        <Card className="h-fit">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <EyeIcon className="size-4" />
+                    Preview
+                </CardTitle>
+                <CardDescription>Rendered using sample values.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="rounded-md border border-stone-200 bg-white shadow-sm">
+                    <TrustedSanitizedHtmlContent
+                        html={previewHtml}
+                        className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                    />
+                </div>
+            </CardContent>
+        </Card>
     )
 }

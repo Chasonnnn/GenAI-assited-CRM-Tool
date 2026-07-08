@@ -2429,6 +2429,34 @@ describe("React regression guards (source)", () => {
         expect(metaMappingSource).not.toMatch(/new Set\(\s*mappings\s*\.filter\([\s\S]*?\)\s*\.map\(/)
     })
 
+    it("uses Sets for platform template variable validation membership checks", () => {
+        const systemTemplateNewSource = readSource("app/ops/templates/system/new/page.client.tsx")
+
+        expect(systemTemplateNewSource).toContain("const usedVariableNamesSet = new Set(usedVariableNames)")
+        expect(systemTemplateNewSource).not.toContain("usedVariableNames.includes(")
+    })
+
+    it("keeps platform system template creation rendering split into sections", () => {
+        const source = readSource("app/ops/templates/system/new/page.client.tsx")
+        const pageIndex = source.indexOf("export default function PlatformSystemEmailTemplateNewPage()")
+        const firstHelperIndex = source.indexOf("function TemplateCreateHeader")
+        const pageSource = source.slice(
+            pageIndex,
+            firstHelperIndex > pageIndex ? firstHelperIndex : undefined
+        )
+
+        expect(pageIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function TemplateCreateHeader")
+        expect(source).toContain("function TemplateSettingsCard")
+        expect(source).toContain("function TemplateContentCard")
+        expect(source).toContain("function TemplateVariableWarnings")
+        expect(source).toContain("function TemplatePreviewCard")
+        expect(pageSource).not.toContain("Template settings")
+        expect(pageSource).not.toContain("Template content")
+        expect(pageSource).not.toContain("Rendered using sample values")
+        expect(pageSource).not.toContain("Unknown:")
+    })
+
     it("keeps surrogate medical section visibility in render state", () => {
         const source = readSource("components/surrogates/CombinedMedicalInsuranceCard.tsx")
 
