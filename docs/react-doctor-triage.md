@@ -4281,3 +4281,25 @@ Full command after Batch 196: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 17 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
 - Removed globally since Batch 195: Tasks page focus-view state effect (`1` `no-event-handler` warning). Remaining `no-event-handler` diagnostics are now limited to intake draft loading.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e379beed-736e-4752-924a-c864a495bd61`
+
+## Batch 197
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler`, `react-doctor/prefer-useReducer` | `app/intake/[slug]/page.client.tsx:839`, `app/intake/[slug]/page.client.tsx:809` | Valid. Hosted intake bootstrap loaded the public schema, draft payload, loading/error state, restored answers, and draft-save metadata through several local setters from the mount effect. The draft session was also separate from the bootstrap transition, which made same-instance slug changes and stale saved draft IDs harder to handle consistently. | High | Moved form/draft bootstrap into `loadHostedIntakeBootstrap` plus `hostedIntakeReducer`, made the reducer own the active `DraftSessionState`, replaced stale saved draft IDs with a fresh draft session on 404, and changed autosave to skip only restored draft payloads rather than the first manual answer. Added shared-intake coverage for saved draft answer restore, stale saved-session replacement before autosave, and same-instance slug changes. No inline suppression is used. | GREEN: `pnpm test --run tests/forms-shared-intake.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports only the pre-existing giant-component finding in the touched file. |
+
+Changed-scope command after Batch 197: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` in `app/intake/[slug]/page.client.tsx:993`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-725d8d52-c150-4818-a895-7d6907d54520`
+
+Full command after Batch 197: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `88 / 100`
+- Total diagnostics: `51`
+- Summary: `Bugs 14 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
+- Removed globally since Batch 196: hosted-intake bootstrap state/effect findings (`2` `no-event-handler` warnings from the same line and `1` `prefer-useReducer` warning). No `no-event-handler` diagnostics remain in the current full scan.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-042bca3c-0d3d-4fa3-81fc-1f7f53f25403`

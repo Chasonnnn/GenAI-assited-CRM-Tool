@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import PublicIntakeFormClient from '../app/intake/[slug]/page.client'
+import { ApiError } from '../lib/api'
 
 const {
     getSharedPublicForm,
@@ -67,6 +68,10 @@ describe('Shared Intake Public Page', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         window.localStorage.clear()
+        Object.defineProperty(window, 'scrollTo', {
+            configurable: true,
+            value: vi.fn(),
+        })
         document.documentElement.classList.remove('dark')
         getSharedPublicForm.mockResolvedValue(baseForm)
         getSharedPublicFormDraft.mockResolvedValue({
@@ -112,11 +117,100 @@ describe('Shared Intake Public Page', () => {
 
     it('restores a saved draft when a draft session already exists', async () => {
         window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                        ],
+                    },
+                ],
+            },
+        })
+        getSharedPublicFormDraft.mockResolvedValue({
+            answers: { full_name: 'Saved Applicant' },
+            started_at: null,
+            updated_at: '2026-07-08T12:00:00.000Z',
+        })
 
         render(<PublicIntakeFormClient slug="event-abc" />)
 
         expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
-        expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', expect.any(String))
+        expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', 'saved-session-1')
+        expect(screen.getByLabelText(/full name/i)).toHaveValue('Saved Applicant')
+    })
+
+    it('replaces a stale saved draft session before autosaving new answers', async () => {
+        window.localStorage.setItem('intake-draft-session:event-abc', 'stale-session-1')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                        ],
+                    },
+                ],
+            },
+        })
+        getSharedPublicFormDraft.mockRejectedValue(new ApiError(404, 'Not Found', 'Draft missing'))
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
+        await waitFor(() =>
+            expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', 'stale-session-1'),
+        )
+        expect(window.localStorage.getItem('intake-draft-session:event-abc')).toBeNull()
+
+        fireEvent.change(screen.getByLabelText(/full name/i), {
+            target: { value: 'New Applicant' },
+        })
+
+        await waitFor(() => {
+            const autosaveCall = saveSharedPublicFormDraft.mock.calls.find(
+                ([slug, sessionId, answers]) =>
+                    slug === 'event-abc' &&
+                    sessionId !== 'stale-session-1' &&
+                    (answers as { full_name?: string }).full_name === 'New Applicant',
+            )
+            expect(autosaveCall).toBeTruthy()
+        }, { timeout: 2500 })
+        expect(saveSharedPublicFormDraft).not.toHaveBeenCalledWith(
+            'event-abc',
+            'stale-session-1',
+            expect.anything(),
+        )
+        expect(window.localStorage.getItem('intake-draft-session:event-abc')).not.toBe('stale-session-1')
+    })
+
+    it('loads the next shared intake schema when the slug changes in the same component instance', async () => {
+        getSharedPublicForm.mockImplementation(async (slug: string) => ({
+            ...baseForm,
+            form_id: slug === 'event-def' ? 'form-2' : 'form-1',
+            form_schema: {
+                ...baseForm.form_schema,
+                public_title: slug === 'event-def' ? 'Second Event Intake' : 'First Event Intake',
+            },
+        }))
+
+        const { rerender } = render(<PublicIntakeFormClient slug="event-abc" />)
+
+        expect(await screen.findByRole('heading', { name: 'First Event Intake' })).toBeInTheDocument()
+
+        rerender(<PublicIntakeFormClient slug="event-def" />)
+
+        expect(await screen.findByRole('heading', { name: 'Second Event Intake' })).toBeInTheDocument()
+        expect(screen.queryByRole('heading', { name: 'First Event Intake' })).not.toBeInTheDocument()
+        expect(getSharedPublicForm).toHaveBeenCalledWith('event-abc')
+        expect(getSharedPublicForm).toHaveBeenCalledWith('event-def')
     })
 
     it('renders a light-surface form shell in dark theme', async () => {

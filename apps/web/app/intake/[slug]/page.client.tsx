@@ -541,6 +541,11 @@ type DraftSessionState = {
     exists: boolean
 }
 type DraftSaveState = "idle" | "saving" | "saved" | "error"
+const draftSessionCache = new Map<string, DraftSessionState>()
+
+function createEmptyDraftSessionState(slug: string): DraftSessionState {
+    return { slug, id: null, exists: false }
+}
 
 type SharedResumePrompt = {
     sourceDraftId: string
@@ -567,9 +572,17 @@ function createDraftSessionState(slug: string): DraftSessionState {
     const storageKey = `intake-draft-session:${slug}`
     const existing = window.localStorage.getItem(storageKey)
     if (existing) {
-        return { slug, id: existing, exists: true }
+        const state = { slug, id: existing, exists: true }
+        draftSessionCache.set(slug, state)
+        return state
     }
-    return { slug, id: createDraftSessionId(), exists: false }
+    const cached = draftSessionCache.get(slug)
+    if (cached && !cached.exists) {
+        return cached
+    }
+    const state = { slug, id: createDraftSessionId(), exists: false }
+    draftSessionCache.set(slug, state)
+    return state
 }
 
 function isDraftValueEmpty(value: AnswerValue): boolean {
@@ -745,27 +758,25 @@ async function saveDraftSessionNow({
     token,
     draftSessionId,
     answers,
-    setDraftUpdatedAt,
-    setDraftSaveState,
+    dispatchIntakeState,
 }: {
     token: string
     draftSessionId: string
     answers: Answers
-    setDraftUpdatedAt: (value: string | null) => void
-    setDraftSaveState: (state: DraftSaveState) => void
+    dispatchIntakeState: React.Dispatch<HostedIntakeAction>
 }): Promise<void> {
-    setDraftSaveState("saving")
+    dispatchIntakeState({ type: "setDraftSaveState", value: "saving" })
     try {
         const res = await saveSharedPublicFormDraft(token, draftSessionId, answers)
         persistDraftSessionForToken(token, draftSessionId)
-        setDraftUpdatedAt(res.updated_at)
-        setDraftSaveState("saved")
+        dispatchIntakeState({ type: "setDraftUpdatedAt", value: res.updated_at })
+        dispatchIntakeState({ type: "setDraftSaveState", value: "saved" })
     } catch (error) {
         if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
-            setDraftSaveState("idle")
+            dispatchIntakeState({ type: "setDraftSaveState", value: "idle" })
             return
         }
-        setDraftSaveState("error")
+        dispatchIntakeState({ type: "setDraftSaveState", value: "error" })
     }
 }
 
@@ -805,89 +816,250 @@ function resolveResumeIdentity(schema: FormSchema, answers: Answers): ResumeIden
     }
 }
 
+const INVALID_FORM_LINK_MESSAGE = "This form link is invalid or has expired."
+
+type HostedIntakeBootstrapResult =
+    | { status: "invalid"; draftSession: DraftSessionState }
+    | {
+        status: "loaded"
+        draftSession: DraftSessionState
+        form: FormIntakePublicRead
+        answers: Answers
+        draftRestored: boolean
+        draftUpdatedAt: string | null
+        draftSaveState: DraftSaveState
+    }
+
+type HostedIntakeState = {
+    draftSession: DraftSessionState
+    formConfig: FormIntakePublicRead | null
+    answers: Answers
+    isLoading: boolean
+    formError: string | null
+    logoError: boolean
+    draftRestored: boolean
+    draftSaveState: DraftSaveState
+    draftUpdatedAt: string | null
+}
+
+type HostedIntakeAction =
+    | { type: "bootstrapStarted"; draftSession: DraftSessionState }
+    | { type: "bootstrapFinished"; result: HostedIntakeBootstrapResult }
+    | { type: "setAnswers"; next: React.SetStateAction<Answers> }
+    | { type: "setLogoError"; value: boolean }
+    | { type: "setDraftRestored"; value: boolean }
+    | { type: "setDraftUpdatedAt"; value: string | null }
+    | { type: "setDraftSaveState"; value: DraftSaveState }
+
+function createInitialHostedIntakeState(
+    draftSession: DraftSessionState = createEmptyDraftSessionState(""),
+): HostedIntakeState {
+    return {
+        draftSession,
+        formConfig: null,
+        answers: {},
+        isLoading: true,
+        formError: null,
+        logoError: false,
+        draftRestored: false,
+        draftSaveState: "idle",
+        draftUpdatedAt: null,
+    }
+}
+
+function hostedIntakeReducer(
+    state: HostedIntakeState,
+    action: HostedIntakeAction,
+): HostedIntakeState {
+    switch (action.type) {
+        case "bootstrapStarted":
+            return createInitialHostedIntakeState(action.draftSession)
+        case "bootstrapFinished":
+            if (action.result.status === "invalid") {
+                return {
+                    ...createInitialHostedIntakeState(action.result.draftSession),
+                    isLoading: false,
+                    formError: INVALID_FORM_LINK_MESSAGE,
+                }
+            }
+            return {
+                ...createInitialHostedIntakeState(action.result.draftSession),
+                formConfig: action.result.form,
+                answers: action.result.answers,
+                isLoading: false,
+                logoError: false,
+                draftRestored: action.result.draftRestored,
+                draftUpdatedAt: action.result.draftUpdatedAt,
+                draftSaveState: action.result.draftSaveState,
+            }
+        case "setAnswers": {
+            const nextAnswers =
+                typeof action.next === "function"
+                    ? action.next(state.answers)
+                    : action.next
+            return { ...state, answers: nextAnswers }
+        }
+        case "setLogoError":
+            return { ...state, logoError: action.value }
+        case "setDraftRestored":
+            return { ...state, draftRestored: action.value }
+        case "setDraftUpdatedAt":
+            return { ...state, draftUpdatedAt: action.value }
+        case "setDraftSaveState":
+            return { ...state, draftSaveState: action.value }
+        default:
+            return state
+    }
+}
+
+async function loadHostedIntakeBootstrap({
+    token,
+    draftSession,
+}: {
+    token: string
+    draftSession: DraftSessionState
+}): Promise<HostedIntakeBootstrapResult> {
+    const draftSessionId = draftSession.id
+    const draftSessionExists = draftSession.exists
+
+    if (!token || !draftSessionId) {
+        return { status: "invalid", draftSession }
+    }
+
+    try {
+        const form = await getSharedPublicForm(token)
+        if (!isIntakePublicRead(form)) {
+            return { status: "invalid", draftSession }
+        }
+
+        if (!draftSessionExists) {
+            return {
+                status: "loaded",
+                draftSession,
+                form,
+                answers: {},
+                draftRestored: false,
+                draftUpdatedAt: null,
+                draftSaveState: "idle",
+            }
+        }
+
+        try {
+            const draft = await getSharedPublicFormDraft(token, draftSessionId)
+            const restored = filterDraftAnswersForSchema(form.form_schema, draft?.answers)
+            const hasRestoredAnswers = Object.keys(restored).length > 0
+            return {
+                status: "loaded",
+                draftSession,
+                form,
+                answers: restored,
+                draftRestored: hasRestoredAnswers,
+                draftUpdatedAt: draft?.updated_at ?? null,
+                draftSaveState: draft?.updated_at ? "saved" : "idle",
+            }
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 404) {
+                if (typeof window !== "undefined") {
+                    window.localStorage.removeItem(`intake-draft-session:${token}`)
+                }
+                draftSessionCache.delete(token)
+                const nextDraftSession = createDraftSessionState(token)
+                return {
+                    status: "loaded",
+                    draftSession: nextDraftSession,
+                    form,
+                    answers: {},
+                    draftRestored: false,
+                    draftUpdatedAt: null,
+                    draftSaveState: "idle",
+                }
+            }
+            return {
+                status: "loaded",
+                draftSession,
+                form,
+                answers: {},
+                draftRestored: false,
+                draftUpdatedAt: null,
+                draftSaveState: "error",
+            }
+        }
+    } catch {
+        return { status: "invalid", draftSession }
+    }
+}
+
 // Main Form Component
 export default function PublicApplicationForm({ slug }: PublicApplicationFormProps) {
     const token = slug
     const isPreview = false
 
     const [currentStep, setCurrentStep] = React.useState(1)
-    const [formConfig, setFormConfig] = React.useState<FormIntakePublicRead | null>(null)
-    const [answers, setAnswers] = React.useState<Answers>({})
+    const [intakeState, dispatchIntakeState] = React.useReducer(hostedIntakeReducer, undefined, createInitialHostedIntakeState)
     const [fileUploads, setFileUploads] = React.useState<FileUploads>({})
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const [isSubmitted, setIsSubmitted] = React.useState(false)
     const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
-    const [isLoading, setIsLoading] = React.useState(true)
-    const [formError, setFormError] = React.useState<string | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     const [agreed, setAgreed] = React.useState(false)
-    const [logoError, setLogoError] = React.useState(false)
-    const [draftRestored, setDraftRestored] = React.useState(false)
-    const [draftSaveState, setDraftSaveState] = React.useState<DraftSaveState>("idle")
-    const [draftUpdatedAt, setDraftUpdatedAt] = React.useState<string | null>(null)
-    const [draftSession] = React.useState<DraftSessionState>(() => createDraftSessionState(slug))
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const autosaveTimerRef = React.useRef<number | null>(null)
     const resumeLookupTimerRef = React.useRef<number | null>(null)
-    const skipNextAutosaveRef = React.useRef(true)
+    const skipNextAutosaveRef = React.useRef(false)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
     const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
     const lookupSeqRef = React.useRef(0)
 
+    const {
+        answers,
+        draftSession,
+        draftRestored,
+        draftSaveState,
+        draftUpdatedAt,
+        formConfig,
+        formError,
+        isLoading,
+        logoError,
+    } = intakeState
     const draftSessionId = draftSession.slug === slug ? draftSession.id : null
-    const draftSessionExists = draftSession.slug === slug && draftSession.exists
+    const setAnswers: React.Dispatch<React.SetStateAction<Answers>> = (next) => {
+        dispatchIntakeState({ type: "setAnswers", next })
+    }
+    const setDraftRestored = (value: boolean) => {
+        dispatchIntakeState({ type: "setDraftRestored", value })
+    }
+    const setDraftSaveState = (value: DraftSaveState) => {
+        dispatchIntakeState({ type: "setDraftSaveState", value })
+    }
+    const setDraftUpdatedAt = (value: string | null) => {
+        dispatchIntakeState({ type: "setDraftUpdatedAt", value })
+    }
+    const setLogoError = (value: boolean) => {
+        dispatchIntakeState({ type: "setLogoError", value })
+    }
 
     // Validate shared link on mount
     React.useEffect(() => {
-        const loadForm = async () => {
-            if (!token) {
-                setFormError("This form link is invalid or has expired.")
-                setIsLoading(false)
-                return
-            }
-            if (!draftSessionId) {
-                return
-            }
+        let cancelled = false
+        const nextDraftSession = createDraftSessionState(token)
+        dispatchIntakeState({ type: "bootstrapStarted", draftSession: nextDraftSession })
 
-            try {
-                const form = await getSharedPublicForm(token)
-                if (!isIntakePublicRead(form)) {
-                    setFormError("This form link is invalid or has expired.")
-                    setIsLoading(false)
-                    return
-                }
-                setFormConfig(form)
-                setLogoError(false)
-                if (draftSessionExists) {
-                    try {
-                        const draft = await getSharedPublicFormDraft(token, draftSessionId)
-                        const restored = filterDraftAnswersForSchema(form.form_schema, draft?.answers)
-                        if (Object.keys(restored).length > 0) {
-                            skipNextAutosaveRef.current = true
-                            setAnswers(restored)
-                            setDraftRestored(true)
-                        }
-                        if (draft?.updated_at) {
-                            setDraftUpdatedAt(draft.updated_at)
-                            setDraftSaveState("saved")
-                        }
-                    } catch (error) {
-                        if (error instanceof ApiError && error.status === 404) {
-                            window.localStorage.removeItem(`intake-draft-session:${token}`)
-                        } else {
-                            setDraftSaveState("error")
-                        }
-                    }
-                }
-                setIsLoading(false)
-            } catch {
-                setFormError("This form link is invalid or has expired.")
-                setIsLoading(false)
-            }
+        void (async () => {
+            const result = await loadHostedIntakeBootstrap({
+                token,
+                draftSession: nextDraftSession,
+            })
+            if (cancelled) return
+            skipNextAutosaveRef.current =
+                result.status === "loaded" && Object.keys(result.answers).length > 0
+            dispatchIntakeState({ type: "bootstrapFinished", result })
+        })()
+
+        return () => {
+            cancelled = true
         }
-        void loadForm()
-    }, [draftSessionExists, draftSessionId, token, isPreview])
+    }, [token])
 
     const resumeIdentity = formConfig ? resolveResumeIdentity(formConfig.form_schema, answers) : null
     const activeResumePrompt =
@@ -1026,8 +1198,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                 token,
                 draftSessionId,
                 answers,
-                setDraftUpdatedAt,
-                setDraftSaveState,
+                dispatchIntakeState,
             })
         }, 1500)
 
@@ -1133,8 +1304,7 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
             token,
             draftSessionId,
             answers,
-            setDraftUpdatedAt,
-            setDraftSaveState,
+            dispatchIntakeState,
         })
     }
 
