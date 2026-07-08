@@ -3210,6 +3210,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const isRedactMode =")
     })
 
+    it("keeps audit settings page sections split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/audit/page.tsx")
+        const pageSource = readFunctionSource(source, "AuditLogPage")
+
+        expect(source).toContain("function AuditPageHeader")
+        expect(source).toContain("function AuditExportCard")
+        expect(source).toContain("function AuditActivityCard")
+        expect(source).toContain("function AuditLogEntriesList")
+        expect(source).toContain("function AuditPagination")
+        expect(pageSource).not.toContain("Export Audit Logs")
+        expect(pageSource).not.toContain("AI Activity")
+        expect(pageSource).not.toContain("No audit log entries found")
+    })
+
     it("keeps compliance settings page sections split into focused helpers", () => {
         const source = readSource("app/(app)/settings/compliance/page.tsx")
         const pageSource = readFunctionSource(source, "ComplianceSettingsPage")

@@ -4449,3 +4449,24 @@ Full command after Batch 204: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 30 warnings`
 - Removed globally since Batch 203: AI Studio page `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c5160557-f656-4de8-8b0e-8dedb839b3e7`
+
+## Batch 205
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/audit/page.tsx:77` | Valid. `AuditLogPage` owned the page header, export controls, export job list, AI activity summary, event filter, audit entries, and pagination in one component. | High | Extracted `AuditPageHeader`, `AuditExportCard`, `AuditActivityCard`, `AuditLogEntriesList`, and `AuditPagination` while keeping filters, query state, export mutation state, and polling in the page controller. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "audit settings page sections"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "audit settings page sections"`; `pnpm test --run tests/audit-log-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+| `react-doctor/rerender-state-only-in-handlers` | `components/intended-parents/IntendedParentClinicCard.tsx:278-279` | False positive. `manuallyAddedSections` and `optimisticallyHiddenSections` are read during render to derive `visibleKeys`, `hiddenKeys`, and `visibleSections`; that render-derived list controls which clinic/embryo sections are visible. | High | No code change. Switching these sets to refs would not preserve behavior because adding/removing a section must rerender the card. Existing focused coverage protects the add/remove flows. | READ-ONLY: subagent validation confirmed render-time reads and existing coverage in `tests/intended-parent-detail.test.tsx` plus `tests/react-regressions-source.test.ts`. |
+
+Changed-scope command after Batch 205: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 205: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `43`
+- Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 29 warnings`
+- Removed globally since Batch 204: audit settings page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-ebb9c679-f297-4c19-8db0-4b21ef7ebcd7`
