@@ -598,6 +598,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps workflow execution details split into focused helpers", () => {
+        const source = readSource("app/(app)/automation/executions/page.tsx")
+
+        expect(source).toContain("function ExecutionDetailsRow")
+        expect(source).toContain("function ExecutionActionsTimeline")
+        expect(source).toContain("function ExecutionErrorPanel")
+        expect(source).toContain("function ExecutionTriggerEventDetails")
+        expect(source).toContain("<ExecutionDetailsRow")
+    })
+
     it("builds journey timeline milestone metadata without mutating a global counter", () => {
         const source = readSource("components/surrogates/journey/JourneyTimeline.tsx")
 

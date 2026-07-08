@@ -4325,3 +4325,25 @@ Full command after Batch 198: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 13 warnings`, `Performance 2 warnings`, `Maintainability 35 warnings`
 - Removed globally since Batch 197: AI Studio settings dialog `prefer-useReducer` warning (`1` bug warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-9829acd9-d964-49d0-9b25-e1d003aca0e9`
+
+## Batch 199
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/jsx-max-depth` | `app/(app)/automation/executions/page.tsx:519` | Valid. The expanded workflow execution row rendered the action timeline, skip reason, error/retry panel, and trigger event map inline inside the table body, producing deeply nested JSX that was hard to scan and change. | High | Extracted focused helpers for `ExecutionDetailsRow`, `ExecutionActionsTimeline`, `ExecutionErrorPanel`, and `ExecutionTriggerEventDetails`, while preserving the existing retry callback and action detail rendering. Added a source guard requiring the split helpers. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "workflow execution details"` failed before the split. GREEN: `pnpm test --run tests/automation-executions-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts -t "workflow execution details"`; `pnpm tsc --noEmit`; changed-scope React Doctor reports only the pre-existing giant-component finding in the touched file. |
+
+Changed-scope command after Batch 199: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Remaining valid but separate in touched files: pre-existing `react-doctor/no-giant-component` in `app/(app)/automation/executions/page.tsx:327`.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6e1f2f1a-1def-4cb4-9fd1-b202dec65970`
+
+Full command after Batch 199: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `88 / 100`
+- Total diagnostics: `49`
+- Summary: `Bugs 13 warnings`, `Performance 2 warnings`, `Maintainability 34 warnings`
+- Removed globally since Batch 198: workflow execution details `jsx-max-depth` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-d46b05fe-a7d8-42eb-aab7-7f7e29a813a3`

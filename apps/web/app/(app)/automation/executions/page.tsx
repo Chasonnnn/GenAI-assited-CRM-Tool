@@ -180,6 +180,150 @@ function formatEntityLabel(execution: Execution): string {
     return `${execution.entity_type} #${execution.entity_id.slice(0, 8)}`
 }
 
+function getExecutionActionKey(executionId: string, action: ExecutionAction): string {
+    return `${executionId}-${action.action_type ?? "action"}-${action.description ?? ""}-${action.duration_ms ?? 0}-${action.error ?? ""}-${action.success ? "1" : "0"}`
+}
+
+function ExecutionActionsTimeline({ execution }: { execution: Execution }) {
+    if (execution.actions_executed.length === 0) return null
+
+    return (
+        <div>
+            <h4 className="mb-3 font-semibold">Actions Executed</h4>
+            <div className="space-y-3">
+                {execution.actions_executed.map((action) => {
+                    const status = action.success ? "success" : "failed"
+                    const name = action.description || action.action_type || "Action"
+                    const duration = action.duration_ms ? formatDuration(action.duration_ms) : "—"
+                    const actionKey = getExecutionActionKey(execution.id, action)
+
+                    return (
+                        <div key={actionKey} className="flex items-start gap-3">
+                            <div
+                                className={`mt-1 flex size-6 shrink-0 items-center justify-center rounded-full ${
+                                    status === "success" ? "bg-green-500/20" : "bg-red-500/20"
+                                }`}
+                            >
+                                {status === "success" ? (
+                                    <CheckCircle2Icon className="size-3 text-green-500" aria-hidden="true" />
+                                ) : (
+                                    <XCircleIcon className="size-3 text-red-500" aria-hidden="true" />
+                                )}
+                            </div>
+                            <div className="flex-1">
+                                <div className="flex items-center justify-between">
+                                    <p className="font-medium">{name}</p>
+                                    <span className="text-xs text-muted-foreground">{duration}</span>
+                                </div>
+                                {action.error && (
+                                    <p className="mt-1 text-sm text-red-500">{action.error}</p>
+                                )}
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
+function ExecutionSkipReason({ skipReason }: { skipReason: string | undefined }) {
+    if (!skipReason) return null
+
+    return (
+        <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4">
+            <p className="text-sm">
+                <span className="font-semibold text-yellow-600">Skipped: </span>
+                {skipReason}
+            </p>
+        </div>
+    )
+}
+
+function ExecutionErrorPanel({
+    execution,
+    isRetryPending,
+    onRetry,
+}: {
+    execution: Execution
+    isRetryPending: boolean
+    onRetry: (execution: Execution) => void
+}) {
+    if (!execution.error_message) return null
+
+    return (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4">
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-2">
+                    <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-red-500" aria-hidden="true" />
+                    <div>
+                        <p className="font-semibold text-red-600">Error</p>
+                        <p className="mt-1 text-sm text-red-600">{execution.error_message}</p>
+                    </div>
+                </div>
+                {execution.status === "failed" && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onRetry(execution)}
+                        disabled={isRetryPending}
+                    >
+                        <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
+                        Retry
+                    </Button>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function ExecutionTriggerEventDetails({ triggerEvent }: { triggerEvent: Record<string, unknown> }) {
+    return (
+        <div>
+            <h4 className="mb-3 font-semibold">Trigger Event</h4>
+            <div className="rounded-lg border bg-card p-4">
+                <div className="space-y-2 text-sm">
+                    {Object.entries(triggerEvent).map(([key, value]) => (
+                        <div key={key} className="flex justify-between">
+                            <span className="text-muted-foreground">{key}:</span>
+                            <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+                                {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                            </code>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function ExecutionDetailsRow({
+    execution,
+    isRetryPending,
+    onRetry,
+}: {
+    execution: Execution
+    isRetryPending: boolean
+    onRetry: (execution: Execution) => void
+}) {
+    return (
+        <TableRow>
+            <TableCell colSpan={7} className="bg-muted/30 p-6">
+                <div className="space-y-6">
+                    <ExecutionActionsTimeline execution={execution} />
+                    <ExecutionSkipReason skipReason={execution.skip_reason} />
+                    <ExecutionErrorPanel
+                        execution={execution}
+                        isRetryPending={isRetryPending}
+                        onRetry={onRetry}
+                    />
+                    <ExecutionTriggerEventDetails triggerEvent={execution.trigger_event || {}} />
+                </div>
+            </TableCell>
+        </TableRow>
+    )
+}
+
 export default function WorkflowExecutionsPage() {
     const [statusFilter, setStatusFilter] = useState("all")
     const [workflowFilter, setWorkflowFilter] = useState("all")
@@ -481,112 +625,12 @@ export default function WorkflowExecutionsPage() {
                                                 </TableCell>
                                             </TableRow>
 
-                                            {/* Expandable Row Details */}
                                             {isExpanded && (
-                                                <TableRow key={`${execution.id}-details`}>
-                                                    <TableCell colSpan={7} className="bg-muted/30 p-6">
-                                                        <div className="space-y-6">
-                                                            {/* Actions Timeline */}
-                                                            {execution.actions_executed && execution.actions_executed.length > 0 && (
-                                                                <div>
-                                                                    <h4 className="mb-3 font-semibold">Actions Executed</h4>
-                                                                    <div className="space-y-3">
-                                                                        {execution.actions_executed.map((action) => {
-                                                                            const status = action.success ? "success" : "failed"
-                                                                            const name =
-                                                                                action.description ||
-                                                                                action.action_type ||
-                                                                                "Action"
-                                                                            const duration = action.duration_ms
-                                                                                ? formatDuration(action.duration_ms)
-                                                                                : "—"
-                                                                            const actionKey =
-                                                                                `${execution.id}-${action.action_type ?? "action"}-${action.description ?? ""}-${action.duration_ms ?? 0}-${action.error ?? ""}-${action.success ? "1" : "0"}`
-                                                                            return (
-                                                                            <div key={actionKey} className="flex items-start gap-3">
-                                                                                <div
-                                                                                    className={`mt-1 flex size-6 shrink-0 items-center justify-center rounded-full ${status === "success" ? "bg-green-500/20" : "bg-red-500/20"
-                                                                                        }`}
-                                                                                >
-                                                                                    {status === "success" ? (
-                                                                                        <CheckCircle2Icon className="size-3 text-green-500" />
-                                                                                    ) : (
-                                                                                        <XCircleIcon className="size-3 text-red-500" />
-                                                                                    )}
-                                                                                </div>
-                                                                                <div className="flex-1">
-                                                                                    <div className="flex items-center justify-between">
-                                                                                        <p className="font-medium">{name}</p>
-                                                                                        <span className="text-xs text-muted-foreground">
-                                                                                            {duration}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    {action.error && (
-                                                                                        <p className="mt-1 text-sm text-red-500">{action.error}</p>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                            )
-                                                                        })}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Skip Reason */}
-                                                            {execution.skip_reason && (
-                                                                <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4">
-                                                                    <p className="text-sm">
-                                                                        <span className="font-semibold text-yellow-600">Skipped: </span>
-                                                                        {execution.skip_reason}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Error Message */}
-                                                            {execution.error_message && (
-                                                                <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4">
-                                                                    <div className="flex items-start justify-between gap-4">
-                                                                        <div className="flex items-start gap-2">
-                                                                            <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-red-500" />
-                                                                            <div>
-                                                                                <p className="font-semibold text-red-600">Error</p>
-                                                                                <p className="mt-1 text-sm text-red-600">{execution.error_message}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                        {execution.status === "failed" && (
-                                                                            <Button
-                                                                                variant="outline"
-                                                                                size="sm"
-                                                                                onClick={() => setRetryTarget(execution)}
-                                                                                disabled={retryExecutionMutation.isPending}
-                                                                            >
-                                                                                <RotateCwIcon className="mr-2 size-4" />
-                                                                                Retry
-                                                                            </Button>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Trigger Event Info */}
-                                                            <div>
-                                                                <h4 className="mb-3 font-semibold">Trigger Event</h4>
-                                                                <div className="rounded-lg border bg-card p-4">
-                                                                    <div className="space-y-2 text-sm">
-                                                                        {Object.entries(execution.trigger_event || {}).map(([key, value]) => (
-                                                                            <div key={key} className="flex justify-between">
-                                                                                <span className="text-muted-foreground">{key}:</span>
-                                                                                <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
-                                                                                    {typeof value === "object" ? JSON.stringify(value) : String(value)}
-                                                                                </code>
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
+                                                <ExecutionDetailsRow
+                                                    execution={execution}
+                                                    isRetryPending={retryExecutionMutation.isPending}
+                                                    onRetry={setRetryTarget}
+                                                />
                                             )}
                                         </Fragment>
                                     )
