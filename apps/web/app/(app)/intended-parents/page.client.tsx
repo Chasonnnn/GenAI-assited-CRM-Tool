@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -70,7 +70,19 @@ const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "
 type DateRangeSelection = { from: Date | undefined; to: Date | undefined }
 type RouterReplace = ReturnType<typeof useRouter>["replace"]
 type SearchParamsSnapshot = {
+    get: (key: string) => string | null
     toString: () => string
+}
+type QueryDraft<T> = {
+    query: string
+    value: T
+}
+type IntendedParentListUrlState = {
+    statusFilter: string
+    search: string
+    page: number
+    dateRange: DateRangePreset
+    customRange: DateRangeSelection
 }
 
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
@@ -87,8 +99,31 @@ const parseDateParam = (value: string | null): Date | undefined => {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed
 }
 
-const datesEqual = (left?: Date, right?: Date) => {
-    return (left?.getTime() ?? null) === (right?.getTime() ?? null)
+function resolveQueryDraft<T>(
+    draft: QueryDraft<T> | null,
+    currentQuery: string,
+    fallback: T,
+): T {
+    return draft?.query === currentQuery ? draft.value : fallback
+}
+
+function readIntendedParentListUrlState(searchParams: SearchParamsSnapshot): IntendedParentListUrlState {
+    const range = isDateRangePreset(searchParams.get("range"))
+        ? searchParams.get("range") as DateRangePreset
+        : "all"
+
+    return {
+        statusFilter: searchParams.get("status") || "all",
+        search: searchParams.get("q") || "",
+        page: parsePageParam(searchParams.get("page")),
+        dateRange: range,
+        customRange: range === "custom"
+            ? {
+                  from: parseDateParam(searchParams.get("from")),
+                  to: parseDateParam(searchParams.get("to")),
+              }
+            : { from: undefined, to: undefined },
+    }
 }
 
 function updateIntendedParentListUrl(
@@ -161,47 +196,58 @@ export default function IntendedParentsPage() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
     const currentQuery = searchParams.toString()
-
-    // Read initial values from URL params
-    const urlStatus = searchParams.get("status")
-    const urlSearch = searchParams.get("q")
-    const urlPage = searchParams.get("page")
-    const urlRange = searchParams.get("range")
-    const urlFrom = searchParams.get("from")
-    const urlTo = searchParams.get("to")
-
-    const [search, setSearch] = useState(urlSearch || "")
-    const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
-    const [statusFilter, setStatusFilter] = useState<string>(urlStatus || "all")
-    const initialRange = isDateRangePreset(urlRange) ? urlRange : "all"
-    const initialCustomRange: DateRangeSelection = initialRange === "custom"
-        ? {
-            from: parseDateParam(urlFrom),
-            to: parseDateParam(urlTo),
-        }
-        : { from: undefined, to: undefined }
-    const [dateRange, setDateRange] = useState<DateRangePreset>(initialRange)
-    const [customRange, setCustomRange] = useState<DateRangeSelection>(initialCustomRange)
-    const [page, setPage] = useState(() => parsePageParam(urlPage))
+    const urlState = readIntendedParentListUrlState(searchParams)
+    const [searchDraft, setSearchDraft] = useState<QueryDraft<string> | null>(null)
+    const [statusDraft, setStatusDraft] = useState<QueryDraft<string> | null>(null)
+    const [pageDraft, setPageDraft] = useState<QueryDraft<number> | null>(null)
+    const [dateSelectionDraft, setDateSelectionDraft] =
+        useState<QueryDraft<{ range: DateRangePreset; customRange: DateRangeSelection }> | null>(null)
+    const search = resolveQueryDraft(searchDraft, currentQuery, urlState.search)
+    const statusFilter = resolveQueryDraft(statusDraft, currentQuery, urlState.statusFilter)
+    const page = resolveQueryDraft(pageDraft, currentQuery, urlState.page)
+    const dateSelection = resolveQueryDraft(dateSelectionDraft, currentQuery, {
+        range: urlState.dateRange,
+        customRange: urlState.customRange,
+    })
+    const dateRange = dateSelection.range
+    const customRange = dateSelection.customRange
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [sortBy, setSortBy] = useState<string | null>("intended_parent_number")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-    const hasSyncedSearchRef = useRef(false)
+    const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    useEffect(() => {
+        return () => {
+            if (searchDebounceTimerRef.current) {
+                clearTimeout(searchDebounceTimerRef.current)
+                searchDebounceTimerRef.current = null
+            }
+        }
+    }, [currentQuery])
+
+    const clearPendingSearchUpdate = () => {
+        if (searchDebounceTimerRef.current) {
+            clearTimeout(searchDebounceTimerRef.current)
+            searchDebounceTimerRef.current = null
+        }
+    }
 
     // Handle status filter change
     const handleStatusChange = (status: string) => {
-        setStatusFilter(status)
-        setPage(1)
-        updateIntendedParentListUrl(replace, searchParams, status, debouncedSearch, 1, dateRange, customRange)
+        clearPendingSearchUpdate()
+        setStatusDraft({ query: currentQuery, value: status })
+        setPageDraft({ query: currentQuery, value: 1 })
+        updateIntendedParentListUrl(replace, searchParams, status, search, 1, dateRange, customRange)
     }
 
     const handlePageChange = (nextPage: number) => {
-        setPage(nextPage)
+        clearPendingSearchUpdate()
+        setPageDraft({ query: currentQuery, value: nextPage })
         updateIntendedParentListUrl(
             replace,
             searchParams,
             statusFilter,
-            debouncedSearch,
+            search,
             nextPage,
             dateRange,
             customRange,
@@ -209,17 +255,18 @@ export default function IntendedParentsPage() {
     }
 
     const handlePresetChange = (preset: DateRangePreset) => {
-        setDateRange(preset)
         const nextCustomRange = preset === "custom" ? customRange : { from: undefined, to: undefined }
-        if (preset !== "custom") {
-            setCustomRange(nextCustomRange)
-        }
-        setPage(1)
+        clearPendingSearchUpdate()
+        setDateSelectionDraft({
+            query: currentQuery,
+            value: { range: preset, customRange: nextCustomRange },
+        })
+        setPageDraft({ query: currentQuery, value: 1 })
         updateIntendedParentListUrl(
             replace,
             searchParams,
             statusFilter,
-            debouncedSearch,
+            search,
             1,
             preset,
             nextCustomRange,
@@ -227,77 +274,34 @@ export default function IntendedParentsPage() {
     }
 
     const handleCustomRangeChange = (range: DateRangeSelection) => {
-        setCustomRange(range)
-        if (dateRange !== "custom") {
-            setDateRange("custom")
-        }
-        setPage(1)
-        updateIntendedParentListUrl(replace, searchParams, statusFilter, debouncedSearch, 1, "custom", range)
+        clearPendingSearchUpdate()
+        setDateSelectionDraft({
+            query: currentQuery,
+            value: { range: "custom", customRange: range },
+        })
+        setPageDraft({ query: currentQuery, value: 1 })
+        updateIntendedParentListUrl(replace, searchParams, statusFilter, search, 1, "custom", range)
     }
 
-    // Debounce search input
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedSearch(search), 300)
-        return () => clearTimeout(timer)
-    }, [search])
-
-    // Sync debouncedSearch to URL
-    useEffect(() => {
-        if (!hasSyncedSearchRef.current) {
-            hasSyncedSearchRef.current = true
-            return
-        }
-        const urlSearchValue = searchParams.get("q") || ""
-        if (debouncedSearch !== urlSearchValue) {
-            startTransition(() => {
-                setPage(1)
-                updateIntendedParentListUrl(
-                    replace,
-                    searchParams,
-                    statusFilter,
-                    debouncedSearch,
-                    1,
-                    dateRange,
-                    customRange,
-                )
-            })
-        }
-    }, [debouncedSearch, replace, searchParams, statusFilter, dateRange, customRange])
-
-    // Sync state when URL changes (back/forward)
-    useEffect(() => {
-        const nextStatus = searchParams.get("status") || "all"
-        const nextSearch = searchParams.get("q") || ""
-        const nextPage = parsePageParam(searchParams.get("page"))
-        const nextRange = isDateRangePreset(searchParams.get("range")) ? searchParams.get("range") as DateRangePreset : "all"
-        const nextFrom = nextRange === "custom" ? parseDateParam(searchParams.get("from")) : undefined
-        const nextTo = nextRange === "custom" ? parseDateParam(searchParams.get("to")) : undefined
-        startTransition(() => {
-            if (nextStatus !== statusFilter) {
-                setStatusFilter(nextStatus)
-            }
-            if (nextSearch !== search) {
-                setSearch(nextSearch)
-            }
-            if (nextSearch !== debouncedSearch) {
-                setDebouncedSearch(nextSearch)
-            }
-            if (nextPage !== page) {
-                setPage(nextPage)
-            }
-            if (nextRange !== dateRange) {
-                setDateRange(nextRange)
-            }
-            if (nextRange === "custom") {
-                if (!datesEqual(nextFrom, customRange.from) || !datesEqual(nextTo, customRange.to)) {
-                    setCustomRange({ from: nextFrom, to: nextTo })
-                }
-            } else if (customRange.from || customRange.to) {
-                setCustomRange({ from: undefined, to: undefined })
-            }
-        })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps
+    const handleSearchChange = (nextSearch: string) => {
+        setSearchDraft({ query: currentQuery, value: nextSearch })
+        setPageDraft({ query: currentQuery, value: 1 })
+        clearPendingSearchUpdate()
+        const scheduledQuery = currentQuery
+        searchDebounceTimerRef.current = setTimeout(() => {
+            searchDebounceTimerRef.current = null
+            if (searchParams.toString() !== scheduledQuery) return
+            updateIntendedParentListUrl(
+                replace,
+                searchParams,
+                statusFilter,
+                nextSearch,
+                1,
+                dateRange,
+                customRange,
+            )
+        }, 300)
+    }
 
     // Form state
     const [formData, setFormData] = useState<IntendedParentFormValues>(EMPTY_INTENDED_PARENT_FORM_VALUES)
@@ -326,13 +330,13 @@ export default function IntendedParentsPage() {
         per_page: 20,
         sort_order: sortOrder,
         ...getDateRangeParams(),
-        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(urlState.search ? { q: urlState.search } : {}),
         ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
         ...(sortBy ? { sort_by: sortBy } : {}),
     }
     const { data, isLoading, isError, error, refetch } = useIntendedParents(filters)
     const { data: availableCreatedDateKeys } = useIntendedParentCreatedDates({
-        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(urlState.search ? { q: urlState.search } : {}),
         ...(statusFilter !== "all" ? { status: [statusFilter] } : {}),
     })
     const { data: stats } = useIntendedParentStats()
@@ -454,8 +458,7 @@ export default function IntendedParentsPage() {
                             placeholder="Search name, number, email, phone…"
                             value={search}
                             onChange={(e) => {
-                                setSearch(e.target.value)
-                                setPage(1)
+                                handleSearchChange(e.target.value)
                             }}
                             className="pl-9"
                         />

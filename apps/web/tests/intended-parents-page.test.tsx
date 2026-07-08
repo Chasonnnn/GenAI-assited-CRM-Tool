@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import IntendedParentsPage from '../app/(app)/intended-parents/page'
 import { ApiError } from '@/lib/api'
 
@@ -95,6 +95,10 @@ describe('IntendedParentsPage', () => {
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
+        mockSearchParams.delete('range')
+        mockSearchParams.delete('from')
+        mockSearchParams.delete('to')
+        mockRouterReplace.mockReset()
         mockCreateIntendedParent.mockReset()
         mockCreateIntendedParent.mockResolvedValue({})
         mockUseIntendedParentCreatedDates.mockReturnValue({ data: [] })
@@ -157,6 +161,53 @@ describe('IntendedParentsPage', () => {
                 page: 4,
             })
         )
+    })
+
+    it('derives committed filters from URL params', () => {
+        mockSearchParams.set('page', '3')
+        mockSearchParams.set('status', 'ready_to_match')
+        mockSearchParams.set('q', 'smith')
+        mockSearchParams.set('range', 'custom')
+        mockSearchParams.set('from', '2026-02-01')
+        mockSearchParams.set('to', '2026-02-14')
+
+        render(<IntendedParentsPage />)
+
+        expect(screen.getByPlaceholderText(/search name/i)).toHaveValue('smith')
+        expect(mockUseIntendedParents).toHaveBeenCalledWith(
+            expect.objectContaining({
+                page: 3,
+                q: 'smith',
+                status: ['ready_to_match'],
+                created_after: '2026-02-01',
+                created_before: '2026-02-14',
+            })
+        )
+    })
+
+    it('debounces search URL updates while preserving sibling filters and resetting page', () => {
+        vi.useFakeTimers()
+        mockSearchParams.set('page', '4')
+        mockSearchParams.set('status', 'new')
+        mockSearchParams.set('q', 'old')
+        mockSearchParams.set('range', 'month')
+
+        render(<IntendedParentsPage />)
+
+        fireEvent.change(screen.getByPlaceholderText(/search name/i), {
+            target: { value: 'alice' },
+        })
+
+        expect(mockRouterReplace).not.toHaveBeenCalled()
+        act(() => {
+            vi.advanceTimersByTime(300)
+        })
+
+        expect(mockRouterReplace).toHaveBeenCalledWith(
+            '/intended-parents?status=new&q=alice&range=month',
+            { scroll: false },
+        )
+        vi.useRealTimers()
     })
 
     it('shows a permission message when the intended parent list is forbidden', () => {

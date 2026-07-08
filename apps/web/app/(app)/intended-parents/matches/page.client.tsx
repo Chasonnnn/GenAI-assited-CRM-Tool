@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -45,12 +45,41 @@ import { isPermissionError } from "@/lib/error-utils"
 type MatchStatusFilter = MatchStatus | "all"
 type RouterReplace = ReturnType<typeof useRouter>["replace"]
 type SearchParamsSnapshot = {
+    get: (key: string) => string | null
     toString: () => string
+}
+type QueryDraft<T> = {
+    query: string
+    value: T
+}
+type MatchListUrlState = {
+    statusFilter: MatchStatusFilter
+    search: string
+    page: number
 }
 
 const parsePageParam = (value: string | null): number => {
     const parsed = Number(value)
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+function resolveQueryDraft<T>(
+    draft: QueryDraft<T> | null,
+    currentQuery: string,
+    fallback: T,
+): T {
+    return draft?.query === currentQuery ? draft.value : fallback
+}
+
+function readMatchListUrlState(searchParams: SearchParamsSnapshot): MatchListUrlState {
+    const rawStatus = searchParams.get("status")
+    return {
+        statusFilter: rawStatus && (rawStatus === "all" || isMatchStatus(rawStatus))
+            ? rawStatus
+            : "all",
+        search: searchParams.get("q") || "",
+        page: parsePageParam(searchParams.get("page")),
+    }
 }
 
 function updateMatchListUrl(
@@ -99,73 +128,56 @@ export default function MatchesPage() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
     const currentQuery = searchParams.toString()
+    const urlState = readMatchListUrlState(searchParams)
+    const [statusDraft, setStatusDraft] = useState<QueryDraft<MatchStatusFilter> | null>(null)
+    const [pageDraft, setPageDraft] = useState<QueryDraft<number> | null>(null)
+    const [searchDraft, setSearchDraft] = useState<QueryDraft<string> | null>(null)
+    const statusFilter = resolveQueryDraft(statusDraft, currentQuery, urlState.statusFilter)
+    const page = resolveQueryDraft(pageDraft, currentQuery, urlState.page)
+    const search = resolveQueryDraft(searchDraft, currentQuery, urlState.search)
+    const searchDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    const urlStatus = searchParams.get("status")
-    const urlSearch = searchParams.get("q")
-    const urlPage = searchParams.get("page")
+    useEffect(() => {
+        return () => {
+            if (searchDebounceTimerRef.current) {
+                clearTimeout(searchDebounceTimerRef.current)
+                searchDebounceTimerRef.current = null
+            }
+        }
+    }, [currentQuery])
 
-    const [statusFilter, setStatusFilter] = useState<MatchStatusFilter>(
-        urlStatus && (urlStatus === "all" || isMatchStatus(urlStatus)) ? urlStatus : "all"
-    )
-    const [page, setPage] = useState(() => parsePageParam(urlPage))
-    const [search, setSearch] = useState(urlSearch || "")
-    const [debouncedSearch, setDebouncedSearch] = useState(urlSearch || "")
-    const hasSyncedSearchRef = useRef(false)
+    const clearPendingSearchUpdate = () => {
+        if (searchDebounceTimerRef.current) {
+            clearTimeout(searchDebounceTimerRef.current)
+            searchDebounceTimerRef.current = null
+        }
+    }
 
     const handleStatusChange = (value: string) => {
         const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
-        setStatusFilter(nextStatus)
-        setPage(1)
-        updateMatchListUrl(replace, searchParams, nextStatus, debouncedSearch, 1)
+        clearPendingSearchUpdate()
+        setStatusDraft({ query: currentQuery, value: nextStatus })
+        setPageDraft({ query: currentQuery, value: 1 })
+        updateMatchListUrl(replace, searchParams, nextStatus, search, 1)
     }
 
     const handlePageChange = (nextPage: number) => {
-        setPage(nextPage)
-        updateMatchListUrl(replace, searchParams, statusFilter, debouncedSearch, nextPage)
+        clearPendingSearchUpdate()
+        setPageDraft({ query: currentQuery, value: nextPage })
+        updateMatchListUrl(replace, searchParams, statusFilter, search, nextPage)
     }
 
-    // Debounce search input
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedSearch(search), 300)
-        return () => clearTimeout(timer)
-    }, [search])
-
-    useEffect(() => {
-        if (!hasSyncedSearchRef.current) {
-            hasSyncedSearchRef.current = true
-            return
-        }
-        const urlSearchValue = searchParams.get("q") || ""
-        if (debouncedSearch !== urlSearchValue) {
-            startTransition(() => {
-                setPage(1)
-                updateMatchListUrl(replace, searchParams, statusFilter, debouncedSearch, 1)
-            })
-        }
-    }, [debouncedSearch, replace, searchParams, statusFilter])
-
-    useEffect(() => {
-        const nextStatus = searchParams.get("status") && (searchParams.get("status") === "all" || isMatchStatus(searchParams.get("status") as string))
-            ? (searchParams.get("status") as MatchStatusFilter)
-            : "all"
-        const nextSearch = searchParams.get("q") || ""
-        const nextPage = parsePageParam(searchParams.get("page"))
-        startTransition(() => {
-            if (nextStatus !== statusFilter) {
-                setStatusFilter(nextStatus)
-            }
-            if (nextSearch !== search) {
-                setSearch(nextSearch)
-            }
-            if (nextSearch !== debouncedSearch) {
-                setDebouncedSearch(nextSearch)
-            }
-            if (nextPage !== page) {
-                setPage(nextPage)
-            }
-        })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps
+    const handleSearchChange = (nextSearch: string) => {
+        setSearchDraft({ query: currentQuery, value: nextSearch })
+        setPageDraft({ query: currentQuery, value: 1 })
+        clearPendingSearchUpdate()
+        const scheduledQuery = currentQuery
+        searchDebounceTimerRef.current = setTimeout(() => {
+            searchDebounceTimerRef.current = null
+            if (searchParams.toString() !== scheduledQuery) return
+            updateMatchListUrl(replace, searchParams, statusFilter, nextSearch, 1)
+        }, 300)
+    }
 
     const filters = {
         page,
@@ -175,7 +187,7 @@ export default function MatchesPage() {
         ...(statusFilter !== "all" && isMatchStatus(statusFilter)
             ? { status: statusFilter }
             : {}),
-        ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        ...(urlState.search ? { q: urlState.search } : {}),
     } satisfies ListMatchesParams
     const { data, isLoading, isError, error, refetch } = useMatches(filters)
     const { data: stats } = useMatchStats()
@@ -247,7 +259,7 @@ export default function MatchesPage() {
                             placeholder="Search case or IP name…"
                             value={search}
                             onChange={(e) => {
-                                setSearch(e.target.value)
+                                handleSearchChange(e.target.value)
                             }}
                             className="pl-9"
                         />

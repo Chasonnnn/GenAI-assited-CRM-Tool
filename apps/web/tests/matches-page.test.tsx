@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchesPage from '../app/(app)/intended-parents/matches/page'
 import { ApiError } from '@/lib/api'
@@ -75,6 +75,7 @@ describe('MatchesPage', () => {
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
+        mockRouterReplace.mockReset()
         mockUseMatches.mockReturnValue({
             data: mockMatchData,
             isLoading: false,
@@ -182,6 +183,47 @@ describe('MatchesPage', () => {
                 page: 2,
             })
         )
+    })
+
+    it('derives committed filters from URL params', () => {
+        mockSearchParams.set('page', '3')
+        mockSearchParams.set('status', 'accepted')
+        mockSearchParams.set('q', 'smith')
+
+        render(<MatchesPage />)
+
+        expect(screen.getByPlaceholderText(/search case/i)).toHaveValue('smith')
+        expect(mockUseMatches).toHaveBeenCalledWith(
+            expect.objectContaining({
+                page: 3,
+                status: 'accepted',
+                q: 'smith',
+            })
+        )
+    })
+
+    it('debounces search URL updates while preserving sibling filters and resetting page', () => {
+        vi.useFakeTimers()
+        mockSearchParams.set('page', '4')
+        mockSearchParams.set('status', 'proposed')
+        mockSearchParams.set('q', 'old')
+
+        render(<MatchesPage />)
+
+        fireEvent.change(screen.getByPlaceholderText(/search case/i), {
+            target: { value: 'alice' },
+        })
+
+        expect(mockRouterReplace).not.toHaveBeenCalled()
+        act(() => {
+            vi.advanceTimersByTime(300)
+        })
+
+        expect(mockRouterReplace).toHaveBeenCalledWith(
+            '/intended-parents/matches?status=proposed&q=alice',
+            { scroll: false },
+        )
+        vi.useRealTimers()
     })
 
     it('shows pagination when needed', () => {

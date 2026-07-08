@@ -209,10 +209,10 @@ describe("React regression guards (source)", () => {
         }
         expect(aiAssistantSource).toContain("oxlint-disable-next-line react-doctor/exhaustive-deps")
         expect(dashboardFilterSource).toContain("oxlint-disable-next-line react-doctor/exhaustive-deps")
-        expect(intendedParentMatchesSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
-        expect(intendedParentMatchesSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
-        expect(intendedParentsSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
-        expect(intendedParentsSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(intendedParentMatchesSource).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(intendedParentMatchesSource).not.toContain("oxlint-disable-line react-doctor/exhaustive-deps")
+        expect(intendedParentsSource).not.toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
+        expect(intendedParentsSource).not.toContain("oxlint-disable-line react-doctor/exhaustive-deps")
         expect(surrogatesSource).toContain("eslint-disable-next-line react-hooks/exhaustive-deps")
         expect(surrogatesSource).toContain("oxlint-disable-line react-doctor/exhaustive-deps")
     })
@@ -1745,6 +1745,23 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const selectedValueSet = new Set(selectedValues)")
         expect(source).toContain("const checked = selectedValueSet.has(option.value)")
         expect(source).not.toContain("selectedValues.includes(option.value)")
+    })
+
+    it("keeps intended parent list filters derived from URL state without mirror effects", () => {
+        const intendedParentsSource = readSource("app/(app)/intended-parents/page.client.tsx")
+        const matchesSource = readSource("app/(app)/intended-parents/matches/page.client.tsx")
+
+        expect(intendedParentsSource).toContain("function readIntendedParentListUrlState")
+        expect(intendedParentsSource).toContain("const searchDebounceTimerRef = useRef")
+        expect(intendedParentsSource).not.toContain("hasSyncedSearchRef")
+        expect(intendedParentsSource).not.toContain("setDebouncedSearch")
+        expect(intendedParentsSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
+
+        expect(matchesSource).toContain("function readMatchListUrlState")
+        expect(matchesSource).toContain("const searchDebounceTimerRef = useRef")
+        expect(matchesSource).not.toContain("hasSyncedSearchRef")
+        expect(matchesSource).not.toContain("setDebouncedSearch")
+        expect(matchesSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
     })
 
     it("builds form builder mappings in a single pass", () => {

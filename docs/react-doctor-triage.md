@@ -4153,3 +4153,25 @@ Full command after Batch 190: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 48 warnings`, `Performance 2 warnings`, `Accessibility 4 warnings`, `Maintainability 36 warnings`
 - Removed globally since Batch 189: the final `js-set-map-lookups` warning in `components/surrogates/SurrogateApplicationTab.tsx`. No `js-set-map-lookups` diagnostics remain in the full scan.
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6dd62997-5f38-492a-be77-126f381a63b2`
+
+## Batch 191
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-event-handler` | `app/(app)/intended-parents/page.client.tsx:251`, `:276`, `:279`, `:282`, `:285`, `:288`, `:292` | Valid. The list page mirrored URL params into local filter/page/search state through effects, and a second effect committed debounced search to the URL one render late. | High | Added `readIntendedParentListUrlState`, keyed draft state, and handler-owned debounced URL replacement. Committed filters now derive from URL state; draft UI values reset naturally when the query changes. Added behavior tests for URL-derived filters and debounced URL replacement, plus a source guard preventing the mirror effects from returning. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "intended parent list filters"` failed before the refactor. GREEN: same source guard; `pnpm test --run tests/intended-parents-page.test.tsx tests/matches-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; changed-scope React Doctor no longer reported these list-page `no-event-handler` warnings. |
+| `react-doctor/no-event-handler` | `app/(app)/intended-parents/matches/page.client.tsx:139`, `:154`, `:157`, `:160`, `:163` | Valid. The matches page used the same debounced-search effect plus URL mirror effect pattern for status/search/page state. | High | Added `readMatchListUrlState`, keyed draft state, and handler-owned debounced URL replacement. Added matching behavior tests and source guard coverage. | GREEN: source guard, matches page tests, TypeScript, lint, and changed-scope React Doctor as above. |
+
+Changed-scope command after Batch 191: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `91 / 100`
+- Total diagnostics in changed files: `5`
+- Summary: `Bugs 3 warnings`, `Maintainability 2 warnings`
+- Remaining changed-scope findings are from other already-ahead local commits (`app/intake/[slug]/page.client.tsx`) plus the valid broader `no-giant-component` warning in `app/(app)/intended-parents/page.client.tsx`.
+
+Full command after Batch 191: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `86 / 100`
+- Total diagnostics: `74`
+- Summary: `Bugs 36 warnings`, `Performance 2 warnings`, `Maintainability 36 warnings`
+- Removed globally since Batch 190: intended-parent list and match list URL mirror effects (`12` `no-event-handler` warnings). The current full scan also no longer shows the prior accessibility cluster, but this batch only changed URL/filter state flow.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-92f6bbdf-2d63-470e-a242-d48a3a4aed6a`
