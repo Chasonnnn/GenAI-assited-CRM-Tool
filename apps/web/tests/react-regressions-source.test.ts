@@ -1879,6 +1879,29 @@ describe("React regression guards (source)", () => {
         expect(campaignDetailSource).not.toContain("checked={editStates.includes(state.value)}")
     })
 
+    it("keeps campaign index rendering split into focused sections", () => {
+        const source = readSource("app/(app)/automation/campaigns/page.tsx")
+
+        expect(source).toContain("function CampaignsPageHeader")
+        expect(source).toContain("function CampaignsListSection")
+        expect(source).toContain("function CampaignCreateWizardDialog")
+        expect(source).toContain("function CampaignWizardProgress")
+        expect(source).toContain("function CampaignWizardStepContent")
+        expect(source).toContain("function CampaignDetailsStep")
+        expect(source).toContain("function CampaignTemplateStep")
+        expect(source).toContain("function CampaignRecipientsStep")
+        expect(source).toContain("function CampaignStateFilterStep")
+        expect(source).toContain("function CampaignReviewStep")
+        expect(source).toContain("function CampaignRecipientPreviewStep")
+        expect(source).toContain("function CampaignScheduleStep")
+        expect(source).toContain("function CampaignWizardFooter")
+        expect(source).toContain("function CampaignConfirmationDialogs")
+        expect(source).toContain("<CampaignsPageHeader")
+        expect(source).toContain("<CampaignsListSection")
+        expect(source).toContain("<CampaignCreateWizardDialog")
+        expect(source).toContain("<CampaignConfirmationDialogs")
+    })
+
     it("uses Set membership for surrogate application multiselect values", () => {
         const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
 
