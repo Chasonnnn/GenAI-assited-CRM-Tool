@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useReducer, useState, useEffect } from "react"
+import { startTransition, useReducer, useState, useEffect, type ReactNode } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -105,6 +105,8 @@ import { formatDateTime, formatRelativeTime } from "@/lib/formatters"
 import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
+import type { IntegrationStatus, GoogleCalendarStatusResponse } from "@/lib/api/integrations"
+import type { IntegrationHealth } from "@/lib/api/ops"
 import type { Pipeline, StageSemantics } from "@/lib/api/pipelines"
 import type {
     MetaCrmDatasetEventMappingItem,
@@ -4121,716 +4123,1054 @@ export default function IntegrationsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Integrations</h1>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            if (organizationIntegrationsEnabled) void refetch()
-                        }}
-                        disabled={!organizationIntegrationsEnabled || isFetching}
-                    >
-                        <RefreshCwIcon className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`} aria-hidden="true" />
-                        Refresh
-                    </Button>
-                </div>
-            </div>
+            <IntegrationsPageHeader
+                canRefresh={organizationIntegrationsEnabled}
+                isFetching={isFetching}
+                onRefresh={() => {
+                    if (organizationIntegrationsEnabled) void refetch()
+                }}
+            />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
-
-                {/* Personal Integrations */}
-                <div>
-                    <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
-                    <p className="mb-4 text-sm text-muted-foreground">Connect your personal accounts to enable features like Zoom appointments and email sending.</p>
-                    <div
-                        data-testid="personal-integrations-grid"
-                        className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-                    >
-                        {/* Zoom */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Zoom</CardTitle>
-                                        <CardDescription className="text-xs">Video appointments</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {zoomIntegration ? (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="default" className="bg-green-600">
-                                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
-                                                Connected
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">{zoomIntegration.account_email}</p>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => disconnectIntegration.mutate('zoom')}
-                                            disabled={disconnectIntegration.isPending}
-                                        >
-                                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
-                                            Disconnect
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <Button
-                                        className="w-full"
-                                        onClick={() => connectZoom.mutate()}
-                                        disabled={connectZoom.isPending}
-                                    >
-                                        {connectZoom.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        ) : (
-                                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
-                                        )}
-                                        Connect Zoom
-                                    </Button>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Gmail */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900">
-                                        <MailIcon className="size-5 text-red-600 dark:text-red-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Gmail</CardTitle>
-                                        <CardDescription className="text-xs">Email sending</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {gmailIntegration ? (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="default" className="bg-green-600">
-                                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
-                                                Connected
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">{gmailIntegration.account_email}</p>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => disconnectIntegration.mutate('gmail')}
-                                            disabled={disconnectIntegration.isPending}
-                                        >
-                                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
-                                            Disconnect
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <Button
-                                        className="w-full"
-                                        onClick={() => connectGmail.mutate()}
-                                        disabled={connectGmail.isPending}
-                                    >
-                                        {connectGmail.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        ) : (
-                                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
-                                        )}
-                                        Connect Gmail
-                                    </Button>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Google Calendar + Meeting */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
-                                        <CalendarIcon className="size-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Google Calendar + Meeting</CardTitle>
-                                        <CardDescription className="text-xs">Two-way calendar sync + meeting links</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {googleCalendarIntegration ? (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="default" className="bg-green-600">
-                                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
-                                                Connected
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">{googleCalendarIntegration.account_email}</p>
-                                        <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
-                                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                Last Sync
-                                            </p>
-                                            <p className="text-xs font-medium">
-                                                {googleLastSyncLabel}
-                                            </p>
-                                            {googleLastSyncAbsoluteLabel ? (
-                                                <p className="text-[11px] text-muted-foreground">
-                                                    {googleLastSyncAbsoluteLabel}
-                                                </p>
-                                            ) : null}
-                                        </div>
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => syncGoogleCalendarNow.mutate()}
-                                            disabled={syncGoogleCalendarNow.isPending}
-                                        >
-                                            {syncGoogleCalendarNow.isPending ? (
-                                                <Loader2Icon className="mr-2 size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                            ) : (
-                                                <RefreshCwIcon className="mr-2 size-3" aria-hidden="true" />
-                                            )}
-                                            Sync now
-                                        </Button>
-                                        {googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
-                                            <p className="text-xs text-amber-700">
-                                                Google Tasks sync is not accessible ({googleCalendarStatus.tasks_error ?? "unknown"}).
-                                            </p>
-                                        ) : null}
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => disconnectIntegration.mutate('google_calendar')}
-                                            disabled={disconnectIntegration.isPending}
-                                        >
-                                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
-                                            Disconnect
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <Button
-                                        className="w-full"
-                                        onClick={() => connectGoogleCalendar.mutate()}
-                                        disabled={connectGoogleCalendar.isPending}
-                                    >
-                                        {connectGoogleCalendar.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        ) : (
-                                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
-                                        )}
-                                        Connect Google Calendar
-                                    </Button>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                    </div>
-                </div>
-
-                {/* Organization Integrations */}
-                <div>
-                    <h2 className="mb-4 text-lg font-semibold">Organization Integrations</h2>
-                    <p className="mb-4 text-sm text-muted-foreground">
-                        Configure shared services like AI, email delivery, and Zapier for the organization.
-                    </p>
-                    {!canManageOrganizationIntegrations ? (
-                        <Alert className="mb-4">
-                            <AlertTriangleIcon className="size-4" aria-hidden="true" />
-                            <AlertTitle>Read-only access</AlertTitle>
-                            <AlertDescription>
-                                You can view organization integration status, but only administrators can configure these integrations.
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    <div
-                        data-testid="organization-integrations-grid"
-                        className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-                    >
-                        {/* AI */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
-                                        <SparklesIcon className="size-5 text-purple-600 dark:text-purple-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">AI Assistant</CardTitle>
-                                        <CardDescription className="text-xs">Copilot, summaries, and AI workflows</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {aiSettingsLoading ? (
-                                    <div className="flex items-center justify-center py-6">
-                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <Badge variant={aiStatusVariant} className="w-fit flex items-center gap-1">
-                                            <AiStatusIcon className="size-3" aria-hidden="true" />
-                                            {aiStatusLabel}
-                                        </Badge>
-                                        <p className="text-xs text-muted-foreground">
-                                            {aiSettings?.provider ? `Provider: ${aiProviderLabel}` : "No provider configured"}
-                                        </p>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full"
-                                            onClick={() => setAiDialogOpen(true)}
-                                            disabled={!canManageOrganizationIntegrations}
-                                        >
-                                            {canManageOrganizationIntegrations ? "Configure AI" : "Admin access required"}
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Email */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900">
-                                        <SendIcon className="size-5 text-teal-600 dark:text-teal-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Email Delivery</CardTitle>
-                                        <CardDescription className="text-xs">Campaign + transactional sending</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {resendSettingsLoading ? (
-                                    <div className="flex items-center justify-center py-6">
-                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <Badge variant={emailStatusVariant} className="w-fit flex items-center gap-1">
-                                            <EmailStatusIcon className="size-3" aria-hidden="true" />
-                                            {emailStatusLabel}
-                                        </Badge>
-                                        <p className="text-xs text-muted-foreground">
-                                            {emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "Choose a provider to start sending"}
-                                        </p>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full"
-                                            onClick={() => setEmailDialogOpen(true)}
-                                            disabled={!canManageOrganizationIntegrations}
-                                        >
-                                            {canManageOrganizationIntegrations ? "Configure Email" : "Admin access required"}
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Zapier */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
-                                        <LinkIcon className="size-5 text-primary" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Zapier</CardTitle>
-                                        <CardDescription className="text-xs">Inbound leads + stage event delivery</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {zapierSettingsLoading ? (
-                                    <div className="flex items-center justify-center py-6">
-                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <Badge variant={zapierStatusVariant} className="w-fit flex items-center gap-1">
-                                            <ZapierStatusIcon className="size-3" aria-hidden="true" />
-                                            {zapierStatusLabel}
-                                        </Badge>
-                                        <Badge
-                                            data-testid="zapier-mapping-health-card-badge"
-                                            variant={zapierMappingBadgeVariant}
-                                            className="w-fit"
-                                        >
-                                            {zapierMappingBadgeLabel}
-                                        </Badge>
-                                        <p className="text-xs text-muted-foreground">
-                                            {zapierDetail}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">{zapierMappingDetail}</p>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full"
-                                            onClick={() => setZapierDialogOpen(true)}
-                                            disabled={!canManageOrganizationIntegrations}
-                                        >
-                                            {canManageOrganizationIntegrations ? "Configure Zapier" : "Admin access required"}
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Meta Lead Ads */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                        <MegaphoneIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-base">Meta Lead Ads</CardTitle>
-                                        <CardDescription className="text-xs">Facebook/Instagram lead capture + CAPI</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {metaCrmDatasetSettingsLoading ? (
-                                    <div className="flex items-center justify-center py-6">
-                                        <Loader2Icon className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <Badge variant={metaStatusVariant} className="w-fit flex items-center gap-1">
-                                            <MetaStatusIcon className="size-3" aria-hidden="true" />
-                                            {metaStatusLabel}
-                                        </Badge>
-                                        <p className="text-xs text-muted-foreground">
-                                            {metaDetail}
-                                        </p>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full"
-                                            onClick={() => setMetaDialogOpen(true)}
-                                            disabled={!canManageOrganizationIntegrations}
-                                        >
-                                            {canManageOrganizationIntegrations ? "Configure Meta" : "Admin access required"}
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-
-                <Dialog
-                    open={canManageOrganizationIntegrations && aiDialogOpen}
-                    onOpenChange={(open) => {
-                        if (!canManageOrganizationIntegrations) return
-                        setAiDialogOpen(open)
+                <PersonalIntegrationsSection
+                    zoomIntegration={zoomIntegration}
+                    gmailIntegration={gmailIntegration}
+                    googleCalendarIntegration={googleCalendarIntegration}
+                    googleCalendarStatus={googleCalendarStatus}
+                    googleLastSyncLabel={googleLastSyncLabel}
+                    googleLastSyncAbsoluteLabel={googleLastSyncAbsoluteLabel}
+                    pendingState={{
+                        zoomConnect: connectZoom.isPending,
+                        gmailConnect: connectGmail.isPending,
+                        googleCalendarConnect: connectGoogleCalendar.isPending,
+                        googleCalendarSync: syncGoogleCalendarNow.isPending,
+                        disconnect: disconnectIntegration.isPending,
                     }}
-                >
-                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
-                        <DialogHeader>
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1">
-                                    <DialogTitle>AI Configuration</DialogTitle>
-                                    <DialogDescription>
-                                        Configure the AI provider, model, and safety controls for your organization.
-                                    </DialogDescription>
-                                </div>
-                                <Badge variant={aiStatusVariant} className="mt-1 flex items-center gap-1">
-                                    <AiStatusIcon className="size-3" aria-hidden="true" />
-                                    {aiStatusLabel}
-                                </Badge>
-                            </div>
-                        </DialogHeader>
-                        {aiDialogOpen ? <AIConfigurationSection variant="dialog" /> : null}
-                    </DialogContent>
-                </Dialog>
+                    onConnectZoom={() => connectZoom.mutate()}
+                    onConnectGmail={() => connectGmail.mutate()}
+                    onConnectGoogleCalendar={() => connectGoogleCalendar.mutate()}
+                    onSyncGoogleCalendar={() => syncGoogleCalendarNow.mutate()}
+                    onDisconnect={(integrationType) => disconnectIntegration.mutate(integrationType)}
+                />
 
-                <Dialog
-                    open={canManageOrganizationIntegrations && emailDialogOpen}
-                    onOpenChange={(open) => {
-                        if (!canManageOrganizationIntegrations) return
-                        setEmailDialogOpen(open)
-                    }}
-                >
-                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
-                        <DialogHeader>
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1">
-                                    <DialogTitle>Email Configuration</DialogTitle>
-                                    <DialogDescription>
-                                        Choose a provider and set sender defaults for campaigns and automation.
-                                    </DialogDescription>
-                                </div>
-                                <Badge variant={emailStatusVariant} className="mt-1 flex items-center gap-1">
-                                    <EmailStatusIcon className="size-3" aria-hidden="true" />
-                                    {emailStatusLabel}
-                                </Badge>
-                            </div>
-                        </DialogHeader>
-                        {emailDialogOpen ? <EmailConfigurationSection variant="dialog" /> : null}
-                    </DialogContent>
-                </Dialog>
+                <OrganizationIntegrationsSection
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    aiSettingsLoading={aiSettingsLoading}
+                    aiSettingsProvider={aiSettings?.provider ?? null}
+                    aiProviderLabel={aiProviderLabel}
+                    aiStatusLabel={aiStatusLabel}
+                    aiStatusVariant={aiStatusVariant}
+                    AiStatusIcon={AiStatusIcon}
+                    resendSettingsLoading={resendSettingsLoading}
+                    emailConfigured={emailConfigured}
+                    emailProviderLabel={emailProviderLabel}
+                    emailDetail={emailDetail}
+                    emailStatusLabel={emailStatusLabel}
+                    emailStatusVariant={emailStatusVariant}
+                    EmailStatusIcon={EmailStatusIcon}
+                    zapierSettingsLoading={zapierSettingsLoading}
+                    zapierStatusLabel={zapierStatusLabel}
+                    zapierStatusVariant={zapierStatusVariant}
+                    ZapierStatusIcon={ZapierStatusIcon}
+                    zapierMappingBadgeLabel={zapierMappingBadgeLabel}
+                    zapierMappingBadgeVariant={zapierMappingBadgeVariant}
+                    zapierDetail={zapierDetail}
+                    zapierMappingDetail={zapierMappingDetail}
+                    metaCrmDatasetSettingsLoading={metaCrmDatasetSettingsLoading}
+                    metaStatusLabel={metaStatusLabel}
+                    metaStatusVariant={metaStatusVariant}
+                    MetaStatusIcon={MetaStatusIcon}
+                    metaDetail={metaDetail}
+                    onConfigureAI={() => setAiDialogOpen(true)}
+                    onConfigureEmail={() => setEmailDialogOpen(true)}
+                    onConfigureZapier={() => setZapierDialogOpen(true)}
+                    onConfigureMeta={() => setMetaDialogOpen(true)}
+                />
 
-                <Dialog
-                    open={canManageOrganizationIntegrations && zapierDialogOpen}
-                    onOpenChange={(open) => {
-                        if (!canManageOrganizationIntegrations) return
-                        setZapierDialogOpen(open)
-                    }}
-                >
-                    <DialogContent className="flex h-[85vh] w-[95vw] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-                        <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1">
-                                    <DialogTitle>Zapier Configuration</DialogTitle>
-                                    <DialogDescription>
-                                        Manage inbound lead webhooks and outbound stage event delivery.
-                                    </DialogDescription>
-                                </div>
-                                <div className="mt-1 flex items-center gap-2">
-                                    <Badge variant={zapierStatusVariant} className="flex items-center gap-1">
-                                        <ZapierStatusIcon className="size-3" aria-hidden="true" />
-                                        {zapierStatusLabel}
-                                    </Badge>
-                                    <Badge
-                                        data-testid="zapier-mapping-health-dialog-badge"
-                                        variant={zapierMappingBadgeVariant}
-                                    >
-                                        {zapierMappingBadgeLabel}
-                                    </Badge>
-                                </div>
-                            </div>
-                        </DialogHeader>
-                        <div
-                            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6"
-                            data-testid="zapier-dialog-body"
-                        >
-                            {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                <IntegrationConfigurationDialogs
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    aiDialogOpen={aiDialogOpen}
+                    emailDialogOpen={emailDialogOpen}
+                    zapierDialogOpen={zapierDialogOpen}
+                    metaDialogOpen={metaDialogOpen}
+                    aiStatusLabel={aiStatusLabel}
+                    aiStatusVariant={aiStatusVariant}
+                    AiStatusIcon={AiStatusIcon}
+                    emailStatusLabel={emailStatusLabel}
+                    emailStatusVariant={emailStatusVariant}
+                    EmailStatusIcon={EmailStatusIcon}
+                    zapierStatusLabel={zapierStatusLabel}
+                    zapierStatusVariant={zapierStatusVariant}
+                    ZapierStatusIcon={ZapierStatusIcon}
+                    zapierMappingBadgeLabel={zapierMappingBadgeLabel}
+                    zapierMappingBadgeVariant={zapierMappingBadgeVariant}
+                    metaStatusLabel={metaStatusLabel}
+                    metaStatusVariant={metaStatusVariant}
+                    MetaStatusIcon={MetaStatusIcon}
+                    onAiDialogOpenChange={setAiDialogOpen}
+                    onEmailDialogOpenChange={setEmailDialogOpen}
+                    onZapierDialogOpenChange={setZapierDialogOpen}
+                    onMetaDialogOpenChange={setMetaDialogOpen}
+                />
 
-                <Dialog
-                    open={canManageOrganizationIntegrations && metaDialogOpen}
-                    onOpenChange={(open) => {
-                        if (!canManageOrganizationIntegrations) return
-                        setMetaDialogOpen(open)
-                    }}
-                >
-                    <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
-                        <DialogHeader>
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="space-y-1">
-                                    <DialogTitle>Meta Lead Ads + CRM Dataset</DialogTitle>
-                                    <DialogDescription>
-                                        Configure direct CRM dataset delivery and manage the legacy app-based Meta setup.
-                                    </DialogDescription>
-                                </div>
-                                <Badge variant={metaStatusVariant} className="mt-1 flex items-center gap-1">
-                                    <MetaStatusIcon className="size-3" aria-hidden="true" />
-                                    {metaStatusLabel}
-                                </Badge>
-                            </div>
-                        </DialogHeader>
-                        {metaDialogOpen ? <MetaConfigurationSection variant="dialog" /> : null}
-                    </DialogContent>
-                </Dialog>
+                <SystemIntegrationsSection
+                    isLoading={isLoading}
+                    healthData={healthData ?? []}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    metaFormsCount={metaFormsCount}
+                    metaMappedFormsCount={metaMappedFormsCount}
+                    metaAdAccounts={metaAdAccounts}
+                    inboundWebhooksCount={inboundWebhooks.length}
+                    zapierOutboundEnabled={Boolean(zapierSettings?.outbound_enabled)}
+                />
 
-                {/* System Integrations Section */}
-                <div className="border-t pt-6">
-                    <h2 className="mb-4 text-lg font-semibold">System Integrations</h2>
-                    <p className="mb-4 text-sm text-muted-foreground">Organization-level integrations managed by administrators.</p>
-                </div>
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-                    </div>
-                ) : (healthData?.length ?? 0) === 0 ? (
-                    <Card>
-                        <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                            <ServerIcon className="mb-4 size-12" aria-hidden="true" />
-                            <p className="text-lg font-medium">No integrations configured</p>
-                            <p className="text-sm">Add integrations to see their health status here</p>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div
-                        data-testid="system-integrations-grid"
-                        className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
-                    >
-                        {healthData?.map((integration) => {
-                            const typeConfig = integrationTypeConfig[integration.integration_type] || {
-                                icon: ServerIcon,
-                                label: integration.integration_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-                                description: "Custom integration",
-                            }
-                            const status = statusConfig[integration.status] || statusConfig.error
-                            const configStatus = configStatusLabels[integration.config_status]
-                                ?? configStatusLabels.configured
-                                ?? { label: "Configured", variant: "default" as const }
-                            const Icon = typeConfig.icon
-                            const StatusIcon = status.icon
-
-                            // Compute integration-specific metrics
-                            let metricsLabel: string | null = null
-                            if (integration.integration_type === "meta_leads") {
-                                metricsLabel = `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} synced · ${metaMappedFormsCount} mapped`
-                            } else if (integration.integration_type === "meta_capi") {
-                                const capiEnabledCount = metaAdAccounts.filter(a => a.capi_enabled).length
-                                metricsLabel = `${capiEnabledCount} ad account${capiEnabledCount === 1 ? "" : "s"} with CAPI enabled`
-                            } else if (integration.integration_type === "zapier") {
-                                const outboundStatus = zapierSettings?.outbound_enabled ? "enabled" : "disabled"
-                                metricsLabel = `${inboundWebhooks.length} inbound webhook${inboundWebhooks.length === 1 ? "" : "s"} · Outbound ${outboundStatus}`
-                            }
-
-                            return (
-                                <Card key={integration.id} className="relative overflow-hidden">
-                                    {/* Status indicator bar */}
-                                    <div className={`absolute left-0 top-0 h-full w-1 ${integration.status === 'healthy' ? 'bg-green-500' :
-                                        integration.status === 'degraded' ? 'bg-yellow-500' :
-                                            'bg-red-500'
-                                        }`} />
-
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                                                    <Icon className="size-5" aria-hidden="true" />
-                                                </div>
-                                                <div>
-                                                    <CardTitle className="text-base">{typeConfig.label}</CardTitle>
-                                                    {integration.integration_key && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Page: {integration.integration_key}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <Badge variant={status.badge} className="flex items-center gap-1">
-                                                <StatusIcon className="size-3" aria-hidden="true" />
-                                                {status.label}
-                                            </Badge>
-                                        </div>
-                                        <CardDescription className="mt-2 text-xs">
-                                            {typeConfig.description}
-                                        </CardDescription>
-                                    </CardHeader>
-
-                                    <CardContent className="space-y-3">
-                                        {/* Integration-specific metrics */}
-                                        {metricsLabel && (
-                                            <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                                                <ActivityIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                                                {metricsLabel}
-                                            </div>
-                                        )}
-
-                                        {/* Config Status */}
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Configuration</span>
-                                            <Badge variant={configStatus.variant} className="text-xs">
-                                                <KeyIcon className="mr-1 size-3" aria-hidden="true" />
-                                                {configStatus.label}
-                                            </Badge>
-                                        </div>
-
-                                        {/* Success/Error timestamps */}
-                                        <div className="space-y-1 text-xs">
-                                            {integration.last_success_at && (
-                                                <div className="flex items-center justify-between text-muted-foreground">
-                                                    <span>Last success</span>
-                                                    <span className="text-green-600">
-                                                        {formatRelativeTime(integration.last_success_at, "Never")}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {integration.last_error_at && (
-                                                <div className="flex items-center justify-between text-muted-foreground">
-                                                    <span>Last error</span>
-                                                    <span className="text-red-600">
-                                                        {formatRelativeTime(integration.last_error_at, "Never")}
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Error count */}
-                                        {integration.error_count_24h > 0 && (
-                                            <div className="flex items-center justify-between rounded-md bg-red-100 px-3 py-2 text-sm dark:bg-red-900/30">
-                                                <span className="text-red-700 dark:text-red-300">Errors (24h)</span>
-                                                <span className="font-semibold text-red-700 dark:text-red-300">
-                                                    {integration.error_count_24h}
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        {/* Last error message */}
-                                        {integration.last_error && (
-                                            <div className="rounded-md bg-muted p-2">
-                                                <p className="text-xs text-muted-foreground line-clamp-2">
-                                                    {integration.last_error}
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Action buttons */}
-                                        {integration.config_status !== "configured" && (
-                                            !canManageOrganizationIntegrations ? (
-                                                <p className="text-xs text-muted-foreground text-center">
-                                                    Admin access required to configure
-                                                </p>
-                                            ) : integration.integration_type === "meta_leads" || integration.integration_type === "meta_capi" ? (
-                                                <Button
-                                                    render={<Link href="/settings/integrations/meta" />}
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="w-full"
-                                                >
-                                                    <KeyIcon className="mr-2 size-3" aria-hidden="true" />
-                                                    {integration.config_status === "expired_token"
-                                                        ? "Refresh Token"
-                                                        : "Configure"
-                                                    }
-                                                </Button>
-                                            ) : (
-                                                <p className="text-xs text-muted-foreground text-center">
-                                                    Configure via CLI
-                                                </p>
-                                            )
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            )
-                        })}
-                    </div>
-                )}
-
-                {/* Help section */}
-                <Card className="bg-muted/50">
-                    <CardHeader>
-                        <CardTitle className="text-base">Need help?</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground">
-                        <p>
-                            Integration tokens are managed via CLI commands. To update a Meta page token:
-                        </p>
-                        <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-xs">
-                            python -m app.cli update-meta-page-token --page-id YOUR_PAGE_ID
-                        </pre>
-                        <p className="mt-3">
-                            Contact your administrator if you need to add or reconfigure integrations.
-                        </p>
-                    </CardContent>
-                </Card>
+                <IntegrationsHelpCard />
             </div>
         </div>
+    )
+}
+
+type BadgeVariant = "default" | "secondary" | "destructive"
+type IconComponent = typeof CheckCircleIcon
+
+function IntegrationsPageHeader({
+    canRefresh,
+    isFetching,
+    onRefresh,
+}: {
+    canRefresh: boolean
+    isFetching: boolean
+    onRefresh: () => void
+}) {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <h1 className="text-2xl font-semibold">Integrations</h1>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onRefresh}
+                    disabled={!canRefresh || isFetching}
+                >
+                    <RefreshCwIcon
+                        className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
+                        aria-hidden="true"
+                    />
+                    Refresh
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function PersonalIntegrationsSection({
+    zoomIntegration,
+    gmailIntegration,
+    googleCalendarIntegration,
+    googleCalendarStatus,
+    googleLastSyncLabel,
+    googleLastSyncAbsoluteLabel,
+    pendingState,
+    onConnectZoom,
+    onConnectGmail,
+    onConnectGoogleCalendar,
+    onSyncGoogleCalendar,
+    onDisconnect,
+}: {
+    zoomIntegration: IntegrationStatus | undefined
+    gmailIntegration: IntegrationStatus | undefined
+    googleCalendarIntegration: IntegrationStatus | undefined
+    googleCalendarStatus: GoogleCalendarStatusResponse | undefined
+    googleLastSyncLabel: string
+    googleLastSyncAbsoluteLabel: string
+    pendingState: {
+        zoomConnect: boolean
+        gmailConnect: boolean
+        googleCalendarConnect: boolean
+        googleCalendarSync: boolean
+        disconnect: boolean
+    }
+    onConnectZoom: () => void
+    onConnectGmail: () => void
+    onConnectGoogleCalendar: () => void
+    onSyncGoogleCalendar: () => void
+    onDisconnect: (integrationType: string) => void
+}) {
+    return (
+        <div>
+            <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+                Connect your personal accounts to enable features like Zoom appointments and email sending.
+            </p>
+            <div
+                data-testid="personal-integrations-grid"
+                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            >
+                <PersonalIntegrationCard
+                    Icon={VideoIcon}
+                    iconContainerClassName="bg-blue-100 dark:bg-blue-900"
+                    iconClassName="text-blue-600 dark:text-blue-400"
+                    title="Zoom"
+                    description="Video appointments"
+                    integration={zoomIntegration}
+                    connectLabel="Connect Zoom"
+                    isConnectPending={pendingState.zoomConnect}
+                    isDisconnectPending={pendingState.disconnect}
+                    onConnect={onConnectZoom}
+                    onDisconnect={() => onDisconnect("zoom")}
+                />
+
+                <PersonalIntegrationCard
+                    Icon={MailIcon}
+                    iconContainerClassName="bg-red-100 dark:bg-red-900"
+                    iconClassName="text-red-600 dark:text-red-400"
+                    title="Gmail"
+                    description="Email sending"
+                    integration={gmailIntegration}
+                    connectLabel="Connect Gmail"
+                    isConnectPending={pendingState.gmailConnect}
+                    isDisconnectPending={pendingState.disconnect}
+                    onConnect={onConnectGmail}
+                    onDisconnect={() => onDisconnect("gmail")}
+                />
+
+                <PersonalIntegrationCard
+                    Icon={CalendarIcon}
+                    iconContainerClassName="bg-emerald-100 dark:bg-emerald-900"
+                    iconClassName="text-emerald-600 dark:text-emerald-400"
+                    title="Google Calendar + Meeting"
+                    description="Two-way calendar sync + meeting links"
+                    integration={googleCalendarIntegration}
+                    connectLabel="Connect Google Calendar"
+                    isConnectPending={pendingState.googleCalendarConnect}
+                    isDisconnectPending={pendingState.disconnect}
+                    onConnect={onConnectGoogleCalendar}
+                    onDisconnect={() => onDisconnect("google_calendar")}
+                >
+                    <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Last Sync
+                        </p>
+                        <p className="text-xs font-medium">{googleLastSyncLabel}</p>
+                        {googleLastSyncAbsoluteLabel ? (
+                            <p className="text-[11px] text-muted-foreground">
+                                {googleLastSyncAbsoluteLabel}
+                            </p>
+                        ) : null}
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full"
+                        onClick={onSyncGoogleCalendar}
+                        disabled={pendingState.googleCalendarSync}
+                    >
+                        {pendingState.googleCalendarSync ? (
+                            <Loader2Icon
+                                className="mr-2 size-3 animate-spin motion-reduce:animate-none"
+                                aria-hidden="true"
+                            />
+                        ) : (
+                            <RefreshCwIcon className="mr-2 size-3" aria-hidden="true" />
+                        )}
+                        Sync now
+                    </Button>
+                    {googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
+                        <p className="text-xs text-amber-700">
+                            Google Tasks sync is not accessible ({googleCalendarStatus.tasks_error ?? "unknown"}).
+                        </p>
+                    ) : null}
+                </PersonalIntegrationCard>
+            </div>
+        </div>
+    )
+}
+
+function PersonalIntegrationCard({
+    Icon,
+    iconContainerClassName,
+    iconClassName,
+    title,
+    description,
+    integration,
+    connectLabel,
+    isConnectPending,
+    isDisconnectPending,
+    onConnect,
+    onDisconnect,
+    children,
+}: {
+    Icon: IconComponent
+    iconContainerClassName: string
+    iconClassName: string
+    title: string
+    description: string
+    integration: IntegrationStatus | undefined
+    connectLabel: string
+    isConnectPending: boolean
+    isDisconnectPending: boolean
+    onConnect: () => void
+    onDisconnect: () => void
+    children?: ReactNode
+}) {
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                    <div className={`flex size-10 items-center justify-center rounded-lg ${iconContainerClassName}`}>
+                        <Icon className={`size-5 ${iconClassName}`} aria-hidden="true" />
+                    </div>
+                    <div>
+                        <CardTitle className="text-base">{title}</CardTitle>
+                        <CardDescription className="text-xs">{description}</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {integration ? (
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <Badge variant="default" className="bg-green-600">
+                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
+                                Connected
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{integration.account_email}</p>
+                        {children}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={onDisconnect}
+                            disabled={isDisconnectPending}
+                        >
+                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
+                            Disconnect
+                        </Button>
+                    </div>
+                ) : (
+                    <Button className="w-full" onClick={onConnect} disabled={isConnectPending}>
+                        {isConnectPending ? (
+                            <Loader2Icon
+                                className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                                aria-hidden="true"
+                            />
+                        ) : (
+                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
+                        )}
+                        {connectLabel}
+                    </Button>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function OrganizationIntegrationsSection({
+    canManageOrganizationIntegrations,
+    aiSettingsLoading,
+    aiSettingsProvider,
+    aiProviderLabel,
+    aiStatusLabel,
+    aiStatusVariant,
+    AiStatusIcon,
+    resendSettingsLoading,
+    emailConfigured,
+    emailProviderLabel,
+    emailDetail,
+    emailStatusLabel,
+    emailStatusVariant,
+    EmailStatusIcon,
+    zapierSettingsLoading,
+    zapierStatusLabel,
+    zapierStatusVariant,
+    ZapierStatusIcon,
+    zapierMappingBadgeLabel,
+    zapierMappingBadgeVariant,
+    zapierDetail,
+    zapierMappingDetail,
+    metaCrmDatasetSettingsLoading,
+    metaStatusLabel,
+    metaStatusVariant,
+    MetaStatusIcon,
+    metaDetail,
+    onConfigureAI,
+    onConfigureEmail,
+    onConfigureZapier,
+    onConfigureMeta,
+}: {
+    canManageOrganizationIntegrations: boolean
+    aiSettingsLoading: boolean
+    aiSettingsProvider: string | null
+    aiProviderLabel: string
+    aiStatusLabel: string
+    aiStatusVariant: BadgeVariant
+    AiStatusIcon: IconComponent
+    resendSettingsLoading: boolean
+    emailConfigured: boolean
+    emailProviderLabel: string
+    emailDetail: string
+    emailStatusLabel: string
+    emailStatusVariant: BadgeVariant
+    EmailStatusIcon: IconComponent
+    zapierSettingsLoading: boolean
+    zapierStatusLabel: string
+    zapierStatusVariant: BadgeVariant
+    ZapierStatusIcon: IconComponent
+    zapierMappingBadgeLabel: string
+    zapierMappingBadgeVariant: BadgeVariant
+    zapierDetail: string
+    zapierMappingDetail: string
+    metaCrmDatasetSettingsLoading: boolean
+    metaStatusLabel: string
+    metaStatusVariant: BadgeVariant
+    MetaStatusIcon: IconComponent
+    metaDetail: string
+    onConfigureAI: () => void
+    onConfigureEmail: () => void
+    onConfigureZapier: () => void
+    onConfigureMeta: () => void
+}) {
+    return (
+        <div>
+            <h2 className="mb-4 text-lg font-semibold">Organization Integrations</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+                Configure shared services like AI, email delivery, and Zapier for the organization.
+            </p>
+            {!canManageOrganizationIntegrations ? (
+                <Alert className="mb-4">
+                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
+                    <AlertTitle>Read-only access</AlertTitle>
+                    <AlertDescription>
+                        You can view organization integration status, but only administrators can configure these integrations.
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+            <div
+                data-testid="organization-integrations-grid"
+                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            >
+                <OrganizationIntegrationCard
+                    Icon={SparklesIcon}
+                    iconContainerClassName="bg-purple-100 dark:bg-purple-900"
+                    iconClassName="text-purple-600 dark:text-purple-400"
+                    title="AI Assistant"
+                    description="Copilot, summaries, and AI workflows"
+                    isLoading={aiSettingsLoading}
+                    statusLabel={aiStatusLabel}
+                    statusVariant={aiStatusVariant}
+                    StatusIcon={AiStatusIcon}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    actionLabel="Configure AI"
+                    onConfigure={onConfigureAI}
+                >
+                    <p className="text-xs text-muted-foreground">
+                        {aiSettingsProvider ? `Provider: ${aiProviderLabel}` : "No provider configured"}
+                    </p>
+                </OrganizationIntegrationCard>
+
+                <OrganizationIntegrationCard
+                    Icon={SendIcon}
+                    iconContainerClassName="bg-teal-100 dark:bg-teal-900"
+                    iconClassName="text-teal-600 dark:text-teal-400"
+                    title="Email Delivery"
+                    description="Campaign + transactional sending"
+                    isLoading={resendSettingsLoading}
+                    statusLabel={emailStatusLabel}
+                    statusVariant={emailStatusVariant}
+                    StatusIcon={EmailStatusIcon}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    actionLabel="Configure Email"
+                    onConfigure={onConfigureEmail}
+                >
+                    <p className="text-xs text-muted-foreground">
+                        {emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "Choose a provider to start sending"}
+                    </p>
+                </OrganizationIntegrationCard>
+
+                <OrganizationIntegrationCard
+                    Icon={LinkIcon}
+                    iconContainerClassName="bg-primary/10 dark:bg-primary/20"
+                    iconClassName="text-primary"
+                    title="Zapier"
+                    description="Inbound leads + stage event delivery"
+                    isLoading={zapierSettingsLoading}
+                    statusLabel={zapierStatusLabel}
+                    statusVariant={zapierStatusVariant}
+                    StatusIcon={ZapierStatusIcon}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    actionLabel="Configure Zapier"
+                    onConfigure={onConfigureZapier}
+                >
+                    <Badge
+                        data-testid="zapier-mapping-health-card-badge"
+                        variant={zapierMappingBadgeVariant}
+                        className="w-fit"
+                    >
+                        {zapierMappingBadgeLabel}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground">{zapierDetail}</p>
+                    <p className="text-xs text-muted-foreground">{zapierMappingDetail}</p>
+                </OrganizationIntegrationCard>
+
+                <OrganizationIntegrationCard
+                    Icon={MegaphoneIcon}
+                    iconContainerClassName="bg-blue-100 dark:bg-blue-900"
+                    iconClassName="text-blue-600 dark:text-blue-400"
+                    title="Meta Lead Ads"
+                    description="Facebook/Instagram lead capture + CAPI"
+                    isLoading={metaCrmDatasetSettingsLoading}
+                    statusLabel={metaStatusLabel}
+                    statusVariant={metaStatusVariant}
+                    StatusIcon={MetaStatusIcon}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                    actionLabel="Configure Meta"
+                    onConfigure={onConfigureMeta}
+                >
+                    <p className="text-xs text-muted-foreground">{metaDetail}</p>
+                </OrganizationIntegrationCard>
+            </div>
+        </div>
+    )
+}
+
+function OrganizationIntegrationCard({
+    Icon,
+    iconContainerClassName,
+    iconClassName,
+    title,
+    description,
+    isLoading,
+    statusLabel,
+    statusVariant,
+    StatusIcon,
+    canManageOrganizationIntegrations,
+    actionLabel,
+    onConfigure,
+    children,
+}: {
+    Icon: IconComponent
+    iconContainerClassName: string
+    iconClassName: string
+    title: string
+    description: string
+    isLoading: boolean
+    statusLabel: string
+    statusVariant: BadgeVariant
+    StatusIcon: IconComponent
+    canManageOrganizationIntegrations: boolean
+    actionLabel: string
+    onConfigure: () => void
+    children: ReactNode
+}) {
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                    <div className={`flex size-10 items-center justify-center rounded-lg ${iconContainerClassName}`}>
+                        <Icon className={`size-5 ${iconClassName}`} aria-hidden="true" />
+                    </div>
+                    <div>
+                        <CardTitle className="text-base">{title}</CardTitle>
+                        <CardDescription className="text-xs">{description}</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                        <Loader2Icon
+                            className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <Badge variant={statusVariant} className="w-fit flex items-center gap-1">
+                            <StatusIcon className="size-3" aria-hidden="true" />
+                            {statusLabel}
+                        </Badge>
+                        {children}
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={onConfigure}
+                            disabled={!canManageOrganizationIntegrations}
+                        >
+                            {canManageOrganizationIntegrations ? actionLabel : "Admin access required"}
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function IntegrationConfigurationDialogs({
+    canManageOrganizationIntegrations,
+    aiDialogOpen,
+    emailDialogOpen,
+    zapierDialogOpen,
+    metaDialogOpen,
+    aiStatusLabel,
+    aiStatusVariant,
+    AiStatusIcon,
+    emailStatusLabel,
+    emailStatusVariant,
+    EmailStatusIcon,
+    zapierStatusLabel,
+    zapierStatusVariant,
+    ZapierStatusIcon,
+    zapierMappingBadgeLabel,
+    zapierMappingBadgeVariant,
+    metaStatusLabel,
+    metaStatusVariant,
+    MetaStatusIcon,
+    onAiDialogOpenChange,
+    onEmailDialogOpenChange,
+    onZapierDialogOpenChange,
+    onMetaDialogOpenChange,
+}: {
+    canManageOrganizationIntegrations: boolean
+    aiDialogOpen: boolean
+    emailDialogOpen: boolean
+    zapierDialogOpen: boolean
+    metaDialogOpen: boolean
+    aiStatusLabel: string
+    aiStatusVariant: BadgeVariant
+    AiStatusIcon: IconComponent
+    emailStatusLabel: string
+    emailStatusVariant: BadgeVariant
+    EmailStatusIcon: IconComponent
+    zapierStatusLabel: string
+    zapierStatusVariant: BadgeVariant
+    ZapierStatusIcon: IconComponent
+    zapierMappingBadgeLabel: string
+    zapierMappingBadgeVariant: BadgeVariant
+    metaStatusLabel: string
+    metaStatusVariant: BadgeVariant
+    MetaStatusIcon: IconComponent
+    onAiDialogOpenChange: (open: boolean) => void
+    onEmailDialogOpenChange: (open: boolean) => void
+    onZapierDialogOpenChange: (open: boolean) => void
+    onMetaDialogOpenChange: (open: boolean) => void
+}) {
+    return (
+        <>
+            <Dialog
+                open={canManageOrganizationIntegrations && aiDialogOpen}
+                onOpenChange={(open) => {
+                    if (!canManageOrganizationIntegrations) return
+                    onAiDialogOpenChange(open)
+                }}
+            >
+                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                    <DialogHeader>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                                <DialogTitle>AI Configuration</DialogTitle>
+                                <DialogDescription>
+                                    Configure the AI provider, model, and safety controls for your organization.
+                                </DialogDescription>
+                            </div>
+                            <Badge variant={aiStatusVariant} className="mt-1 flex items-center gap-1">
+                                <AiStatusIcon className="size-3" aria-hidden="true" />
+                                {aiStatusLabel}
+                            </Badge>
+                        </div>
+                    </DialogHeader>
+                    {aiDialogOpen ? <AIConfigurationSection variant="dialog" /> : null}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={canManageOrganizationIntegrations && emailDialogOpen}
+                onOpenChange={(open) => {
+                    if (!canManageOrganizationIntegrations) return
+                    onEmailDialogOpenChange(open)
+                }}
+            >
+                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                    <DialogHeader>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                                <DialogTitle>Email Configuration</DialogTitle>
+                                <DialogDescription>
+                                    Choose a provider and set sender defaults for campaigns and automation.
+                                </DialogDescription>
+                            </div>
+                            <Badge variant={emailStatusVariant} className="mt-1 flex items-center gap-1">
+                                <EmailStatusIcon className="size-3" aria-hidden="true" />
+                                {emailStatusLabel}
+                            </Badge>
+                        </div>
+                    </DialogHeader>
+                    {emailDialogOpen ? <EmailConfigurationSection variant="dialog" /> : null}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={canManageOrganizationIntegrations && zapierDialogOpen}
+                onOpenChange={(open) => {
+                    if (!canManageOrganizationIntegrations) return
+                    onZapierDialogOpenChange(open)
+                }}
+            >
+                <DialogContent className="flex h-[85vh] w-[95vw] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+                    <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                                <DialogTitle>Zapier Configuration</DialogTitle>
+                                <DialogDescription>
+                                    Manage inbound lead webhooks and outbound stage event delivery.
+                                </DialogDescription>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2">
+                                <Badge variant={zapierStatusVariant} className="flex items-center gap-1">
+                                    <ZapierStatusIcon className="size-3" aria-hidden="true" />
+                                    {zapierStatusLabel}
+                                </Badge>
+                                <Badge
+                                    data-testid="zapier-mapping-health-dialog-badge"
+                                    variant={zapierMappingBadgeVariant}
+                                >
+                                    {zapierMappingBadgeLabel}
+                                </Badge>
+                            </div>
+                        </div>
+                    </DialogHeader>
+                    <div
+                        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6"
+                        data-testid="zapier-dialog-body"
+                    >
+                        {zapierDialogOpen ? <ZapierWebhookSection variant="dialog" /> : null}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={canManageOrganizationIntegrations && metaDialogOpen}
+                onOpenChange={(open) => {
+                    if (!canManageOrganizationIntegrations) return
+                    onMetaDialogOpenChange(open)
+                }}
+            >
+                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden">
+                    <DialogHeader>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                                <DialogTitle>Meta Lead Ads + CRM Dataset</DialogTitle>
+                                <DialogDescription>
+                                    Configure direct CRM dataset delivery and manage the legacy app-based Meta setup.
+                                </DialogDescription>
+                            </div>
+                            <Badge variant={metaStatusVariant} className="mt-1 flex items-center gap-1">
+                                <MetaStatusIcon className="size-3" aria-hidden="true" />
+                                {metaStatusLabel}
+                            </Badge>
+                        </div>
+                    </DialogHeader>
+                    {metaDialogOpen ? <MetaConfigurationSection variant="dialog" /> : null}
+                </DialogContent>
+            </Dialog>
+        </>
+    )
+}
+
+function SystemIntegrationsSection({
+    isLoading,
+    healthData,
+    canManageOrganizationIntegrations,
+    metaFormsCount,
+    metaMappedFormsCount,
+    metaAdAccounts,
+    inboundWebhooksCount,
+    zapierOutboundEnabled,
+}: {
+    isLoading: boolean
+    healthData: IntegrationHealth[]
+    canManageOrganizationIntegrations: boolean
+    metaFormsCount: number
+    metaMappedFormsCount: number
+    metaAdAccounts: MetaAdAccount[]
+    inboundWebhooksCount: number
+    zapierOutboundEnabled: boolean
+}) {
+    return (
+        <>
+            <div className="border-t pt-6">
+                <h2 className="mb-4 text-lg font-semibold">System Integrations</h2>
+                <p className="mb-4 text-sm text-muted-foreground">
+                    Organization-level integrations managed by administrators.
+                </p>
+            </div>
+            {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                    <Loader2Icon
+                        className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground"
+                        aria-hidden="true"
+                    />
+                </div>
+            ) : healthData.length === 0 ? (
+                <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                        <ServerIcon className="mb-4 size-12" aria-hidden="true" />
+                        <p className="text-lg font-medium">No integrations configured</p>
+                        <p className="text-sm">Add integrations to see their health status here</p>
+                    </CardContent>
+                </Card>
+            ) : (
+                <div
+                    data-testid="system-integrations-grid"
+                    className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
+                >
+                    {healthData.map((integration) => (
+                        <SystemIntegrationCard
+                            key={integration.id}
+                            integration={integration}
+                            canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                            metaFormsCount={metaFormsCount}
+                            metaMappedFormsCount={metaMappedFormsCount}
+                            metaAdAccounts={metaAdAccounts}
+                            inboundWebhooksCount={inboundWebhooksCount}
+                            zapierOutboundEnabled={zapierOutboundEnabled}
+                        />
+                    ))}
+                </div>
+            )}
+        </>
+    )
+}
+
+function SystemIntegrationCard({
+    integration,
+    canManageOrganizationIntegrations,
+    metaFormsCount,
+    metaMappedFormsCount,
+    metaAdAccounts,
+    inboundWebhooksCount,
+    zapierOutboundEnabled,
+}: {
+    integration: IntegrationHealth
+    canManageOrganizationIntegrations: boolean
+    metaFormsCount: number
+    metaMappedFormsCount: number
+    metaAdAccounts: MetaAdAccount[]
+    inboundWebhooksCount: number
+    zapierOutboundEnabled: boolean
+}) {
+    const typeConfig = integrationTypeConfig[integration.integration_type] || {
+        icon: ServerIcon,
+        label: integration.integration_type.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
+        description: "Custom integration",
+    }
+    const status = statusConfig[integration.status] || statusConfig.error
+    const configStatus = configStatusLabels[integration.config_status]
+        ?? configStatusLabels.configured
+        ?? { label: "Configured", variant: "default" as const }
+    const Icon = typeConfig.icon
+    const StatusIcon = status.icon
+    const metricsLabel = getSystemIntegrationMetricsLabel({
+        integrationType: integration.integration_type,
+        metaFormsCount,
+        metaMappedFormsCount,
+        metaAdAccounts,
+        inboundWebhooksCount,
+        zapierOutboundEnabled,
+    })
+
+    return (
+        <Card className="relative overflow-hidden">
+            <div className={`absolute left-0 top-0 h-full w-1 ${getIntegrationStatusBarClass(integration.status)}`} />
+
+            <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
+                            <Icon className="size-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-base">{typeConfig.label}</CardTitle>
+                            {integration.integration_key ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Page: {integration.integration_key}
+                                </p>
+                            ) : null}
+                        </div>
+                    </div>
+                    <Badge variant={status.badge} className="flex items-center gap-1">
+                        <StatusIcon className="size-3" aria-hidden="true" />
+                        {status.label}
+                    </Badge>
+                </div>
+                <CardDescription className="mt-2 text-xs">{typeConfig.description}</CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-3">
+                {metricsLabel ? (
+                    <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                        <ActivityIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                        {metricsLabel}
+                    </div>
+                ) : null}
+
+                <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Configuration</span>
+                    <Badge variant={configStatus.variant} className="text-xs">
+                        <KeyIcon className="mr-1 size-3" aria-hidden="true" />
+                        {configStatus.label}
+                    </Badge>
+                </div>
+
+                <SystemIntegrationTimestamps integration={integration} />
+                <SystemIntegrationErrorDetails integration={integration} />
+                <SystemIntegrationAction
+                    integration={integration}
+                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                />
+            </CardContent>
+        </Card>
+    )
+}
+
+function SystemIntegrationTimestamps({ integration }: { integration: IntegrationHealth }) {
+    return (
+        <div className="space-y-1 text-xs">
+            {integration.last_success_at ? (
+                <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Last success</span>
+                    <span className="text-green-600">
+                        {formatRelativeTime(integration.last_success_at, "Never")}
+                    </span>
+                </div>
+            ) : null}
+            {integration.last_error_at ? (
+                <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Last error</span>
+                    <span className="text-red-600">
+                        {formatRelativeTime(integration.last_error_at, "Never")}
+                    </span>
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
+function SystemIntegrationErrorDetails({ integration }: { integration: IntegrationHealth }) {
+    return (
+        <>
+            {integration.error_count_24h > 0 ? (
+                <div className="flex items-center justify-between rounded-md bg-red-100 px-3 py-2 text-sm dark:bg-red-900/30">
+                    <span className="text-red-700 dark:text-red-300">Errors (24h)</span>
+                    <span className="font-semibold text-red-700 dark:text-red-300">
+                        {integration.error_count_24h}
+                    </span>
+                </div>
+            ) : null}
+            {integration.last_error ? (
+                <div className="rounded-md bg-muted p-2">
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                        {integration.last_error}
+                    </p>
+                </div>
+            ) : null}
+        </>
+    )
+}
+
+function SystemIntegrationAction({
+    integration,
+    canManageOrganizationIntegrations,
+}: {
+    integration: IntegrationHealth
+    canManageOrganizationIntegrations: boolean
+}) {
+    if (integration.config_status === "configured") {
+        return null
+    }
+
+    if (!canManageOrganizationIntegrations) {
+        return (
+            <p className="text-xs text-muted-foreground text-center">
+                Admin access required to configure
+            </p>
+        )
+    }
+
+    if (integration.integration_type === "meta_leads" || integration.integration_type === "meta_capi") {
+        return (
+            <Button
+                render={<Link href="/settings/integrations/meta" />}
+                variant="outline"
+                size="sm"
+                className="w-full"
+            >
+                <KeyIcon className="mr-2 size-3" aria-hidden="true" />
+                {integration.config_status === "expired_token" ? "Refresh Token" : "Configure"}
+            </Button>
+        )
+    }
+
+    return (
+        <p className="text-xs text-muted-foreground text-center">
+            Configure via CLI
+        </p>
+    )
+}
+
+function getSystemIntegrationMetricsLabel({
+    integrationType,
+    metaFormsCount,
+    metaMappedFormsCount,
+    metaAdAccounts,
+    inboundWebhooksCount,
+    zapierOutboundEnabled,
+}: {
+    integrationType: string
+    metaFormsCount: number
+    metaMappedFormsCount: number
+    metaAdAccounts: MetaAdAccount[]
+    inboundWebhooksCount: number
+    zapierOutboundEnabled: boolean
+}): string | null {
+    if (integrationType === "meta_leads") {
+        return `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} synced · ${metaMappedFormsCount} mapped`
+    }
+    if (integrationType === "meta_capi") {
+        const capiEnabledCount = metaAdAccounts.filter((account) => account.capi_enabled).length
+        return `${capiEnabledCount} ad account${capiEnabledCount === 1 ? "" : "s"} with CAPI enabled`
+    }
+    if (integrationType === "zapier") {
+        const outboundStatus = zapierOutboundEnabled ? "enabled" : "disabled"
+        return `${inboundWebhooksCount} inbound webhook${inboundWebhooksCount === 1 ? "" : "s"} · Outbound ${outboundStatus}`
+    }
+    return null
+}
+
+function getIntegrationStatusBarClass(status: IntegrationHealth["status"]): string {
+    if (status === "healthy") return "bg-green-500"
+    if (status === "degraded") return "bg-yellow-500"
+    return "bg-red-500"
+}
+
+function IntegrationsHelpCard() {
+    return (
+        <Card className="bg-muted/50">
+            <CardHeader>
+                <CardTitle className="text-base">Need help?</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+                <p>
+                    Integration tokens are managed via CLI commands. To update a Meta page token:
+                </p>
+                <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-xs">
+                    python -m app.cli update-meta-page-token --page-id YOUR_PAGE_ID
+                </pre>
+                <p className="mt-3">
+                    Contact your administrator if you need to add or reconfigure integrations.
+                </p>
+            </CardContent>
+        </Card>
     )
 }

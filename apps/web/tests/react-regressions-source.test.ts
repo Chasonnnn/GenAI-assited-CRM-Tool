@@ -1637,6 +1637,25 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("<MetaCrmDatasetTestControls")
     })
 
+    it("keeps integrations page rendering split into focused sections", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+        const pageSource = readFunctionSource(source, "IntegrationsPage")
+
+        expect(source).toContain("function IntegrationsPageHeader")
+        expect(source).toContain("function PersonalIntegrationsSection")
+        expect(source).toContain("function PersonalIntegrationCard")
+        expect(source).toContain("function OrganizationIntegrationsSection")
+        expect(source).toContain("function OrganizationIntegrationCard")
+        expect(source).toContain("function SystemIntegrationsSection")
+        expect(source).toContain("function SystemIntegrationCard")
+        expect(source).toContain("function IntegrationsHelpCard")
+        expect(source).toContain("function IntegrationConfigurationDialogs")
+        expect(pageSource).not.toContain("Personal Integrations")
+        expect(pageSource).not.toContain("Organization Integrations")
+        expect(pageSource).not.toContain("System Integrations")
+        expect(pageSource).not.toContain("Need help?")
+    })
+
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
         const hookSource = readSource("lib/hooks/use-zapier.ts")
