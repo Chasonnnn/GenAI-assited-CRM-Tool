@@ -1675,6 +1675,25 @@ describe("React regression guards (source)", () => {
         expect(sectionSource).not.toContain("Save AI Configuration")
     })
 
+    it("keeps email integration settings rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+        const sectionSource = readFunctionSource(source, "EmailConfigurationSection")
+
+        expect(source).toContain("function EmailConfigurationLoadingState")
+        expect(source).toContain("function EmailConfigurationHeading")
+        expect(source).toContain("function EmailSettingsCard")
+        expect(source).toContain("function EmailProviderField")
+        expect(source).toContain("function ResendConfigurationFields")
+        expect(source).toContain("function ResendApiKeyField")
+        expect(source).toContain("function ResendVerifiedDomainBanner")
+        expect(source).toContain("function ResendWebhookUrlField")
+        expect(source).toContain("function GmailConfigurationFields")
+        expect(source).toContain("function EmailSaveButton")
+        expect(sectionSource).not.toContain("Resend Configuration")
+        expect(sectionSource).not.toContain("Gmail Configuration")
+        expect(sectionSource).not.toContain("Save Email Configuration")
+    })
+
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
         const hookSource = readSource("lib/hooks/use-zapier.ts")
