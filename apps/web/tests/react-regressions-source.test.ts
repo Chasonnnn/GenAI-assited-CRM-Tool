@@ -1351,6 +1351,7 @@ describe("React regression guards (source)", () => {
         const clientSource = readSource("components/surrogates/detail/SurrogateDetailLayoutClient.tsx")
         const indexSource = readSource("components/surrogates/detail/SurrogateDetailLayout/index.tsx")
         const contextSource = readSource("components/surrogates/detail/SurrogateDetailLayout/context.tsx")
+        const providerSource = readFunctionSource(contextSource, "SurrogateDetailLayoutProviderContent")
 
         expect(clientSource).not.toContain("useSurrogateDetailLayout")
         expect(indexSource).not.toContain("useSurrogateDetailLayout")
@@ -1374,6 +1375,12 @@ describe("React regression guards (source)", () => {
         expect(contextSource).not.toContain("router.push")
         expect(contextSource).not.toContain("router.replace")
         expect(contextSource).not.toContain("[defaultPipeline?.feature_config, stageOptions, user?.role]")
+        expect(contextSource).toContain("function useSurrogateDetailTabNavigation")
+        expect(contextSource).toContain("function useSurrogateDetailDataValue")
+        expect(contextSource).toContain("function useSurrogateDetailDialogState")
+        expect(contextSource).toContain("function useSurrogateDetailZoomValue")
+        expect(contextSource).toContain("function useSurrogateDetailActionsValue")
+        expect(providerSource.split("\n").length).toBeLessThan(180)
         expect(contextSource).toContain(
             "canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)"
         )

@@ -256,28 +256,32 @@ export function SurrogateDetailLayoutProvider({ surrogateId, children }: Surroga
     )
 }
 
-function SurrogateDetailLayoutProviderContent({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
+type SurrogateDetailAuthUser = ReturnType<typeof useAuth>["user"]
+type SurrogateDetailRouterPush = ReturnType<typeof useRouter>["push"]
+type ZoomIdempotencyKeyRef = React.MutableRefObject<string | null>
+
+function canUserViewSurrogateProfile(user: SurrogateDetailAuthUser) {
+    return user ? ["case_manager", "admin", "developer"].includes(user.role) : false
+}
+
+function useSurrogateDetailTabNavigation({
+    surrogateId,
+    canViewProfile,
+}: {
+    surrogateId: string
+    canViewProfile: boolean
+}) {
     const { push, replace } = useRouter()
     const searchParams = useSearchParams()
     const segment = useSelectedLayoutSegment()
-    const { user } = useAuth()
     const detailSearch = searchParams.toString()
     const returnTo = sanitizeInternalReturnTo(searchParams.get("return_to")) ?? DEFAULT_SURROGATES_LIST_PATH
-
-    // Tab state
-    const canViewProfile = user
-        ? ["case_manager", "admin", "developer"].includes(user.role)
-        : false
-
     const allowedTabs: TabValue[] = canViewProfile
         ? [...TAB_VALUES]
         : TAB_VALUES.filter((tab) => tab !== "profile")
 
     const isTabValue = (value: string | null): value is TabValue =>
         !!value && allowedTabs.includes(value as TabValue)
-
-    const resolvedTab: TabValue = isTabValue(segment) ? segment : "overview"
-    const currentTab: TabValue = resolvedTab
 
     const handleTabChange = (value: string) => {
         const nextTab: TabValue = isTabValue(value) ? value : "overview"
@@ -297,23 +301,31 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         normalizeInvalidTab(segment)
     }, [segment])
 
-    // Dialog state - consolidated from 7+ booleans
-    const [activeDialog, setActiveDialog] = useState<ActiveDialog>({ type: "none" })
-    const [selectedQueueId, setSelectedQueueId] = useState("")
+    const tabsValue: SurrogateDetailTabsContextValue = {
+        currentTab: isTabValue(segment) ? segment : "overview",
+        allowedTabs,
+        setTab: handleTabChange,
+    }
 
-    // Zoom form state
-    const [zoomForm, setZoomForm] = useState<ZoomFormState>({
-        topic: "",
-        duration: 30,
-        startAt: undefined,
-        lastMeetingResult: null,
-    })
-    const zoomIdempotencyKeyRef = useRef<string | null>(null)
+    return { push, returnTo, tabsValue }
+}
 
+function useSurrogateDetailDataValue({
+    surrogateId,
+    user,
+    canViewProfile,
+    push,
+    returnTo,
+}: {
+    surrogateId: string
+    user: SurrogateDetailAuthUser
+    canViewProfile: boolean
+    push: SurrogateDetailRouterPush
+    returnTo: string
+}) {
     const timezoneName = getLocalTimezoneName()
-
-    // Data fetching
     const { data: surrogateData, isLoading, error } = useSurrogate(surrogateId)
+    const surrogate = surrogateData || null
     const { data: defaultPipeline } = useDefaultPipeline()
     const { data: notes } = useNotes(surrogateId)
     const { data: tasksData } = useTasks({ surrogate_id: surrogateId, exclude_approvals: true })
@@ -322,8 +334,6 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     })
     const { data: assigneesData = [] } = useAssignees()
     const { data: zoomStatus } = useZoomStatus()
-
-    // Derived data
     const stageOptions = defaultPipeline?.stages ?? EMPTY_STAGES
     const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
     const visibleStageOptions = (() => {
@@ -332,62 +342,270 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
             canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)
         )
     })()
-    const stageContext = getSurrogateStageContext(surrogateData ?? null, stageById)
-
+    const stageContext = getSurrogateStageContext(surrogate, stageById)
     const canViewJourney = (() => {
         if (!stageContext.effectiveStage) return false
         return stageHasCapability(stageContext.effectiveStage, "locks_match_state")
     })()
-
     const stage = stageContext.currentStage
     const effectiveStage = stageContext.effectiveStage
     const pausedFromStage = stageContext.pausedFromStage
-    const statusLabel = surrogateData?.status_label || stage?.label || "Unknown"
+    const statusLabel = surrogate?.status_label || stage?.label || "Unknown"
     const statusColor = stage?.color || "#6B7280"
     const noteCount = notes?.length ?? 0
     const taskCount = tasksData?.items?.length ?? 0
-
-    // Permissions
     const canManageQueue = user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false
     const isOwnedByCurrentUser = !!(
-        surrogateData?.owner_type === "user" &&
+        surrogate?.owner_type === "user" &&
         user?.user_id &&
-        surrogateData.owner_id === user.user_id
+        surrogate.owner_id === user.user_id
     )
     const canChangeStage = !!(
-        surrogateData &&
-        !surrogateData.is_archived &&
+        surrogate &&
+        !surrogate.is_archived &&
         (["admin", "developer"].includes(user?.role || "") ||
             (user?.role === "case_manager" && isOwnedByCurrentUser) ||
             (user?.role === "intake_specialist" && isOwnedByCurrentUser))
     )
-    const isInQueue = surrogateData?.owner_type === "queue"
-    const isOwnedByUser = surrogateData?.owner_type === "user"
+    const isInQueue = surrogate?.owner_type === "queue"
+    const isOwnedByUser = surrogate?.owner_type === "user"
     const zoomConnected = !!zoomStatus?.connected
     const canClaimSurrogate = !!(
-        surrogateData &&
-        !surrogateData.is_archived &&
+        surrogate &&
+        !surrogate.is_archived &&
         isInQueue &&
         canManageQueue
     )
 
     useEffect(() => {
-        if (!surrogateData?.id) return
-        trackSurrogateViewed(surrogateData.id)
-    }, [surrogateData?.id])
+        if (!surrogate?.id) return
+        trackSurrogateViewed(surrogate.id)
+    }, [surrogate?.id])
 
-    // Set AI context
     useSetAIContext(
-        surrogateData
+        surrogate
             ? {
                 entityType: "surrogate",
-                entityId: surrogateData.id,
-                entityName: `Surrogate #${surrogateData.surrogate_number} - ${surrogateData.full_name}`,
+                entityId: surrogate.id,
+                entityName: `Surrogate #${surrogate.surrogate_number} - ${surrogate.full_name}`,
             }
             : null
     )
 
-    // Mutations
+    const navigateToList = () => {
+        push(returnTo as Route)
+    }
+
+    const dataValue: SurrogateDetailDataContextValue = {
+        surrogateId,
+        surrogate,
+        isLoading,
+        error: error || null,
+        stage,
+        effectiveStage,
+        pausedFromStage,
+        statusLabel,
+        statusColor,
+        stageOptions,
+        visibleStageOptions,
+        stageById,
+        queues,
+        assignees: assigneesData,
+        noteCount,
+        taskCount,
+        canViewJourney,
+        canViewProfile,
+        timezoneName,
+        navigateToList,
+        canManageQueue,
+        canClaimSurrogate,
+        canChangeStage,
+        isOwnedByCurrentUser,
+        isInQueue,
+        isOwnedByUser,
+        zoomConnected,
+    }
+
+    return {
+        canChangeStage,
+        dataValue,
+        queues,
+        stageById,
+        surrogate,
+        timezoneName,
+    }
+}
+
+function useSurrogateDetailDialogState() {
+    const [activeDialog, setActiveDialog] = useState<ActiveDialog>({ type: "none" })
+    const [selectedQueueId, setSelectedQueueId] = useState("")
+    const zoomIdempotencyKeyRef = useRef<string | null>(null)
+
+    const resetZoomIdempotencyKey = () => {
+        zoomIdempotencyKeyRef.current = null
+    }
+
+    const openDialog = (dialog: ActiveDialog) => {
+        if (dialog.type !== "zoom_meeting") {
+            resetZoomIdempotencyKey()
+        }
+        setActiveDialog(dialog)
+    }
+
+    const closeDialog = () => {
+        resetZoomIdempotencyKey()
+        setActiveDialog({ type: "none" })
+    }
+
+    const dialogValue: SurrogateDetailDialogContextValue = {
+        activeDialog,
+        openDialog,
+        closeDialog,
+    }
+    const queueValue: SurrogateDetailQueueContextValue = {
+        selectedQueueId,
+        setSelectedQueueId,
+    }
+
+    return {
+        closeDialog,
+        dialogValue,
+        queueValue,
+        selectedQueueId,
+        setSelectedQueueId,
+        zoomIdempotencyKeyRef,
+    }
+}
+
+function useSurrogateDetailZoomValue({
+    closeDialog,
+    surrogate,
+    surrogateId,
+    timezoneName,
+    zoomIdempotencyKeyRef,
+}: {
+    closeDialog: () => void
+    surrogate: SurrogateRead | null
+    surrogateId: string
+    timezoneName: string
+    zoomIdempotencyKeyRef: ZoomIdempotencyKeyRef
+}) {
+    const [zoomForm, setZoomForm] = useState<ZoomFormState>({
+        topic: "",
+        duration: 30,
+        startAt: undefined,
+        lastMeetingResult: null,
+    })
+    const createZoomMeetingMutation = useCreateZoomMeeting()
+    const sendZoomInviteMutation = useSendZoomInvite()
+    const setZoomTopic = (topic: string) => {
+        setZoomForm((prev) => ({ ...prev, topic }))
+    }
+    const setZoomDuration = (duration: number) => {
+        setZoomForm((prev) => ({ ...prev, duration }))
+    }
+    const setZoomStartAt = (startAt: Date | undefined) => {
+        setZoomForm((prev) => ({ ...prev, startAt }))
+    }
+    const setZoomLastMeetingResult = (lastMeetingResult: ZoomFormState["lastMeetingResult"]) => {
+        setZoomForm((prev) => ({ ...prev, lastMeetingResult }))
+    }
+
+    const createZoomMeeting = async () => {
+        if (!zoomForm.startAt || !surrogate) return
+        try {
+            if (!zoomIdempotencyKeyRef.current) {
+                zoomIdempotencyKeyRef.current =
+                    typeof crypto !== "undefined" && "randomUUID" in crypto
+                        ? crypto.randomUUID()
+                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+            }
+            const result = await createZoomMeetingMutation.mutateAsync({
+                entity_type: "surrogate",
+                entity_id: surrogateId,
+                topic: zoomForm.topic,
+                start_time: toLocalIsoDateTime(zoomForm.startAt),
+                timezone: timezoneName,
+                duration: zoomForm.duration,
+                contact_name: surrogate.full_name,
+                idempotency_key: zoomIdempotencyKeyRef.current,
+            })
+            setZoomLastMeetingResult({
+                join_url: result.join_url,
+                meeting_id: result.meeting_id,
+                password: result.password,
+                start_time: formatMeetingTimeForInvite(zoomForm.startAt),
+            })
+            void navigator.clipboard.writeText(result.join_url)
+        } catch {
+            // Error handled by react-query
+        }
+    }
+
+    const sendZoomInvite = async () => {
+        if (!surrogate?.email || !zoomForm.lastMeetingResult) return
+        try {
+            await sendZoomInviteMutation.mutateAsync({
+                recipient_email: surrogate.email,
+                meeting_id: zoomForm.lastMeetingResult.meeting_id,
+                join_url: zoomForm.lastMeetingResult.join_url,
+                topic: zoomForm.topic,
+                duration: zoomForm.duration,
+                contact_name: surrogate.full_name || "there",
+                surrogate_id: surrogateId,
+                ...(zoomForm.lastMeetingResult.start_time
+                    ? { start_time: zoomForm.lastMeetingResult.start_time }
+                    : {}),
+                ...(zoomForm.lastMeetingResult.password
+                    ? { password: zoomForm.lastMeetingResult.password }
+                    : {}),
+            })
+            closeDialog()
+            setZoomLastMeetingResult(null)
+        } catch {
+            // Error handled by react-query
+        }
+    }
+
+    const zoomValue: SurrogateDetailZoomContextValue = {
+        zoomForm,
+        setZoomTopic,
+        setZoomDuration,
+        setZoomStartAt,
+        setZoomLastMeetingResult,
+        zoomIdempotencyKeyRef,
+        createZoomMeeting,
+        sendZoomInvite,
+        isCreateZoomPending: createZoomMeetingMutation.isPending,
+        isSendZoomInvitePending: sendZoomInviteMutation.isPending,
+    }
+
+    return zoomValue
+}
+
+function useSurrogateDetailActionsValue({
+    canChangeStage,
+    closeDialog,
+    push,
+    queues,
+    returnTo,
+    selectedQueueId,
+    setSelectedQueueId,
+    stageById,
+    surrogate,
+    surrogateId,
+}: {
+    canChangeStage: boolean
+    closeDialog: () => void
+    push: SurrogateDetailRouterPush
+    queues: Queue[]
+    returnTo: string
+    selectedQueueId: string
+    setSelectedQueueId: (id: string) => void
+    stageById: Map<string, PipelineStage>
+    surrogate: SurrogateRead | null
+    surrogateId: string
+}) {
     const changeStatusMutation = useChangeSurrogateStatus()
     const archiveMutation = useArchiveSurrogate()
     const restoreMutation = useRestoreSurrogate()
@@ -395,40 +613,7 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
     const claimSurrogateMutation = useClaimSurrogate()
     const releaseSurrogateMutation = useReleaseSurrogate()
     const assignSurrogateMutation = useAssignSurrogate()
-    const createZoomMeetingMutation = useCreateZoomMeeting()
-    const sendZoomInviteMutation = useSendZoomInvite()
 
-    // Dialog actions
-    const openDialog = (dialog: ActiveDialog) => {
-        if (dialog.type !== "zoom_meeting") {
-            zoomIdempotencyKeyRef.current = null
-        }
-        setActiveDialog(dialog)
-    }
-
-    const closeDialog = () => {
-        zoomIdempotencyKeyRef.current = null
-        setActiveDialog({ type: "none" })
-    }
-
-    // Zoom form setters
-    const setZoomTopic = (topic: string) => {
-        setZoomForm(prev => ({ ...prev, topic }))
-    }
-
-    const setZoomDuration = (duration: number) => {
-        setZoomForm(prev => ({ ...prev, duration }))
-    }
-
-    const setZoomStartAt = (startAt: Date | undefined) => {
-        setZoomForm(prev => ({ ...prev, startAt }))
-    }
-
-    const setZoomLastMeetingResult = (lastMeetingResult: ZoomFormState["lastMeetingResult"]) => {
-        setZoomForm(prev => ({ ...prev, lastMeetingResult }))
-    }
-
-    // Actions
     const changeStatus = async (data: {
         stage_id: string
         reason?: string
@@ -438,12 +623,11 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         delivery_baby_gender?: string | null
         delivery_baby_weight?: string | null
     }): Promise<{ status: "applied" | "pending_approval"; request_id?: string }> => {
-        if (!surrogateData || !canChangeStage) {
+        if (!surrogate || !canChangeStage) {
             return { status: "applied" }
         }
-        const previousStageId = surrogateData.stage_id
+        const previousStageId = surrogate.stage_id
         const targetStageLabel = stageById.get(data.stage_id)?.label || "Stage"
-
         const payload: {
             stage_id: string
             reason?: string
@@ -465,18 +649,12 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         if (data.delivery_baby_weight !== undefined) {
             payload.delivery_baby_weight = data.delivery_baby_weight
         }
-
-        const result = await changeStatusMutation.mutateAsync({
-            surrogateId,
-            data: payload,
-        })
+        const result = await changeStatusMutation.mutateAsync({ surrogateId, data: payload })
         closeDialog()
-
         const response: { status: "applied" | "pending_approval"; request_id?: string } = {
             status: result.status,
         }
         if (result.request_id) response.request_id = result.request_id
-
         if (result.status === "applied") {
             toast.success(`Stage updated to ${targetStageLabel}`, {
                 action: {
@@ -506,169 +684,40 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         await archiveMutation.mutateAsync(surrogateId)
         push(returnTo as Route)
     }
-
     const restoreSurrogate = async () => {
         await restoreMutation.mutateAsync(surrogateId)
     }
-
     const claimSurrogate = async () => {
         await claimSurrogateMutation.mutateAsync(surrogateId)
         toast.success("Surrogate claimed")
     }
-
     const releaseSurrogate = async () => {
         if (!selectedQueueId) return
         await releaseSurrogateMutation.mutateAsync({ surrogateId, queueId: selectedQueueId })
         closeDialog()
         setSelectedQueueId("")
     }
-
     const updateSurrogate = async (data: Record<string, unknown>) => {
         await updateSurrogateMutation.mutateAsync({ surrogateId, data })
         closeDialog()
     }
-
     const assignSurrogate = async (ownerId: string | null) => {
-        if (!surrogateData) return
+        if (!surrogate) return
         if (ownerId === null) {
-            const defaultQueue = queues.find(q => q.name === "Unassigned")
+            const defaultQueue = queues.find((queue) => queue.name === "Unassigned")
             if (defaultQueue) {
                 await releaseSurrogateMutation.mutateAsync({
-                    surrogateId: surrogateData.id,
+                    surrogateId: surrogate.id,
                     queueId: defaultQueue.id,
                 })
             }
         } else {
             await assignSurrogateMutation.mutateAsync({
-                surrogateId: surrogateData.id,
+                surrogateId: surrogate.id,
                 owner_type: "user",
                 owner_id: ownerId,
             })
         }
-    }
-
-    const createZoomMeeting = async () => {
-        if (!zoomForm.startAt || !surrogateData) return
-
-        try {
-            if (!zoomIdempotencyKeyRef.current) {
-                zoomIdempotencyKeyRef.current =
-                    typeof crypto !== "undefined" && "randomUUID" in crypto
-                        ? crypto.randomUUID()
-                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-            }
-            const result = await createZoomMeetingMutation.mutateAsync({
-                entity_type: "surrogate",
-                entity_id: surrogateId,
-                topic: zoomForm.topic,
-                start_time: toLocalIsoDateTime(zoomForm.startAt),
-                timezone: timezoneName,
-                duration: zoomForm.duration,
-                contact_name: surrogateData.full_name,
-                idempotency_key: zoomIdempotencyKeyRef.current,
-            })
-            setZoomLastMeetingResult({
-                join_url: result.join_url,
-                meeting_id: result.meeting_id,
-                password: result.password,
-                start_time: formatMeetingTimeForInvite(zoomForm.startAt),
-            })
-            void navigator.clipboard.writeText(result.join_url)
-        } catch {
-            // Error handled by react-query
-        }
-    }
-
-    const sendZoomInvite = async () => {
-        if (!surrogateData?.email || !zoomForm.lastMeetingResult) return
-
-        try {
-            await sendZoomInviteMutation.mutateAsync({
-                recipient_email: surrogateData.email,
-                meeting_id: zoomForm.lastMeetingResult.meeting_id,
-                join_url: zoomForm.lastMeetingResult.join_url,
-                topic: zoomForm.topic,
-                duration: zoomForm.duration,
-                contact_name: surrogateData.full_name || "there",
-                surrogate_id: surrogateId,
-                ...(zoomForm.lastMeetingResult.start_time
-                    ? { start_time: zoomForm.lastMeetingResult.start_time }
-                    : {}),
-                ...(zoomForm.lastMeetingResult.password
-                    ? { password: zoomForm.lastMeetingResult.password }
-                    : {}),
-            })
-            closeDialog()
-            setZoomLastMeetingResult(null)
-        } catch {
-            // Error handled by react-query
-        }
-    }
-
-    const navigateToList = () => {
-        push(returnTo as Route)
-    }
-
-    const dataValue: SurrogateDetailDataContextValue = {
-        surrogateId,
-        surrogate: surrogateData || null,
-        isLoading,
-        error: error || null,
-
-        stage,
-        effectiveStage,
-        pausedFromStage,
-        statusLabel,
-        statusColor,
-        stageOptions,
-        visibleStageOptions,
-        stageById,
-        queues,
-        assignees: assigneesData,
-        noteCount,
-        taskCount,
-        canViewJourney,
-        canViewProfile,
-        timezoneName,
-        navigateToList,
-
-        canManageQueue,
-        canClaimSurrogate,
-        canChangeStage,
-        isOwnedByCurrentUser,
-        isInQueue,
-        isOwnedByUser,
-        zoomConnected,
-    }
-
-    const tabsValue: SurrogateDetailTabsContextValue = {
-        currentTab,
-        allowedTabs,
-        setTab: handleTabChange,
-    }
-
-    const dialogValue: SurrogateDetailDialogContextValue = {
-        activeDialog,
-        openDialog,
-        closeDialog,
-    }
-
-    const queueValue: SurrogateDetailQueueContextValue = {
-        selectedQueueId,
-        setSelectedQueueId,
-    }
-
-    const zoomValue: SurrogateDetailZoomContextValue = {
-        zoomForm,
-        setZoomTopic,
-        setZoomDuration,
-        setZoomStartAt,
-        setZoomLastMeetingResult,
-        zoomIdempotencyKeyRef,
-        createZoomMeeting,
-        sendZoomInvite,
-        isCreateZoomPending: createZoomMeetingMutation.isPending,
-        isSendZoomInvitePending: sendZoomInviteMutation.isPending,
     }
 
     const actionsValue: SurrogateDetailActionsContextValue = {
@@ -688,11 +737,46 @@ function SurrogateDetailLayoutProviderContent({ surrogateId, children }: Surroga
         isAssignPending: assignSurrogateMutation.isPending,
     }
 
+    return actionsValue
+}
+
+function SurrogateDetailLayoutProviderContent({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
+    const { user } = useAuth()
+    const canViewProfile = canUserViewSurrogateProfile(user)
+    const navigation = useSurrogateDetailTabNavigation({ surrogateId, canViewProfile })
+    const data = useSurrogateDetailDataValue({
+        surrogateId,
+        user,
+        canViewProfile,
+        push: navigation.push,
+        returnTo: navigation.returnTo,
+    })
+    const dialogs = useSurrogateDetailDialogState()
+    const zoomValue = useSurrogateDetailZoomValue({
+        closeDialog: dialogs.closeDialog,
+        surrogate: data.surrogate,
+        surrogateId,
+        timezoneName: data.timezoneName,
+        zoomIdempotencyKeyRef: dialogs.zoomIdempotencyKeyRef,
+    })
+    const actionsValue = useSurrogateDetailActionsValue({
+        canChangeStage: data.canChangeStage,
+        closeDialog: dialogs.closeDialog,
+        push: navigation.push,
+        queues: data.queues,
+        returnTo: navigation.returnTo,
+        selectedQueueId: dialogs.selectedQueueId,
+        setSelectedQueueId: dialogs.setSelectedQueueId,
+        stageById: data.stageById,
+        surrogate: data.surrogate,
+        surrogateId,
+    })
+
     return (
-        <SurrogateDetailDataContext.Provider value={dataValue}>
-            <SurrogateDetailTabsContext.Provider value={tabsValue}>
-                <SurrogateDetailDialogContext.Provider value={dialogValue}>
-                    <SurrogateDetailQueueContext.Provider value={queueValue}>
+        <SurrogateDetailDataContext.Provider value={data.dataValue}>
+            <SurrogateDetailTabsContext.Provider value={navigation.tabsValue}>
+                <SurrogateDetailDialogContext.Provider value={dialogs.dialogValue}>
+                    <SurrogateDetailQueueContext.Provider value={dialogs.queueValue}>
                         <SurrogateDetailZoomContext.Provider value={zoomValue}>
                             <SurrogateDetailActionsContext.Provider value={actionsValue}>
                                 {children}
