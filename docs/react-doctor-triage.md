@@ -4749,3 +4749,25 @@ Full command after Batch 219: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 18 warnings`
 - Removed globally since Batch 218: AI configuration `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f420c4d5-6f5b-4e6e-966a-9077167b1bab`
+
+## Batch 220
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/page.tsx:1508` | Valid. `EmailConfigurationSection` still owned loading/heading rendering, provider selection, Resend API key edit/test UI, verified-domain/from/reply/webhook fields, Gmail default sender UI, and save button rendering in one section. | High | Extracted `EmailConfigurationLoadingState`, `EmailConfigurationHeading`, `EmailSettingsCard`, `EmailProviderField`, `ResendConfigurationFields`, `ResendApiKeyField`, `ResendVerifiedDomainBanner`, `ResendWebhookUrlField`, `GmailConfigurationFields`, and `EmailSaveButton`. Kept Resend hooks, eligible-sender query, form/UI state, provider/save/test/rotate handlers, and toast behavior in `EmailConfigurationSection`. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "email integration settings rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "email integration settings rendering"`; `pnpm test --run tests/integrations-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 220: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `2`
+- Summary: `Maintainability 2 warnings`
+- Note: the changed file still has existing `no-giant-component` warnings for `ZapierWebhookSection` and `MetaConfigurationSection`; this batch removed the targeted `EmailConfigurationSection` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-a8516ec2-74ed-4ce9-97e0-e1a0c28c322e`
+
+Full command after Batch 220: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `27`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 17 warnings`
+- Removed globally since Batch 219: email configuration `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e39b24d9-0ac7-45a9-a9be-f95a047a70dd`
