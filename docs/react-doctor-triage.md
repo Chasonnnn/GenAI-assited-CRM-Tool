@@ -4880,3 +4880,23 @@ Full command after Batch 228: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 9 warnings`
 - Removed globally since Batch 227: Zapier webhook section `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-855cc1f4-2df1-4dab-8e32-61a85e25b8e4`
+
+## Batch 229
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/surrogates/detail/SurrogateDetailLayout/context.tsx:259` | Valid. `SurrogateDetailLayoutProviderContent` still owned tab routing, search-param return handling, data fetching, stage derivation, permissions, AI context setup, dialog state, queue selection, Zoom form/idempotency state, Zoom create/invite actions, surrogate mutations, and all context value assembly in one provider. | High | Extracted `useSurrogateDetailTabNavigation`, `useSurrogateDetailDataValue`, `useSurrogateDetailDialogState`, `useSurrogateDetailZoomValue`, and `useSurrogateDetailActionsValue`. Kept the public context hooks and provider nesting unchanged. Added a source guard requiring the hook split and a smaller provider line count. A read-only sidecar flagged Zoom idempotency, tab routing, and queue release as the main regression risks, so focused surrogate detail, picker, stage, change-stage, and hook tests were included. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate detail layout context"` failed before the hook split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate detail layout context"`; `pnpm test --run tests/surrogate-detail.test.tsx tests/header-actions.test.tsx tests/surrogate-detail-dialog-pickers.test.tsx`; `pnpm test --run tests/surrogate-stage-context.test.ts tests/change-stage-modal.test.tsx tests/use-surrogates-hooks.test.ts`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 229: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 229: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `18`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 8 warnings`
+- Removed globally since Batch 228: Surrogate detail layout provider `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c1a7d48e-569d-4f04-9ea8-45fcb38a7ca3`
