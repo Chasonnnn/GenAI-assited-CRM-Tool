@@ -4860,3 +4860,23 @@ Full command after Batch 227: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 10 warnings`
 - Removed globally since Batch 226: Interview tab provider `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6869f7f4-4423-4ca8-9850-d3021ad78ad4`
+
+## Batch 228
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/page.tsx:3324` | Valid. `ZapierWebhookSection` still owned Zapier settings queries, webhook draft state, field-paste state, outbound draft state, mutation handlers, inbound webhook rendering, field-paste rendering, test-lead controls, outbound settings, stage mapping rows, outbound test controls, and monitoring tabs in one section. | High | Extracted `ZapierInboundWebhooksCard`, `ZapierInboundWebhookItem`, `ZapierFieldPasteCard`, `ZapierTestLeadControls`, `ZapierOutboundSettingsCard`, `ZapierStageMappingRows`, `ZapierStageMappingRow`, and `ZapierOutboundTestControls`. The first render-only split left the parent at 397 lines, so extracted `useZapierWebhookController` for the existing state/query/mutation/handler logic and kept `ZapierWebhookSection` as a small view composition. Added a source guard requiring the helper split, controller hook, and parent line-count ceiling. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Zapier webhook rendering"` failed before helpers existed, then failed again after tightening the guard because `useZapierWebhookController` was missing. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Zapier webhook rendering"`; `pnpm test --run tests/integrations-page.test.tsx -t "zapier\|Zapier"`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 228: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 228: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `19`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 9 warnings`
+- Removed globally since Batch 227: Zapier webhook section `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-855cc1f4-2df1-4dab-8e32-61a85e25b8e4`
