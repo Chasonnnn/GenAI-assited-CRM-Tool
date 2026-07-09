@@ -1254,6 +1254,286 @@ function DayView({
     )
 }
 
+function UnifiedCalendarHeader({
+    currentDate,
+    viewType,
+    onNavigate,
+    onTodayClick,
+    onViewTypeChange,
+}: {
+    currentDate: Date
+    viewType: ViewType
+    onNavigate: (direction: "prev" | "next") => void
+    onTodayClick: () => void
+    onViewTypeChange: (viewType: ViewType) => void
+}) {
+    return (
+        <CardHeader className="grid-cols-[minmax(0,1fr)_auto] grid-rows-1 items-center gap-3 border-b border-border/70 bg-muted/20 pb-4">
+            <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm">
+                    <Button variant="ghost" size="sm" onClick={() => onNavigate("prev")} aria-label="Previous period">
+                        <ChevronLeftIcon className="size-4" aria-hidden="true" />
+                    </Button>
+                    <div className="min-w-[160px] px-2 text-center sm:min-w-[200px]">
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                            Calendar
+                        </p>
+                        <h2 className="truncate text-lg font-semibold" aria-live="polite">
+                            {viewType === "month" && format(currentDate, "MMMM yyyy")}
+                            {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
+                            {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
+                        </h2>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => onNavigate("next")} aria-label="Next period">
+                        <ChevronRightIcon className="size-4" aria-hidden="true" />
+                    </Button>
+                </div>
+                <Button variant="outline" size="sm" onClick={onTodayClick}>
+                    Today
+                </Button>
+            </div>
+
+            <Select value={viewType} onValueChange={(value) => value && onViewTypeChange(value as ViewType)}>
+                <SelectTrigger className="w-28 shrink-0 bg-background sm:w-36">
+                    <SelectValue placeholder="View">
+                        {(value: string | null) => {
+                            if (value === "month") return "Month"
+                            if (value === "week") return "Week"
+                            if (value === "day") return "Day"
+                            return "View"
+                        }}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
+                    <SelectItem value="day">Day</SelectItem>
+                </SelectContent>
+            </Select>
+        </CardHeader>
+    )
+}
+
+function UnifiedCalendarLoadingState() {
+    return (
+        <div className="py-12 flex items-center justify-center">
+            <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+        </div>
+    )
+}
+
+function GoogleCalendarDisconnectedAlert({
+    calendarError,
+}: {
+    calendarError: string | null | undefined
+}) {
+    return (
+        <Alert className="mb-4 border-amber-500/60 bg-amber-50 text-amber-900">
+            <CalendarIcon className="size-4" />
+            <AlertTitle>Google Calendar not connected</AlertTitle>
+            <AlertDescription>
+                {calendarError === "token_expired"
+                    ? "Your Google Calendar token expired. Reconnect to show Google Calendar events."
+                    : "Connect Google Calendar to show Google Calendar events alongside appointments."}
+            </AlertDescription>
+            <AlertAction>
+                <Button size="sm" variant="outline" render={<Link href="/settings/integrations" />}>
+                    Reconnect
+                </Button>
+            </AlertAction>
+        </Alert>
+    )
+}
+
+type UnifiedCalendarViewData = {
+    appointments: AppointmentListItem[]
+    tasks: TaskListItem[]
+    googleEvents: GoogleCalendarEvent[]
+}
+
+type UnifiedCalendarViewHandlers = {
+    onEventClick: (appt: AppointmentListItem) => void
+    onOpenDayAgenda: (day: Date) => void
+    onDragStart: (e: React.DragEvent, appointment: AppointmentListItem) => void
+    onDrop: (e: React.DragEvent, date: Date) => void
+    onDragOver: (e: React.DragEvent, date: Date) => void
+    onDragLeave: () => void
+    onTaskClick?: (task: TaskListItem) => void
+}
+
+function UnifiedCalendarViewContent({
+    viewType,
+    currentDate,
+    includeAppointments,
+    dragOverDate,
+    data,
+    handlers,
+}: {
+    viewType: ViewType
+    currentDate: Date
+    includeAppointments: boolean
+    dragOverDate: string | null
+    data: UnifiedCalendarViewData
+    handlers: UnifiedCalendarViewHandlers
+}) {
+    if (viewType === "month") {
+        return (
+            <MonthView
+                currentDate={currentDate}
+                appointments={data.appointments}
+                tasks={data.tasks}
+                googleEvents={data.googleEvents}
+                onEventClick={handlers.onEventClick}
+                dragOverDate={dragOverDate}
+                onOpenDayAgenda={handlers.onOpenDayAgenda}
+                {...(handlers.onTaskClick ? { onTaskClick: handlers.onTaskClick } : {})}
+                {...(includeAppointments ? {
+                    onDragStart: handlers.onDragStart,
+                    onDrop: handlers.onDrop,
+                    onDragOver: handlers.onDragOver,
+                    onDragLeave: handlers.onDragLeave,
+                } : {})}
+            />
+        )
+    }
+
+    if (viewType === "week") {
+        return (
+            <WeekView
+                currentDate={currentDate}
+                appointments={data.appointments}
+                tasks={data.tasks}
+                googleEvents={data.googleEvents}
+                onEventClick={handlers.onEventClick}
+                {...(handlers.onTaskClick ? { onTaskClick: handlers.onTaskClick } : {})}
+            />
+        )
+    }
+
+    return (
+        <DayView
+            currentDate={currentDate}
+            appointments={data.appointments}
+            tasks={data.tasks}
+            googleEvents={data.googleEvents}
+            onEventClick={handlers.onEventClick}
+            {...(handlers.onTaskClick ? { onTaskClick: handlers.onTaskClick } : {})}
+        />
+    )
+}
+
+function UnifiedCalendarLegend({
+    includeAppointments,
+    includeGoogleEvents,
+}: {
+    includeAppointments: boolean
+    includeGoogleEvents: boolean
+}) {
+    return (
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+            <span className="mr-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Legend
+            </span>
+            {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
+                <Badge key={status} variant="outline" className="gap-1.5 rounded-full font-normal">
+                    <span className={`size-2 rounded-full ${color}`} />
+                    <span className="capitalize">{status.replace("_", " ")}</span>
+                </Badge>
+            ))}
+            {includeGoogleEvents && (
+                <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
+                    <span className={`size-2 rounded-full ${GOOGLE_EVENT_COLOR}`} />
+                    <span>Google Calendar</span>
+                </Badge>
+            )}
+            <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
+                <span className={`size-2 rounded-full ${TASK_COLOR}`} />
+                <span>Tasks</span>
+            </Badge>
+            {includeAppointments && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                    Drag pending or confirmed appointments to open the reschedule picker.
+                </span>
+            )}
+        </div>
+    )
+}
+
+type AppointmentDetailDialogState = {
+    enabled: boolean
+    key: string
+    appointment: AppointmentListItem | null
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}
+
+type DragRescheduleDialogState = {
+    enabled: boolean
+    appointmentId: string | null
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    initialDateSeed: string | null
+    onInitialDateSeedChange: (dateSeed: string | null) => void
+}
+
+type DayAgendaDialogState = {
+    day: Date | null
+    appointments: AppointmentListItem[]
+    tasks: TaskListItem[]
+    googleEvents: GoogleCalendarEvent[]
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    onEventClick: (appt: AppointmentListItem) => void
+    onTaskClick?: (task: TaskListItem) => void
+}
+
+function UnifiedCalendarDialogs({
+    appointmentDetail,
+    dragReschedule,
+    dayAgenda,
+}: {
+    appointmentDetail: AppointmentDetailDialogState
+    dragReschedule: DragRescheduleDialogState
+    dayAgenda: DayAgendaDialogState
+}) {
+    return (
+        <>
+            {appointmentDetail.enabled && (
+                <AppointmentDetailDialog
+                    key={appointmentDetail.key}
+                    appointment={appointmentDetail.appointment}
+                    open={appointmentDetail.open}
+                    onOpenChange={appointmentDetail.onOpenChange}
+                />
+            )}
+            {dragReschedule.enabled && (
+                <AppointmentManagementDialog
+                    appointmentId={dragReschedule.appointmentId}
+                    open={dragReschedule.open}
+                    onOpenChange={(open) => {
+                        dragReschedule.onOpenChange(open)
+                        if (!open) {
+                            dragReschedule.onInitialDateSeedChange(null)
+                        }
+                    }}
+                    initialRescheduleDate={dragReschedule.initialDateSeed}
+                    startInRescheduleMode={!!dragReschedule.initialDateSeed}
+                />
+            )}
+            <DayAgendaSheet
+                day={dayAgenda.day}
+                appointments={dayAgenda.appointments}
+                tasks={dayAgenda.tasks}
+                googleEvents={dayAgenda.googleEvents}
+                open={dayAgenda.open}
+                onOpenChange={dayAgenda.onOpenChange}
+                onEventClick={dayAgenda.onEventClick}
+                {...(dayAgenda.onTaskClick ? { onTaskClick: dayAgenda.onTaskClick } : {})}
+            />
+        </>
+    )
+}
+
 // =============================================================================
 // Main Export
 // =============================================================================
@@ -1389,174 +1669,77 @@ export function UnifiedCalendar({
 
     return (
         <Card className="gap-3 overflow-hidden border-border/70">
-            <CardHeader className="grid-cols-[minmax(0,1fr)_auto] grid-rows-1 items-center gap-3 border-b border-border/70 bg-muted/20 pb-4">
-                <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm">
-                        <Button variant="ghost" size="sm" onClick={() => navigate("prev")} aria-label="Previous period">
-                            <ChevronLeftIcon className="size-4" aria-hidden="true" />
-                        </Button>
-                        <div className="min-w-[160px] px-2 text-center sm:min-w-[200px]">
-                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                Calendar
-                            </p>
-                            <h2 className="truncate text-lg font-semibold" aria-live="polite">
-                                {viewType === "month" && format(currentDate, "MMMM yyyy")}
-                                {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
-                                {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
-                            </h2>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => navigate("next")} aria-label="Next period">
-                            <ChevronRightIcon className="size-4" aria-hidden="true" />
-                        </Button>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={handleTodayClick}>
-                        Today
-                    </Button>
-                </div>
-
-                <Select value={viewType} onValueChange={(v) => v && setViewType(v as ViewType)}>
-                    <SelectTrigger className="w-28 shrink-0 bg-background sm:w-36">
-                        <SelectValue placeholder="View">
-                            {(value: string | null) => {
-                                if (value === "month") return "Month"
-                                if (value === "week") return "Week"
-                                if (value === "day") return "Day"
-                                return "View"
-                            }}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="month">Month</SelectItem>
-                        <SelectItem value="week">Week</SelectItem>
-                        <SelectItem value="day">Day</SelectItem>
-                    </SelectContent>
-                </Select>
-            </CardHeader>
+            <UnifiedCalendarHeader
+                currentDate={currentDate}
+                viewType={viewType}
+                onNavigate={navigate}
+                onTodayClick={handleTodayClick}
+                onViewTypeChange={setViewType}
+            />
 
             <CardContent className="pt-2">
                 {appointmentsLoading || tasksLoading ? (
-                    <div className="py-12 flex items-center justify-center">
-                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                    </div>
+                    <UnifiedCalendarLoadingState />
                 ) : (
                     <>
                         {includeGoogleEvents && !calendarConnected && (
-                            <Alert className="mb-4 border-amber-500/60 bg-amber-50 text-amber-900">
-                                <CalendarIcon className="size-4" />
-                                <AlertTitle>Google Calendar not connected</AlertTitle>
-                                <AlertDescription>
-                                    {calendarError === "token_expired"
-                                        ? "Your Google Calendar token expired. Reconnect to show Google Calendar events."
-                                        : "Connect Google Calendar to show Google Calendar events alongside appointments."}
-                                </AlertDescription>
-                                <AlertAction>
-                                    <Button size="sm" variant="outline" render={<Link href="/settings/integrations" />}>
-                                        Reconnect
-                                    </Button>
-                                </AlertAction>
-                            </Alert>
+                            <GoogleCalendarDisconnectedAlert calendarError={calendarError} />
                         )}
-                        {viewType === "month" && (
-                            <MonthView
-                                currentDate={currentDate}
-                                appointments={appointments}
-                                tasks={tasks}
-                                googleEvents={googleEvents}
-                                onEventClick={handleEventClick}
-                                dragOverDate={dragOverDate}
-                                onOpenDayAgenda={handleOpenDayAgenda}
-                                {...(onTaskClick ? { onTaskClick } : {})}
-                                {...(includeAppointments ? {
-                                    onDragStart: handleDragStart,
-                                    onDrop: handleDrop,
-                                    onDragOver: handleDragOver,
-                                    onDragLeave: handleDragLeave,
-                                } : {})}
-                            />
-                        )}
-                        {viewType === "week" && (
-                            <WeekView
-                                currentDate={currentDate}
-                                appointments={appointments}
-                                tasks={tasks}
-                                googleEvents={googleEvents}
-                                onEventClick={handleEventClick}
-                                {...(onTaskClick ? { onTaskClick } : {})}
-                            />
-                        )}
-                        {viewType === "day" && (
-                            <DayView
-                                currentDate={currentDate}
-                                appointments={appointments}
-                                tasks={tasks}
-                                googleEvents={googleEvents}
-                                onEventClick={handleEventClick}
-                                {...(onTaskClick ? { onTaskClick } : {})}
-                            />
-                        )}
+                        <UnifiedCalendarViewContent
+                            viewType={viewType}
+                            currentDate={currentDate}
+                            includeAppointments={includeAppointments}
+                            dragOverDate={dragOverDate}
+                            data={{
+                                appointments,
+                                tasks,
+                                googleEvents,
+                            }}
+                            handlers={{
+                                onEventClick: handleEventClick,
+                                onOpenDayAgenda: handleOpenDayAgenda,
+                                onDragStart: handleDragStart,
+                                onDrop: handleDrop,
+                                onDragOver: handleDragOver,
+                                onDragLeave: handleDragLeave,
+                                ...(onTaskClick ? { onTaskClick } : {}),
+                            }}
+                        />
                     </>
                 )}
 
-                {/* Legend */}
-                <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-                    <span className="mr-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                        Legend
-                    </span>
-                    {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
-                        <Badge key={status} variant="outline" className="gap-1.5 rounded-full font-normal">
-                            <span className={`size-2 rounded-full ${color}`} />
-                            <span className="capitalize">{status.replace("_", " ")}</span>
-                        </Badge>
-                    ))}
-                    {includeGoogleEvents && (
-                        <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
-                            <span className={`size-2 rounded-full ${GOOGLE_EVENT_COLOR}`} />
-                            <span>Google Calendar</span>
-                        </Badge>
-                    )}
-                    <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
-                        <span className={`size-2 rounded-full ${TASK_COLOR}`} />
-                        <span>Tasks</span>
-                    </Badge>
-                    {includeAppointments && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                            Drag pending or confirmed appointments to open the reschedule picker.
-                        </span>
-                    )}
-                </div>
+                <UnifiedCalendarLegend
+                    includeAppointments={includeAppointments}
+                    includeGoogleEvents={includeGoogleEvents}
+                />
             </CardContent>
 
-            {includeAppointments && (
-                <AppointmentDetailDialog
-                    key={appointmentDetailDialogKey}
-                    appointment={selectedAppointment}
-                    open={dialogOpen}
-                    onOpenChange={setDialogOpen}
-                />
-            )}
-            {includeAppointments && (
-                <AppointmentManagementDialog
-                    appointmentId={dragRescheduleAppointmentId}
-                    open={dragRescheduleDialogOpen}
-                    onOpenChange={(open) => {
-                        setDragRescheduleDialogOpen(open)
-                        if (!open) {
-                            setDragRescheduleDateSeed(null)
-                        }
-                    }}
-                    initialRescheduleDate={dragRescheduleDateSeed}
-                    startInRescheduleMode={!!dragRescheduleDateSeed}
-                />
-            )}
-            <DayAgendaSheet
-                day={dayAgendaDate}
-                appointments={appointments}
-                tasks={tasks}
-                googleEvents={googleEvents}
-                open={dayAgendaOpen}
-                onOpenChange={setDayAgendaOpen}
-                onEventClick={handleEventClick}
-                {...(onTaskClick ? { onTaskClick } : {})}
+            <UnifiedCalendarDialogs
+                appointmentDetail={{
+                    enabled: includeAppointments,
+                    key: appointmentDetailDialogKey,
+                    appointment: selectedAppointment,
+                    open: dialogOpen,
+                    onOpenChange: setDialogOpen,
+                }}
+                dragReschedule={{
+                    enabled: includeAppointments,
+                    appointmentId: dragRescheduleAppointmentId,
+                    open: dragRescheduleDialogOpen,
+                    onOpenChange: setDragRescheduleDialogOpen,
+                    initialDateSeed: dragRescheduleDateSeed,
+                    onInitialDateSeedChange: setDragRescheduleDateSeed,
+                }}
+                dayAgenda={{
+                    day: dayAgendaDate,
+                    appointments,
+                    tasks,
+                    googleEvents,
+                    open: dayAgendaOpen,
+                    onOpenChange: setDayAgendaOpen,
+                    onEventClick: handleEventClick,
+                    ...(onTaskClick ? { onTaskClick } : {}),
+                }}
             />
         </Card>
     )

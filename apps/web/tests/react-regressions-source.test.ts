@@ -2695,6 +2695,26 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("const clientTimeFormatter = Intl.DateTimeFormat(")
     })
 
+    it("keeps unified calendar shell rendering split into focused helpers", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+        const calendarSource = readExportedFunctionSource(source, "UnifiedCalendar")
+
+        expect(source).toContain("function UnifiedCalendarHeader")
+        expect(source).toContain("function UnifiedCalendarLoadingState")
+        expect(source).toContain("function GoogleCalendarDisconnectedAlert")
+        expect(source).toContain("function UnifiedCalendarViewContent")
+        expect(source).toContain("function UnifiedCalendarLegend")
+        expect(source).toContain("function UnifiedCalendarDialogs")
+        expect(calendarSource).toContain("useUnifiedCalendarData({")
+        expect(calendarSource).toContain("const navigate =")
+        expect(calendarSource).toContain("const handleDragStart =")
+        expect(calendarSource).toContain("const handleDrop =")
+        expect(calendarSource).toContain("appointmentDetailDialogKey")
+        expect(calendarSource).not.toContain("Previous period")
+        expect(calendarSource).not.toContain("Google Calendar not connected")
+        expect(calendarSource).not.toContain("Drag pending or confirmed appointments")
+    })
+
     it("resets unified calendar appointment detail draft state by keying the dialog", () => {
         const source = readSource("components/appointments/UnifiedCalendar.tsx")
 
