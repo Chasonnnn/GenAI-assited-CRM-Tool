@@ -333,6 +333,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [openAlertCount, setOpenAlertCount] = useState")
     })
 
+    it("keeps ops agency detail page sections split from the controller", () => {
+        const source = readSource("app/ops/agencies/[orgId]/page.client.tsx")
+        const pageSource = readFunctionSource(source, "AgencyDetailPage")
+
+        expect(source).toContain("function useAgencyDetailController")
+        expect(source).toContain("function AgencyDetailLoadingState")
+        expect(source).toContain("function AgencyDetailMissingState")
+        expect(source).toContain("function AgencyDetailHeader")
+        expect(source).toContain("function AgencyDetailTabContent")
+        expect(pageSource).not.toContain("AgencyOverviewTab")
+        expect(pageSource).not.toContain("Agency not found")
+        expect(pageSource).not.toContain("Subscription Tab")
+    })
+
     it("uses reducer-based local state in CSVUpload", () => {
         const source = readSource("components/import/CSVUpload.tsx")
 

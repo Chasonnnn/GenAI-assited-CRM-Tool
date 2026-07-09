@@ -71,7 +71,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     );
 }
 
-export default function AgencyDetailPage() {
+function useAgencyDetailController() {
     const params = useParams();
     const orgId = params.orgId as string;
     const { push } = useRouter();
@@ -465,104 +465,168 @@ export default function AgencyDetailPage() {
         : false;
 
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center py-16">
-                <Loader2 className="size-8 animate-spin text-muted-foreground" />
-            </div>
-        );
+        return { status: 'loading' as const };
     }
 
     if (!org) {
-        return (
-            <div className="p-6">
-                <div className="text-center py-16">
-                    <AlertTriangle className="size-12 mx-auto mb-4 text-muted-foreground/50" />
-                    <h3 className="text-lg font-medium">Agency not found</h3>
-                </div>
-            </div>
-        );
+        return { status: 'missing' as const };
     }
 
     const isDeleted = Boolean(org.deleted_at);
     const purgeDate = org.purge_at ? new Date(org.purge_at) : null;
 
-    return (
-        <div>
-            {/* Header */}
-            <div className="border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
-                <div className="px-6 py-4">
-                    {/* Breadcrumb */}
-                    <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 mb-2">
-                        <Link
-                            href="/ops/agencies"
-                            className="hover:text-stone-900 dark:hover:text-stone-100"
-                        >
-                            Agencies
-                        </Link>
-                        <ChevronRight className="size-4" />
-                        <span className="text-stone-900 dark:text-stone-100">{org.name}</span>
-                    </div>
+    return {
+        status: 'ready' as const,
+        actionLogs,
+        activeTab,
+        alertsLoading,
+        alertsUpdating,
+        deleteSubmitting,
+        fetchOrgAlerts,
+        handleAcknowledgeAlert,
+        handleCreateInvite,
+        handleDeactivateMember,
+        handleDeleteOrganization,
+        handleExtendSubscription,
+        handlePurgeOrganization,
+        handleResetMfa,
+        handleResendInvite,
+        handleResolveAlert,
+        handleRestoreOrganization,
+        handleRevokeInvite,
+        handleSaveNotes,
+        handleToggleAutoRenew,
+        inviteError,
+        inviteForm,
+        inviteOpen,
+        inviteResending,
+        inviteSubmitting,
+        invites,
+        isDeleted,
+        members,
+        mfaResetting,
+        notesDirty,
+        notesDraft,
+        notesSaving,
+        openAlertCount,
+        org,
+        orgAlerts,
+        platformEmailLoading,
+        platformEmailStatus,
+        purgeDate,
+        purgeSubmitting,
+        restoreSubmitting,
+        setActiveTab,
+        setInviteForm,
+        setInviteOpen,
+        setNotesDraft,
+        subscription,
+    };
+}
 
-                    {/* Header Content */}
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <div className="flex items-center gap-3">
-                                <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-                                    {org.name}
-                                </h1>
-                                <Badge
-                                    variant="outline"
-                                    className={STATUS_BADGE_VARIANTS[org.subscription_status]}
-                                >
-                                    {org.subscription_status}
-                                </Badge>
-                                {isDeleted && (
-                                    <Badge variant="destructive">Deletion scheduled</Badge>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-4 mt-1 text-sm text-stone-500 dark:text-stone-400">
-                                <span className="font-mono">{org.slug}</span>
-                                <CopyButton value={org.id} label="ID" />
-                                {org.portal_base_url && (
-                                    <a
-                                        href={org.portal_base_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1 hover:text-primary transition-colors"
-                                    >
-                                        <Globe className="size-3.5" />
-                                        {org.portal_base_url.replace('https://', '')}
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <Badge
-                                variant="outline"
-                                className={PLAN_BADGE_VARIANTS[org.subscription_plan]}
-                            >
-                                {org.subscription_plan} plan
-                            </Badge>
-                            <SupportSessionDialog
-                                orgId={org.id}
-                                orgName={org.name}
-                                portalBaseUrl={org.portal_base_url}
-                                disabled={isDeleted}
-                            />
-                        </div>
-                    </div>
+type ReadyAgencyDetailController = Extract<
+    ReturnType<typeof useAgencyDetailController>,
+    { status: 'ready' }
+>;
+
+function AgencyDetailLoadingState() {
+    return (
+        <div className="flex items-center justify-center py-16">
+            <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        </div>
+    );
+}
+
+function AgencyDetailMissingState() {
+    return (
+        <div className="p-6">
+            <div className="text-center py-16">
+                <AlertTriangle className="size-12 mx-auto mb-4 text-muted-foreground/50" />
+                <h3 className="text-lg font-medium">Agency not found</h3>
+            </div>
+        </div>
+    );
+}
+
+function AgencyDetailHeader({ controller }: { controller: ReadyAgencyDetailController }) {
+    const {
+        activeTab,
+        isDeleted,
+        openAlertCount,
+        org,
+        setActiveTab,
+    } = controller;
+
+    return (
+        <div className="border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
+            <div className="px-6 py-4">
+                <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 mb-2">
+                    <Link
+                        href="/ops/agencies"
+                        className="hover:text-stone-900 dark:hover:text-stone-100"
+                    >
+                        Agencies
+                    </Link>
+                    <ChevronRight className="size-4" />
+                    <span className="text-stone-900 dark:text-stone-100">{org.name}</span>
                 </div>
 
-                {/* Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="px-6">
-                    <TabsList className="border-b-0">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="users">
-                            Users{' '}
-                            <Badge variant="secondary" className="ml-1.5">
-                                {org.member_count}
+                <div className="flex items-start justify-between">
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+                                {org.name}
+                            </h1>
+                            <Badge
+                                variant="outline"
+                                className={STATUS_BADGE_VARIANTS[org.subscription_status]}
+                            >
+                                {org.subscription_status}
                             </Badge>
-                        </TabsTrigger>
+                            {isDeleted && <Badge variant="destructive">Deletion scheduled</Badge>}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-sm text-stone-500 dark:text-stone-400">
+                            <span className="font-mono">{org.slug}</span>
+                            <CopyButton value={org.id} label="ID" />
+                            {org.portal_base_url && (
+                                <a
+                                    href={org.portal_base_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 hover:text-primary transition-colors"
+                                >
+                                    <Globe className="size-3.5" />
+                                    {org.portal_base_url.replace('https://', '')}
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                        <Badge
+                            variant="outline"
+                            className={PLAN_BADGE_VARIANTS[org.subscription_plan]}
+                        >
+                            {org.subscription_plan} plan
+                        </Badge>
+                        <SupportSessionDialog
+                            orgId={org.id}
+                            orgName={org.name}
+                            portalBaseUrl={org.portal_base_url}
+                            disabled={isDeleted}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="px-6">
+                <TabsList className="border-b-0">
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="users">
+                        Users{' '}
+                        <Badge variant="secondary" className="ml-1.5">
+                            {org.member_count}
+                        </Badge>
+                    </TabsTrigger>
                     <TabsTrigger value="invites">Invites</TabsTrigger>
                     <TabsTrigger value="subscription">Subscription</TabsTrigger>
                     <TabsTrigger value="alerts">
@@ -576,94 +640,155 @@ export default function AgencyDetailPage() {
                     <TabsTrigger value="audit">Audit Log</TabsTrigger>
                 </TabsList>
             </Tabs>
-            </div>
+        </div>
+    );
+}
 
-            {/* Tab Content */}
-            <div className="p-6">
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    {/* Overview Tab */}
-                    <TabsContent value="overview" className="mt-0">
-                        <AgencyOverviewTab
-                            org={org}
-                            isDeleted={isDeleted}
-                            purgeDate={purgeDate}
-                            restoreSubmitting={restoreSubmitting}
-                            deleteSubmitting={deleteSubmitting}
-                            onRestoreOrganization={handleRestoreOrganization}
-                            onDeleteOrganization={handleDeleteOrganization}
-                            purgeSubmitting={purgeSubmitting}
-                            onPurgeOrganization={handlePurgeOrganization}
-                        />
-                    </TabsContent>
+function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailController }) {
+    const {
+        actionLogs,
+        activeTab,
+        alertsLoading,
+        alertsUpdating,
+        deleteSubmitting,
+        fetchOrgAlerts,
+        handleAcknowledgeAlert,
+        handleCreateInvite,
+        handleDeactivateMember,
+        handleDeleteOrganization,
+        handleExtendSubscription,
+        handlePurgeOrganization,
+        handleResetMfa,
+        handleResendInvite,
+        handleResolveAlert,
+        handleRestoreOrganization,
+        handleRevokeInvite,
+        handleSaveNotes,
+        handleToggleAutoRenew,
+        inviteError,
+        inviteForm,
+        inviteOpen,
+        inviteResending,
+        inviteSubmitting,
+        invites,
+        isDeleted,
+        members,
+        mfaResetting,
+        notesDirty,
+        notesDraft,
+        notesSaving,
+        org,
+        orgAlerts,
+        platformEmailLoading,
+        platformEmailStatus,
+        purgeDate,
+        purgeSubmitting,
+        restoreSubmitting,
+        setActiveTab,
+        setInviteForm,
+        setInviteOpen,
+        setNotesDraft,
+        subscription,
+    } = controller;
 
-                    {/* Users Tab */}
-                    <TabsContent value="users" className="mt-0">
-                        <AgencyUsersTab
-                            members={members}
-                            orgName={org.name}
-                            mfaResetting={mfaResetting}
-                            onResetMfa={handleResetMfa}
-                            onDeactivateMember={handleDeactivateMember}
-                        />
-                    </TabsContent>
+    return (
+        <div className="p-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsContent value="overview" className="mt-0">
+                    <AgencyOverviewTab
+                        org={org}
+                        isDeleted={isDeleted}
+                        purgeDate={purgeDate}
+                        restoreSubmitting={restoreSubmitting}
+                        deleteSubmitting={deleteSubmitting}
+                        onRestoreOrganization={handleRestoreOrganization}
+                        onDeleteOrganization={handleDeleteOrganization}
+                        purgeSubmitting={purgeSubmitting}
+                        onPurgeOrganization={handlePurgeOrganization}
+                    />
+                </TabsContent>
 
-                    {/* Invites Tab */}
-                    <TabsContent value="invites" className="mt-0">
-                        <AgencyInvitesTab
-                            orgName={org.name}
-                            invites={invites}
-                            inviteOpen={inviteOpen}
-                            inviteSubmitting={inviteSubmitting}
-                            inviteResending={inviteResending}
-                            inviteForm={inviteForm}
-                            inviteError={inviteError}
-                            platformEmailStatus={platformEmailStatus}
-                            platformEmailLoading={platformEmailLoading}
-                            onInviteOpenChange={setInviteOpen}
-                            onInviteEmailChange={(email) =>
-                                setInviteForm((prev) => ({ ...prev, email }))
-                            }
-                            onInviteRoleChange={(role) =>
-                                setInviteForm((prev) => ({ ...prev, role }))
-                            }
-                            onCreateInvite={handleCreateInvite}
-                            onResendInvite={handleResendInvite}
-                            onRevokeInvite={handleRevokeInvite}
-                        />
-                    </TabsContent>
+                <TabsContent value="users" className="mt-0">
+                    <AgencyUsersTab
+                        members={members}
+                        orgName={org.name}
+                        mfaResetting={mfaResetting}
+                        onResetMfa={handleResetMfa}
+                        onDeactivateMember={handleDeactivateMember}
+                    />
+                </TabsContent>
 
-                    {/* Subscription Tab */}
-                    <TabsContent value="subscription" className="mt-0 space-y-6">
-                        <AgencySubscriptionTab
-                            subscription={subscription}
-                            notesDraft={notesDraft}
-                            notesDirty={notesDirty}
-                            notesSaving={notesSaving}
-                            onNotesChange={setNotesDraft}
-                            onSaveNotes={handleSaveNotes}
-                            onExtendSubscription={handleExtendSubscription}
-                            onToggleAutoRenew={handleToggleAutoRenew}
-                        />
-                    </TabsContent>
+                <TabsContent value="invites" className="mt-0">
+                    <AgencyInvitesTab
+                        orgName={org.name}
+                        invites={invites}
+                        inviteOpen={inviteOpen}
+                        inviteSubmitting={inviteSubmitting}
+                        inviteResending={inviteResending}
+                        inviteForm={inviteForm}
+                        inviteError={inviteError}
+                        platformEmailStatus={platformEmailStatus}
+                        platformEmailLoading={platformEmailLoading}
+                        onInviteOpenChange={setInviteOpen}
+                        onInviteEmailChange={(email) =>
+                            setInviteForm((prev) => ({ ...prev, email }))
+                        }
+                        onInviteRoleChange={(role) =>
+                            setInviteForm((prev) => ({ ...prev, role }))
+                        }
+                        onCreateInvite={handleCreateInvite}
+                        onResendInvite={handleResendInvite}
+                        onRevokeInvite={handleRevokeInvite}
+                    />
+                </TabsContent>
 
-                    {/* Alerts Tab */}
-                    <TabsContent value="alerts" className="mt-0">
-                        <AgencyAlertsTab
-                            orgAlerts={orgAlerts}
-                            alertsLoading={alertsLoading}
-                            alertsUpdating={alertsUpdating}
-                            onRefresh={fetchOrgAlerts}
-                            onAcknowledge={handleAcknowledgeAlert}
-                            onResolve={handleResolveAlert}
-                        />
-                    </TabsContent>
+                <TabsContent value="subscription" className="mt-0 space-y-6">
+                    <AgencySubscriptionTab
+                        subscription={subscription}
+                        notesDraft={notesDraft}
+                        notesDirty={notesDirty}
+                        notesSaving={notesSaving}
+                        onNotesChange={setNotesDraft}
+                        onSaveNotes={handleSaveNotes}
+                        onExtendSubscription={handleExtendSubscription}
+                        onToggleAutoRenew={handleToggleAutoRenew}
+                    />
+                </TabsContent>
 
-                    {/* Audit Log Tab */}
-                    <TabsContent value="audit" className="mt-0">
-                        <AgencyAuditTab actionLogs={actionLogs} />
-                    </TabsContent>
-                </Tabs>
-            </div>
+                <TabsContent value="alerts" className="mt-0">
+                    <AgencyAlertsTab
+                        orgAlerts={orgAlerts}
+                        alertsLoading={alertsLoading}
+                        alertsUpdating={alertsUpdating}
+                        onRefresh={fetchOrgAlerts}
+                        onAcknowledge={handleAcknowledgeAlert}
+                        onResolve={handleResolveAlert}
+                    />
+                </TabsContent>
+
+                <TabsContent value="audit" className="mt-0">
+                    <AgencyAuditTab actionLogs={actionLogs} />
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
+}
+
+export default function AgencyDetailPage() {
+    const controller = useAgencyDetailController();
+
+    if (controller.status === 'loading') {
+        return <AgencyDetailLoadingState />;
+    }
+
+    if (controller.status === 'missing') {
+        return <AgencyDetailMissingState />;
+    }
+
+    return (
+        <div>
+            <AgencyDetailHeader controller={controller} />
+            <AgencyDetailTabContent controller={controller} />
         </div>
     );
 }
