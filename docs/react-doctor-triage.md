@@ -4820,3 +4820,23 @@ React Doctor rerun after Batch 224 was not attempted again because the same sand
 | `react-doctor/no-giant-component` | `app/(app)/intended-parents/page.client.tsx:195` | Valid. `IntendedParentsPage` owned URL-derived filter state, search debounce, sorting, query hooks, create mutation, page header, stats, filters, table loading/error/empty/data states, pagination, and create dialog in one page component. | High | Extracted `IntendedParentsPageHeader`, `IntendedParentStatsGrid`, `IntendedParentsFilters`, `IntendedParentsTableCard`, `IntendedParentsPagination`, and `CreateIntendedParentDialog`. Kept URL parsing, draft state, debounced search, query hooks, sorting, create mutation, and mutation handlers in `IntendedParentsPage`. Added a source guard requiring the render split and parent-owned behavior boundaries. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "intended-parents list rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "intended-parents list rendering"`; `pnpm test --run tests/intended-parents-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
 
 React Doctor rerun after Batch 225 was not attempted again because the same sandbox reviewer policy rejected npm scanner execution against this private repo in Batch 221. Do not treat this batch as a score-confirmed full React Doctor run until a locally approved scanner invocation is available. The last score-confirmed full run remains Batch 220 (`90 / 100`, `27` warnings), and this batch targets one of those warning sources.
+
+## Batch 226
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/intended-parents/matches/[id]/page.client.tsx:83` | Valid. `MatchDetailPage` owned match loading/error state, AI context, related profile/note/file/task/activity queries, match status mutations, notes/files/tasks mutations, profile columns, tab content, calendar tab, and all dialogs in one page component. | High | Extracted `MatchDetailHeader`, `MatchDetailMainTabs`, `SurrogateProfileColumn`, `IntendedParentProfileColumn`, `MatchDetailDialogs`, and `useMatchDetailRelatedData`. Kept match lookup, status mutations, dialog state, source query invalidation, and mutation handlers in `MatchDetailPage`; delegated the repeated related-data query block and render-heavy sections. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "match detail page rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "match detail page rendering"`; `pnpm test --run tests/match-detail.test.tsx tests/match-detail-overview-tabs.test.tsx tests/match-detail-tab-data.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 226: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 226: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `21`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 11 warnings`
+- Removed globally since the last score-confirmed full run in Batch 220: Meta configuration, appointment types, unified calendar shell, appointment detail dialog, intended parents list, and match detail `no-giant-component` warnings (`6` maintainability warnings).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-edb74418-2e21-4635-8129-64c7e3f43141`
