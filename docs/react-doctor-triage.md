@@ -4690,3 +4690,40 @@ Full command after Batch 217: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 20 warnings`
 - Removed globally since Batch 216: Meta CRM dataset `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7e19795a-4b01-4149-b538-5fd5566f64bf`
+
+## Batch 218
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/page.tsx:3991` | Valid. `IntegrationsPage` owned the page header, personal integration cards, organization integration cards, four configuration dialogs, system health cards, and help copy in one component. | High | Extracted `IntegrationsPageHeader`, `PersonalIntegrationsSection`, `PersonalIntegrationCard`, `OrganizationIntegrationsSection`, `OrganizationIntegrationCard`, `IntegrationConfigurationDialogs`, `SystemIntegrationsSection`, `SystemIntegrationCard`, and `IntegrationsHelpCard`. Kept auth, permission checks, query hooks, mutation hooks, derived status labels, and dialog state in `IntegrationsPage`. Grouped personal pending flags into a named pending-state object after changed-scope React Doctor caught a `no-many-boolean-props` warning. Added a source guard requiring the render split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "integrations page rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "integrations page rendering"`; `pnpm test --run tests/integrations-page.test.tsx -t "renders integration health\|shows status badge\|shows status badges\|uses wider card grids\|shows last sync\|keeps personal integrations accessible\|does not load admin-only\|loads and saves Meta CRM dataset settings\|syncs Meta CRM dataset stage mapping\|friendly bucket and stage labels\|sends Meta CRM dataset tests"`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 218: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `4`
+- Summary: `Maintainability 4 warnings`
+- Note: the changed file still has existing `no-giant-component` warnings for `AIConfigurationSection`, `EmailConfigurationSection`, `ZapierWebhookSection`, and `MetaConfigurationSection`; this batch removed the targeted `IntegrationsPage` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f5598c6d-c622-49b5-b2d4-ac58c8a43b0d`
+
+Full command after Batch 218: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `29`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 19 warnings`
+- Removed globally since Batch 217: integrations page `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-258406c4-a64e-4593-810c-b56fd6a3cc6b`
+
+## Query Mutation Warning Triage 2026-07-09
+
+Read-only source inspection classified the current `react-doctor/query-mutation-missing-invalidation` warnings as follows. Do not add dummy invalidations for the false positives; revisit only if the product flow starts persisting data into a React Query cache.
+
+| File | Verdict | Evidence | Follow-up |
+| --- | --- | --- | --- |
+| `lib/hooks/use-forms.ts:518` (`useUploadFormLogo`) | False positive | Upload returns a standalone `logo_url`; the builder stores that URL in local draft state, and form create/update hooks own persisted form-cache invalidation. | No cache key to invalidate unless a logo detail/list query is introduced. |
+| `lib/hooks/use-import.ts:198` (`useAiMapImport`) | False positive | Streams AI column-mapping suggestions; it does not mutate import records. Import lifecycle mutations around it already invalidate import and surrogate caches. | No action. |
+| `lib/hooks/use-meta-oauth.ts:38` (`useMetaConnectUrl`) | False positive | Generates an OAuth URL and state cookie before the external OAuth flow; it does not create or update the Meta connection list. | Actual connection completion should continue to invalidate `metaOAuthKeys.connections()` where that callback is handled. |
+| `lib/hooks/use-mfa.ts:91` (`useInitiateDuoAuth`) | False positive | Starts Duo auth/enrollment and redirect state only. MFA state changes happen on callback/challenge completion; complete/disable/recovery-code hooks already invalidate auth/MFA state. | No action for initiate. |
+| `lib/hooks/use-pipelines.ts:200` (`useRecommendedPipelineDraft`) | False positive | Wraps a GET recommended-draft endpoint for a button-driven reset flow and returns a local draft. Persistence happens through `useApplyPipelineDraft`, which invalidates pipeline detail/list/semantic keys. | No action unless recommended drafts become query-cached. |
+| `lib/hooks/use-platform-templates.ts:348` (`useSendPlatformSystemEmailCampaign`) | Needs human review | Sends emails and backend logs admin/email activity, but it does not mutate system template or branding caches. Current admin action display is local state, not a React Query list. | If live audit freshness becomes a product requirement, introduce/invalidate an admin-actions query; `platformTemplateKeys.systemDetail(systemKey)` would be the wrong target. |
+| `lib/hooks/use-profile.ts:29` (`useSyncProfile`) | False positive | Returns staged profile diffs only. The hook comment says not to invalidate because sync is not persisted; save/toggle mutations invalidate the profile cache. | No action. |
+| `lib/hooks/use-schedule-parser.ts:17` (`useParseSchedule`) | False positive | Parses text into proposed tasks only. Actual task creation uses `useCreateBulkTasks`, which invalidates task lists and surrogate keys. | No action. |
