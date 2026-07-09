@@ -4668,3 +4668,25 @@ Full command after Batch 216: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 21 warnings`
 - Removed globally since Batch 215: CSV upload `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5f00ef09-dcd4-4a6e-81ca-e687ffd0da50`
+
+## Batch 217
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/page.tsx:2982` | Valid. `MetaCrmDatasetSection` owned settings fields, stage-to-event mapping rows, test controls, and save/test actions in one large section. | High | Extracted `MetaCrmDatasetSettingsFields`, `MetaCrmDatasetStageMapping`, and `MetaCrmDatasetTestControls`. Kept `usePipelines`, Meta CRM hooks, `metaForm`, `updateMetaForm`, `updateEventMapping`, `handleSave`, `handleOutboundTest`, and `applyRecommendedBucketMapping` in the parent section. Preserved the existing `SelectValue` render functions for friendly bucket and stage labels. Added a source guard requiring the render split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta CRM dataset rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta CRM dataset rendering"`; `pnpm test --run tests/integrations-page.test.tsx -t "loads and saves Meta CRM dataset settings\|syncs Meta CRM dataset stage mapping\|friendly bucket and stage labels in the Meta CRM dialog\|sends Meta CRM dataset tests"`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 217: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100`
+- Total diagnostics in changed files: `5`
+- Summary: `Maintainability 5 warnings`
+- Note: the changed file still has existing `no-giant-component` warnings for `AIConfigurationSection`, `EmailConfigurationSection`, `ZapierWebhookSection`, `MetaConfigurationSection`, and `IntegrationsPage`; this batch removed the targeted `MetaCrmDatasetSection` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-879ee30d-ce50-4219-bfbe-68f6fd9f1f3b`
+
+Full command after Batch 217: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `30`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 20 warnings`
+- Removed globally since Batch 216: Meta CRM dataset `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-7e19795a-4b01-4149-b538-5fd5566f64bf`

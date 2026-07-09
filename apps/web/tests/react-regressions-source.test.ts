@@ -1626,6 +1626,17 @@ describe("React regression guards (source)", () => {
         }
     })
 
+    it("keeps Meta CRM dataset rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+
+        expect(source).toContain("function MetaCrmDatasetSettingsFields")
+        expect(source).toContain("function MetaCrmDatasetStageMapping")
+        expect(source).toContain("function MetaCrmDatasetTestControls")
+        expect(source).toContain("<MetaCrmDatasetSettingsFields")
+        expect(source).toContain("<MetaCrmDatasetStageMapping")
+        expect(source).toContain("<MetaCrmDatasetTestControls")
+    })
+
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
         const hookSource = readSource("lib/hooks/use-zapier.ts")

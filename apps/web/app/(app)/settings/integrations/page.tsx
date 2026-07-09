@@ -487,6 +487,15 @@ type MetaCrmDatasetFormState = {
     outboundTestFbc: string
 }
 
+type UpdateMetaCrmDatasetForm = <K extends keyof MetaCrmDatasetFormState>(
+    field: K,
+    value: MetaCrmDatasetFormState[K],
+) => void
+
+type UpdateMetaCrmDatasetEventMapping = (
+    updater: (current: MetaCrmDatasetEventMappingItem[]) => MetaCrmDatasetEventMappingItem[],
+) => void
+
 type ZapierInboundWebhookDraftSource = {
     webhook_id: string
     label?: string | null
@@ -3142,268 +3151,365 @@ function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialo
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
-                <Alert>
-                    <AlertTitle>No Meta app required</AlertTitle>
-                    <AlertDescription>
-                        Use this direct CRM dataset path when you want Meta CRM conversion reporting without the legacy app-based OAuth flow.
-                    </AlertDescription>
-                </Alert>
-
-                <div className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                        <p className="text-sm font-medium">Enable direct CRM dataset delivery</p>
-                        <p className="text-xs text-muted-foreground">
-                            Send Meta lead stage changes directly to your dataset endpoint.
-                        </p>
-                    </div>
-                    <Switch
-                        checked={metaForm.enabled}
-                        onCheckedChange={(checked) => updateMetaForm("enabled", checked)}
-                        aria-label="Enable direct CRM dataset delivery"
-                    />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="meta-crm-dataset-id">Dataset ID</Label>
-                        <Input
-                            id="meta-crm-dataset-id"
-                            value={metaForm.datasetId}
-                            onChange={(event) => updateMetaForm("datasetId", event.target.value)}
-                            placeholder="1428122951556949"
-                            autoComplete="off"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="meta-crm-dataset-access-token">Meta CRM Dataset Access Token</Label>
-                        <Input
-                            id="meta-crm-dataset-access-token"
-                            type="password"
-                            value={metaForm.accessToken}
-                            onChange={(event) => updateMetaForm("accessToken", event.target.value)}
-                            placeholder={settings?.access_token_configured ? "•••••••• (set)" : "Enter access token"}
-                            autoComplete="off"
-                        />
-                    </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="meta-crm-dataset-crm-name">CRM Name</Label>
-                        <Input
-                            id="meta-crm-dataset-crm-name"
-                            value={metaForm.crmName}
-                            onChange={(event) => updateMetaForm("crmName", event.target.value)}
-                            placeholder="Surrogacy Force CRM"
-                            autoComplete="off"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="meta-crm-dataset-test-event-code">Test Event Code</Label>
-                        <Input
-                            id="meta-crm-dataset-test-event-code"
-                            value={metaForm.testEventCode}
-                            onChange={(event) => updateMetaForm("testEventCode", event.target.value)}
-                            placeholder="Optional Meta test event code"
-                            autoComplete="off"
-                        />
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                        <p className="text-sm font-medium">Include hashed PII for Meta CRM dataset</p>
-                        <p className="text-xs text-muted-foreground">
-                            Send hashed email and phone when available to improve match quality.
-                        </p>
-                    </div>
-                    <Switch
-                        checked={metaForm.sendHashedPii}
-                        onCheckedChange={(checked) => updateMetaForm("sendHashedPii", checked)}
-                        aria-label="Include hashed PII for Meta CRM dataset"
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                        <Label>Stage → Event Mapping</Label>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={applyRecommendedBucketMapping}
-                        >
-                            Apply Recommended Mapping
-                        </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Map each internal surrogate stage to the Meta CRM event bucket you want to report.
-                    </p>
-                    <div className="space-y-2">
-                        {metaForm.eventMapping.map((item, index) => (
-                            <div
-                                key={item.stage_key}
-                                className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
-                            >
-                                <div className="w-32 text-sm font-medium">
-                                    {getStageKeyLabel(item.stage_key)}
-                                </div>
-                                <Select
-                                    value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
-                                    onValueChange={(value) => {
-                                        updateEventMapping((current) => {
-                                            const next = [...current]
-                                            const existing = next[index]
-                                            if (!existing) return current
-                                            if (value === UNTRACKED_BUCKET_VALUE) {
-                                                next[index] = {
-                                                    ...existing,
-                                                    bucket: null,
-                                                    enabled: false,
-                                                }
-                                            } else if (isZapierStageBucket(value)) {
-                                                next[index] = {
-                                                    ...existing,
-                                                    bucket: value,
-                                                    event_name: ZAPIER_BUCKET_EVENT_NAME[value],
-                                                    enabled: true,
-                                                }
-                                            }
-                                            return next
-                                        })
-                                    }}
-                                >
-                                    <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
-                                        <SelectValue placeholder="Bucket">
-                                            {(value: string | null) => getBucketSelectLabel(value)}
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
-                                        {ZAPIER_BUCKET_OPTIONS.map((option) => (
-                                            <SelectItem key={option.value} value={option.value}>
-                                                {option.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {!isZapierStageBucket(item.bucket) ? (
-                                    <Input
-                                        value={item.event_name}
-                                        onChange={(event) => {
-                                            updateEventMapping((current) => {
-                                                const next = [...current]
-                                                const existing = next[index]
-                                                if (!existing) return current
-                                                next[index] = { ...existing, event_name: event.target.value }
-                                                return next
-                                            })
-                                        }}
-                                        placeholder="Event name"
-                                        name={`meta-crm-dataset-event-${item.stage_key}`}
-                                        autoComplete="off"
-                                    />
-                                ) : null}
-                                <div className="flex items-center gap-2">
-                                    <Switch
-                                        checked={item.enabled}
-                                        onCheckedChange={(checked) => {
-                                            updateEventMapping((current) => {
-                                                const next = [...current]
-                                                const existing = next[index]
-                                                if (!existing) return current
-                                                next[index] = { ...existing, enabled: checked }
-                                                return next
-                                            })
-                                        }}
-                                        aria-label={`Enable ${item.stage_key} Meta CRM dataset event`}
-                                    />
-                                    <span className="text-xs text-muted-foreground">Enabled</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-start"}`}>
-                    <Button onClick={handleSave} disabled={updateSettings.isPending}>
-                        {updateSettings.isPending ? (
-                            <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                Saving…
-                            </>
-                        ) : (
-                            "Save CRM Dataset Settings"
-                        )}
-                    </Button>
-                    <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
-                        <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
-                            <Label htmlFor="meta-crm-dataset-test-lead-id">Real Meta Lead ID</Label>
-                            <Input
-                                id="meta-crm-dataset-test-lead-id"
-                                value={metaForm.outboundTestLeadId}
-                                onChange={(event) => updateMetaForm("outboundTestLeadId", event.target.value)}
-                                placeholder="Use a real Meta lead ID for testing"
-                                autoComplete="off"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Meta CRM funnel updates generally only work for leads created within 90 days.
-                            </p>
-                        </div>
-                        <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
-                            <Label htmlFor="meta-crm-dataset-test-fbc">Click ID (fbc)</Label>
-                            <Input
-                                id="meta-crm-dataset-test-fbc"
-                                value={metaForm.outboundTestFbc}
-                                onChange={(event) => updateMetaForm("outboundTestFbc", event.target.value)}
-                                placeholder="Optional Meta click ID for better matching"
-                                autoComplete="off"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Send Meta click ID when you have it. This maps to <code>user_data.fbc</code>.
-                            </p>
-                        </div>
-                        <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
-                            <Select
-                                value={metaForm.selectedStage}
-                                onValueChange={(value) => updateMetaForm("selectedStage", value ?? "")}
-                            >
-                                <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select Meta CRM dataset stage">
-                                    <SelectValue placeholder="Select stage">
-                                        {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {metaForm.eventMapping.map((item) => (
-                                        <SelectItem key={item.stage_key} value={item.stage_key}>
-                                            {getStageKeyLabel(item.stage_key)}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Button
-                                variant="outline"
-                                onClick={handleOutboundTest}
-                                disabled={sendOutboundTest.isPending}
-                                className={isDialog ? "w-full" : undefined}
-                            >
-                                {sendOutboundTest.isPending ? (
-                                    <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Sending…
-                                    </>
-                                ) : (
-                                    <>
-                                        <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
-                                        Send Meta CRM Test Event
-                                    </>
-                                )}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
+                <MetaCrmDatasetSettingsFields
+                    metaForm={metaForm}
+                    accessTokenConfigured={Boolean(settings?.access_token_configured)}
+                    updateMetaForm={updateMetaForm}
+                />
+                <MetaCrmDatasetStageMapping
+                    eventMapping={metaForm.eventMapping}
+                    isDialog={isDialog}
+                    updateEventMapping={updateEventMapping}
+                    getStageKeyLabel={getStageKeyLabel}
+                    applyRecommendedBucketMapping={applyRecommendedBucketMapping}
+                />
+                <MetaCrmDatasetTestControls
+                    metaForm={metaForm}
+                    isDialog={isDialog}
+                    updateMetaForm={updateMetaForm}
+                    getStageKeyLabel={getStageKeyLabel}
+                    isSaving={updateSettings.isPending}
+                    isSendingTest={sendOutboundTest.isPending}
+                    handleSave={handleSave}
+                    handleOutboundTest={handleOutboundTest}
+                />
             </CardContent>
         </Card>
+    )
+}
+
+function MetaCrmDatasetSettingsFields({
+    metaForm,
+    accessTokenConfigured,
+    updateMetaForm,
+}: {
+    metaForm: MetaCrmDatasetFormState
+    accessTokenConfigured: boolean
+    updateMetaForm: UpdateMetaCrmDatasetForm
+}) {
+    return (
+        <>
+            <Alert>
+                <AlertTitle>No Meta app required</AlertTitle>
+                <AlertDescription>
+                    Use this direct CRM dataset path when you want Meta CRM conversion reporting without the legacy app-based OAuth flow.
+                </AlertDescription>
+            </Alert>
+
+            <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                    <p className="text-sm font-medium">Enable direct CRM dataset delivery</p>
+                    <p className="text-xs text-muted-foreground">
+                        Send Meta lead stage changes directly to your dataset endpoint.
+                    </p>
+                </div>
+                <Switch
+                    checked={metaForm.enabled}
+                    onCheckedChange={(checked) => updateMetaForm("enabled", checked)}
+                    aria-label="Enable direct CRM dataset delivery"
+                />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                    <Label htmlFor="meta-crm-dataset-id">Dataset ID</Label>
+                    <Input
+                        id="meta-crm-dataset-id"
+                        value={metaForm.datasetId}
+                        onChange={(event) => updateMetaForm("datasetId", event.target.value)}
+                        placeholder="1428122951556949"
+                        autoComplete="off"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="meta-crm-dataset-access-token">Meta CRM Dataset Access Token</Label>
+                    <Input
+                        id="meta-crm-dataset-access-token"
+                        type="password"
+                        value={metaForm.accessToken}
+                        onChange={(event) => updateMetaForm("accessToken", event.target.value)}
+                        placeholder={accessTokenConfigured ? "•••••••• (set)" : "Enter access token"}
+                        autoComplete="off"
+                    />
+                </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                    <Label htmlFor="meta-crm-dataset-crm-name">CRM Name</Label>
+                    <Input
+                        id="meta-crm-dataset-crm-name"
+                        value={metaForm.crmName}
+                        onChange={(event) => updateMetaForm("crmName", event.target.value)}
+                        placeholder="Surrogacy Force CRM"
+                        autoComplete="off"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="meta-crm-dataset-test-event-code">Test Event Code</Label>
+                    <Input
+                        id="meta-crm-dataset-test-event-code"
+                        value={metaForm.testEventCode}
+                        onChange={(event) => updateMetaForm("testEventCode", event.target.value)}
+                        placeholder="Optional Meta test event code"
+                        autoComplete="off"
+                    />
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                    <p className="text-sm font-medium">Include hashed PII for Meta CRM dataset</p>
+                    <p className="text-xs text-muted-foreground">
+                        Send hashed email and phone when available to improve match quality.
+                    </p>
+                </div>
+                <Switch
+                    checked={metaForm.sendHashedPii}
+                    onCheckedChange={(checked) => updateMetaForm("sendHashedPii", checked)}
+                    aria-label="Include hashed PII for Meta CRM dataset"
+                />
+            </div>
+        </>
+    )
+}
+
+function MetaCrmDatasetStageMapping({
+    eventMapping,
+    isDialog,
+    updateEventMapping,
+    getStageKeyLabel,
+    applyRecommendedBucketMapping,
+}: {
+    eventMapping: MetaCrmDatasetEventMappingItem[]
+    isDialog: boolean
+    updateEventMapping: UpdateMetaCrmDatasetEventMapping
+    getStageKeyLabel: (stageKey: string) => string
+    applyRecommendedBucketMapping: () => void
+}) {
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <Label>Stage → Event Mapping</Label>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={applyRecommendedBucketMapping}
+                >
+                    Apply Recommended Mapping
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Map each internal surrogate stage to the Meta CRM event bucket you want to report.
+            </p>
+            <div className="space-y-2">
+                {eventMapping.map((item, index) => (
+                    <MetaCrmDatasetStageMappingRow
+                        key={item.stage_key}
+                        item={item}
+                        index={index}
+                        isDialog={isDialog}
+                        updateEventMapping={updateEventMapping}
+                        getStageKeyLabel={getStageKeyLabel}
+                    />
+                ))}
+            </div>
+        </div>
+    )
+}
+
+function MetaCrmDatasetStageMappingRow({
+    item,
+    index,
+    isDialog,
+    updateEventMapping,
+    getStageKeyLabel,
+}: {
+    item: MetaCrmDatasetEventMappingItem
+    index: number
+    isDialog: boolean
+    updateEventMapping: UpdateMetaCrmDatasetEventMapping
+    getStageKeyLabel: (stageKey: string) => string
+}) {
+    return (
+        <div className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
+            <div className="w-32 text-sm font-medium">
+                {getStageKeyLabel(item.stage_key)}
+            </div>
+            <Select
+                value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
+                onValueChange={(value) => {
+                    updateEventMapping((current) => {
+                        const next = [...current]
+                        const existing = next[index]
+                        if (!existing) return current
+                        if (value === UNTRACKED_BUCKET_VALUE) {
+                            next[index] = {
+                                ...existing,
+                                bucket: null,
+                                enabled: false,
+                            }
+                        } else if (isZapierStageBucket(value)) {
+                            next[index] = {
+                                ...existing,
+                                bucket: value,
+                                event_name: ZAPIER_BUCKET_EVENT_NAME[value],
+                                enabled: true,
+                            }
+                        }
+                        return next
+                    })
+                }}
+            >
+                <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
+                    <SelectValue placeholder="Bucket">
+                        {(value: string | null) => getBucketSelectLabel(value)}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
+                    {ZAPIER_BUCKET_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {!isZapierStageBucket(item.bucket) ? (
+                <Input
+                    value={item.event_name}
+                    onChange={(event) => {
+                        updateEventMapping((current) => {
+                            const next = [...current]
+                            const existing = next[index]
+                            if (!existing) return current
+                            next[index] = { ...existing, event_name: event.target.value }
+                            return next
+                        })
+                    }}
+                    placeholder="Event name"
+                    name={`meta-crm-dataset-event-${item.stage_key}`}
+                    autoComplete="off"
+                />
+            ) : null}
+            <div className="flex items-center gap-2">
+                <Switch
+                    checked={item.enabled}
+                    onCheckedChange={(checked) => {
+                        updateEventMapping((current) => {
+                            const next = [...current]
+                            const existing = next[index]
+                            if (!existing) return current
+                            next[index] = { ...existing, enabled: checked }
+                            return next
+                        })
+                    }}
+                    aria-label={`Enable ${item.stage_key} Meta CRM dataset event`}
+                />
+                <span className="text-xs text-muted-foreground">Enabled</span>
+            </div>
+        </div>
+    )
+}
+
+function MetaCrmDatasetTestControls({
+    metaForm,
+    isDialog,
+    updateMetaForm,
+    getStageKeyLabel,
+    isSaving,
+    isSendingTest,
+    handleSave,
+    handleOutboundTest,
+}: {
+    metaForm: MetaCrmDatasetFormState
+    isDialog: boolean
+    updateMetaForm: UpdateMetaCrmDatasetForm
+    getStageKeyLabel: (stageKey: string) => string
+    isSaving: boolean
+    isSendingTest: boolean
+    handleSave: () => Promise<void>
+    handleOutboundTest: () => Promise<void>
+}) {
+    return (
+        <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-start"}`}>
+            <Button onClick={() => { void handleSave() }} disabled={isSaving}>
+                {isSaving ? (
+                    <>
+                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        Saving…
+                    </>
+                ) : (
+                    "Save CRM Dataset Settings"
+                )}
+            </Button>
+            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
+                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                    <Label htmlFor="meta-crm-dataset-test-lead-id">Real Meta Lead ID</Label>
+                    <Input
+                        id="meta-crm-dataset-test-lead-id"
+                        value={metaForm.outboundTestLeadId}
+                        onChange={(event) => updateMetaForm("outboundTestLeadId", event.target.value)}
+                        placeholder="Use a real Meta lead ID for testing"
+                        autoComplete="off"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Meta CRM funnel updates generally only work for leads created within 90 days.
+                    </p>
+                </div>
+                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                    <Label htmlFor="meta-crm-dataset-test-fbc">Click ID (fbc)</Label>
+                    <Input
+                        id="meta-crm-dataset-test-fbc"
+                        value={metaForm.outboundTestFbc}
+                        onChange={(event) => updateMetaForm("outboundTestFbc", event.target.value)}
+                        placeholder="Optional Meta click ID for better matching"
+                        autoComplete="off"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Send Meta click ID when you have it. This maps to <code>user_data.fbc</code>.
+                    </p>
+                </div>
+                <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
+                    <Select
+                        value={metaForm.selectedStage}
+                        onValueChange={(value) => updateMetaForm("selectedStage", value ?? "")}
+                    >
+                        <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select Meta CRM dataset stage">
+                            <SelectValue placeholder="Select stage">
+                                {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {metaForm.eventMapping.map((item) => (
+                                <SelectItem key={item.stage_key} value={item.stage_key}>
+                                    {getStageKeyLabel(item.stage_key)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        variant="outline"
+                        onClick={() => { void handleOutboundTest() }}
+                        disabled={isSendingTest}
+                        className={isDialog ? "w-full" : undefined}
+                    >
+                        {isSendingTest ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Sending…
+                            </>
+                        ) : (
+                            <>
+                                <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
+                                Send Meta CRM Test Event
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </div>
+        </div>
     )
 }
 
