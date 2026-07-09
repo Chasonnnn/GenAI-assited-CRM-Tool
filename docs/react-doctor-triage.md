@@ -4564,3 +4564,25 @@ Full command after Batch 211: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 10 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
 - Removed globally since Batch 210: Meta configuration `prefer-useReducer` warning (`1` bug warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8a344e4d-8115-4170-b070-450c8d2c9bb1`
+
+## Batch 212
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `app/(app)/automation/campaigns/[id]/page.client.tsx:139` | Valid. `CampaignDetailPage` loaded, edited, and submitted campaign edit-dialog draft state across campaign name, description, template, recipient type, stage filters, state filters, unsubscribe inclusion, and scheduled send time as one logical form draft. | High | Added `CampaignEditDraftState` and `campaignEditDraftReducer` for the edit-dialog draft only. Kept edit dialog visibility, delete/retry/cancel/send dialogs, recipient tab filtering, and API mutation state independent. Added a source guard requiring the grouped reducer and a behavior test for edit prefill, field updates, include-unsubscribed toggling, preserved filters, and update payload construction. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "campaign detail edit draft"` failed before the reducer. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "campaign detail edit draft"`; `pnpm test --run tests/campaign-detail-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 212: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Note: `CampaignDetailPage` still has a valid `no-giant-component` warning; this batch removed the targeted `prefer-useReducer` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cd3ba35d-46d5-47c0-bb44-e5b426c35c62`
+
+Full command after Batch 212: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `35`
+- Summary: `Bugs 9 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
+- Removed globally since Batch 211: campaign detail `prefer-useReducer` warning (`1` bug warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b8f2d91d-9bf2-4eb0-acb3-770f04e04516`

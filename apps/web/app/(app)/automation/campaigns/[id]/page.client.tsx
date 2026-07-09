@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { startTransition, useEffect, useReducer, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -136,6 +136,79 @@ function getSelectedLabels<T extends { label: string }>(
     ))
 }
 
+type CampaignEditRecipientType = "case" | "intended_parent"
+
+type CampaignEditDraftState = {
+    name: string
+    description: string
+    templateId: string
+    recipientType: CampaignEditRecipientType
+    stages: string[]
+    states: string[]
+    includeUnsubscribed: boolean
+    scheduledAt: string
+}
+
+type CampaignEditDraftAction =
+    | { type: "hydrate"; draft: CampaignEditDraftState }
+    | { type: "changeName"; value: string }
+    | { type: "changeDescription"; value: string }
+    | { type: "changeTemplate"; value: string }
+    | { type: "changeRecipientType"; value: CampaignEditRecipientType }
+    | { type: "toggleStage"; stageId: string; checked: boolean }
+    | { type: "toggleState"; stateCode: string; checked: boolean }
+    | { type: "toggleIncludeUnsubscribed"; value: boolean }
+    | { type: "changeScheduledAt"; value: string }
+
+const initialCampaignEditDraft: CampaignEditDraftState = {
+    name: "",
+    description: "",
+    templateId: "",
+    recipientType: "case",
+    stages: [],
+    states: [],
+    includeUnsubscribed: false,
+    scheduledAt: "",
+}
+
+function campaignEditDraftReducer(
+    state: CampaignEditDraftState,
+    action: CampaignEditDraftAction,
+): CampaignEditDraftState {
+    switch (action.type) {
+        case "hydrate":
+            return action.draft
+        case "changeName":
+            return { ...state, name: action.value }
+        case "changeDescription":
+            return { ...state, description: action.value }
+        case "changeTemplate":
+            return { ...state, templateId: action.value }
+        case "changeRecipientType":
+            return { ...state, recipientType: action.value, stages: [] }
+        case "toggleStage":
+            return {
+                ...state,
+                stages: action.checked
+                    ? [...state.stages, action.stageId]
+                    : state.stages.filter((stageId) => stageId !== action.stageId),
+            }
+        case "toggleState":
+            return {
+                ...state,
+                states: action.checked
+                    ? [...state.states, action.stateCode]
+                    : state.states.filter((stateValue) => stateValue !== action.stateCode),
+            }
+        case "toggleIncludeUnsubscribed":
+            return { ...state, includeUnsubscribed: action.value }
+        case "changeScheduledAt":
+            return { ...state, scheduledAt: action.value }
+        default:
+            return state
+    }
+}
+
 export default function CampaignDetailPage() {
     const params = useParams()
     const { push } = useRouter()
@@ -155,14 +228,10 @@ export default function CampaignDetailPage() {
     const [recipientFilter, setRecipientFilter] = useState("all")
     const [showTemplatePreview, setShowTemplatePreview] = useState(true)
     const [showEditDialog, setShowEditDialog] = useState(false)
-    const [editName, setEditName] = useState("")
-    const [editDescription, setEditDescription] = useState("")
-    const [editTemplateId, setEditTemplateId] = useState("")
-    const [editRecipientType, setEditRecipientType] = useState<"case" | "intended_parent">("case")
-    const [editStages, setEditStages] = useState<string[]>([])
-    const [editStates, setEditStates] = useState<string[]>([])
-    const [editIncludeUnsubscribed, setEditIncludeUnsubscribed] = useState(false)
-    const [editScheduledAt, setEditScheduledAt] = useState("")
+    const [editDraft, dispatchEditDraft] = useReducer(
+        campaignEditDraftReducer,
+        initialCampaignEditDraft,
+    )
     const minScheduleDate = toLocalDateTimeInput(new Date())
 
     // API hooks
@@ -205,7 +274,7 @@ export default function CampaignDetailPage() {
         stage_type: stage.stage_type,
     }))
     const editStageOptions =
-        editRecipientType === "intended_parent"
+        editDraft.recipientType === "intended_parent"
             ? intendedParentStageOptions
             : pipelineStages.filter(stage => stage.is_active)
     const canEdit = campaign?.status === "draft" || campaign?.status === "scheduled"
@@ -229,30 +298,35 @@ export default function CampaignDetailPage() {
             campaign.recipient_type === "intended_parent" ? "intended_parent" : "case"
 
         startTransition(() => {
-            setEditName(campaign.name)
-            setEditDescription(campaign.description ?? "")
-            setEditTemplateId(campaign.email_template_id)
-            setEditRecipientType(recipientType)
-            setEditStages(recipientType === "intended_parent" ? stageSlugs : stageIds)
-            setEditStates(states)
-            setEditIncludeUnsubscribed(!!campaign.include_unsubscribed)
-            setEditScheduledAt(
-                campaign.scheduled_at ? toLocalDateTimeInput(new Date(campaign.scheduled_at)) : ""
-            )
+            dispatchEditDraft({
+                type: "hydrate",
+                draft: {
+                    name: campaign.name,
+                    description: campaign.description ?? "",
+                    templateId: campaign.email_template_id,
+                    recipientType,
+                    stages: recipientType === "intended_parent" ? stageSlugs : stageIds,
+                    states,
+                    includeUnsubscribed: !!campaign.include_unsubscribed,
+                    scheduledAt: campaign.scheduled_at
+                        ? toLocalDateTimeInput(new Date(campaign.scheduled_at))
+                        : "",
+                },
+            })
         })
     }, [campaign, showEditDialog])
 
     const buildEditFilterCriteria = () => {
         const stageFilters =
-            editStages.length > 0
-                ? editRecipientType === "intended_parent"
-                    ? { stage_slugs: editStages }
-                    : { stage_ids: editStages }
+            editDraft.stages.length > 0
+                ? editDraft.recipientType === "intended_parent"
+                    ? { stage_slugs: editDraft.stages }
+                    : { stage_ids: editDraft.stages }
                 : {}
 
         return {
             ...stageFilters,
-            ...(editStates.length > 0 ? { states: editStates } : {}),
+            ...(editDraft.states.length > 0 ? { states: editDraft.states } : {}),
         }
     }
 
@@ -279,14 +353,14 @@ export default function CampaignDetailPage() {
 
     const handleEditSave = async () => {
         if (!campaign) return
-        if (!editName || !editTemplateId) {
+        if (!editDraft.name || !editDraft.templateId) {
             toast.error("Please fill in required fields")
             return
         }
 
         let scheduledAt: string | undefined
-        if (editScheduledAt) {
-            const parsedDate = new Date(editScheduledAt)
+        if (editDraft.scheduledAt) {
+            const parsedDate = new Date(editDraft.scheduledAt)
             if (Number.isNaN(parsedDate.getTime())) {
                 toast.error("Scheduled date is invalid")
                 return
@@ -302,12 +376,12 @@ export default function CampaignDetailPage() {
             await updateCampaign.mutateAsync({
                 id: campaign.id,
                 data: {
-                    name: editName,
-                    description: editDescription,
-                    email_template_id: editTemplateId,
-                    recipient_type: editRecipientType,
+                    name: editDraft.name,
+                    description: editDraft.description,
+                    email_template_id: editDraft.templateId,
+                    recipient_type: editDraft.recipientType,
                     filter_criteria: buildEditFilterCriteria(),
-                    include_unsubscribed: editIncludeUnsubscribed,
+                    include_unsubscribed: editDraft.includeUnsubscribed,
                     ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
                 },
             })
@@ -384,8 +458,8 @@ export default function CampaignDetailPage() {
     const stateLabelsForFilter = getSelectedLabels(US_STATES, selectedStateFilters, (state) => state.value)
     const createdAfter = filterCriteria.created_after ? new Date(filterCriteria.created_after) : null
     const createdBefore = filterCriteria.created_before ? new Date(filterCriteria.created_before) : null
-    const editStageIdSet = new Set(editStages)
-    const editStateCodeSet = new Set(editStates)
+    const editStageIdSet = new Set(editDraft.stages)
+    const editStateCodeSet = new Set(editDraft.states)
 
     return (
         <div className="flex min-h-screen flex-col bg-background">
@@ -755,21 +829,41 @@ export default function CampaignDetailPage() {
                             <Label htmlFor="edit-name">Campaign Name *</Label>
                             <Input
                                 id="edit-name"
-                                value={editName}
-                                onChange={(event) => setEditName(event.target.value)}
+                                value={editDraft.name}
+                                onChange={(event) =>
+                                    dispatchEditDraft({
+                                        type: "changeName",
+                                        value: event.target.value,
+                                    })
+                                }
                             />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="edit-description">Description</Label>
                             <Textarea
                                 id="edit-description"
-                                value={editDescription}
-                                onChange={(event) => setEditDescription(event.target.value)}
+                                value={editDraft.description}
+                                onChange={(event) =>
+                                    dispatchEditDraft({
+                                        type: "changeDescription",
+                                        value: event.target.value,
+                                    })
+                                }
                             />
                         </div>
                         <div className="space-y-2">
                             <Label>Template *</Label>
-                            <Select value={editTemplateId} onValueChange={(value) => value && setEditTemplateId(value)}>
+                            <Select
+                                value={editDraft.templateId}
+                                onValueChange={(value) => {
+                                    if (value) {
+                                        dispatchEditDraft({
+                                            type: "changeTemplate",
+                                            value,
+                                        })
+                                    }
+                                }}
+                            >
                                 <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Choose a template">
                                         {(value: string | null) => {
@@ -791,11 +885,13 @@ export default function CampaignDetailPage() {
                         <div className="space-y-2">
                             <Label>Recipient Type</Label>
                             <Select
-                                value={editRecipientType}
+                                value={editDraft.recipientType}
                                 onValueChange={(value) => {
                                     if (value === "case" || value === "intended_parent") {
-                                        setEditRecipientType(value)
-                                        setEditStages([])
+                                        dispatchEditDraft({
+                                            type: "changeRecipientType",
+                                            value,
+                                        })
                                     }
                                 }}
                             >
@@ -815,7 +911,7 @@ export default function CampaignDetailPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>{editRecipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
+                            <Label>{editDraft.recipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
                             <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                                 {editStageOptions.map((stage) => (
                                     <div key={stage.id} className="flex items-center gap-x-2">
@@ -823,11 +919,11 @@ export default function CampaignDetailPage() {
                                             id={`edit-stage-${stage.id}`}
                                             checked={editStageIdSet.has(stage.id)}
                                             onCheckedChange={(checked) => {
-                                                setEditStages((currentStages) =>
-                                                    checked
-                                                        ? [...currentStages, stage.id]
-                                                        : currentStages.filter((stageId) => stageId !== stage.id)
-                                                )
+                                                dispatchEditDraft({
+                                                    type: "toggleStage",
+                                                    stageId: stage.id,
+                                                    checked: checked === true,
+                                                })
                                             }}
                                         />
                                         <Label htmlFor={`edit-stage-${stage.id}`} className="text-sm">
@@ -847,11 +943,11 @@ export default function CampaignDetailPage() {
                                             id={`edit-state-${state.value}`}
                                             checked={editStateCodeSet.has(state.value)}
                                             onCheckedChange={(checked) => {
-                                                setEditStates((currentStates) =>
-                                                    checked
-                                                        ? [...currentStates, state.value]
-                                                        : currentStates.filter((stateValue) => stateValue !== state.value)
-                                                )
+                                                dispatchEditDraft({
+                                                    type: "toggleState",
+                                                    stateCode: state.value,
+                                                    checked: checked === true,
+                                                })
                                             }}
                                         />
                                         <Label htmlFor={`edit-state-${state.value}`} className="text-sm cursor-pointer">
@@ -860,9 +956,9 @@ export default function CampaignDetailPage() {
                                     </div>
                                 ))}
                             </div>
-                            {editStates.length > 0 && (
+                            {editDraft.states.length > 0 && (
                                 <p className="text-xs text-muted-foreground">
-                                    {editStates.length} state{editStates.length !== 1 ? "s" : ""} selected
+                                    {editDraft.states.length} state{editDraft.states.length !== 1 ? "s" : ""} selected
                                 </p>
                             )}
                         </div>
@@ -870,9 +966,12 @@ export default function CampaignDetailPage() {
                             <div className="flex items-start gap-3">
                                 <Checkbox
                                     id="edit-include-unsubscribed"
-                                    checked={editIncludeUnsubscribed}
+                                    checked={editDraft.includeUnsubscribed}
                                     onCheckedChange={(checked) =>
-                                        setEditIncludeUnsubscribed(checked === true)
+                                        dispatchEditDraft({
+                                            type: "toggleIncludeUnsubscribed",
+                                            value: checked === true,
+                                        })
                                     }
                                 />
                                 <div className="space-y-1">
@@ -893,8 +992,13 @@ export default function CampaignDetailPage() {
                                     id="edit-scheduled-at"
                                     type="datetime-local"
                                     min={minScheduleDate}
-                                    value={editScheduledAt}
-                                    onChange={(event) => setEditScheduledAt(event.target.value)}
+                                    value={editDraft.scheduledAt}
+                                    onChange={(event) =>
+                                        dispatchEditDraft({
+                                            type: "changeScheduledAt",
+                                            value: event.target.value,
+                                        })
+                                    }
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     {campaign?.status === "scheduled"

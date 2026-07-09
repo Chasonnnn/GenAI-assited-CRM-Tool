@@ -2815,6 +2815,23 @@ describe("React regression guards (source)", () => {
         expect(campaignDetailSource).not.toMatch(/US_STATES\.filter\([^)]*stateFilters\.includes[\s\S]*?\.map/)
     })
 
+    it("keeps campaign detail edit draft state grouped", () => {
+        const source = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
+        const pageSource = readFunctionSource(source, "CampaignDetailPage")
+
+        expect(source).toContain("type CampaignEditDraftState")
+        expect(source).toContain("function campaignEditDraftReducer")
+        expect(pageSource).toContain("const [editDraft, dispatchEditDraft] = useReducer")
+        expect(pageSource).not.toContain("setEditName")
+        expect(pageSource).not.toContain("setEditDescription")
+        expect(pageSource).not.toContain("setEditTemplateId")
+        expect(pageSource).not.toContain("setEditRecipientType")
+        expect(pageSource).not.toContain("setEditStages")
+        expect(pageSource).not.toContain("setEditStates")
+        expect(pageSource).not.toContain("setEditIncludeUnsubscribed")
+        expect(pageSource).not.toContain("setEditScheduledAt")
+    })
+
     it("hoists Meta spend dashboard number formatters", () => {
         const source = readSource("components/reports/MetaSpendDashboard.tsx")
 
