@@ -4771,3 +4771,11 @@ Full command after Batch 220: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 17 warnings`
 - Removed globally since Batch 219: email configuration `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-e39b24d9-0ac7-45a9-a9be-f95a047a70dd`
+
+## Batch 221
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/page.tsx:4130` | Valid. `MetaConfigurationSection` still owned loading/heading rendering, legacy connection table, legacy ad-account table, edit dialog, and disconnect dialog in one section. | High | Extracted `MetaConfigurationLoadingState`, `MetaConfigurationHeading`, `LegacyMetaSetupSection`, `LegacyMetaConnectionsCard`, `LegacyMetaAdAccountsCard`, `MetaAdAccountEditDialog`, and `MetaDisconnectDialog`. Kept Meta hooks, reducer state, disconnect state, connect/disconnect/update/delete handlers, and mutation ownership in `MetaConfigurationSection`. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta configuration rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta configuration rendering"`; `pnpm test --run tests/integrations-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm test --run tests/integrations-page.test.tsx tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+React Doctor rerun after Batch 221 was attempted with `cd apps/web && npx -y react-doctor@latest . --verbose`, but the sandbox reviewer rejected network npm scanner execution against this private repo. Do not treat this batch as a score-confirmed full React Doctor run until a locally approved scanner invocation is available. The last score-confirmed full run remains Batch 220 (`90 / 100`, `27` warnings), and this batch targets one of those warning sources.
