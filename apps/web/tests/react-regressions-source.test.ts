@@ -1656,6 +1656,25 @@ describe("React regression guards (source)", () => {
         expect(pageSource).not.toContain("Need help?")
     })
 
+    it("keeps AI integration settings rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+        const sectionSource = readFunctionSource(source, "AIConfigurationSection")
+
+        expect(source).toContain("function AIConfigurationLoadingState")
+        expect(source).toContain("function AIConfigurationHeading")
+        expect(source).toContain("function AIConsentCard")
+        expect(source).toContain("function AISettingsCard")
+        expect(source).toContain("function AIProviderField")
+        expect(source).toContain("function AIApiKeyField")
+        expect(source).toContain("function VertexApiKeySettings")
+        expect(source).toContain("function VertexWifSettings")
+        expect(source).toContain("function AIModelField")
+        expect(source).toContain("function AISaveButton")
+        expect(sectionSource).not.toContain("AI Consent Required")
+        expect(sectionSource).not.toContain("Vertex AI (WIF)")
+        expect(sectionSource).not.toContain("Save AI Configuration")
+    })
+
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
         const hookSource = readSource("lib/hooks/use-zapier.ts")
