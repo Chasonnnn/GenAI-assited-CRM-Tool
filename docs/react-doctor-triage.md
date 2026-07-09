@@ -4586,3 +4586,25 @@ Full command after Batch 212: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 9 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
 - Removed globally since Batch 211: campaign detail `prefer-useReducer` warning (`1` bug warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b8f2d91d-9bf2-4eb0-acb3-770f04e04516`
+
+## Batch 213
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `app/(app)/automation/email-templates/page.tsx:905` | Valid. `EmailTemplatesPage` opened, reset, edited, and submitted related email editor, signature draft, and test-send dialog fields through coordinated setter groups. | High | Added focused reducers for the template editor draft, signature draft, and test-send dialog state. Kept active tab, preview, copy/share dialog, library copy, and target/touched refs outside the reducers because those states have separate ownership or do not need render-state. Added source guards and behavior tests for create/update payloads, edit-to-create reset, and test-send payload construction. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "email test-send dialog"` failed before the test-send reducer. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "email template editor draft\|email signature draft\|email test-send dialog\|email template handler bookkeeping\|sets the email test recipient"`; `pnpm test --run tests/email-templates-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 213: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `1`
+- Summary: `Maintainability 1 warning`
+- Note: `EmailTemplatesPage` still has a valid `no-giant-component` warning; this batch removed the targeted `prefer-useReducer` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-872f97f8-07e4-4489-85ee-5b82a0e0e5d2`
+
+Full command after Batch 213: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `34`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
+- Removed globally since Batch 212: email templates `prefer-useReducer` warning (`1` bug warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4e5f1738-377a-493d-ad78-b9601f2a5a7d`

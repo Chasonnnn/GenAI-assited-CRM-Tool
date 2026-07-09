@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import NextImage from "next/image"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useReducer } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -315,6 +315,191 @@ type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
 type TextSelectionRef = React.MutableRefObject<{ start: number; end: number } | null>
 const PREVIEW_FONT_STACK =
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", Arial, sans-serif'
+
+type EmailTemplateEditorState = {
+    isOpen: boolean
+    template: EmailTemplateListItem | null
+    name: string
+    subject: string
+    bodyOverride: string | null
+    bodyModeOverride: EditorMode | null
+    scope: EmailTemplateScope
+}
+
+type EmailTemplateEditorAction =
+    | { type: "openCreate"; scope: EmailTemplateScope }
+    | { type: "openEdit"; template: EmailTemplateListItem }
+    | { type: "close" }
+    | { type: "changeName"; value: string }
+    | { type: "changeSubject"; value: string }
+    | { type: "changeBody"; value: string }
+    | { type: "changeBodyMode"; value: EditorMode }
+
+const initialEmailTemplateEditorState: EmailTemplateEditorState = {
+    isOpen: false,
+    template: null,
+    name: "",
+    subject: "",
+    bodyOverride: null,
+    bodyModeOverride: null,
+    scope: "personal",
+}
+
+function emailTemplateEditorReducer(
+    state: EmailTemplateEditorState,
+    action: EmailTemplateEditorAction,
+): EmailTemplateEditorState {
+    switch (action.type) {
+        case "openCreate":
+            return {
+                ...initialEmailTemplateEditorState,
+                isOpen: true,
+                scope: action.scope,
+            }
+        case "openEdit":
+            return {
+                isOpen: true,
+                template: action.template,
+                name: action.template.name,
+                subject: action.template.subject,
+                bodyOverride: null,
+                bodyModeOverride: null,
+                scope: action.template.scope,
+            }
+        case "close":
+            return {
+                ...state,
+                isOpen: false,
+            }
+        case "changeName":
+            return { ...state, name: action.value }
+        case "changeSubject":
+            return { ...state, subject: action.value }
+        case "changeBody":
+            return { ...state, bodyOverride: action.value }
+        case "changeBodyMode":
+            return { ...state, bodyModeOverride: action.value }
+        default:
+            return state
+    }
+}
+
+type SignatureDraftState = {
+    name: string
+    title: string
+    phone: string
+    linkedin: string
+    twitter: string
+    instagram: string
+}
+
+type SignatureDraftField = keyof SignatureDraftState
+
+type SignatureDraftAction =
+    | { type: "hydrate"; draft: SignatureDraftState }
+    | { type: "changeField"; field: SignatureDraftField; value: string }
+
+const initialSignatureDraftState: SignatureDraftState = {
+    name: "",
+    title: "",
+    phone: "",
+    linkedin: "",
+    twitter: "",
+    instagram: "",
+}
+
+function createSignatureDraftState(
+    signatureData: {
+        signature_name?: string | null
+        signature_title?: string | null
+        signature_phone?: string | null
+        signature_linkedin?: string | null
+        signature_twitter?: string | null
+        signature_instagram?: string | null
+    } | null | undefined,
+): SignatureDraftState {
+    return {
+        name: signatureData?.signature_name || "",
+        title: signatureData?.signature_title || "",
+        phone: signatureData?.signature_phone || "",
+        linkedin: signatureData?.signature_linkedin || "",
+        twitter: signatureData?.signature_twitter || "",
+        instagram: signatureData?.signature_instagram || "",
+    }
+}
+
+function signatureDraftReducer(
+    state: SignatureDraftState,
+    action: SignatureDraftAction,
+): SignatureDraftState {
+    switch (action.type) {
+        case "hydrate":
+            return action.draft
+        case "changeField":
+            return { ...state, [action.field]: action.value }
+        default:
+            return state
+    }
+}
+
+type TestSendDialogState = {
+    isOpen: boolean
+    target: EmailTemplateListItem | null
+    toEmail: string
+    ignoreOptOut: boolean
+    variables: Record<string, string>
+}
+
+type TestSendDialogAction =
+    | { type: "open"; target: EmailTemplateListItem; toEmail: string }
+    | { type: "close" }
+    | { type: "changeToEmail"; value: string }
+    | { type: "changeIgnoreOptOut"; value: boolean }
+    | { type: "initializeVariables"; variables: Record<string, string> }
+    | { type: "changeVariable"; name: string; value: string }
+
+const initialTestSendDialogState: TestSendDialogState = {
+    isOpen: false,
+    target: null,
+    toEmail: "",
+    ignoreOptOut: false,
+    variables: {},
+}
+
+function testSendDialogReducer(
+    state: TestSendDialogState,
+    action: TestSendDialogAction,
+): TestSendDialogState {
+    switch (action.type) {
+        case "open":
+            return {
+                isOpen: true,
+                target: action.target,
+                toEmail: action.toEmail,
+                ignoreOptOut: false,
+                variables: {},
+            }
+        case "close":
+            return initialTestSendDialogState
+        case "changeToEmail":
+            return { ...state, toEmail: action.value }
+        case "changeIgnoreOptOut":
+            return { ...state, ignoreOptOut: action.value }
+        case "initializeVariables":
+            if (Object.keys(state.variables).length > 0) return state
+            return { ...state, variables: action.variables }
+        case "changeVariable":
+            return {
+                ...state,
+                variables: {
+                    ...state.variables,
+                    [action.name]: action.value,
+                },
+            }
+        default:
+            return state
+    }
+}
 
 function hasAdvancedTemplateHtml(body: string | null | undefined) {
     return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body || "")
@@ -727,13 +912,10 @@ export default function EmailTemplatesPage() {
 
     const [activeTab, setActiveTab] = useState("personal")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
-    const [isModalOpen, setIsModalOpen] = useState(false)
-    const [editingTemplate, setEditingTemplate] = useState<EmailTemplateListItem | null>(null)
-    const [templateName, setTemplateName] = useState("")
-    const [templateSubject, setTemplateSubject] = useState("")
-    const [templateBodyOverride, setTemplateBodyOverride] = useState<string | null>(null)
-    const [templateBodyModeOverride, setTemplateBodyModeOverride] = useState<EditorMode | null>(null)
-    const [templateScope, setTemplateScope] = useState<EmailTemplateScope>("personal")
+    const [editorState, dispatchEditor] = useReducer(
+        emailTemplateEditorReducer,
+        initialEmailTemplateEditorState,
+    )
     const [showPreview, setShowPreview] = useState(false)
     const [previewHtml, setPreviewHtml] = useState("")
     const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
@@ -753,11 +935,10 @@ export default function EmailTemplatesPage() {
     const [copyShareName, setCopyShareName] = useState("")
 
     // Test send dialog state
-    const [testSendOpen, setTestSendOpen] = useState(false)
-    const [testSendTarget, setTestSendTarget] = useState<EmailTemplateListItem | null>(null)
-    const [testSendToEmail, setTestSendToEmail] = useState("")
-    const [testSendIgnoreOptOut, setTestSendIgnoreOptOut] = useState(false)
-    const [testSendVariables, setTestSendVariables] = useState<Record<string, string>>({})
+    const [testSendState, dispatchTestSend] = useReducer(
+        testSendDialogReducer,
+        initialTestSendDialogState,
+    )
     const testSendTouchedRef = useRef<Record<string, boolean>>({})
 
     // Platform library copy/preview state
@@ -766,15 +947,10 @@ export default function EmailTemplatesPage() {
     const [libraryCopyName, setLibraryCopyName] = useState("")
     const [libraryPreviewId, setLibraryPreviewId] = useState<string | null>(null)
 
-    // Signature override state
-    const [signatureName, setSignatureName] = useState("")
-    const [signatureTitle, setSignatureTitle] = useState("")
-    const [signaturePhone, setSignaturePhone] = useState("")
-
-    // Social links state
-    const [signatureLinkedin, setSignatureLinkedin] = useState("")
-    const [signatureTwitter, setSignatureTwitter] = useState("")
-    const [signatureInstagram, setSignatureInstagram] = useState("")
+    const [signatureDraft, dispatchSignatureDraft] = useReducer(
+        signatureDraftReducer,
+        initialSignatureDraftState,
+    )
 
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
@@ -807,30 +983,36 @@ export default function EmailTemplatesPage() {
     const { data: orgSignaturePreview } = useOrgSignaturePreview({ enabled: true, mode: "org_only" })
 
     const hasChanges = Boolean(
-        signatureData &&
-        (
-            signatureName !== (signatureData.signature_name || "") ||
-            signatureTitle !== (signatureData.signature_title || "") ||
-            signaturePhone !== (signatureData.signature_phone || "") ||
-            signatureLinkedin !== (signatureData.signature_linkedin || "") ||
-            signatureTwitter !== (signatureData.signature_twitter || "") ||
-            signatureInstagram !== (signatureData.signature_instagram || "")
+            signatureData &&
+            (
+            signatureDraft.name !== (signatureData.signature_name || "") ||
+            signatureDraft.title !== (signatureData.signature_title || "") ||
+            signatureDraft.phone !== (signatureData.signature_phone || "") ||
+            signatureDraft.linkedin !== (signatureData.signature_linkedin || "") ||
+            signatureDraft.twitter !== (signatureData.signature_twitter || "") ||
+            signatureDraft.instagram !== (signatureData.signature_instagram || "")
         )
     )
 
     // Get full template details when editing
-    const { data: fullTemplate } = useEmailTemplate(editingTemplate?.id || null)
+    const { data: fullTemplate } = useEmailTemplate(editorState.template?.id || null)
     const { data: testSendTemplateDetail, isLoading: testSendTemplateLoading } = useEmailTemplate(
-        testSendTarget?.id || null
+        testSendState.target?.id || null
     )
     const { data: libraryTemplateDetail } = useEmailTemplateLibraryItem(libraryPreviewId)
-    const templateBody = templateBodyOverride ?? (editingTemplate ? fullTemplate?.body ?? "" : "")
-    const templateBodyMode = templateBodyModeOverride ?? getTemplateBodyMode(editingTemplate ? fullTemplate?.body : null)
+    const templateBody = editorState.bodyOverride ?? (editorState.template ? fullTemplate?.body ?? "" : "")
+    const templateBodyMode = editorState.bodyModeOverride ?? getTemplateBodyMode(editorState.template ? fullTemplate?.body : null)
     const hasComplexHtml = hasAdvancedTemplateHtml(templateBody)
+    const changeTemplateSubjectDraft: React.Dispatch<React.SetStateAction<string>> = (nextValue) => {
+        dispatchEditor({
+            type: "changeSubject",
+            value: typeof nextValue === "function" ? nextValue(editorState.subject) : nextValue,
+        })
+    }
     const setTemplateBodyDraft: React.Dispatch<React.SetStateAction<string>> = (nextValue) => {
-        setTemplateBodyOverride((currentOverride) => {
-            const currentBody = currentOverride ?? (editingTemplate ? fullTemplate?.body ?? "" : "")
-            return typeof nextValue === "function" ? nextValue(currentBody) : nextValue
+        dispatchEditor({
+            type: "changeBody",
+            value: typeof nextValue === "function" ? nextValue(templateBody) : nextValue,
         })
     }
 
@@ -843,7 +1025,7 @@ export default function EmailTemplatesPage() {
     const testSendEditableVariables = testSendUsedVariables.filter((name) => name !== "unsubscribe_url")
 
     useEffect(() => {
-        if (!testSendOpen) return
+        if (!testSendState.isOpen) return
         if (!testSendTemplateDetail) return
         const editableVariables = extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
             .slice()
@@ -852,21 +1034,25 @@ export default function EmailTemplatesPage() {
         if (editableVariables.length === 0) return
 
         React.startTransition(() => {
-            setTestSendVariables((prev) => {
-                if (Object.keys(prev).length > 0) return prev
-                const toEmail = testSendToEmail.trim() || user?.email || ""
-                const next: Record<string, string> = {}
-                for (const variableName of editableVariables) {
-                    next[variableName] = buildTestVariableSample(variableName, {
-                        toEmail,
-                        ownerName: user?.display_name,
-                        orgName: user?.org_name,
-                    })
-                }
-                return next
-            })
+            const toEmail = testSendState.toEmail.trim() || user?.email || ""
+            const variables: Record<string, string> = {}
+            for (const variableName of editableVariables) {
+                variables[variableName] = buildTestVariableSample(variableName, {
+                    toEmail,
+                    ownerName: user?.display_name,
+                    orgName: user?.org_name,
+                })
+            }
+            dispatchTestSend({ type: "initializeVariables", variables })
         })
-    }, [testSendOpen, testSendTemplateDetail, testSendToEmail, user?.display_name, user?.email, user?.org_name])
+    }, [
+        testSendState.isOpen,
+        testSendState.toEmail,
+        testSendTemplateDetail,
+        user?.display_name,
+        user?.email,
+        user?.org_name,
+    ])
 
     const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
     const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
@@ -876,7 +1062,7 @@ export default function EmailTemplatesPage() {
             requiredVariableNames.push(variable.name)
         }
     }
-    const usedVariableNames = extractTemplateVariables(`${templateSubject}\n${templateBody}`)
+    const usedVariableNames = extractTemplateVariables(`${editorState.subject}\n${templateBody}`)
     const usedVariableNamesSet = new Set(usedVariableNames)
     const unknownVariables = canValidateVariables
         ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
@@ -889,49 +1075,47 @@ export default function EmailTemplatesPage() {
     useEffect(() => {
         if (signatureData) {
             React.startTransition(() => {
-                setSignatureName(signatureData.signature_name || "")
-                setSignatureTitle(signatureData.signature_title || "")
-                setSignaturePhone(signatureData.signature_phone || "")
-                setSignatureLinkedin(signatureData.signature_linkedin || "")
-                setSignatureTwitter(signatureData.signature_twitter || "")
-                setSignatureInstagram(signatureData.signature_instagram || "")
+                dispatchSignatureDraft({
+                    type: "hydrate",
+                    draft: createSignatureDraftState(signatureData),
+                })
             })
         }
     }, [signatureData])
 
     const handleOpenModal = (template?: EmailTemplateListItem, scope: EmailTemplateScope = "personal") => {
+        activeInsertionTargetRef.current = null
         if (template) {
-            setEditingTemplate(template)
-            setTemplateName(template.name)
-            setTemplateSubject(template.subject)
-            setTemplateBodyOverride(null)
-            setTemplateScope(template.scope)
-            setTemplateBodyModeOverride(null)
-            activeInsertionTargetRef.current = null
+            dispatchEditor({ type: "openEdit", template })
         } else {
-            setEditingTemplate(null)
-            setTemplateName("")
-            setTemplateSubject("")
-            setTemplateBodyOverride(null)
-            setTemplateScope(scope)
-            setTemplateBodyModeOverride(null)
-            activeInsertionTargetRef.current = null
+            dispatchEditor({ type: "openCreate", scope })
         }
-        setIsModalOpen(true)
     }
 
     const handleSave = () => {
-        if (!templateName.trim() || !templateSubject.trim() || !templateBody.trim()) return
+        if (!editorState.name.trim() || !editorState.subject.trim() || !templateBody.trim()) return
 
-        if (editingTemplate) {
+        if (editorState.template) {
             updateTemplate.mutate(
-                { id: editingTemplate.id, data: { name: templateName, subject: templateSubject, body: templateBody } },
-                { onSuccess: () => setIsModalOpen(false) }
+                {
+                    id: editorState.template.id,
+                    data: {
+                        name: editorState.name,
+                        subject: editorState.subject,
+                        body: templateBody,
+                    },
+                },
+                { onSuccess: () => dispatchEditor({ type: "close" }) }
             )
         } else {
             createTemplate.mutate(
-                { name: templateName, subject: templateSubject, body: templateBody, scope: templateScope },
-                { onSuccess: () => setIsModalOpen(false) }
+                {
+                    name: editorState.name,
+                    subject: editorState.subject,
+                    body: templateBody,
+                    scope: editorState.scope,
+                },
+                { onSuccess: () => dispatchEditor({ type: "close" }) }
             )
         }
     }
@@ -955,24 +1139,25 @@ export default function EmailTemplatesPage() {
     }
 
     const handleOpenTestDialog = (template: EmailTemplateListItem) => {
-        setTestSendTarget(template)
-        setTestSendToEmail(user?.email || "")
-        setTestSendIgnoreOptOut(false)
-        setTestSendVariables({})
         testSendTouchedRef.current = {}
-        setTestSendOpen(true)
+        dispatchTestSend({ type: "open", target: template, toEmail: user?.email || "" })
+    }
+
+    const handleCloseTestDialog = () => {
+        dispatchTestSend({ type: "close" })
+        testSendTouchedRef.current = {}
     }
 
     const handleSendTest = async () => {
-        if (!testSendTarget) return
-        const toEmail = testSendToEmail.trim()
+        if (!testSendState.target) return
+        const toEmail = testSendState.toEmail.trim()
         if (!toEmail) {
             toast.error("To email is required")
             return
         }
 
         const overrides: Record<string, string> = {}
-        for (const [key, value] of Object.entries(testSendVariables)) {
+        for (const [key, value] of Object.entries(testSendState.variables)) {
             if (!testSendTouchedRef.current[key]) continue
             const trimmed = value.trim()
             if (!trimmed) continue
@@ -981,11 +1166,11 @@ export default function EmailTemplatesPage() {
 
         try {
             const result = await sendTest.mutateAsync({
-                id: testSendTarget.id,
+                id: testSendState.target.id,
                 payload: {
                     to_email: toEmail,
                     variables: overrides,
-                    ...(testSendIgnoreOptOut ? { ignore_opt_out: true } : {}),
+                    ...(testSendState.ignoreOptOut ? { ignore_opt_out: true } : {}),
                 },
             })
             const providerLabel =
@@ -995,10 +1180,7 @@ export default function EmailTemplatesPage() {
                         ? "Gmail"
                         : "provider"
             toast.success(`Test email sent via ${providerLabel}`)
-            setTestSendOpen(false)
-            setTestSendTarget(null)
-            setTestSendVariables({})
-            testSendTouchedRef.current = {}
+            handleCloseTestDialog()
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to send test email")
         }
@@ -1044,12 +1226,12 @@ export default function EmailTemplatesPage() {
 
     const previewScope: EmailTemplateScope = libraryPreviewId
         ? "org"
-        : editingTemplate?.scope === "personal" || editingTemplate?.scope === "org"
-          ? editingTemplate.scope
-          : templateScope
+        : editorState.template?.scope === "personal" || editorState.template?.scope === "org"
+          ? editorState.template.scope
+          : editorState.scope
     const previewSubjectTemplate = libraryPreviewId && libraryTemplateDetail?.subject
         ? libraryTemplateDetail.subject
-        : templateSubject
+        : editorState.subject
     const previewSubject = previewSubjectTemplate
         .replace(/\{\{full_name\}\}/g, "John Smith")
         .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
@@ -1122,7 +1304,7 @@ export default function EmailTemplatesPage() {
     const insertToken = (token: string) => {
         const activeInsertionTarget = activeInsertionTargetRef.current
         if (activeInsertionTarget === "subject") {
-            insertIntoTextControl(subjectRef.current, subjectSelectionRef, setTemplateSubject, token)
+            insertIntoTextControl(subjectRef.current, subjectSelectionRef, changeTemplateSubjectDraft, token)
             return
         }
         if (activeInsertionTarget === "body_html") {
@@ -1157,12 +1339,12 @@ export default function EmailTemplatesPage() {
     const handleSaveSignature = () => {
         updateSignatureMutation.mutate(
             {
-                signature_name: signatureName || null,
-                signature_title: signatureTitle || null,
-                signature_phone: signaturePhone || null,
-                signature_linkedin: signatureLinkedin || null,
-                signature_twitter: signatureTwitter || null,
-                signature_instagram: signatureInstagram || null,
+                signature_name: signatureDraft.name || null,
+                signature_title: signatureDraft.title || null,
+                signature_phone: signatureDraft.phone || null,
+                signature_linkedin: signatureDraft.linkedin || null,
+                signature_twitter: signatureDraft.twitter || null,
+                signature_instagram: signatureDraft.instagram || null,
             },
             {
                 onSuccess: () => {
@@ -1565,29 +1747,65 @@ export default function EmailTemplatesPage() {
                                             <SignatureOverrideField
                                                 id="sig-name"
                                                 label="Name"
-                                                value={signatureName}
+                                                value={signatureDraft.name}
                                                 profileDefault={signatureData?.profile_name || null}
-                                                onChange={setSignatureName}
-                                                onClear={() => setSignatureName("")}
+                                                onChange={(value) =>
+                                                    dispatchSignatureDraft({
+                                                        type: "changeField",
+                                                        field: "name",
+                                                        value,
+                                                    })
+                                                }
+                                                onClear={() =>
+                                                    dispatchSignatureDraft({
+                                                        type: "changeField",
+                                                        field: "name",
+                                                        value: "",
+                                                    })
+                                                }
                                             />
 
                                             <SignatureOverrideField
                                                 id="sig-title"
                                                 label="Title"
-                                                value={signatureTitle}
+                                                value={signatureDraft.title}
                                                 profileDefault={signatureData?.profile_title || null}
-                                                onChange={setSignatureTitle}
-                                                onClear={() => setSignatureTitle("")}
+                                                onChange={(value) =>
+                                                    dispatchSignatureDraft({
+                                                        type: "changeField",
+                                                        field: "title",
+                                                        value,
+                                                    })
+                                                }
+                                                onClear={() =>
+                                                    dispatchSignatureDraft({
+                                                        type: "changeField",
+                                                        field: "title",
+                                                        value: "",
+                                                    })
+                                                }
                                                 placeholder="e.g., Case Manager"
                                             />
 
                                             <SignatureOverrideField
                                                 id="sig-phone"
                                                 label="Phone"
-                                                value={signaturePhone}
+                                                value={signatureDraft.phone}
                                                 profileDefault={signatureData?.profile_phone || null}
-                                                onChange={setSignaturePhone}
-                                                onClear={() => setSignaturePhone("")}
+                                                onChange={(value) =>
+                                                    dispatchSignatureDraft({
+                                                        type: "changeField",
+                                                        field: "phone",
+                                                        value,
+                                                    })
+                                                }
+                                                onClear={() =>
+                                                    dispatchSignatureDraft({
+                                                        type: "changeField",
+                                                        field: "phone",
+                                                        value: "",
+                                                    })
+                                                }
                                                 type="tel"
                                                 placeholder="e.g., (555) 123-4567"
                                             />
@@ -1613,8 +1831,14 @@ export default function EmailTemplatesPage() {
                                                     <Input
                                                         id="sig-linkedin"
                                                         placeholder="https://linkedin.com/in/yourprofile"
-                                                        value={signatureLinkedin}
-                                                        onChange={(e) => setSignatureLinkedin(e.target.value)}
+                                                        value={signatureDraft.linkedin}
+                                                        onChange={(e) =>
+                                                            dispatchSignatureDraft({
+                                                                type: "changeField",
+                                                                field: "linkedin",
+                                                                value: e.target.value,
+                                                            })
+                                                        }
                                                         className="h-9"
                                                     />
                                                 </div>
@@ -1629,8 +1853,14 @@ export default function EmailTemplatesPage() {
                                                     <Input
                                                         id="sig-twitter"
                                                         placeholder="https://x.com/yourhandle"
-                                                        value={signatureTwitter}
-                                                        onChange={(e) => setSignatureTwitter(e.target.value)}
+                                                        value={signatureDraft.twitter}
+                                                        onChange={(e) =>
+                                                            dispatchSignatureDraft({
+                                                                type: "changeField",
+                                                                field: "twitter",
+                                                                value: e.target.value,
+                                                            })
+                                                        }
                                                         className="h-9"
                                                     />
                                                 </div>
@@ -1643,8 +1873,14 @@ export default function EmailTemplatesPage() {
                                                     <Input
                                                         id="sig-instagram"
                                                         placeholder="https://instagram.com/yourhandle"
-                                                        value={signatureInstagram}
-                                                        onChange={(e) => setSignatureInstagram(e.target.value)}
+                                                        value={signatureDraft.instagram}
+                                                        onChange={(e) =>
+                                                            dispatchSignatureDraft({
+                                                                type: "changeField",
+                                                                field: "instagram",
+                                                                value: e.target.value,
+                                                            })
+                                                        }
                                                         className="h-9"
                                                     />
                                                 </div>
@@ -1803,26 +2039,26 @@ export default function EmailTemplatesPage() {
 
             {/* Create/Edit Template Modal */}
             <Dialog
-                open={isModalOpen}
+                open={editorState.isOpen}
                 onOpenChange={(open) => {
-                    setIsModalOpen(open)
                     if (!open) {
                         activeInsertionTargetRef.current = null
+                        dispatchEditor({ type: "close" })
                     }
                 }}
             >
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle>
-                            {editingTemplate ? "Edit Template" : "Create Template"}
+                            {editorState.template ? "Edit Template" : "Create Template"}
                         </DialogTitle>
                         <DialogDescription>
                             Create reusable email templates with dynamic variables.
-                            {!editingTemplate && (
+                            {!editorState.template && (
                                 <span className="block mt-1">
                                     Creating a{" "}
                                     <Badge variant="outline" className="text-xs">
-                                        {templateScope === "personal" ? "Personal" : "Organization"}
+                                        {editorState.scope === "personal" ? "Personal" : "Organization"}
                                     </Badge>{" "}
                                     template
                                 </span>
@@ -1836,8 +2072,13 @@ export default function EmailTemplatesPage() {
                             <Input
                                 id="name"
                                 placeholder="Welcome Email"
-                                value={templateName}
-                                onChange={(e) => setTemplateName(e.target.value)}
+                                value={editorState.name}
+                                onChange={(e) =>
+                                    dispatchEditor({
+                                        type: "changeName",
+                                        value: e.target.value,
+                                    })
+                                }
                             />
                         </div>
 
@@ -1847,8 +2088,13 @@ export default function EmailTemplatesPage() {
                                 id="subject"
                                 placeholder="Welcome to {{org_name}}, {{full_name}}!"
                                 ref={subjectRef}
-                                value={templateSubject}
-                                onChange={(e) => setTemplateSubject(e.target.value)}
+                                value={editorState.subject}
+                                onChange={(e) =>
+                                    dispatchEditor({
+                                        type: "changeSubject",
+                                        value: e.target.value,
+                                    })
+                                }
                                 onFocus={(e) => {
                                     activeInsertionTargetRef.current = "subject"
                                     recordSelection(e.currentTarget, subjectSelectionRef)
@@ -1874,7 +2120,10 @@ export default function EmailTemplatesPage() {
                                         onValueChange={(value) => {
                                             const next = value[0] as EditorMode | undefined
                                             if (!next) return
-                                            setTemplateBodyModeOverride(next)
+                                            dispatchEditor({
+                                                type: "changeBodyMode",
+                                                value: next,
+                                            })
                                             const current = activeInsertionTargetRef.current
                                             activeInsertionTargetRef.current = current === "subject"
                                                 ? current
@@ -1911,7 +2160,12 @@ export default function EmailTemplatesPage() {
                                 <RichTextEditor
                                     ref={visualBodyRef}
                                     content={templateBody}
-                                    onChange={(html) => setTemplateBodyOverride(html)}
+                                    onChange={(html) =>
+                                        dispatchEditor({
+                                            type: "changeBody",
+                                            value: html,
+                                        })
+                                    }
                                     onFocus={() => {
                                         activeInsertionTargetRef.current = "body_visual"
                                     }}
@@ -1928,7 +2182,12 @@ export default function EmailTemplatesPage() {
                                     aria-labelledby="template-body-label"
                                     ref={htmlBodyRef}
                                     value={templateBody}
-                                    onChange={(event) => setTemplateBodyOverride(event.target.value)}
+                                    onChange={(event) =>
+                                        dispatchEditor({
+                                            type: "changeBody",
+                                            value: event.target.value,
+                                        })
+                                    }
                                     onFocus={(event) => {
                                         activeInsertionTargetRef.current = "body_html"
                                         recordSelection(event.currentTarget, htmlBodySelectionRef)
@@ -1949,7 +2208,7 @@ export default function EmailTemplatesPage() {
                                 Use the Insert Variable button above to add dynamic placeholders like {"{{full_name}}"}
                             </p>
                             {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
-                                (templateSubject.trim() || templateBody.trim()) && (
+                                (editorState.subject.trim() || templateBody.trim()) && (
                                     <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
                                         <AlertTriangleIcon className="size-4" />
                                         <AlertTitle>Template variables</AlertTitle>
@@ -1988,7 +2247,7 @@ export default function EmailTemplatesPage() {
                             {(createTemplate.isPending || updateTemplate.isPending) && (
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
                             )}
-                            {editingTemplate ? "Save Changes" : "Create Template"}
+                            {editorState.template ? "Save Changes" : "Create Template"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -2106,14 +2365,10 @@ export default function EmailTemplatesPage() {
 
             {/* Send Test Email Dialog */}
             <Dialog
-                open={testSendOpen}
+                open={testSendState.isOpen}
                 onOpenChange={(open) => {
-                    setTestSendOpen(open)
                     if (!open) {
-                        setTestSendTarget(null)
-                        setTestSendVariables({})
-                        testSendTouchedRef.current = {}
-                        setTestSendIgnoreOptOut(false)
+                        handleCloseTestDialog()
                     }
                 }}
             >
@@ -2122,7 +2377,7 @@ export default function EmailTemplatesPage() {
                         <DialogTitle>Send test email</DialogTitle>
                         <DialogDescription>
                             Send a test email for{" "}
-                            <span className="font-medium">{testSendTarget?.name || "this template"}</span>.
+                            <span className="font-medium">{testSendState.target?.name || "this template"}</span>.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -2132,15 +2387,21 @@ export default function EmailTemplatesPage() {
                             <Input
                                 id="test-send-to"
                                 type="email"
-                                value={testSendToEmail}
-                                onChange={(e) => setTestSendToEmail(e.target.value)}
+                                value={testSendState.toEmail}
+                                onChange={(e) => dispatchTestSend({
+                                    type: "changeToEmail",
+                                    value: e.target.value,
+                                })}
                                 placeholder="test@example.com"
                             />
                             <div className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
                                 <Checkbox
                                     id="test-send-ignore-opt-out"
-                                    checked={testSendIgnoreOptOut}
-                                    onCheckedChange={(checked) => setTestSendIgnoreOptOut(checked === true)}
+                                    checked={testSendState.ignoreOptOut}
+                                    onCheckedChange={(checked) => dispatchTestSend({
+                                        type: "changeIgnoreOptOut",
+                                        value: checked === true,
+                                    })}
                                 />
                                 <div className="space-y-1">
                                     <Label htmlFor="test-send-ignore-opt-out" className="cursor-pointer">
@@ -2190,13 +2451,13 @@ export default function EmailTemplatesPage() {
                                                             </Label>
                                                             <Input
                                                                 id={`test-var-${variableName}`}
-                                                                value={testSendVariables[variableName] ?? ""}
+                                                                value={testSendState.variables[variableName] ?? ""}
                                                                 onChange={(e) => {
-                                                                    const value = e.target.value
-                                                                    setTestSendVariables((prev) => ({
-                                                                        ...prev,
-                                                                        [variableName]: value,
-                                                                    }))
+                                                                    dispatchTestSend({
+                                                                        type: "changeVariable",
+                                                                        name: variableName,
+                                                                        value: e.target.value,
+                                                                    })
                                                                     testSendTouchedRef.current[variableName] = true
                                                                 }}
                                                             />
@@ -2214,7 +2475,7 @@ export default function EmailTemplatesPage() {
                     <DialogFooter>
                         <Button
                             variant="outline"
-                            onClick={() => setTestSendOpen(false)}
+                            onClick={handleCloseTestDialog}
                             disabled={sendTest.isPending}
                         >
                             Cancel

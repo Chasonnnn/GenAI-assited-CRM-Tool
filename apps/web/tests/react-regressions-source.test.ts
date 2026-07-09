@@ -1981,14 +1981,14 @@ describe("React regression guards (source)", () => {
     it("keeps email template handler bookkeeping out of render state", () => {
         const source = readSource("app/(app)/automation/email-templates/page.tsx")
 
-        expect(source).toContain("const [templateBodyOverride, setTemplateBodyOverride] = useState<string | null>(null)")
-        expect(source).toContain("const [templateBodyModeOverride, setTemplateBodyModeOverride] = useState<EditorMode | null>(null)")
-        expect(source).toContain("const templateBody = templateBodyOverride ?? (editingTemplate ? fullTemplate?.body ?? \"\" : \"\")")
-        expect(source).toContain("const templateBodyMode = templateBodyModeOverride ?? getTemplateBodyMode(editingTemplate ? fullTemplate?.body : null)")
+        expect(source).toContain("const templateBody = editorState.bodyOverride ?? (editorState.template ? fullTemplate?.body ?? \"\" : \"\")")
+        expect(source).toContain("const templateBodyMode = editorState.bodyModeOverride ?? getTemplateBodyMode(editorState.template ? fullTemplate?.body : null)")
         expect(source).toContain("const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)")
         expect(source).toContain("const copyShareTargetRef = useRef<EmailTemplateListItem | null>(null)")
         expect(source).toContain("const testSendTouchedRef = useRef<Record<string, boolean>>({})")
         expect(source).toContain("const libraryCopyTargetRef = useRef<EmailTemplateLibraryItem | null>(null)")
+        expect(source).not.toContain("const [templateBodyOverride, setTemplateBodyOverride] = useState")
+        expect(source).not.toContain("const [templateBodyModeOverride, setTemplateBodyModeOverride] = useState")
         expect(source).not.toContain("const [templateBody, setTemplateBody] = useState")
         expect(source).not.toContain("const [templateBodyMode, setTemplateBodyMode] = useState")
         expect(source).not.toContain("templateBodyModeTouchedRef")
@@ -1999,6 +1999,50 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [copyShareTarget, setCopyShareTarget] = useState")
         expect(source).not.toContain("const [testSendTouched, setTestSendTouched] = useState")
         expect(source).not.toContain("const [libraryCopyTarget, setLibraryCopyTarget] = useState")
+    })
+
+    it("keeps email template editor draft state grouped", () => {
+        const source = readSource("app/(app)/automation/email-templates/page.tsx")
+        const pageSource = readFunctionSource(source, "EmailTemplatesPage")
+
+        expect(source).toContain("type EmailTemplateEditorState")
+        expect(source).toContain("function emailTemplateEditorReducer")
+        expect(pageSource).toContain("const [editorState, dispatchEditor] = useReducer")
+        expect(pageSource).not.toContain("setEditingTemplate")
+        expect(pageSource).not.toContain("setTemplateName")
+        expect(pageSource).not.toContain("setTemplateSubject")
+        expect(pageSource).not.toContain("setTemplateBodyOverride")
+        expect(pageSource).not.toContain("setTemplateBodyModeOverride")
+        expect(pageSource).not.toContain("setTemplateScope")
+    })
+
+    it("keeps email signature draft state grouped", () => {
+        const source = readSource("app/(app)/automation/email-templates/page.tsx")
+        const pageSource = readFunctionSource(source, "EmailTemplatesPage")
+
+        expect(source).toContain("type SignatureDraftState")
+        expect(source).toContain("function signatureDraftReducer")
+        expect(pageSource).toContain("const [signatureDraft, dispatchSignatureDraft] = useReducer")
+        expect(pageSource).not.toContain("setSignatureName")
+        expect(pageSource).not.toContain("setSignatureTitle")
+        expect(pageSource).not.toContain("setSignaturePhone")
+        expect(pageSource).not.toContain("setSignatureLinkedin")
+        expect(pageSource).not.toContain("setSignatureTwitter")
+        expect(pageSource).not.toContain("setSignatureInstagram")
+    })
+
+    it("keeps email test-send dialog state grouped", () => {
+        const source = readSource("app/(app)/automation/email-templates/page.tsx")
+        const pageSource = readFunctionSource(source, "EmailTemplatesPage")
+
+        expect(source).toContain("type TestSendDialogState")
+        expect(source).toContain("function testSendDialogReducer")
+        expect(pageSource).toContain("const [testSendState, dispatchTestSend] = useReducer")
+        expect(pageSource).not.toContain("setTestSendOpen")
+        expect(pageSource).not.toContain("setTestSendTarget")
+        expect(pageSource).not.toContain("setTestSendToEmail")
+        expect(pageSource).not.toContain("setTestSendIgnoreOptOut")
+        expect(pageSource).not.toContain("setTestSendVariables")
     })
 
     it("clears email library preview state from the preview close handler", () => {
@@ -2018,7 +2062,7 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/automation/email-templates/page.tsx")
 
         expect(source).toContain("const handleOpenTestDialog = (template: EmailTemplateListItem) =>")
-        expect(source).toContain('setTestSendToEmail(user?.email || "")')
+        expect(source).toContain('dispatchTestSend({ type: "open", target: template, toEmail: user?.email || "" })')
         expect(source).not.toContain("setTestSendToEmail(user.email)")
         expect(source).not.toContain("[testSendOpen, testSendToEmail, user?.email]")
     })

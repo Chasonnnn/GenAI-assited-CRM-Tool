@@ -12,6 +12,9 @@ import type {
 const mockUseAuth = vi.fn()
 const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
+const mockCreateEmailTemplate = vi.fn()
+const mockUpdateEmailTemplate = vi.fn()
+const mockSendTestEmailTemplate = vi.fn()
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
 const TEMPLATE_VARIABLES = [
     {
@@ -180,13 +183,13 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         isLoading: false,
     }),
     useEmailTemplateVariables: () => ({ data: TEMPLATE_VARIABLES, isLoading: false }),
-    useCreateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
-    useUpdateEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
+    useCreateEmailTemplate: () => ({ mutate: mockCreateEmailTemplate, isPending: false }),
+    useUpdateEmailTemplate: () => ({ mutate: mockUpdateEmailTemplate, isPending: false }),
     useDeleteEmailTemplate: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateToPersonal: () => ({ mutate: vi.fn(), isPending: false }),
     useShareTemplateWithOrg: () => ({ mutate: vi.fn(), isPending: false }),
     useCopyTemplateFromLibrary: () => ({ mutate: vi.fn(), isPending: false }),
-    useSendTestEmailTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSendTestEmailTemplate: () => ({ mutateAsync: mockSendTestEmailTemplate, isPending: false }),
 }))
 
 vi.mock("@/lib/hooks/use-signature", () => ({
@@ -211,6 +214,10 @@ describe("EmailTemplatesPage", () => {
         document.documentElement.classList.remove("dark")
         mockRichTextEditorProps.mockClear()
         mockUseEmailTemplates.mockClear()
+        mockCreateEmailTemplate.mockReset()
+        mockUpdateEmailTemplate.mockReset()
+        mockSendTestEmailTemplate.mockReset()
+        mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
         personalTemplatesFixture = [PERSONAL_TEMPLATE]
         orgTemplatesFixture = [ORG_TEMPLATE]
         TEMPLATE_DETAIL_BY_ID.tpl_personal_1.body = "<p>Personal Body</p>"
@@ -248,6 +255,35 @@ describe("EmailTemplatesPage", () => {
         const toEmailInput = await screen.findByLabelText("To email")
         expect(toEmailInput).toBeInTheDocument()
         expect((toEmailInput as HTMLInputElement).value).toBe("admin@example.com")
+    })
+
+    it("sends a test email with touched variable overrides and opt-out override", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+
+        const toEmailInput = await screen.findByLabelText("To email")
+        fireEvent.change(toEmailInput, { target: { value: "qa@example.com" } })
+        fireEvent.click(screen.getByRole("checkbox", { name: "Send even if unsubscribed" }))
+        fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
+
+        const fullNameInput = await screen.findByLabelText("{{full_name}}")
+        expect(fullNameInput).toHaveValue("Jordan Smith")
+        fireEvent.change(fullNameInput, { target: { value: "Custom Recipient" } })
+
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+
+        await waitFor(() => {
+            expect(mockSendTestEmailTemplate).toHaveBeenCalledWith({
+                id: "tpl_personal_1",
+                payload: {
+                    to_email: "qa@example.com",
+                    variables: { full_name: "Custom Recipient" },
+                    ignore_opt_out: true,
+                },
+            })
+        })
     })
 
     it("labels organization template action menus with template context", async () => {
@@ -376,6 +412,73 @@ describe("EmailTemplatesPage", () => {
             "<table><tbody><tr><td>Personal Body</td></tr></tbody></table>",
         )
         expect(screen.queryByTestId("rich-text-editor")).not.toBeInTheDocument()
+    })
+
+    it("creates an organization template with the current editor draft", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("button", { name: /Create Org Template/i }))
+        fireEvent.change(screen.getByLabelText("Template Name"), {
+            target: { value: "New Org Template" },
+        })
+        fireEvent.change(screen.getByLabelText("Subject Line"), {
+            target: { value: "Hello {{full_name}}" },
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
+        fireEvent.change(await screen.findByLabelText("Email Body"), {
+            target: { value: "<p>Welcome</p>" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Create Template" }))
+
+        expect(mockCreateEmailTemplate).toHaveBeenCalledWith(
+            {
+                name: "New Org Template",
+                subject: "Hello {{full_name}}",
+                body: "<p>Welcome</p>",
+                scope: "org",
+            },
+            expect.any(Object),
+        )
+    })
+
+    it("updates an existing template and resets stale edit draft on create reopen", async () => {
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
+        fireEvent.change(await screen.findByLabelText("Template Name"), {
+            target: { value: "Renamed Personal Template" },
+        })
+        fireEvent.change(screen.getByLabelText("Subject Line"), {
+            target: { value: "Updated subject" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
+        fireEvent.change(await screen.findByLabelText("Email Body"), {
+            target: { value: "<p>Updated Body</p>" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+        expect(mockUpdateEmailTemplate).toHaveBeenCalledWith(
+            {
+                id: "tpl_personal_1",
+                data: {
+                    name: "Renamed Personal Template",
+                    subject: "Updated subject",
+                    body: "<p>Updated Body</p>",
+                },
+            },
+            expect.any(Object),
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Close" }))
+        fireEvent.click(screen.getByRole("button", { name: /^Create Template$/i }))
+
+        expect(screen.getByRole("heading", { name: "Create Template" })).toBeInTheDocument()
+        expect(screen.getByLabelText("Template Name")).toHaveValue("")
+        expect(screen.getByLabelText("Subject Line")).toHaveValue("")
+        expect(screen.getByText("Personal")).toBeInTheDocument()
     })
 
     it("uses org signature in preview for organization templates", async () => {
