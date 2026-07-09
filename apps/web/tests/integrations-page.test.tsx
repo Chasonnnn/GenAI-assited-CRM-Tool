@@ -856,6 +856,71 @@ describe('IntegrationsPage', () => {
         }))
     })
 
+    it('edits legacy Meta ad accounts with preserved draft state and reset on reopen', async () => {
+        metaAdAccountsData = [
+            {
+                id: 'ad-account-1',
+                organization_id: 'org-1',
+                ad_account_external_id: 'act_123',
+                ad_account_name: 'Original Account',
+                pixel_id: 'pixel-original',
+                capi_enabled: false,
+                hierarchy_synced_at: null,
+                spend_synced_at: null,
+                is_active: true,
+                last_error: null,
+                last_error_at: null,
+                created_at: '2026-01-01T00:00:00Z',
+                updated_at: '2026-01-01T00:00:00Z',
+            },
+        ]
+        mockUpdateMetaAdAccount.mockRejectedValueOnce(new Error('Meta rejected pixel'))
+
+        render(<IntegrationsPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+        fireEvent.click(screen.getByRole('button', { name: /edit ad account/i }))
+
+        const editDialog = screen.getByText('Edit Ad Account').closest('dialog')
+        expect(editDialog).not.toBeNull()
+        expect(within(editDialog as HTMLElement).getByLabelText(/ad account name/i)).toHaveValue('Original Account')
+        expect(within(editDialog as HTMLElement).getByLabelText(/pixel id/i)).toHaveValue('pixel-original')
+
+        fireEvent.change(within(editDialog as HTMLElement).getByLabelText(/ad account name/i), {
+            target: { value: 'Updated Account' },
+        })
+        fireEvent.change(within(editDialog as HTMLElement).getByLabelText(/pixel id/i), {
+            target: { value: 'pixel-updated' },
+        })
+        fireEvent.click(within(editDialog as HTMLElement).getByRole('checkbox', { name: /enable capi/i }))
+        fireEvent.click(within(editDialog as HTMLElement).getByRole('checkbox', { name: /active/i }))
+
+        await act(async () => {
+            fireEvent.click(within(editDialog as HTMLElement).getByRole('button', { name: /save changes/i }))
+        })
+
+        expect(mockUpdateMetaAdAccount).toHaveBeenCalledWith({
+            accountId: 'ad-account-1',
+            data: {
+                ad_account_name: 'Updated Account',
+                pixel_id: 'pixel-updated',
+                capi_enabled: true,
+                is_active: false,
+            },
+        })
+        expect(within(editDialog as HTMLElement).getByText('Meta rejected pixel')).toBeInTheDocument()
+        expect(within(editDialog as HTMLElement).getByLabelText(/ad account name/i)).toHaveValue('Updated Account')
+
+        fireEvent.click(within(editDialog as HTMLElement).getByRole('button', { name: /cancel/i }))
+        fireEvent.click(screen.getByRole('button', { name: /edit ad account/i }))
+
+        const reopenedDialog = screen.getByText('Edit Ad Account').closest('dialog')
+        expect(reopenedDialog).not.toBeNull()
+        expect(within(reopenedDialog as HTMLElement).getByLabelText(/ad account name/i)).toHaveValue('Original Account')
+        expect(within(reopenedDialog as HTMLElement).getByLabelText(/pixel id/i)).toHaveValue('pixel-original')
+        expect(within(reopenedDialog as HTMLElement).queryByText('Meta rejected pixel')).not.toBeInTheDocument()
+    })
+
     it('keeps the Meta monitoring panel mounted to avoid remount flashing on tab switches', () => {
         render(<IntegrationsPage />)
 

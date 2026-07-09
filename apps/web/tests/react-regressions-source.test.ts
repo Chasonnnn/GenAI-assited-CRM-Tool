@@ -2904,6 +2904,20 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("finally")
     })
 
+    it("keeps Meta configuration account edit state grouped", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+        const sectionSource = readFunctionSource(source, "MetaConfigurationSection")
+
+        expect(source).toContain("type MetaAccountEditState")
+        expect(source).toContain("function metaAccountEditReducer")
+        expect(sectionSource).toContain("const [accountEditState, dispatchAccountEdit] = useReducer")
+        expect(sectionSource).not.toContain("setAccountFormError")
+        expect(sectionSource).not.toContain("setAdAccountName")
+        expect(sectionSource).not.toContain("setPixelId")
+        expect(sectionSource).not.toContain("setCapiEnabled")
+        expect(sectionSource).not.toContain("setAccountActive")
+    })
+
     it("keeps AI chat message state compiler-friendly", () => {
         const source = readSource("components/ai/AIChatPanel.tsx")
 

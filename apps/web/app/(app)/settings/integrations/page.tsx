@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useState, useEffect } from "react"
+import { startTransition, useReducer, useState, useEffect } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -509,6 +509,71 @@ type ZapierOutboundFormState = {
 type ZapierOutboundDraftState = {
     outboundKey: string
     form: ZapierOutboundFormState
+}
+
+type MetaAccountEditState = {
+    account: MetaAdAccount | null
+    error: string
+    adAccountName: string
+    pixelId: string
+    capiEnabled: boolean
+    accountActive: boolean
+}
+
+type MetaAccountEditAction =
+    | { type: "open"; account: MetaAdAccount }
+    | { type: "close" }
+    | { type: "clearError" }
+    | { type: "setError"; error: string }
+    | { type: "changeAdAccountName"; value: string }
+    | { type: "changePixelId"; value: string }
+    | { type: "toggleCapiEnabled"; value: boolean }
+    | { type: "toggleAccountActive"; value: boolean }
+
+const initialMetaAccountEditState: MetaAccountEditState = {
+    account: null,
+    error: "",
+    adAccountName: "",
+    pixelId: "",
+    capiEnabled: false,
+    accountActive: true,
+}
+
+function createMetaAccountEditState(account: MetaAdAccount): MetaAccountEditState {
+    return {
+        account,
+        error: "",
+        adAccountName: account.ad_account_name || "",
+        pixelId: account.pixel_id || "",
+        capiEnabled: account.capi_enabled,
+        accountActive: account.is_active,
+    }
+}
+
+function metaAccountEditReducer(
+    state: MetaAccountEditState,
+    action: MetaAccountEditAction,
+): MetaAccountEditState {
+    switch (action.type) {
+        case "open":
+            return createMetaAccountEditState(action.account)
+        case "close":
+            return initialMetaAccountEditState
+        case "clearError":
+            return { ...state, error: "" }
+        case "setError":
+            return { ...state, error: action.error }
+        case "changeAdAccountName":
+            return { ...state, adAccountName: action.value }
+        case "changePixelId":
+            return { ...state, pixelId: action.value }
+        case "toggleCapiEnabled":
+            return { ...state, capiEnabled: action.value }
+        case "toggleAccountActive":
+            return { ...state, accountActive: action.value }
+        default:
+            return state
+    }
 }
 
 function createZapierWebhookDraftKey(
@@ -3425,13 +3490,19 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
     const updateAccountMutation = useUpdateMetaAdAccount()
     const deleteAccountMutation = useDeleteMetaAdAccount()
 
-    const [editAccount, setEditAccount] = useState<MetaAdAccount | null>(null)
+    const [accountEditState, dispatchAccountEdit] = useReducer(
+        metaAccountEditReducer,
+        initialMetaAccountEditState,
+    )
     const [disconnectConnectionId, setDisconnectConnectionId] = useState<string | null>(null)
-    const [accountFormError, setAccountFormError] = useState("")
-    const [adAccountName, setAdAccountName] = useState("")
-    const [pixelId, setPixelId] = useState("")
-    const [capiEnabled, setCapiEnabled] = useState(false)
-    const [accountActive, setAccountActive] = useState(true)
+    const {
+        account: editAccount,
+        error: accountFormError,
+        adAccountName,
+        pixelId,
+        capiEnabled,
+        accountActive,
+    } = accountEditState
 
     const handleConnectWithFacebook = async () => {
         try {
@@ -3452,18 +3523,13 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
     }
 
     const openEditAccount = (account: MetaAdAccount) => {
-        setEditAccount(account)
-        setAdAccountName(account.ad_account_name || "")
-        setPixelId(account.pixel_id || "")
-        setCapiEnabled(account.capi_enabled)
-        setAccountActive(account.is_active)
-        setAccountFormError("")
+        dispatchAccountEdit({ type: "open", account })
     }
 
     const handleUpdateAdAccount = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!editAccount) return
-        setAccountFormError("")
+        dispatchAccountEdit({ type: "clearError" })
 
         const payload: MetaAdAccountUpdate = {
             capi_enabled: capiEnabled,
@@ -3481,10 +3547,10 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                 accountId: editAccount.id,
                 data: payload,
             })
-            setEditAccount(null)
+            dispatchAccountEdit({ type: "close" })
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Failed to update ad account"
-            setAccountFormError(message)
+            dispatchAccountEdit({ type: "setError", error: message })
         }
     }
 
@@ -3692,7 +3758,7 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
             </Tabs>
 
             {/* Edit Ad Account Dialog */}
-            <Dialog open={!!editAccount} onOpenChange={(open) => !open && setEditAccount(null)}>
+            <Dialog open={!!editAccount} onOpenChange={(open) => !open && dispatchAccountEdit({ type: "close" })}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Edit Ad Account</DialogTitle>
@@ -3705,7 +3771,12 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                                 <Input
                                     id="adAccountName"
                                     value={adAccountName}
-                                    onChange={(e) => setAdAccountName(e.target.value)}
+                                    onChange={(e) =>
+                                        dispatchAccountEdit({
+                                            type: "changeAdAccountName",
+                                            value: e.target.value,
+                                        })
+                                    }
                                     name="ad-account-name"
                                     autoComplete="off"
                                 />
@@ -3715,7 +3786,12 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                                 <Input
                                     id="pixelId"
                                     value={pixelId}
-                                    onChange={(e) => setPixelId(e.target.value)}
+                                    onChange={(e) =>
+                                        dispatchAccountEdit({
+                                            type: "changePixelId",
+                                            value: e.target.value,
+                                        })
+                                    }
                                     name="pixel-id"
                                     autoComplete="off"
                                 />
@@ -3729,7 +3805,12 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                                 </div>
                                 <Checkbox
                                     checked={capiEnabled}
-                                    onCheckedChange={(checked) => setCapiEnabled(!!checked)}
+                                    onCheckedChange={(checked) =>
+                                        dispatchAccountEdit({
+                                            type: "toggleCapiEnabled",
+                                            value: !!checked,
+                                        })
+                                    }
                                     id="capiEnabled"
                                 />
                             </div>
@@ -3742,7 +3823,12 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                                 </div>
                                 <Checkbox
                                     checked={accountActive}
-                                    onCheckedChange={(checked) => setAccountActive(!!checked)}
+                                    onCheckedChange={(checked) =>
+                                        dispatchAccountEdit({
+                                            type: "toggleAccountActive",
+                                            value: !!checked,
+                                        })
+                                    }
                                     id="accountActive"
                                 />
                             </div>
@@ -3751,7 +3837,11 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                             )}
                         </div>
                         <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setEditAccount(null)} type="button">
+                            <Button
+                                variant="outline"
+                                onClick={() => dispatchAccountEdit({ type: "close" })}
+                                type="button"
+                            >
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={updateAccountMutation.isPending}>

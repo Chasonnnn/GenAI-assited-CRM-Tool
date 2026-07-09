@@ -4542,3 +4542,25 @@ Full command after Batch 210: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 11 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
 - Removed globally since Batch 207 plus local unpushed Batches 208-210: AI assistant page, ops agency detail page, Meta form mapping page, and one additional previously listed warning no longer appear in the latest scan (`4` total diagnostics removed).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0dc2812e-a936-4065-b6cf-d6fcc332ec83`
+
+## Batch 211
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/prefer-useReducer` | `app/(app)/settings/integrations/page.tsx:3419` | Valid. `MetaConfigurationSection` updated the selected legacy ad account, form error, ad account name, pixel id, CAPI flag, and active flag as one edit-dialog draft during open, save, failure, close, and field edits. | High | Added a narrow `MetaAccountEditState` reducer for only the legacy ad-account edit dialog. Left unrelated disconnect, connect, delete, query, and Meta CRM dataset state unchanged. Added a source guard requiring the reducer and a behavior test for open prefill, failed-save preservation, payload construction, cancel, and reopen reset. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta configuration account edit state"` failed before the reducer. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta configuration account edit state"`; `pnpm test --run tests/integrations-page.test.tsx -t "legacy Meta ad accounts"`; `pnpm test --run tests/integrations-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 211: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `97 / 100`
+- Total diagnostics in changed files: `6`
+- Summary: `Maintainability 6 warnings`
+- Note: the changed file still has existing `no-giant-component` warnings for other large integration sections; this batch removed the targeted `prefer-useReducer` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-cefecb20-6eee-4adf-8b77-3de271304af8`
+
+Full command after Batch 211: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `36`
+- Summary: `Bugs 10 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
+- Removed globally since Batch 210: Meta configuration `prefer-useReducer` warning (`1` bug warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-8a344e4d-8115-4170-b070-450c8d2c9bb1`
