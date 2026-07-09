@@ -4727,3 +4727,25 @@ Read-only source inspection classified the current `react-doctor/query-mutation-
 | `lib/hooks/use-platform-templates.ts:348` (`useSendPlatformSystemEmailCampaign`) | Needs human review | Sends emails and backend logs admin/email activity, but it does not mutate system template or branding caches. Current admin action display is local state, not a React Query list. | If live audit freshness becomes a product requirement, introduce/invalidate an admin-actions query; `platformTemplateKeys.systemDetail(systemKey)` would be the wrong target. |
 | `lib/hooks/use-profile.ts:29` (`useSyncProfile`) | False positive | Returns staged profile diffs only. The hook comment says not to invalidate because sync is not persisted; save/toggle mutations invalidate the profile cache. | No action. |
 | `lib/hooks/use-schedule-parser.ts:17` (`useParseSchedule`) | False positive | Parses text into proposed tasks only. Actual task creation uses `useCreateBulkTasks`, which invalidates task lists and surrogate keys. | No action. |
+
+## Batch 219
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/page.tsx:710` | Valid. `AIConfigurationSection` still owned heading/loading states, consent rendering, provider selection, API key editing/testing, Vertex API key settings, Vertex WIF settings, model selection, and save button rendering in one section. | High | Extracted `AIConfigurationLoadingState`, `AIConfigurationHeading`, `AIConsentCard`, `AISettingsCard`, `AIProviderField`, `AIApiKeyField`, `VertexApiKeySettings`, `VertexWifSettings`, `AIModelField`, and `AISaveButton`. Kept AI settings hooks, GCP connect/disconnect hooks, form/UI state, consent/test/save handlers, and auth refetch in `AIConfigurationSection`. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "AI integration settings rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "AI integration settings rendering"`; `pnpm test --run tests/integrations-page.test.tsx -t "renders integration health\|shows status badge in AI dialog header\|shows status badges\|uses wider card grids\|does not load admin-only\|keeps personal integrations accessible"`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 219: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `98 / 100`
+- Total diagnostics in changed files: `3`
+- Summary: `Maintainability 3 warnings`
+- Note: the changed file still has existing `no-giant-component` warnings for `EmailConfigurationSection`, `ZapierWebhookSection`, and `MetaConfigurationSection`; this batch removed the targeted `AIConfigurationSection` warning.
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4c17e785-96b3-4c83-8342-5a8afd00905d`
+
+Full command after Batch 219: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `28`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 18 warnings`
+- Removed globally since Batch 218: AI configuration `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-f420c4d5-6f5b-4e6e-966a-9077167b1bab`
