@@ -349,6 +349,7 @@ function AppSidebarContent({
                                         "ml-auto transition-transform",
                                         sections.tasks && "rotate-90"
                                     )}
+                                    aria-hidden="true"
                                 />
                             </>
                         )}
@@ -384,6 +385,7 @@ function AppSidebarContent({
                                         "ml-auto transition-transform",
                                         sections.automation && "rotate-90"
                                     )}
+                                    aria-hidden="true"
                                 />
                             </>
                         )}
@@ -443,6 +445,7 @@ function AppSidebarContent({
                                         "ml-auto transition-transform",
                                         sections.settings && "rotate-90"
                                     )}
+                                    aria-hidden="true"
                                 />
                             </>
                         )}
@@ -488,7 +491,7 @@ function AppSidebarContent({
                                     <span className="truncate font-semibold">{user?.display_name || "Loading..."}</span>
                                     <span className="truncate text-xs text-muted-foreground">{user?.email || ""}</span>
                                 </div>
-                                <ChevronsUpDown className="ml-auto size-4" />
+                                <ChevronsUpDown className="ml-auto size-4" aria-hidden="true" />
                             </>
                         )}
                     </DropdownMenuTrigger>
