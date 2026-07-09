@@ -3502,6 +3502,26 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const formatDate =")
     })
 
+    it("keeps intended-parents list rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/intended-parents/page.client.tsx")
+        const pageIndex = source.indexOf("export default function IntendedParentsPage")
+        const pageSource = source.slice(pageIndex)
+
+        expect(pageIndex).toBeGreaterThanOrEqual(0)
+        expect(source).toContain("function IntendedParentsPageHeader")
+        expect(source).toContain("function IntendedParentStatsGrid")
+        expect(source).toContain("function IntendedParentsFilters")
+        expect(source).toContain("function IntendedParentsTableCard")
+        expect(source).toContain("function IntendedParentsPagination")
+        expect(source).toContain("function CreateIntendedParentDialog")
+        expect(pageSource).toContain("useIntendedParents(filters)")
+        expect(pageSource).toContain("const handleSearchChange =")
+        expect(pageSource).toContain("const handleCreate =")
+        expect(pageSource).not.toContain("No intended parents found")
+        expect(pageSource).not.toContain("Failed to load intended parents")
+        expect(pageSource).not.toContain("New Intended Parent")
+    })
+
     it("keeps match-detail tab state routing helpers compiler-friendly", () => {
         const source = readSource("app/(app)/intended-parents/matches/[id]/hooks/useMatchDetailTabState.ts")
 

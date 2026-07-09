@@ -192,6 +192,354 @@ function formatIntendedParentCreatedDate(dateStr: string) {
     })
 }
 
+type IntendedParentStatusMetadata = Parameters<typeof getIntendedParentStatusLabel>[0]
+type IntendedParentStageOption = ReturnType<typeof getIntendedParentStageOptions>[number]
+type IntendedParentStatsData = {
+    total: number
+    by_status: Record<string, number>
+}
+type IntendedParentListData = {
+    items: IntendedParentListItem[]
+    total: number
+    per_page: number
+}
+type IntendedParentSortOrder = "asc" | "desc"
+
+function IntendedParentsPageHeader({
+    onCreateClick,
+}: {
+    onCreateClick: () => void
+}) {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <h1 className="text-2xl font-semibold">Intended Parents</h1>
+                <Button onClick={onCreateClick}>
+                    <PlusIcon className="mr-2 size-4" />
+                    New Intended Parent
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function IntendedParentStatsGrid({
+    stats,
+    statusOptions,
+}: {
+    stats: IntendedParentStatsData | undefined
+    statusOptions: IntendedParentStageOption[]
+}) {
+    return (
+        <div className="grid gap-4 md:grid-cols-5">
+            <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
+                </CardContent>
+            </Card>
+            {statusOptions.map((status) => (
+                <Card key={status.id}>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">
+                            {status.label}
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {stats?.by_status[status.stage_key] ?? 0}
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
+    )
+}
+
+function IntendedParentsFilters({
+    statusFilter,
+    statusOptions,
+    statusMetadata,
+    dateRange,
+    customRange,
+    availableDateKeys,
+    search,
+    onStatusChange,
+    onPresetChange,
+    onCustomRangeChange,
+    onSearchChange,
+}: {
+    statusFilter: string
+    statusOptions: IntendedParentStageOption[]
+    statusMetadata: IntendedParentStatusMetadata
+    dateRange: DateRangePreset
+    customRange: DateRangeSelection
+    availableDateKeys: string[]
+    search: string
+    onStatusChange: (status: string) => void
+    onPresetChange: (preset: DateRangePreset) => void
+    onCustomRangeChange: (range: DateRangeSelection) => void
+    onSearchChange: (search: string) => void
+}) {
+    return (
+        <div className="flex flex-col gap-4 md:flex-row md:items-center">
+            <Select value={statusFilter} onValueChange={(value) => { if (value) onStatusChange(value) }}>
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="All Stages">
+                        {(value: string | null) => {
+                            if (!value || value === "all") return "All Stages"
+                            return getIntendedParentStatusLabel(statusMetadata, value)
+                        }}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Stages</SelectItem>
+                    {statusOptions.map((status) => (
+                        <SelectItem key={status.id} value={status.stage_key}>
+                            {status.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <DateRangePicker
+                preset={dateRange}
+                onPresetChange={onPresetChange}
+                customRange={customRange}
+                onCustomRangeChange={onCustomRangeChange}
+                availableDateKeys={availableDateKeys}
+            />
+            <div className="flex-1" />
+            <div className="relative w-full max-w-sm">
+                <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    placeholder="Search name, number, email, phone…"
+                    value={search}
+                    onChange={(event) => {
+                        onSearchChange(event.target.value)
+                    }}
+                    className="pl-9"
+                />
+            </div>
+        </div>
+    )
+}
+
+function IntendedParentsTableCard({
+    data,
+    isLoading,
+    isError,
+    error,
+    search,
+    statusFilter,
+    sortBy,
+    sortOrder,
+    statusMetadata,
+    onSort,
+    onRetry,
+}: {
+    data: IntendedParentListData | undefined
+    isLoading: boolean
+    isError: boolean
+    error: unknown
+    search: string
+    statusFilter: string
+    sortBy: string | null
+    sortOrder: IntendedParentSortOrder
+    statusMetadata: IntendedParentStatusMetadata
+    onSort: (column: string) => void
+    onRetry: () => void
+}) {
+    return (
+        <Card className="py-0">
+            <CardContent className="p-0">
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Loading…</span>
+                    </div>
+                ) : isPermissionError(error) ? (
+                    <PermissionDeniedState
+                        description="Your account does not have permission to view intended parents. Ask an admin to update your role or permissions."
+                        onRetry={onRetry}
+                    />
+                ) : isError ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <AlertCircleIcon className="size-12 text-destructive mb-4" />
+                        <h3 className="text-lg font-medium">Failed to load intended parents</h3>
+                        <p className="text-muted-foreground">Please try again or contact support if the issue persists.</p>
+                        <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+                            Retry
+                        </Button>
+                    </div>
+                ) : !data?.items.length ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <UsersIcon className="size-12 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-medium">No intended parents found</h3>
+                        <p className="text-muted-foreground">
+                            {search || statusFilter !== "all"
+                                ? "Try adjusting your filters"
+                                : "Create your first intended parent to get started"}
+                        </p>
+                    </div>
+                ) : (
+                    <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
+                        <TableHeader>
+                            <TableRow>
+                                <SortableTableHead column="intended_parent_number" label="IP#" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="partner_name" label="Partner" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="status" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.items.map((ip) => (
+                                <TableRow key={ip.id} className="cursor-pointer hover:bg-muted/50">
+                                    <TableCell>
+                                        <Link
+                                            href={`/intended-parents/${ip.id}`}
+                                            className="font-medium text-primary hover:underline"
+                                        >
+                                            {ip.intended_parent_number}
+                                        </Link>
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        {ip.full_name}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground">{ip.email}</TableCell>
+                                    <TableCell className="text-muted-foreground">{ip.phone || "—"}</TableCell>
+                                    <TableCell className="text-muted-foreground">{ip.state || "—"}</TableCell>
+                                    <TableCell className="text-muted-foreground">{ip.partner_name || "—"}</TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            variant="outline"
+                                            style={getIntendedParentStatusStyle(
+                                                statusMetadata,
+                                                ip.stage_key ?? ip.status,
+                                            )}
+                                        >
+                                            {getIntendedParentStatusLabel(
+                                                statusMetadata,
+                                                ip.stage_key ?? ip.status,
+                                                ip.status_label,
+                                            )}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground">
+                                        {formatIntendedParentCreatedDate(ip.created_at)}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function IntendedParentsPagination({
+    data,
+    page,
+    totalPages,
+    onPageChange,
+}: {
+    data: IntendedParentListData | undefined
+    page: number
+    totalPages: number
+    onPageChange: (page: number) => void
+}) {
+    if (!data || data.total <= data.per_page) return null
+
+    return (
+        <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+                Showing {(page - 1) * data.per_page + 1} to{" "}
+                {Math.min(page * data.per_page, data.total)} of {data.total}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(Math.max(1, page - 1))}
+                    disabled={page === 1}
+                >
+                    <ChevronLeftIcon className="size-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+                    disabled={page === totalPages}
+                >
+                    <ChevronRightIcon className="size-4" />
+                </Button>
+                <PaginationJump page={page} totalPages={totalPages} onPageChange={onPageChange} />
+            </div>
+        </div>
+    )
+}
+
+function CreateIntendedParentDialog({
+    open,
+    formData,
+    isPending,
+    onOpenChange,
+    onFieldChange,
+    onCancel,
+    onCreate,
+}: {
+    open: boolean
+    formData: IntendedParentFormValues
+    isPending: boolean
+    onOpenChange: (open: boolean) => void
+    onFieldChange: <K extends keyof IntendedParentFormValues>(
+        field: K,
+        value: IntendedParentFormValues[K],
+    ) => void
+    onCancel: () => void
+    onCreate: () => void
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>New Intended Parent</DialogTitle>
+                    <DialogDescription>Add a new intended parent to the system</DialogDescription>
+                </DialogHeader>
+                <IntendedParentFormFields
+                    values={formData}
+                    onChange={onFieldChange}
+                    idPrefix="create_"
+                    showAddressSection={false}
+                    showClinicSection={false}
+                />
+                <DialogFooter>
+                    <Button variant="outline" onClick={onCancel}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={onCreate}
+                        disabled={
+                            isPending ||
+                            !formData.full_name.trim() ||
+                            !formData.email.trim()
+                        }
+                    >
+                        {isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                        Create
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 export default function IntendedParentsPage() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
@@ -382,241 +730,53 @@ export default function IntendedParentsPage() {
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Intended Parents</h1>
-                    <Button onClick={() => setIsCreateOpen(true)}>
-                        <PlusIcon className="mr-2 size-4" />
-                        New Intended Parent
-                    </Button>
-                </div>
-            </div>
+            <IntendedParentsPageHeader onCreateClick={() => setIsCreateOpen(true)} />
 
-            {/* Main Content */}
             <div className="flex-1 p-6 space-y-6">
-                {/* Stats Cards */}
-                <div className="grid gap-4 md:grid-cols-5">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
-                        </CardContent>
-                    </Card>
-                    {statusOptions.map((status) => (
-                        <Card key={status.id}>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    {status.label}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats?.by_status[status.stage_key] ?? 0}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                    <Select value={statusFilter} onValueChange={(v) => { if (v) handleStatusChange(v) }}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Stages">
-                                {(value: string | null) => {
-                                    if (!value || value === "all") return "All Stages"
-                                    return getIntendedParentStatusLabel(
-                                        stageOptionsResponse?.statuses,
-                                        value,
-                                    )
-                                }}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Stages</SelectItem>
-                            {statusOptions.map((status) => (
-                                <SelectItem key={status.id} value={status.stage_key}>
-                                    {status.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <DateRangePicker
-                        preset={dateRange}
-                        onPresetChange={handlePresetChange}
-                        customRange={customRange}
-                        onCustomRangeChange={handleCustomRangeChange}
-                        availableDateKeys={availableCreatedDateKeys ?? []}
-                    />
-                    <div className="flex-1" />
-                    <div className="relative w-full max-w-sm">
-                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Search name, number, email, phone…"
-                            value={search}
-                            onChange={(e) => {
-                                handleSearchChange(e.target.value)
-                            }}
-                            className="pl-9"
-                        />
-                    </div>
-                </div>
-
-                {/* Table */}
-                <Card className="py-0">
-                    <CardContent className="p-0">
-                        {isLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                                <span className="ml-2 text-muted-foreground">Loading…</span>
-                            </div>
-                        ) : isPermissionError(error) ? (
-                            <PermissionDeniedState
-                                description="Your account does not have permission to view intended parents. Ask an admin to update your role or permissions."
-                                onRetry={() => refetch()}
-                            />
-                        ) : isError ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <AlertCircleIcon className="size-12 text-destructive mb-4" />
-                                <h3 className="text-lg font-medium">Failed to load intended parents</h3>
-                                <p className="text-muted-foreground">Please try again or contact support if the issue persists.</p>
-                                <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
-                                    Retry
-                                </Button>
-                            </div>
-                        ) : !data?.items.length ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <UsersIcon className="size-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-medium">No intended parents found</h3>
-                                <p className="text-muted-foreground">
-                                    {search || statusFilter !== "all"
-                                        ? "Try adjusting your filters"
-                                        : "Create your first intended parent to get started"}
-                                </p>
-                            </div>
-                        ) : (
-                            <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
-                                <TableHeader>
-                                    <TableRow>
-                                        <SortableTableHead column="intended_parent_number" label="IP#" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="email" label="Email" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="phone" label="Phone" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="partner_name" label="Partner" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="status" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                        <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {data.items.map((ip: IntendedParentListItem) => (
-                                        <TableRow key={ip.id} className="cursor-pointer hover:bg-muted/50">
-                                            <TableCell>
-                                                <Link
-                                                    href={`/intended-parents/${ip.id}`}
-                                                    className="font-medium text-primary hover:underline"
-                                                >
-                                                    {ip.intended_parent_number}
-                                                </Link>
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                {ip.full_name}
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">{ip.email}</TableCell>
-                                            <TableCell className="text-muted-foreground">{ip.phone || "—"}</TableCell>
-                                            <TableCell className="text-muted-foreground">{ip.state || "—"}</TableCell>
-                                            <TableCell className="text-muted-foreground">{ip.partner_name || "—"}</TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant="outline"
-                                                    style={getIntendedParentStatusStyle(
-                                                        stageOptionsResponse?.statuses,
-                                                        ip.stage_key ?? ip.status,
-                                                    )}
-                                                >
-                                                    {getIntendedParentStatusLabel(
-                                                        stageOptionsResponse?.statuses,
-                                                        ip.stage_key ?? ip.status,
-                                                        ip.status_label,
-                                                    )}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">
-                                                {formatIntendedParentCreatedDate(ip.created_at)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Pagination */}
-                {data && data.total > data.per_page && (
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm text-muted-foreground">
-                            Showing {(page - 1) * data.per_page + 1} to{" "}
-                            {Math.min(page * data.per_page, data.total)} of {data.total}
-                        </p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePageChange(Math.max(1, page - 1))}
-                                disabled={page === 1}
-                            >
-                                <ChevronLeftIcon className="size-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
-                                disabled={page === totalPages}
-                            >
-                                <ChevronRightIcon className="size-4" />
-                            </Button>
-                            <PaginationJump page={page} totalPages={totalPages} onPageChange={handlePageChange} />
-                        </div>
-                    </div>
-                )}
+                <IntendedParentStatsGrid stats={stats} statusOptions={statusOptions} />
+                <IntendedParentsFilters
+                    statusFilter={statusFilter}
+                    statusOptions={statusOptions}
+                    statusMetadata={stageOptionsResponse?.statuses}
+                    dateRange={dateRange}
+                    customRange={customRange}
+                    availableDateKeys={availableCreatedDateKeys ?? []}
+                    search={search}
+                    onStatusChange={handleStatusChange}
+                    onPresetChange={handlePresetChange}
+                    onCustomRangeChange={handleCustomRangeChange}
+                    onSearchChange={handleSearchChange}
+                />
+                <IntendedParentsTableCard
+                    data={data}
+                    isLoading={isLoading}
+                    isError={isError}
+                    error={error}
+                    search={search}
+                    statusFilter={statusFilter}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    statusMetadata={stageOptionsResponse?.statuses}
+                    onSort={handleSort}
+                    onRetry={() => { void refetch() }}
+                />
+                <IntendedParentsPagination
+                    data={data}
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                />
             </div>
 
-            {/* Create Modal */}
-            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm() }}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>New Intended Parent</DialogTitle>
-                        <DialogDescription>Add a new intended parent to the system</DialogDescription>
-                    </DialogHeader>
-                    <IntendedParentFormFields
-                        values={formData}
-                        onChange={updateFormField}
-                        idPrefix="create_"
-                        showAddressSection={false}
-                        showClinicSection={false}
-                    />
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleCreate}
-                            disabled={
-                                createMutation.isPending ||
-                                !formData.full_name.trim() ||
-                                !formData.email.trim()
-                            }
-                        >
-                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                            Create
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <CreateIntendedParentDialog
+                open={isCreateOpen}
+                formData={formData}
+                isPending={createMutation.isPending}
+                onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm() }}
+                onFieldChange={updateFormField}
+                onCancel={() => setIsCreateOpen(false)}
+                onCreate={handleCreate}
+            />
         </div>
     )
 }
