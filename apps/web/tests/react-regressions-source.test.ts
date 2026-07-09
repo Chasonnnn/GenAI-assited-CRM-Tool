@@ -1871,8 +1871,8 @@ describe("React regression guards (source)", () => {
         expect(campaignCreateSource).not.toContain("checked={selectedStages.includes(stage.id)}")
         expect(campaignCreateSource).not.toContain("checked={selectedStates.includes(state.value)}")
 
-        expect(campaignDetailSource).toContain("const editStageIdSet = new Set(editStages)")
-        expect(campaignDetailSource).toContain("const editStateCodeSet = new Set(editStates)")
+        expect(campaignDetailSource).toContain("const editStageIdSet = new Set(editDraft.stages)")
+        expect(campaignDetailSource).toContain("const editStateCodeSet = new Set(editDraft.states)")
         expect(campaignDetailSource).toContain("checked={editStageIdSet.has(stage.id)}")
         expect(campaignDetailSource).toContain("checked={editStateCodeSet.has(state.value)}")
         expect(campaignDetailSource).not.toContain("checked={editStages.includes(stage.id)}")
