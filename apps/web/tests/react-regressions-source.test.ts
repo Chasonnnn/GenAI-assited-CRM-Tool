@@ -1694,6 +1694,24 @@ describe("React regression guards (source)", () => {
         expect(sectionSource).not.toContain("Save Email Configuration")
     })
 
+    it("keeps Meta configuration rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+        const sectionSource = readFunctionSource(source, "MetaConfigurationSection")
+
+        expect(source).toContain("function MetaConfigurationLoadingState")
+        expect(source).toContain("function MetaConfigurationHeading")
+        expect(source).toContain("function LegacyMetaSetupSection")
+        expect(source).toContain("function LegacyMetaConnectionsCard")
+        expect(source).toContain("function LegacyMetaAdAccountsCard")
+        expect(source).toContain("function MetaAdAccountEditDialog")
+        expect(source).toContain("function MetaDisconnectDialog")
+        expect(sectionSource).not.toContain("Legacy app-based Meta setup")
+        expect(sectionSource).not.toContain("Legacy Connections")
+        expect(sectionSource).not.toContain("Legacy Ad Accounts + CAPI")
+        expect(sectionSource).not.toContain("Edit Ad Account")
+        expect(sectionSource).not.toContain("Disconnect Meta account?")
+    })
+
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
         const hookSource = readSource("lib/hooks/use-zapier.ts")
