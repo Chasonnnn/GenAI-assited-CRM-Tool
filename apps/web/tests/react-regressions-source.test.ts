@@ -763,8 +763,17 @@ describe("React regression guards (source)", () => {
 
     it("keeps surrogate application form-link defaults compiler-friendly", () => {
         const source = readSource("components/surrogates/SurrogateApplicationTab.tsx")
+        const tabSource = readExportedFunctionSource(source, "SurrogateApplicationTab")
 
         expect(source).toContain('aria-label="Upload application file"')
+        expect(source).toContain("function SurrogateApplicationLoadingCard")
+        expect(source).toContain("function SurrogateApplicationErrorCard")
+        expect(source).toContain("function SurrogateApplicationEmptyState")
+        expect(source).toContain("function SurrogateApplicationSubmittedView")
+        expect(source).toContain("function SurrogateApplicationFieldEditor")
+        expect(source).toContain("function SurrogateApplicationFilesCard")
+        expect(source).toContain("function SurrogateApplicationReviewDialogs")
+        expect(tabSource.split("\n").length).toBeLessThan(300)
         expect(source).not.toContain("setSelectedTemplateId(emailTemplates[0]?.id")
         expect(source).not.toContain("setSelectedIntakeLinkId(sendableIntakeLinks[0]?.id")
         expect(source).not.toContain("setUploadFieldKey(fileFields[0]?.key")
