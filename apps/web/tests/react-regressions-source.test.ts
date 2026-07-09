@@ -458,8 +458,18 @@ describe("React regression guards (source)", () => {
 
     it("keeps interview tab context compiler-friendly", () => {
         const source = readSource("components/surrogates/interviews/InterviewTab/context.tsx")
+        const providerSource = readFunctionSource(source, "InterviewTabProvider")
 
         expect(source).toContain("function buildInterviewFormState")
+        expect(source).toContain("function useInterviewDialogFormState")
+        expect(source).toContain("function useInterviewAttachmentActions")
+        expect(providerSource).toContain("useInterviewDialogFormState()")
+        expect(providerSource).toContain("useInterviewAttachmentActions(selectedId)")
+        expect(providerSource).not.toContain("const [dialog, setDialog]")
+        expect(providerSource).not.toContain("const [upload, setUpload]")
+        expect(providerSource).not.toContain("const openEditor =")
+        expect(providerSource).not.toContain("const uploadFiles =")
+        expect(providerSource).not.toContain("const requestTranscription =")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("finally")

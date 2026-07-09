@@ -161,63 +161,10 @@ function buildInterviewFormState(interview: InterviewRead | null): FormState {
     }
 }
 
-export function InterviewTabProvider({ surrogateId, children }: InterviewTabProviderProps) {
-    const { user } = useAuth()
-
-    // Selection state
-    const [selectedId, setSelectedId] = useState<string | null>(null)
-
-    // Dialog state - consolidated from multiple booleans
+function useInterviewDialogFormState() {
     const [dialog, setDialog] = useState<DialogState>({ type: "closed" })
-
-    // Upload state - consolidated
-    const [upload, setUpload] = useState<UploadState>({ type: "idle" })
-    const uploadInputRef = useRef<HTMLInputElement>(null)
-
-    // Form state
     const [form, setForm] = useState<FormState>(() => buildInterviewFormState(null))
 
-    // Data fetching
-    const { data: interviews = [], isLoading } = useInterviews(surrogateId)
-    const { data: selectedInterview, refetch: refetchInterview } = useInterview(selectedId || "")
-    const { data: notes = [] } = useInterviewNotes(selectedId || "")
-    const { data: attachments = [] } = useInterviewAttachments(selectedId || "")
-
-    // Mutations
-    const createInterviewMutation = useCreateInterview()
-    const updateInterviewMutation = useUpdateInterview()
-    const deleteInterviewMutation = useDeleteInterview()
-    const createNoteMutation = useCreateInterviewNote()
-    const updateNoteMutation = useUpdateInterviewNote()
-    const deleteNoteMutation = useDeleteInterviewNote()
-    const uploadAttachmentMutation = useUploadInterviewAttachment()
-    const requestTranscriptionMutation = useRequestTranscription()
-    const summarizeInterviewMutation = useSummarizeInterview()
-
-    // Permissions
-    const canEdit = user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false
-    const canDelete = user?.role ? ["admin", "developer"].includes(user.role) : false
-    const canEditNotes = !!user
-
-    // Poll for transcription status
-    useEffect(() => {
-        if (!selectedId || !attachments.length) return
-        const hasPending = attachments.some((att) =>
-            ["pending", "processing"].includes(att.transcription_status || "")
-        )
-        if (!hasPending) return
-        const interval = setInterval(() => {
-            void refetchInterview()
-        }, 5000)
-        return () => clearInterval(interval)
-    }, [attachments, refetchInterview, selectedId])
-
-    // Selection
-    const selectInterview = (id: string | null) => {
-        setSelectedId(id)
-    }
-
-    // Dialog actions
     const openEditor = (interview?: InterviewRead | null) => {
         const nextInterview = interview || null
         setForm(buildInterviewFormState(nextInterview))
@@ -240,7 +187,6 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         setDialog({ type: "closed" })
     }
 
-    // Form setters
     const setFormType = (type: InterviewType) => {
         setForm((prev) => ({ ...prev, type }))
     }
@@ -261,58 +207,27 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         setForm((prev) => ({ ...prev, status }))
     }
 
-    // Mutations
-    const createOrUpdateInterview = async () => {
-        if (dialog.type !== "editor") return
-
-        const editingInterview = dialog.interview
-        const data = {
-            interview_type: form.type,
-            conducted_at: new Date(form.date).toISOString(),
-            duration_minutes: form.duration ? parseInt(form.duration) : null,
-            transcript_json: isTranscriptEmpty(form.transcript) ? null : form.transcript,
-            status: form.status,
-        }
-
-        try {
-            if (editingInterview) {
-                await updateInterviewMutation.mutateAsync({
-                    interviewId: editingInterview.id,
-                    data: {
-                        ...data,
-                        expected_version: editingInterview.transcript_version,
-                    },
-                })
-                toast.success("Interview updated")
-            } else {
-                const newInterview = await createInterviewMutation.mutateAsync({
-                    surrogateId,
-                    data,
-                })
-                setSelectedId(newInterview.id)
-                toast.success("Interview created")
-            }
-            closeDialog()
-        } catch {
-            toast.error(editingInterview ? "Failed to update interview" : "Failed to create interview")
-        }
+    return {
+        dialog,
+        form,
+        openEditor,
+        openDeleteDialog,
+        openVersionHistory,
+        openAttachments,
+        closeDialog,
+        setFormType,
+        setFormDate,
+        setFormDuration,
+        setFormTranscript,
+        setFormStatus,
     }
+}
 
-    const deleteInterview = async () => {
-        if (dialog.type !== "delete") return
-
-        try {
-            await deleteInterviewMutation.mutateAsync({
-                interviewId: dialog.interview.id,
-                surrogateId,
-            })
-            setSelectedId(null)
-            closeDialog()
-            toast.success("Interview deleted")
-        } catch {
-            toast.error("Failed to delete interview")
-        }
-    }
+function useInterviewAttachmentActions(selectedId: string | null) {
+    const [upload, setUpload] = useState<UploadState>({ type: "idle" })
+    const uploadInputRef = useRef<HTMLInputElement>(null)
+    const uploadAttachmentMutation = useUploadInterviewAttachment()
+    const requestTranscriptionMutation = useRequestTranscription()
 
     const uploadFiles = async (files: FileList | null) => {
         if (!selectedId || !files?.length) return
@@ -376,6 +291,131 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
             toast.error(result.message)
         }
         setUpload({ type: "idle" })
+    }
+
+    return {
+        upload,
+        uploadInputRef,
+        uploadFiles,
+        requestTranscription,
+    }
+}
+
+export function InterviewTabProvider({ surrogateId, children }: InterviewTabProviderProps) {
+    const { user } = useAuth()
+
+    // Selection state
+    const [selectedId, setSelectedId] = useState<string | null>(null)
+    const {
+        dialog,
+        form,
+        openEditor,
+        openDeleteDialog,
+        openVersionHistory,
+        openAttachments,
+        closeDialog,
+        setFormType,
+        setFormDate,
+        setFormDuration,
+        setFormTranscript,
+        setFormStatus,
+    } = useInterviewDialogFormState()
+    const {
+        upload,
+        uploadInputRef,
+        uploadFiles,
+        requestTranscription,
+    } = useInterviewAttachmentActions(selectedId)
+
+    // Data fetching
+    const { data: interviews = [], isLoading } = useInterviews(surrogateId)
+    const { data: selectedInterview, refetch: refetchInterview } = useInterview(selectedId || "")
+    const { data: notes = [] } = useInterviewNotes(selectedId || "")
+    const { data: attachments = [] } = useInterviewAttachments(selectedId || "")
+
+    // Mutations
+    const createInterviewMutation = useCreateInterview()
+    const updateInterviewMutation = useUpdateInterview()
+    const deleteInterviewMutation = useDeleteInterview()
+    const createNoteMutation = useCreateInterviewNote()
+    const updateNoteMutation = useUpdateInterviewNote()
+    const deleteNoteMutation = useDeleteInterviewNote()
+    const summarizeInterviewMutation = useSummarizeInterview()
+
+    // Permissions
+    const canEdit = user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false
+    const canDelete = user?.role ? ["admin", "developer"].includes(user.role) : false
+    const canEditNotes = !!user
+
+    // Poll for transcription status
+    useEffect(() => {
+        if (!selectedId || !attachments.length) return
+        const hasPending = attachments.some((att) =>
+            ["pending", "processing"].includes(att.transcription_status || "")
+        )
+        if (!hasPending) return
+        const interval = setInterval(() => {
+            void refetchInterview()
+        }, 5000)
+        return () => clearInterval(interval)
+    }, [attachments, refetchInterview, selectedId])
+
+    // Selection
+    const selectInterview = (id: string | null) => {
+        setSelectedId(id)
+    }
+
+    // Mutations
+    const createOrUpdateInterview = async () => {
+        if (dialog.type !== "editor") return
+
+        const editingInterview = dialog.interview
+        const data = {
+            interview_type: form.type,
+            conducted_at: new Date(form.date).toISOString(),
+            duration_minutes: form.duration ? parseInt(form.duration) : null,
+            transcript_json: isTranscriptEmpty(form.transcript) ? null : form.transcript,
+            status: form.status,
+        }
+
+        try {
+            if (editingInterview) {
+                await updateInterviewMutation.mutateAsync({
+                    interviewId: editingInterview.id,
+                    data: {
+                        ...data,
+                        expected_version: editingInterview.transcript_version,
+                    },
+                })
+                toast.success("Interview updated")
+            } else {
+                const newInterview = await createInterviewMutation.mutateAsync({
+                    surrogateId,
+                    data,
+                })
+                setSelectedId(newInterview.id)
+                toast.success("Interview created")
+            }
+            closeDialog()
+        } catch {
+            toast.error(editingInterview ? "Failed to update interview" : "Failed to create interview")
+        }
+    }
+
+    const deleteInterview = async () => {
+        if (dialog.type !== "delete") return
+
+        try {
+            await deleteInterviewMutation.mutateAsync({
+                interviewId: dialog.interview.id,
+                surrogateId,
+            })
+            setSelectedId(null)
+            closeDialog()
+            toast.success("Interview deleted")
+        } catch {
+            toast.error("Failed to delete interview")
+        }
     }
 
     const generateAISummary = async () => {
