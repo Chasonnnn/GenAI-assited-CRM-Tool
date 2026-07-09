@@ -82,6 +82,507 @@ function getUnknownColumnBehaviorLabel(value: UnknownColumnBehavior | null) {
     return value ? UNKNOWN_COLUMN_BEHAVIOR_LABELS.get(value) ?? value : "Store metadata"
 }
 
+type MetaFormMappingData = NonNullable<ReturnType<typeof useMetaFormMapping>["data"]>
+type MetaFormUnconvertedLeadData = NonNullable<ReturnType<typeof useMetaFormUnconvertedLeads>["data"]>
+type UpdateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
+
+function MetaFormMappingHeader({
+    formExternalId,
+    formName,
+    onBack,
+}: {
+    formExternalId: string
+    formName: string
+    onBack: () => void
+}) {
+    return (
+        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-16 items-center justify-between px-6">
+                <div>
+                    <h1 className="text-2xl font-semibold">{formName}</h1>
+                    <p className="text-sm text-muted-foreground">{formExternalId}</p>
+                </div>
+                <Button variant="ghost" onClick={onBack}>
+                    <ArrowLeftIcon className="mr-2 size-4" aria-hidden="true" />
+                    Back to forms
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function MetaMappingOutdatedAlert() {
+    return (
+        <Alert variant="destructive">
+            <AlertTitle>Mapping outdated</AlertTitle>
+            <AlertDescription>
+                This form changed in Meta. Update mappings before leads can convert.
+            </AlertDescription>
+        </Alert>
+    )
+}
+
+function MetaColumnMappingCard({
+    aiMapPending,
+    columnLabels,
+    data,
+    mappings,
+    onAiHelp,
+    onUnknownBehaviorChange,
+    onUpdateMapping,
+    unknownColumnBehavior,
+}: {
+    aiMapPending: boolean
+    columnLabels: ReadonlyMap<string, string>
+    data: MetaFormMappingData
+    mappings: ColumnMappingDraft[]
+    onAiHelp: () => Promise<void>
+    onUnknownBehaviorChange: (value: UnknownColumnBehavior) => void
+    onUpdateMapping: UpdateMapping
+    unknownColumnBehavior: UnknownColumnBehavior
+}) {
+    return (
+        <Card className="overflow-hidden">
+            <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <CardTitle>Column Mapping</CardTitle>
+                        <CardDescription>
+                            Map Meta fields to surrogate fields.
+                        </CardDescription>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>Unknown columns:</span>
+                            <Select
+                                value={unknownColumnBehavior}
+                                onValueChange={(value) =>
+                                    onUnknownBehaviorChange(value as UnknownColumnBehavior)
+                                }
+                            >
+                                <SelectTrigger
+                                    className="h-8 w-[140px]"
+                                    aria-label="Unknown columns behavior"
+                                >
+                                    <SelectValue>
+                                        {(value: string | null) =>
+                                            getUnknownColumnBehaviorLabel(
+                                                value as UnknownColumnBehavior | null
+                                            )
+                                        }
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {data.ai_available && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    void onAiHelp()
+                                }}
+                                disabled={aiMapPending}
+                            >
+                                {aiMapPending ? (
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                ) : (
+                                    <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
+                                )}
+                                Get AI help
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="max-h-[520px] overflow-auto">
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background">
+                            <TableRow>
+                                <TableHead>Field</TableHead>
+                                <TableHead>Samples</TableHead>
+                                <TableHead>Action</TableHead>
+                                <TableHead>Map To</TableHead>
+                                <TableHead>Transform</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {mappings.map((mapping) => (
+                                <MetaColumnMappingRow
+                                    key={mapping.csv_column}
+                                    availableFields={data.available_fields}
+                                    columnLabel={columnLabels.get(mapping.csv_column) || mapping.csv_column}
+                                    mapping={mapping}
+                                    onUpdateMapping={onUpdateMapping}
+                                />
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function MetaColumnMappingRow({
+    availableFields,
+    columnLabel,
+    mapping,
+    onUpdateMapping,
+}: {
+    availableFields: string[]
+    columnLabel: string
+    mapping: ColumnMappingDraft
+    onUpdateMapping: UpdateMapping
+}) {
+    return (
+        <TableRow>
+            <TableCell className="font-medium">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <span>{columnLabel}</span>
+                        <Badge variant="secondary" className="text-xs">
+                            {mapping.csv_column}
+                        </Badge>
+                    </div>
+                </div>
+            </TableCell>
+            <TableCell className="text-xs text-muted-foreground">
+                {(mapping.sample_values || []).slice(0, 2).join(", ") || "—"}
+            </TableCell>
+            <TableCell>
+                <Select
+                    value={mapping.action}
+                    onValueChange={(value) => {
+                        if (value === "map") {
+                            onUpdateMapping(mapping.csv_column, { action: "map" })
+                        } else if (value === "custom") {
+                            onUpdateMapping(mapping.csv_column, {
+                                action: "custom",
+                                surrogate_field: null,
+                            })
+                        } else {
+                            onUpdateMapping(mapping.csv_column, {
+                                action: value as ColumnMappingDraft["action"],
+                                surrogate_field: null,
+                                transformation: null,
+                            })
+                        }
+                    }}
+                >
+                    <SelectTrigger
+                        className="w-[130px]"
+                        aria-label={`Action for ${mapping.csv_column}`}
+                    >
+                        <SelectValue placeholder="Action">
+                            {(value: string | null) => getActionLabel(value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {ACTION_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </TableCell>
+            <TableCell>
+                {mapping.action === "map" ? (
+                    <Select
+                        value={mapping.surrogate_field || ""}
+                        onValueChange={(value) =>
+                            onUpdateMapping(mapping.csv_column, {
+                                surrogate_field: value || null,
+                                action: "map",
+                            })
+                        }
+                    >
+                        <SelectTrigger
+                            className="w-[180px]"
+                            aria-label={`Map ${mapping.csv_column} to field`}
+                        >
+                            <SelectValue placeholder="Select field">
+                                {(value: string | null) =>
+                                    getSurrogateFieldLabel(value) ?? "Select field"
+                                }
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableFields.map((field) => (
+                                <SelectItem key={field} value={field}>
+                                    {getSurrogateFieldLabel(field) ?? "Unknown field"}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                ) : mapping.action === "custom" ? (
+                    <Input
+                        value={mapping.custom_field_key || ""}
+                        onChange={(event) =>
+                            onUpdateMapping(mapping.csv_column, {
+                                custom_field_key: event.target.value,
+                            })
+                        }
+                        placeholder="custom_field_key"
+                        className="w-[180px]"
+                        name={`custom-field-${mapping.csv_column}`}
+                        autoComplete="off"
+                        aria-label={`Custom field key for ${mapping.csv_column}`}
+                    />
+                ) : (
+                    <span className="text-xs text-muted-foreground">No custom field</span>
+                )}
+            </TableCell>
+            <TableCell>
+                <Select
+                    value={mapping.transformation || ""}
+                    onValueChange={(value) =>
+                        onUpdateMapping(mapping.csv_column, {
+                            transformation: value || null,
+                        })
+                    }
+                    disabled={mapping.action !== "map"}
+                >
+                    <SelectTrigger
+                        className="w-[170px]"
+                        aria-label={`Transform ${mapping.csv_column}`}
+                    >
+                        <SelectValue placeholder="None">
+                            {(value: string | null) => getTransformationLabel(value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {TRANSFORM_OPTIONS.map((option) => (
+                            <SelectItem key={option.value || "none"} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </TableCell>
+        </TableRow>
+    )
+}
+
+function MetaMappingPreviewCard({ data }: { data: MetaFormMappingData }) {
+    return (
+        <Card className="overflow-hidden">
+            <CardHeader>
+                <CardTitle>Preview</CardTitle>
+                <CardDescription>
+                    {data.has_live_leads ? "Live lead samples" : "Sample data (no live leads yet)"}
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="max-h-[360px] overflow-auto">
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background">
+                            <TableRow>
+                                {(data.columns || []).map((col) => (
+                                    <TableHead key={col.key}>{col.label || col.key}</TableHead>
+                                ))}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.sample_rows.map((row, rowIdx) => (
+                                <TableRow key={rowIdx}>
+                                    {(data.columns || []).map((col) => (
+                                        <TableCell key={col.key}>
+                                            {row[col.key] || <span className="text-muted-foreground">Empty</span>}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function MetaMappingActions({
+    error,
+    isSaving,
+    onCancel,
+    onSave,
+}: {
+    error: string
+    isSaving: boolean
+    onCancel: () => void
+    onSave: () => Promise<void>
+}) {
+    return (
+        <>
+            {error && (
+                <Alert variant="destructive">
+                    <AlertTitle>Unable to save</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            )}
+
+            <div className="flex items-center justify-end gap-3">
+                <Button variant="outline" onClick={onCancel}>
+                    Cancel
+                </Button>
+                <Button
+                    onClick={() => {
+                        void onSave()
+                    }}
+                    disabled={isSaving}
+                >
+                    {isSaving ? (
+                        <>
+                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            Saving…
+                        </>
+                    ) : (
+                        "Save mapping"
+                    )}
+                </Button>
+            </div>
+        </>
+    )
+}
+
+function MetaUnconvertedLeadsCard({
+    leadCount,
+    reconvertMessage,
+    reconvertPending,
+    unconvertedLeadData,
+    unconvertedLeadsLoading,
+    onReconvert,
+}: {
+    leadCount: number
+    reconvertMessage: string
+    reconvertPending: boolean
+    unconvertedLeadData: MetaFormUnconvertedLeadData | undefined
+    unconvertedLeadsLoading: boolean
+    onReconvert: () => Promise<void>
+}) {
+    return (
+        <Card className="overflow-hidden">
+            <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <CardTitle>Unconverted Leads</CardTitle>
+                        <CardDescription>
+                            {unconvertedLeadData
+                                ? `${unconvertedLeadData.eligible_count} eligible, ${unconvertedLeadData.blocked_count} blocked.`
+                                : `Saving will reprocess ${leadCount} unconverted lead(s).`}
+                        </CardDescription>
+                    </div>
+                    <Button
+                        size="sm"
+                        onClick={() => {
+                            void onReconvert()
+                        }}
+                        disabled={
+                            reconvertPending ||
+                            !unconvertedLeadData ||
+                            unconvertedLeadData.eligible_count === 0
+                        }
+                    >
+                        {reconvertPending ? (
+                            <>
+                                <Loader2Icon
+                                    className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                                    aria-hidden="true"
+                                />
+                                Queueing…
+                            </>
+                        ) : (
+                            "Re-convert eligible leads"
+                        )}
+                    </Button>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <Alert>
+                    <AlertTitle>Reprocess queued</AlertTitle>
+                    <AlertDescription>
+                        Review the current failure reasons below before saving a new mapping.
+                    </AlertDescription>
+                </Alert>
+                {reconvertMessage && (
+                    <Alert>
+                        <AlertTitle>Reconversion queued</AlertTitle>
+                        <AlertDescription>{reconvertMessage}</AlertDescription>
+                    </Alert>
+                )}
+                {unconvertedLeadsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2Icon
+                            className="size-4 animate-spin motion-reduce:animate-none"
+                            aria-hidden="true"
+                        />
+                        Loading unconverted leads…
+                    </div>
+                ) : unconvertedLeadData?.items.length ? (
+                    <MetaUnconvertedLeadsTable items={unconvertedLeadData.items} />
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        No unconverted leads are currently queued for this form.
+                    </p>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function MetaUnconvertedLeadsTable({ items }: { items: MetaFormUnconvertedLeadData["items"] }) {
+    return (
+        <div className="max-h-[360px] overflow-auto">
+            <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                    <TableRow>
+                        <TableHead>Lead ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Retry</TableHead>
+                        <TableHead>Reason</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {items.map((lead) => (
+                        <TableRow key={lead.id}>
+                            <TableCell className="font-mono text-xs">
+                                {lead.meta_lead_id}
+                            </TableCell>
+                            <TableCell>{lead.full_name || "—"}</TableCell>
+                            <TableCell>{lead.email || "—"}</TableCell>
+                            <TableCell>
+                                <Badge variant="secondary">{lead.status}</Badge>
+                            </TableCell>
+                            <TableCell>
+                                {lead.reprocess_eligible ? (
+                                    <Badge>Eligible</Badge>
+                                ) : (
+                                    <Badge variant="outline">Blocked</Badge>
+                                )}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                                {lead.reprocess_block_reason
+                                    ? lead.reprocess_block_reason.replace(/_/g, " ")
+                                    : lead.conversion_error || "Awaiting mapping"}
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    )
+}
+
 export default function MetaFormMappingPage() {
     const params = useParams()
     const { push } = useRouter()
@@ -270,395 +771,44 @@ export default function MetaFormMappingPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div>
-                        <h1 className="text-2xl font-semibold">{data.form.form_name}</h1>
-                        <p className="text-sm text-muted-foreground">{data.form.form_external_id}</p>
-                    </div>
-                    <Button variant="ghost" onClick={() => push("/settings/integrations/meta/forms")}>
-                        <ArrowLeftIcon className="mr-2 size-4" aria-hidden="true" />
-                        Back to forms
-                    </Button>
-                </div>
-            </div>
+            <MetaFormMappingHeader
+                formExternalId={data.form.form_external_id}
+                formName={data.form.form_name}
+                onBack={() => push("/settings/integrations/meta/forms")}
+            />
 
             <div className="flex-1 space-y-6 p-6">
-                {data.form.mapping_status === "outdated" && (
-                    <Alert variant="destructive">
-                        <AlertTitle>Mapping outdated</AlertTitle>
-                        <AlertDescription>
-                            This form changed in Meta. Update mappings before leads can convert.
-                        </AlertDescription>
-                    </Alert>
-                )}
+                {data.form.mapping_status === "outdated" && <MetaMappingOutdatedAlert />}
 
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <CardTitle>Column Mapping</CardTitle>
-                                <CardDescription>
-                                    Map Meta fields to surrogate fields.
-                                </CardDescription>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <span>Unknown columns:</span>
-                                    <Select
-                                        value={unknownColumnBehavior}
-                                        onValueChange={(value) =>
-                                            handleUnknownBehaviorChange(value as UnknownColumnBehavior)
-                                        }
-                                    >
-                                        <SelectTrigger
-                                            className="h-8 w-[140px]"
-                                            aria-label="Unknown columns behavior"
-                                        >
-                                            <SelectValue>
-                                                {(value: string | null) =>
-                                                    getUnknownColumnBehaviorLabel(
-                                                        value as UnknownColumnBehavior | null
-                                                    )
-                                                }
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => (
-                                                <SelectItem key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                {data.ai_available && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleAiHelp}
-                                        disabled={aiMapMutation.isPending}
-                                    >
-                                        {aiMapMutation.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        ) : (
-                                            <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
-                                        )}
-                                        Get AI help
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="max-h-[520px] overflow-auto">
-                            <Table>
-                                <TableHeader className="sticky top-0 z-10 bg-background">
-                                    <TableRow>
-                                        <TableHead>Field</TableHead>
-                                        <TableHead>Samples</TableHead>
-                                        <TableHead>Action</TableHead>
-                                        <TableHead>Map To</TableHead>
-                                        <TableHead>Transform</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {mappings.map((mapping) => (
-                                        <TableRow key={mapping.csv_column}>
-                                            <TableCell className="font-medium">
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span>{columnLabels.get(mapping.csv_column) || mapping.csv_column}</span>
-                                                        <Badge variant="secondary" className="text-xs">
-                                                            {mapping.csv_column}
-                                                        </Badge>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {(mapping.sample_values || []).slice(0, 2).join(", ") || "—"}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Select
-                                                    value={mapping.action}
-                                                    onValueChange={(value) => {
-                                                        if (value === "map") {
-                                                            updateMapping(mapping.csv_column, { action: "map" })
-                                                        } else if (value === "custom") {
-                                                            updateMapping(mapping.csv_column, {
-                                                                action: "custom",
-                                                                surrogate_field: null,
-                                                            })
-                                                        } else {
-                                                            updateMapping(mapping.csv_column, {
-                                                                action: value as ColumnMappingDraft["action"],
-                                                                surrogate_field: null,
-                                                                transformation: null,
-                                                            })
-                                                        }
-                                                    }}
-                                                >
-                                                    <SelectTrigger
-                                                        className="w-[130px]"
-                                                        aria-label={`Action for ${mapping.csv_column}`}
-                                                    >
-                                                        <SelectValue placeholder="Action">
-                                                            {(value: string | null) => getActionLabel(value)}
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {ACTION_OPTIONS.map((option) => (
-                                                            <SelectItem key={option.value} value={option.value}>
-                                                                {option.label}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                            <TableCell>
-                                                {mapping.action === "map" ? (
-                                                    <Select
-                                                        value={mapping.surrogate_field || ""}
-                                                        onValueChange={(value) =>
-                                                            updateMapping(mapping.csv_column, {
-                                                                surrogate_field: value || null,
-                                                                action: "map",
-                                                            })
-                                                        }
-                                                    >
-                                                        <SelectTrigger
-                                                            className="w-[180px]"
-                                                            aria-label={`Map ${mapping.csv_column} to field`}
-                                                        >
-                                                            <SelectValue placeholder="Select field">
-                                                                {(value: string | null) =>
-                                                                    getSurrogateFieldLabel(value) ?? "Select field"
-                                                                }
-                                                            </SelectValue>
-                                                        </SelectTrigger>
-                                                            <SelectContent>
-                                                                {data.available_fields.map((field) => (
-                                                                    <SelectItem key={field} value={field}>
-                                                                    {getSurrogateFieldLabel(field) ?? "Unknown field"}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                    </Select>
-                                                ) : mapping.action === "custom" ? (
-                                                    <Input
-                                                        value={mapping.custom_field_key || ""}
-                                                        onChange={(e) =>
-                                                            updateMapping(mapping.csv_column, {
-                                                                custom_field_key: e.target.value,
-                                                            })
-                                                        }
-                                                        placeholder="custom_field_key"
-                                                        className="w-[180px]"
-                                                        name={`custom-field-${mapping.csv_column}`}
-                                                        autoComplete="off"
-                                                        aria-label={`Custom field key for ${mapping.csv_column}`}
-                                                    />
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground">No custom field</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Select
-                                                    value={mapping.transformation || ""}
-                                                    onValueChange={(value) =>
-                                                        updateMapping(mapping.csv_column, {
-                                                            transformation: value || null,
-                                                        })
-                                                    }
-                                                    disabled={mapping.action !== "map"}
-                                                >
-                                                    <SelectTrigger
-                                                        className="w-[170px]"
-                                                        aria-label={`Transform ${mapping.csv_column}`}
-                                                    >
-                                                        <SelectValue placeholder="None">
-                                                            {(value: string | null) =>
-                                                                getTransformationLabel(value)
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {TRANSFORM_OPTIONS.map((option) => (
-                                                            <SelectItem key={option.value || "none"} value={option.value}>
-                                                                {option.label}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
+                <MetaColumnMappingCard
+                    aiMapPending={aiMapMutation.isPending}
+                    columnLabels={columnLabels}
+                    data={data}
+                    mappings={mappings}
+                    onAiHelp={handleAiHelp}
+                    onUnknownBehaviorChange={handleUnknownBehaviorChange}
+                    onUpdateMapping={updateMapping}
+                    unknownColumnBehavior={unknownColumnBehavior}
+                />
 
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle>Preview</CardTitle>
-                        <CardDescription>
-                            {data.has_live_leads ? "Live lead samples" : "Sample data (no live leads yet)"}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="max-h-[360px] overflow-auto">
-                            <Table>
-                                <TableHeader className="sticky top-0 z-10 bg-background">
-                                    <TableRow>
-                                        {(data.columns || []).map((col) => (
-                                            <TableHead key={col.key}>{col.label || col.key}</TableHead>
-                                        ))}
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {data.sample_rows.map((row, rowIdx) => (
-                                        <TableRow key={rowIdx}>
-                                            {(data.columns || []).map((col) => (
-                                                <TableCell key={col.key}>
-                                                    {row[col.key] || <span className="text-muted-foreground">Empty</span>}
-                                                </TableCell>
-                                            ))}
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
+                <MetaMappingPreviewCard data={data} />
 
-                {error && (
-                    <Alert variant="destructive">
-                        <AlertTitle>Unable to save</AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                )}
-
-                <div className="flex items-center justify-end gap-3">
-                    <Button variant="outline" onClick={() => push("/settings/integrations/meta/forms")}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave} disabled={updateMutation.isPending}>
-                        {updateMutation.isPending ? (
-                            <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                Saving…
-                            </>
-                        ) : (
-                            "Save mapping"
-                        )}
-                    </Button>
-                </div>
+                <MetaMappingActions
+                    error={error}
+                    isSaving={updateMutation.isPending}
+                    onCancel={() => push("/settings/integrations/meta/forms")}
+                    onSave={handleSave}
+                />
 
                 {data.form.unconverted_leads > 0 && (
-                    <Card className="overflow-hidden">
-                        <CardHeader>
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <CardTitle>Unconverted Leads</CardTitle>
-                                    <CardDescription>
-                                        {unconvertedLeadData
-                                            ? `${unconvertedLeadData.eligible_count} eligible, ${unconvertedLeadData.blocked_count} blocked.`
-                                            : `Saving will reprocess ${data.form.unconverted_leads} unconverted lead(s).`}
-                                    </CardDescription>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    onClick={handleReconvert}
-                                    disabled={
-                                        reconvertMutation.isPending ||
-                                        !unconvertedLeadData ||
-                                        unconvertedLeadData.eligible_count === 0
-                                    }
-                                >
-                                    {reconvertMutation.isPending ? (
-                                        <>
-                                            <Loader2Icon
-                                                className="mr-2 size-4 animate-spin motion-reduce:animate-none"
-                                                aria-hidden="true"
-                                            />
-                                            Queueing…
-                                        </>
-                                    ) : (
-                                        "Re-convert eligible leads"
-                                    )}
-                                </Button>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <Alert>
-                                <AlertTitle>Reprocess queued</AlertTitle>
-                                <AlertDescription>
-                                    Review the current failure reasons below before saving a new mapping.
-                                </AlertDescription>
-                            </Alert>
-                            {reconvertMessage && (
-                                <Alert>
-                                    <AlertTitle>Reconversion queued</AlertTitle>
-                                    <AlertDescription>{reconvertMessage}</AlertDescription>
-                                </Alert>
-                            )}
-                            {unconvertedLeadsLoading ? (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2Icon
-                                        className="size-4 animate-spin motion-reduce:animate-none"
-                                        aria-hidden="true"
-                                    />
-                                    Loading unconverted leads…
-                                </div>
-                            ) : unconvertedLeadData?.items.length ? (
-                                <div className="max-h-[360px] overflow-auto">
-                                    <Table>
-                                        <TableHeader className="sticky top-0 z-10 bg-background">
-                                            <TableRow>
-                                                <TableHead>Lead ID</TableHead>
-                                                <TableHead>Name</TableHead>
-                                                <TableHead>Email</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Retry</TableHead>
-                                                <TableHead>Reason</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {unconvertedLeadData.items.map((lead) => (
-                                                <TableRow key={lead.id}>
-                                                    <TableCell className="font-mono text-xs">
-                                                        {lead.meta_lead_id}
-                                                    </TableCell>
-                                                    <TableCell>{lead.full_name || "—"}</TableCell>
-                                                    <TableCell>{lead.email || "—"}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="secondary">{lead.status}</Badge>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {lead.reprocess_eligible ? (
-                                                            <Badge>Eligible</Badge>
-                                                        ) : (
-                                                            <Badge variant="outline">Blocked</Badge>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-muted-foreground">
-                                                        {lead.reprocess_block_reason
-                                                            ? lead.reprocess_block_reason.replace(/_/g, " ")
-                                                            : lead.conversion_error || "Awaiting mapping"}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    No unconverted leads are currently queued for this form.
-                                </p>
-                            )}
-                        </CardContent>
-                    </Card>
+                    <MetaUnconvertedLeadsCard
+                        leadCount={data.form.unconverted_leads}
+                        reconvertMessage={reconvertMessage}
+                        reconvertPending={reconvertMutation.isPending}
+                        unconvertedLeadData={unconvertedLeadData}
+                        unconvertedLeadsLoading={unconvertedLeadsLoading}
+                        onReconvert={handleReconvert}
+                    />
                 )}
             </div>
         </div>

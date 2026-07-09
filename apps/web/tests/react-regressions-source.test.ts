@@ -3267,6 +3267,25 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [touchedColumns, setTouchedColumns] = useState")
     })
 
+    it("keeps Meta form mapping page rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
+        const pageSource = readFunctionSource(source, "MetaFormMappingPage")
+
+        expect(source).toContain("function MetaFormMappingHeader")
+        expect(source).toContain("function MetaMappingOutdatedAlert")
+        expect(source).toContain("function MetaColumnMappingCard")
+        expect(source).toContain("function MetaColumnMappingRow")
+        expect(source).toContain("function MetaMappingPreviewCard")
+        expect(source).toContain("function MetaMappingActions")
+        expect(source).toContain("function MetaUnconvertedLeadsCard")
+        expect(source).toContain("function MetaUnconvertedLeadsTable")
+        expect(pageSource).not.toContain("Column Mapping")
+        expect(pageSource).not.toContain("<CardTitle>Preview</CardTitle>")
+        expect(pageSource).not.toContain("Live lead samples")
+        expect(pageSource).not.toContain("Unconverted Leads")
+        expect(pageSource).not.toContain("Reconversion queued")
+    })
+
     it("keeps audit settings export derivations compiler-friendly", () => {
         const source = readSource("app/(app)/settings/audit/page.tsx")
 

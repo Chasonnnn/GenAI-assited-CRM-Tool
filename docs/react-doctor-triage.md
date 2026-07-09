@@ -4522,3 +4522,23 @@ Full command after Batch 207: `cd apps/web && npx -y react-doctor@latest . --ver
 | Rule | Files | Verdict | Confidence | Action | Verification |
 | --- | --- | --- | --- | --- | --- |
 | `react-doctor/no-giant-component` | `app/ops/agencies/[orgId]/page.client.tsx:74` | Valid. `AgencyDetailPage` owned data loading, alerts loading, invite/subscription/member handlers, destructive agency actions, header rendering, tab navigation, and all tab composition in one component. | High | Extracted `useAgencyDetailController`, `AgencyDetailLoadingState`, `AgencyDetailMissingState`, `AgencyDetailHeader`, and `AgencyDetailTabContent` while leaving API calls, mutations, tab state, and child tab props unchanged. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "ops agency detail page sections"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "ops agency detail page sections\|open alert count\|remaining router navigation"`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`. React Doctor rerun still needs explicit approval for the external scanner after the sandbox reviewer rejected network execution. |
+
+## Batch 210
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/settings/integrations/meta/forms/[id]/page.tsx:85` | Valid. `MetaFormMappingPage` owned the form header, outdated alert, column mapping table, preview table, save actions, and unconverted-leads review table in one component. | High | Extracted `MetaFormMappingHeader`, `MetaMappingOutdatedAlert`, `MetaColumnMappingCard`, `MetaColumnMappingRow`, `MetaMappingPreviewCard`, `MetaMappingActions`, `MetaUnconvertedLeadsCard`, and `MetaUnconvertedLeadsTable` while keeping mapping state, touched-column tracking, AI suggestion adoption, save validation, and reconversion handlers in the page controller. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta form mapping page rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "Meta form mapping page rendering\|Meta form mapping touched columns\|settings derived maps"`; `pnpm test --run tests/meta-form-mapping-page.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; changed-scope React Doctor reports no issues. |
+
+Changed-scope command after Batch 210: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 210: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `89 / 100`
+- Total diagnostics: `37`
+- Summary: `Bugs 11 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
+- Removed globally since Batch 207 plus local unpushed Batches 208-210: AI assistant page, ops agency detail page, Meta form mapping page, and one additional previously listed warning no longer appear in the latest scan (`4` total diagnostics removed).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-0dc2812e-a936-4065-b6cf-d6fcc332ec83`
