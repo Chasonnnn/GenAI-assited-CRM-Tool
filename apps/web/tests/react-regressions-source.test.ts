@@ -354,6 +354,24 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("function csvUploadReducer(")
     })
 
+    it("keeps CSV upload rendering split into focused sections", () => {
+        const source = readSource("components/import/CSVUpload.tsx")
+
+        expect(source).toContain("function CSVUploadDropzone")
+        expect(source).toContain("function CSVPreviewSummaryCard")
+        expect(source).toContain("function CSVTemplateAppliedAlert")
+        expect(source).toContain("function CSVAiPromptDialog")
+        expect(source).toContain("function CSVColumnMappingCard")
+        expect(source).toContain("function CSVColumnMappingRow")
+        expect(source).toContain("function CSVSamplePreviewCard")
+        expect(source).toContain("function CSVImportFooter")
+        expect(source).toContain("function CSVImportStatusMessages")
+        expect(source).toContain("function CSVValidationDialog")
+        expect(source).toContain("<CSVUploadDropzone")
+        expect(source).toContain("<CSVColumnMappingCard")
+        expect(source).toContain("<CSVValidationDialog")
+    })
+
     it("keeps DateTimePicker draft state and default month hydration-safe", () => {
         const source = readSource("components/ui/date-time-picker.tsx")
 

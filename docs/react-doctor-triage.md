@@ -4648,3 +4648,23 @@ Full command after Batch 215: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 22 warnings`
 - Removed globally since Batch 214: campaign index `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-104500b5-0f59-47ae-9309-7edb0c95b2f1`
+
+## Batch 216
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/import/CSVUpload.tsx:303` | Valid. `CSVUpload` owned import state, preview/submit/approve/AI handlers, dropzone rendering, summary cards, template/AI dialogs, mapping table, sample preview, status messages, and validation dialog in one component. | High | Extracted focused render helpers for the dropzone, preview summary, template alert, AI prompt, column mapping table/rows, sample preview, import footer, status messages, and validation dialog. Moved import workflow actions into non-component helpers while keeping hooks and reducer state in `CSVUpload`. Added a source guard requiring the render split and preserved existing CSV reducer/dropzone/label guards. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "CSV upload rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "CSV upload rendering\|reducer-based local state in CSVUpload\|CSV upload handlers\|CSV validation option rows\|CSV derived lists\|empty-state labels"`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 216: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 216: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `31`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 21 warnings`
+- Removed globally since Batch 215: CSV upload `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-5f00ef09-dcd4-4a6e-81ca-e687ffd0da50`

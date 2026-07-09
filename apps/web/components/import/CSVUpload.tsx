@@ -89,6 +89,12 @@ interface CSVUploadProps {
     onImportComplete?: () => void
 }
 
+type CSVUploadDispatch = React.Dispatch<CSVUploadAction>
+type CSVPreviewMutation = ReturnType<typeof usePreviewImport>
+type CSVSubmitMutation = ReturnType<typeof useSubmitImport>
+type CSVApproveMutation = ReturnType<typeof useApproveImport>
+type CSVAiMapMutation = ReturnType<typeof useAiMapImport>
+
 function openFilePicker() {
     document.getElementById("file-upload")?.click()
 }
@@ -300,54 +306,88 @@ function csvUploadReducer(state: CSVUploadState, action: CSVUploadAction): CSVUp
     }
 }
 
-export function CSVUpload({ onImportComplete }: CSVUploadProps) {
-    const { user } = useAuth()
-    const [isDragging, setIsDragging] = useState(false)
-    const [state, dispatch] = useReducer(csvUploadReducer, undefined, createInitialCSVUploadState)
-    const {
-        file,
-        preview,
-        mappings,
-        unknownColumnBehavior,
-        touchedColumns,
-        backdateCreatedAt,
-        showAiPrompt,
-        defaultSource,
-        error,
-        submitMessage,
-        approveMessage,
-        templateCleared,
-        validationMode,
-        showValidationDialog,
-    } = state
+function buildPreviewPatch(
+    previewData: EnhancedImportPreview,
+    behavior: UnknownColumnBehavior,
+): Partial<CSVUploadState> {
+    const baseMappings = buildColumnMappingsFromSuggestions(previewData.column_suggestions)
+    const nextTouched = new Set<string>()
 
-    const previewMutation = usePreviewImport()
-    const submitMutation = useSubmitImport()
-    const approveMutation = useApproveImport()
-    const aiMapMutation = useAiMapImport()
+    return {
+        preview: previewData,
+        showAiPrompt:
+            previewData.unmatched_count > 0 &&
+            previewData.ai_available &&
+            !previewData.ai_auto_triggered,
+        touchedColumns: nextTouched,
+        mappings: applyUnknownColumnBehavior(baseMappings, behavior, nextTouched),
+    }
+}
 
-    const canApprove = user?.role === "admin" || user?.role === "developer"
-    const hasCreatedAtMapping = mappings.some(
-        (mapping) => mapping.action === "map" && mapping.surrogate_field === "created_at"
-    )
+function hasRequiredCSVImportMappings(
+    mappings: ColumnMappingDraft[],
+    dispatch: CSVUploadDispatch,
+): boolean {
+    const mappedFields = new Set<string>()
+    for (const mapping of mappings) {
+        if (mapping.action === "map" && mapping.surrogate_field) {
+            mappedFields.add(mapping.surrogate_field)
+        }
+    }
 
-    useEffect(() => {
+    if (!mappedFields.has("full_name") || !mappedFields.has("email")) {
         dispatch({
-            type: "sync_backdate_from_created_at_mapping",
-            hasCreatedAtMapping,
+            type: "patch",
+            patch: { error: "Please map required fields: full_name and email" },
         })
-    }, [hasCreatedAtMapping])
-
-    const handleDragOver = (e: DragEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        setIsDragging(true)
+        return false
     }
 
-    const handleDragLeave = (e: DragEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        setIsDragging(false)
+    const hasUnselectedMaps = mappings.some(
+        (mapping) => mapping.action === "map" && !mapping.surrogate_field
+    )
+    if (hasUnselectedMaps) {
+        dispatch({
+            type: "patch",
+            patch: { error: "Please select a field for every mapped column" },
+        })
+        return false
     }
 
+    return true
+}
+
+function createCSVUploadHandlers({
+    file,
+    preview,
+    mappings,
+    unknownColumnBehavior,
+    touchedColumns,
+    backdateCreatedAt,
+    defaultSource,
+    validationMode,
+    dispatch,
+    previewMutation,
+    submitMutation,
+    approveMutation,
+    aiMapMutation,
+    onImportComplete,
+}: {
+    file: File | null
+    preview: EnhancedImportPreview | null
+    mappings: ColumnMappingDraft[]
+    unknownColumnBehavior: UnknownColumnBehavior
+    touchedColumns: Set<string>
+    backdateCreatedAt: boolean
+    defaultSource: SurrogateSource
+    validationMode: ValidationMode
+    dispatch: CSVUploadDispatch
+    previewMutation: CSVPreviewMutation
+    submitMutation: CSVSubmitMutation
+    approveMutation: CSVApproveMutation
+    aiMapMutation: CSVAiMapMutation
+    onImportComplete: (() => void) | undefined
+}) {
     const handleFileSelect = async (selectedFile: File) => {
         if (!selectedFile.name.endsWith(".csv") && !selectedFile.name.endsWith(".tsv")) {
             dispatch({ type: "patch", patch: { error: "Please upload a CSV or TSV file" } })
@@ -362,21 +402,8 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 applyTemplate: true,
                 enableAi: false,
             })
-            const baseMappings = buildColumnMappingsFromSuggestions(previewData.column_suggestions)
-            const nextTouched = new Set<string>()
-
-            // Use template's unknown_column_behavior if auto-applied, otherwise default
             const effectiveBehavior = previewData.template_unknown_column_behavior as UnknownColumnBehavior | null
-            const behavior = effectiveBehavior || unknownColumnBehavior
-            const nextPatch: Partial<CSVUploadState> = {
-                preview: previewData,
-                showAiPrompt:
-                    previewData.unmatched_count > 0 &&
-                    previewData.ai_available &&
-                    !previewData.ai_auto_triggered,
-                touchedColumns: nextTouched,
-                mappings: applyUnknownColumnBehavior(baseMappings, behavior, nextTouched),
-            }
+            const nextPatch = buildPreviewPatch(previewData, effectiveBehavior || unknownColumnBehavior)
             if (effectiveBehavior) {
                 nextPatch.unknownColumnBehavior = effectiveBehavior
             }
@@ -384,38 +411,9 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         } catch (err: unknown) {
             dispatch({
                 type: "patch",
-                patch: {
-                    error: resolveErrorDetail(err, "Failed to preview CSV"),
-                    file: null,
-                },
+                patch: { error: resolveErrorDetail(err, "Failed to preview CSV"), file: null },
             })
         }
-    }
-
-    const handleDrop = (e: DragEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        setIsDragging(false)
-
-        const droppedFile = e.dataTransfer.files[0]
-        if (droppedFile) {
-            void handleFileSelect(droppedFile)
-        }
-    }
-
-    const handleRemoveFile = () => {
-        dispatch({ type: "reset_for_removed_file" })
-    }
-
-    const handleBackdateToggle = (checked: boolean) => {
-        dispatch({ type: "set_backdate_toggled", checked })
-    }
-
-    const updateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => {
-        dispatch({ type: "update_mapping", csvColumn, patch })
-    }
-
-    const handleUnknownBehaviorChange = (value: UnknownColumnBehavior) => {
-        dispatch({ type: "set_unknown_column_behavior", value })
     }
 
     const handleAiHelp = async () => {
@@ -427,7 +425,6 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
                 unmatched.push(mapping.csv_column)
             }
         }
-
         if (unmatched.length === 0) return
 
         const sampleValues = Object.fromEntries(
@@ -445,42 +442,9 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         }
     }
 
-    const ensureRequiredMappings = () => {
-        const mappedFields = new Set<string>()
-        for (const mapping of mappings) {
-            if (mapping.action === "map" && mapping.surrogate_field) {
-                mappedFields.add(mapping.surrogate_field)
-            }
-        }
-
-        if (!mappedFields.has("full_name") || !mappedFields.has("email")) {
-            dispatch({
-                type: "patch",
-                patch: { error: "Please map required fields: full_name and email" },
-            })
-            return false
-        }
-
-        const hasUnselectedMaps = mappings.some(
-            (mapping) => mapping.action === "map" && !mapping.surrogate_field
-        )
-        if (hasUnselectedMaps) {
-            dispatch({
-                type: "patch",
-                patch: { error: "Please select a field for every mapped column" },
-            })
-            return false
-        }
-
-        return true
-    }
-
     const submitImportWithMode = async (mode: ValidationMode) => {
         if (!preview) return
-        dispatch({
-            type: "patch",
-            patch: { error: "", submitMessage: null, approveMessage: null },
-        })
+        dispatch({ type: "patch", patch: { error: "", submitMessage: null, approveMessage: null } })
 
         const payload = buildImportSubmitPayload(
             mappings,
@@ -524,13 +488,8 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
 
     const handleSubmit = async () => {
         if (!preview) return
-        dispatch({
-            type: "patch",
-            patch: { error: "", submitMessage: null, approveMessage: null },
-        })
-
-        if (!ensureRequiredMappings()) return
-
+        dispatch({ type: "patch", patch: { error: "", submitMessage: null, approveMessage: null } })
+        if (!hasRequiredCSVImportMappings(mappings, dispatch)) return
         dispatch({ type: "patch", patch: { showValidationDialog: true } })
     }
 
@@ -553,684 +512,1047 @@ export function CSVUpload({ onImportComplete }: CSVUploadProps) {
         }
     }
 
+    const handleClearTemplate = async () => {
+        if (!file) return
+        dispatch({ type: "patch", patch: { templateCleared: true } })
+        try {
+            const previewData = await previewMutation.mutateAsync({
+                file,
+                applyTemplate: false,
+                enableAi: false,
+            })
+            dispatch({
+                type: "patch",
+                patch: {
+                    ...buildPreviewPatch(previewData, "ignore"),
+                    unknownColumnBehavior: "ignore",
+                },
+            })
+        } catch (err: unknown) {
+            dispatch({
+                type: "patch",
+                patch: { error: resolveErrorDetail(err, "Failed to clear template mappings") },
+            })
+        }
+    }
+
+    const handleUseAiSuggestions = async () => {
+        await handleAiHelp()
+        dispatch({ type: "patch", patch: { showAiPrompt: false } })
+    }
+
+    const handleConfirmValidationSubmit = async () => {
+        dispatch({ type: "patch", patch: { showValidationDialog: false } })
+        await submitImportWithMode(validationMode)
+    }
+
+    return {
+        handleFileSelect,
+        handleAiHelp,
+        handleSubmit,
+        handleApprove,
+        handleClearTemplate,
+        handleUseAiSuggestions,
+        handleConfirmValidationSubmit,
+    }
+}
+
+export function CSVUpload({ onImportComplete }: CSVUploadProps) {
+    const { user } = useAuth()
+    const [isDragging, setIsDragging] = useState(false)
+    const [state, dispatch] = useReducer(csvUploadReducer, undefined, createInitialCSVUploadState)
+    const {
+        file,
+        preview,
+        mappings,
+        unknownColumnBehavior,
+        touchedColumns,
+        backdateCreatedAt,
+        showAiPrompt,
+        defaultSource,
+        error,
+        submitMessage,
+        approveMessage,
+        templateCleared,
+        validationMode,
+        showValidationDialog,
+    } = state
+
+    const previewMutation = usePreviewImport()
+    const submitMutation = useSubmitImport()
+    const approveMutation = useApproveImport()
+    const aiMapMutation = useAiMapImport()
+
+    const canApprove = user?.role === "admin" || user?.role === "developer"
+    const hasCreatedAtMapping = mappings.some(
+        (mapping) => mapping.action === "map" && mapping.surrogate_field === "created_at"
+    )
+    const csvHandlers = createCSVUploadHandlers({
+        file,
+        preview,
+        mappings,
+        unknownColumnBehavior,
+        touchedColumns,
+        backdateCreatedAt,
+        defaultSource,
+        validationMode,
+        dispatch,
+        previewMutation,
+        submitMutation,
+        approveMutation,
+        aiMapMutation,
+        onImportComplete,
+    })
+
+    useEffect(() => {
+        dispatch({
+            type: "sync_backdate_from_created_at_mapping",
+            hasCreatedAtMapping,
+        })
+    }, [hasCreatedAtMapping])
+
+    const handleDragOver = (e: DragEvent<HTMLButtonElement>) => {
+        e.preventDefault()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (e: DragEvent<HTMLButtonElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+    }
+
+    const handleDrop = (e: DragEvent<HTMLButtonElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+
+        const droppedFile = e.dataTransfer.files[0]
+        if (droppedFile) {
+            void csvHandlers.handleFileSelect(droppedFile)
+        }
+    }
+
+    const handleRemoveFile = () => {
+        dispatch({ type: "reset_for_removed_file" })
+    }
+
+    const handleBackdateToggle = (checked: boolean) => {
+        dispatch({ type: "set_backdate_toggled", checked })
+    }
+
+    const updateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => {
+        dispatch({ type: "update_mapping", csvColumn, patch })
+    }
+
+    const handleUnknownBehaviorChange = (value: UnknownColumnBehavior) => {
+        dispatch({ type: "set_unknown_column_behavior", value })
+    }
+
+    const handleValidationDialogOpenChange = (next: boolean) => {
+        dispatch({ type: "patch", patch: { showValidationDialog: next } })
+    }
+
+    const handleValidationModeChange = (value: ValidationMode) => {
+        dispatch({ type: "patch", patch: { validationMode: value } })
+    }
+
     return (
         <div className="space-y-6">
-            {!preview && (
-                <Card>
-                    <input
-                        id="file-upload"
-                        type="file"
-                        accept=".csv,.tsv"
-                        className="hidden"
-                        aria-label="Upload CSV or TSV file"
-                        onChange={(e) => {
-                            const selectedFile = e.target.files?.[0]
-                            if (selectedFile) void handleFileSelect(selectedFile)
-                        }}
+            {!preview ? (
+                <CSVUploadDropzone
+                    error={error}
+                    isDragging={isDragging}
+                    isProcessing={previewMutation.isPending}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onFileSelect={csvHandlers.handleFileSelect}
+                />
+            ) : (
+                <>
+                    <CSVPreviewSummaryCard preview={preview} fileName={file?.name} onRemoveFile={handleRemoveFile} />
+                    <CSVTemplateAppliedAlert
+                        preview={preview}
+                        templateCleared={templateCleared}
+                        onClearTemplate={csvHandlers.handleClearTemplate}
                     />
-                    <button
-                        type="button"
-                        className={cn(
-                            "relative flex min-h-[300px] w-full cursor-pointer flex-col items-center justify-center border-2 border-dashed bg-transparent p-12 text-center transition-colors",
-                            isDragging && "border-primary bg-primary/5",
-                            !isDragging && "border-border hover:border-primary/50 hover:bg-muted/50",
-                            error && "border-destructive",
-                        )}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        onClick={openFilePicker}
-                    >
-                        {previewMutation.isPending ? (
-                            <>
-                                <Loader2Icon className="mb-4 size-12 animate-spin text-muted-foreground" />
-                                <h3 className="mb-2 text-lg font-semibold">Processing CSV…</h3>
-                                <p className="text-sm text-muted-foreground">Analyzing rows and detecting duplicates</p>
-                            </>
-                        ) : (
-                            <>
-                                <UploadIcon className="mb-4 size-12 text-muted-foreground" />
-                                <h3 className="mb-2 text-lg font-semibold">
-                                    {isDragging ? "Drop CSV file here" : "Drag CSV here or click to browse"}
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                    Upload a CSV file to import surrogates
-                                </p>
-                            </>
-                        )}
+                    <CSVAiMappingIndicator preview={preview} />
+                    <CSVAiPromptDialog
+                        preview={preview}
+                        open={showAiPrompt}
+                        isAiPending={aiMapMutation.isPending}
+                        onOpenChange={(next) => dispatch({ type: "patch", patch: { showAiPrompt: next } })}
+                        onUseAiSuggestions={csvHandlers.handleUseAiSuggestions}
+                    />
+                    <CSVColumnMappingCard
+                        preview={preview}
+                        mappings={mappings}
+                        defaultSource={defaultSource}
+                        unknownColumnBehavior={unknownColumnBehavior}
+                        backdateCreatedAt={backdateCreatedAt}
+                        hasCreatedAtMapping={hasCreatedAtMapping}
+                        isAiPending={aiMapMutation.isPending}
+                        onDefaultSourceChange={(value) =>
+                            dispatch({ type: "patch", patch: { defaultSource: value } })
+                        }
+                        onUnknownBehaviorChange={handleUnknownBehaviorChange}
+                        onBackdateToggle={handleBackdateToggle}
+                        onAiHelp={csvHandlers.handleAiHelp}
+                        onUpdateMapping={updateMapping}
+                    />
+                    <CSVSamplePreviewCard preview={preview} validationMode={validationMode} />
+                    <CSVImportFooter
+                        isSubmitting={submitMutation.isPending}
+                        onCancel={handleRemoveFile}
+                        onSubmit={csvHandlers.handleSubmit}
+                    />
+                    <CSVImportStatusMessages
+                        submitMessage={submitMessage}
+                        approveMessage={approveMessage}
+                        error={error}
+                        canApprove={canApprove}
+                        isApproving={approveMutation.isPending}
+                        onApprove={csvHandlers.handleApprove}
+                    />
+                    <CSVValidationDialog
+                        open={showValidationDialog}
+                        validationMode={validationMode}
+                        isSubmitting={submitMutation.isPending}
+                        onOpenChange={handleValidationDialogOpenChange}
+                        onValidationModeChange={handleValidationModeChange}
+                        onReviewMappings={() => handleValidationDialogOpenChange(false)}
+                        onSubmit={csvHandlers.handleConfirmValidationSubmit}
+                    />
+                </>
+            )}
+        </div>
+    )
+}
 
-                        {error && (
-                            <div className="mt-4 flex items-center gap-2 text-sm text-destructive">
-                                <XCircleIcon className="size-4" />
-                                {error}
+function CSVUploadDropzone({
+    error,
+    isDragging,
+    isProcessing,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onFileSelect,
+}: {
+    error: string
+    isDragging: boolean
+    isProcessing: boolean
+    onDragOver: (event: DragEvent<HTMLButtonElement>) => void
+    onDragLeave: (event: DragEvent<HTMLButtonElement>) => void
+    onDrop: (event: DragEvent<HTMLButtonElement>) => void
+    onFileSelect: (file: File) => Promise<void>
+}) {
+    return (
+        <Card>
+            <input
+                id="file-upload"
+                type="file"
+                accept=".csv,.tsv"
+                className="hidden"
+                aria-label="Upload CSV or TSV file"
+                onChange={(event) => {
+                    const selectedFile = event.target.files?.[0]
+                    if (selectedFile) void onFileSelect(selectedFile)
+                }}
+            />
+            <button
+                type="button"
+                className={cn(
+                    "relative flex min-h-[300px] w-full cursor-pointer flex-col items-center justify-center border-2 border-dashed bg-transparent p-12 text-center transition-colors",
+                    isDragging && "border-primary bg-primary/5",
+                    !isDragging && "border-border hover:border-primary/50 hover:bg-muted/50",
+                    error && "border-destructive",
+                )}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onClick={openFilePicker}
+            >
+                {isProcessing ? (
+                    <>
+                        <Loader2Icon className="mb-4 size-12 animate-spin text-muted-foreground" />
+                        <h3 className="mb-2 text-lg font-semibold">Processing CSV…</h3>
+                        <p className="text-sm text-muted-foreground">Analyzing rows and detecting duplicates</p>
+                    </>
+                ) : (
+                    <>
+                        <UploadIcon className="mb-4 size-12 text-muted-foreground" />
+                        <h3 className="mb-2 text-lg font-semibold">
+                            {isDragging ? "Drop CSV file here" : "Drag CSV here or click to browse"}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            Upload a CSV file to import surrogates
+                        </p>
+                    </>
+                )}
+
+                {error && (
+                    <div className="mt-4 flex items-center gap-2 text-sm text-destructive">
+                        <XCircleIcon className="size-4" />
+                        {error}
+                    </div>
+                )}
+            </button>
+        </Card>
+    )
+}
+
+function CSVPreviewSummaryCard({
+    preview,
+    fileName,
+    onRemoveFile,
+}: {
+    preview: EnhancedImportPreview
+    fileName: string | undefined
+    onRemoveFile: () => void
+}) {
+    return (
+        <Card className="p-4">
+            <div className="flex flex-wrap items-center gap-4">
+                <CSVSummaryBadge label="Total Rows" value={preview.total_rows} />
+                <CSVSummaryBadge label="Matched Columns" value={preview.matched_count} tone="success" />
+                <CSVSummaryBadge label="Unmatched Columns" value={preview.unmatched_count} tone="warning" />
+                {preview.duplicate_emails_db > 0 && (
+                    <CSVSummaryBadge label="Duplicates in DB" value={preview.duplicate_emails_db} tone="destructive" />
+                )}
+                {preview.duplicate_emails_csv > 0 && (
+                    <CSVSummaryBadge label="Duplicates in CSV" value={preview.duplicate_emails_csv} tone="warning" />
+                )}
+                {preview.validation_errors > 0 && (
+                    <CSVSummaryBadge label="Validation Errors" value={preview.validation_errors} tone="destructive" />
+                )}
+
+                <div className="ml-auto flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <FileIcon className="size-4" />
+                        {fileName}
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onRemoveFile}
+                        aria-label={`Remove selected file ${fileName ?? ""}`.trim()}
+                    >
+                        <XIcon className="size-4" />
+                    </Button>
+                </div>
+            </div>
+        </Card>
+    )
+}
+
+function CSVSummaryBadge({
+    label,
+    value,
+    tone = "neutral",
+}: {
+    label: string
+    value: number
+    tone?: "neutral" | "success" | "warning" | "destructive"
+}) {
+    const classNameByTone = {
+        neutral: undefined,
+        success: "bg-green-500/10 text-green-600 border-green-500/20",
+        warning: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+        destructive: "bg-destructive/10 text-destructive border-destructive/20",
+    }
+
+    return (
+        <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{label}:</span>
+            <Badge variant={tone === "neutral" ? "secondary" : undefined} className={classNameByTone[tone]}>
+                {value}
+            </Badge>
+        </div>
+    )
+}
+
+function CSVTemplateAppliedAlert({
+    preview,
+    templateCleared,
+    onClearTemplate,
+}: {
+    preview: EnhancedImportPreview
+    templateCleared: boolean
+    onClearTemplate: () => Promise<void>
+}) {
+    if (!preview.auto_applied_template || templateCleared) return null
+
+    return (
+        <Alert>
+            <CheckIcon className="size-4" />
+            <AlertTitle>Template auto-applied</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+                <span>
+                    &ldquo;{preview.auto_applied_template.name}&rdquo; matched{" "}
+                    {Math.round(preview.auto_applied_template.match_score * 100)}% of columns.
+                    {preview.template_unknown_column_behavior && (
+                        <span className="text-muted-foreground ml-2">
+                            Unknown columns: {preview.template_unknown_column_behavior}
+                        </span>
+                    )}
+                </span>
+                <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => { void onClearTemplate() }}
+                >
+                    Clear and map manually
+                </Button>
+            </AlertDescription>
+        </Alert>
+    )
+}
+
+function CSVAiMappingIndicator({ preview }: { preview: EnhancedImportPreview }) {
+    if (!preview.ai_auto_triggered || preview.ai_mapped_columns.length === 0) return null
+
+    return (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <SparklesIcon className="size-4" />
+            AI suggested mappings for {preview.ai_mapped_columns.length} unmatched column(s)
+        </div>
+    )
+}
+
+function CSVAiPromptDialog({
+    preview,
+    open,
+    isAiPending,
+    onOpenChange,
+    onUseAiSuggestions,
+}: {
+    preview: EnhancedImportPreview
+    open: boolean
+    isAiPending: boolean
+    onOpenChange: (open: boolean) => void
+    onUseAiSuggestions: () => Promise<void>
+}) {
+    if (!preview.ai_available || preview.unmatched_count === 0) return null
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Unmatched columns detected</DialogTitle>
+                    <DialogDescription>
+                        We couldn&rsquo;t map {preview.unmatched_count} column
+                        {preview.unmatched_count === 1 ? "" : "s"}. Want AI to suggest mappings?
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Not now
+                    </Button>
+                    <Button onClick={() => { void onUseAiSuggestions() }} disabled={isAiPending}>
+                        {isAiPending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                        ) : (
+                            <SparklesIcon className="mr-2 size-4" />
+                        )}
+                        Use AI suggestions
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function CSVColumnMappingCard({
+    preview,
+    mappings,
+    defaultSource,
+    unknownColumnBehavior,
+    backdateCreatedAt,
+    hasCreatedAtMapping,
+    isAiPending,
+    onDefaultSourceChange,
+    onUnknownBehaviorChange,
+    onBackdateToggle,
+    onAiHelp,
+    onUpdateMapping,
+}: {
+    preview: EnhancedImportPreview
+    mappings: ColumnMappingDraft[]
+    defaultSource: SurrogateSource
+    unknownColumnBehavior: UnknownColumnBehavior
+    backdateCreatedAt: boolean
+    hasCreatedAtMapping: boolean
+    isAiPending: boolean
+    onDefaultSourceChange: (value: SurrogateSource) => void
+    onUnknownBehaviorChange: (value: UnknownColumnBehavior) => void
+    onBackdateToggle: (checked: boolean) => void
+    onAiHelp: () => Promise<void>
+    onUpdateMapping: (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
+}) {
+    return (
+        <Card className="overflow-hidden">
+            <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <CSVColumnMappingHeading
+                        hasCreatedAtMapping={hasCreatedAtMapping}
+                        backdateCreatedAt={backdateCreatedAt}
+                    />
+                    <CSVColumnMappingControls
+                        preview={preview}
+                        defaultSource={defaultSource}
+                        unknownColumnBehavior={unknownColumnBehavior}
+                        backdateCreatedAt={backdateCreatedAt}
+                        hasCreatedAtMapping={hasCreatedAtMapping}
+                        isAiPending={isAiPending}
+                        onDefaultSourceChange={onDefaultSourceChange}
+                        onUnknownBehaviorChange={onUnknownBehaviorChange}
+                        onBackdateToggle={onBackdateToggle}
+                        onAiHelp={onAiHelp}
+                    />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="max-h-[520px] overflow-auto">
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background">
+                            <TableRow>
+                                <TableHead>CSV Column</TableHead>
+                                <TableHead>Samples</TableHead>
+                                <TableHead>Action</TableHead>
+                                <TableHead>Map To</TableHead>
+                                <TableHead>Transform</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {mappings.map((mapping) => (
+                                <CSVColumnMappingRow
+                                    key={mapping.csv_column}
+                                    mapping={mapping}
+                                    preview={preview}
+                                    onUpdateMapping={onUpdateMapping}
+                                />
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function CSVColumnMappingHeading({
+    hasCreatedAtMapping,
+    backdateCreatedAt,
+}: {
+    hasCreatedAtMapping: boolean
+    backdateCreatedAt: boolean
+}) {
+    return (
+        <div>
+            <CardTitle>Column Mapping</CardTitle>
+            <CardDescription>Review column mappings before submitting the import.</CardDescription>
+            {hasCreatedAtMapping && (
+                <p className={cn("mt-2 text-xs", backdateCreatedAt ? "text-muted-foreground" : "text-amber-600")}>
+                    {backdateCreatedAt
+                        ? "Created_at will use the CSV timestamp (org timezone fallback if none is provided)."
+                        : "Created_at will use import time; CSV values are stored as metadata unless backdating is enabled."}
+                </p>
+            )}
+        </div>
+    )
+}
+
+function CSVColumnMappingControls({
+    preview,
+    defaultSource,
+    unknownColumnBehavior,
+    backdateCreatedAt,
+    hasCreatedAtMapping,
+    isAiPending,
+    onDefaultSourceChange,
+    onUnknownBehaviorChange,
+    onBackdateToggle,
+    onAiHelp,
+}: {
+    preview: EnhancedImportPreview
+    defaultSource: SurrogateSource
+    unknownColumnBehavior: UnknownColumnBehavior
+    backdateCreatedAt: boolean
+    hasCreatedAtMapping: boolean
+    isAiPending: boolean
+    onDefaultSourceChange: (value: SurrogateSource) => void
+    onUnknownBehaviorChange: (value: UnknownColumnBehavior) => void
+    onBackdateToggle: (checked: boolean) => void
+    onAiHelp: () => Promise<void>
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Default source:</span>
+                <Select value={defaultSource} onValueChange={(value) => onDefaultSourceChange(value as SurrogateSource)}>
+                    <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {SOURCE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Unknown columns:</span>
+                <Select
+                    value={unknownColumnBehavior}
+                    onValueChange={(value) => onUnknownBehaviorChange(value as UnknownColumnBehavior)}
+                >
+                    <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="ignore">Ignore</SelectItem>
+                        <SelectItem value="metadata">Store metadata</SelectItem>
+                        <SelectItem value="warn">Warn only</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Switch
+                    id="backdate-created-at"
+                    checked={backdateCreatedAt}
+                    onCheckedChange={onBackdateToggle}
+                    disabled={!hasCreatedAtMapping}
+                />
+                <Label htmlFor="backdate-created-at">Use CSV created_at values</Label>
+            </div>
+            {preview.ai_available && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { void onAiHelp() }}
+                    disabled={isAiPending}
+                >
+                    {isAiPending ? (
+                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                    ) : (
+                        <SparklesIcon className="mr-2 size-4" />
+                    )}
+                    Get AI help
+                </Button>
+            )}
+        </div>
+    )
+}
+
+function CSVColumnMappingRow({
+    mapping,
+    preview,
+    onUpdateMapping,
+}: {
+    mapping: ColumnMappingDraft
+    preview: EnhancedImportPreview
+    onUpdateMapping: (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
+}) {
+    const originalSuggestion = preview.column_suggestions.find(
+        (suggestion) => suggestion.csv_column === mapping.csv_column
+    )
+    const reasonBadge = originalSuggestion ? getReasonBadge(originalSuggestion.reason) : null
+
+    return (
+        <TableRow>
+            <TableCell className="font-medium">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <span>{mapping.csv_column}</span>
+                        {reasonBadge && (
+                            <Badge variant={reasonBadge.variant} className="text-xs flex items-center">
+                                {reasonBadge.icon}
+                                {reasonBadge.label}
+                            </Badge>
+                        )}
+                        {!reasonBadge && mapping.confidence_level !== "none" && (
+                            <Badge variant="secondary" className="text-xs capitalize">
+                                {mapping.confidence_level}
+                            </Badge>
+                        )}
+                    </div>
+                    {mapping.warnings?.length > 0 && (
+                        <p className="text-xs text-amber-600">{mapping.warnings[0]}</p>
+                    )}
+                </div>
+            </TableCell>
+            <TableCell className="text-xs text-muted-foreground">
+                {(mapping.sample_values || []).slice(0, 2).join(", ") || "—"}
+            </TableCell>
+            <TableCell>
+                <CSVMappingActionSelect mapping={mapping} onUpdateMapping={onUpdateMapping} />
+            </TableCell>
+            <TableCell>
+                <CSVMappingTargetControl mapping={mapping} preview={preview} onUpdateMapping={onUpdateMapping} />
+            </TableCell>
+            <TableCell>
+                <CSVMappingTransformSelect mapping={mapping} onUpdateMapping={onUpdateMapping} />
+            </TableCell>
+        </TableRow>
+    )
+}
+
+function CSVMappingActionSelect({
+    mapping,
+    onUpdateMapping,
+}: {
+    mapping: ColumnMappingDraft
+    onUpdateMapping: (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
+}) {
+    return (
+        <Select
+            value={mapping.action}
+            onValueChange={(value) => {
+                if (value === "map") {
+                    onUpdateMapping(mapping.csv_column, { action: "map" })
+                } else if (value === "custom") {
+                    onUpdateMapping(mapping.csv_column, { action: "custom", surrogate_field: null })
+                } else {
+                    onUpdateMapping(mapping.csv_column, {
+                        action: value as ColumnMappingDraft["action"],
+                        surrogate_field: null,
+                        transformation: null,
+                    })
+                }
+            }}
+        >
+            <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="Action" />
+            </SelectTrigger>
+            <SelectContent>
+                {ACTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    )
+}
+
+function CSVMappingTargetControl({
+    mapping,
+    preview,
+    onUpdateMapping,
+}: {
+    mapping: ColumnMappingDraft
+    preview: EnhancedImportPreview
+    onUpdateMapping: (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
+}) {
+    if (mapping.action === "map") {
+        return (
+            <Select
+                value={mapping.surrogate_field || ""}
+                onValueChange={(value) =>
+                    onUpdateMapping(mapping.csv_column, {
+                        surrogate_field: value || null,
+                        action: "map",
+                    })
+                }
+            >
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select field" />
+                </SelectTrigger>
+                <SelectContent>
+                    {preview.available_fields.map((field) => (
+                        <SelectItem key={field} value={field}>
+                            {getSurrogateFieldLabel(field) ?? "Unknown field"}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        )
+    }
+
+    if (mapping.action === "custom") {
+        return (
+            <Input
+                value={mapping.custom_field_key || ""}
+                onChange={(event) =>
+                    onUpdateMapping(mapping.csv_column, { custom_field_key: event.target.value })
+                }
+                placeholder="custom_field_key"
+                className="w-[180px]"
+            />
+        )
+    }
+
+    return <span className="text-xs text-muted-foreground">No custom field</span>
+}
+
+function CSVMappingTransformSelect({
+    mapping,
+    onUpdateMapping,
+}: {
+    mapping: ColumnMappingDraft
+    onUpdateMapping: (csvColumn: string, patch: Partial<ColumnMappingDraft>) => void
+}) {
+    return (
+        <Select
+            value={mapping.transformation || ""}
+            onValueChange={(value) =>
+                onUpdateMapping(mapping.csv_column, { transformation: value || null })
+            }
+            disabled={mapping.action !== "map"}
+        >
+            <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+                {TRANSFORM_OPTIONS.map((option) => (
+                    <SelectItem key={option.value || "none"} value={option.value}>
+                        {option.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    )
+}
+
+function CSVSamplePreviewCard({
+    preview,
+    validationMode,
+}: {
+    preview: EnhancedImportPreview
+    validationMode: ValidationMode
+}) {
+    const sampleHeaders = Object.keys(preview.sample_rows[0] || {})
+
+    return (
+        <Card className="overflow-hidden">
+            <CardHeader>
+                <CardTitle>Preview ({preview.sample_rows.length} of {preview.total_rows} rows)</CardTitle>
+                <CardDescription>
+                    {validationMode === "drop_invalid_fields"
+                        ? "Rows with invalid values will still be imported; invalid fields are dropped and logged."
+                        : "Rows with validation errors will be skipped and logged."}
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="max-h-[400px] overflow-auto">
+                    <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-background">
+                            <TableRow>
+                                {sampleHeaders.map((header) => (
+                                    <TableHead key={header}>{header}</TableHead>
+                                ))}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {preview.sample_rows.map((row, rowIdx) => (
+                                <TableRow key={rowIdx}>
+                                    {sampleHeaders.map((header) => (
+                                        <TableCell key={header}>
+                                            {row[header] || <span className="text-muted-foreground">Empty</span>}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+function CSVImportFooter({
+    isSubmitting,
+    onCancel,
+    onSubmit,
+}: {
+    isSubmitting: boolean
+    onCancel: () => void
+    onSubmit: () => Promise<void>
+}) {
+    return (
+        <div className="flex items-center justify-end gap-3">
+            <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
+                Cancel
+            </Button>
+            <Button onClick={() => { void onSubmit() }} disabled={isSubmitting} className="min-w-[160px]">
+                {isSubmitting ? (
+                    <>
+                        <Loader2Icon className="mr-2 size-4 animate-spin" />
+                        Submitting…
+                    </>
+                ) : (
+                    "Submit Import"
+                )}
+            </Button>
+        </div>
+    )
+}
+
+function CSVImportStatusMessages({
+    submitMessage,
+    approveMessage,
+    error,
+    canApprove,
+    isApproving,
+    onApprove,
+}: {
+    submitMessage: string | null
+    approveMessage: string | null
+    error: string
+    canApprove: boolean
+    isApproving: boolean
+    onApprove: () => Promise<void>
+}) {
+    return (
+        <>
+            {submitMessage && (
+                <Card className="bg-green-500/10 border-green-500/20">
+                    <CardContent className="py-3">
+                        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <CheckIcon className="size-5" />
+                            <p className="font-medium">{submitMessage}</p>
+                        </div>
+                        {canApprove && (
+                            <div className="mt-3">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => { void onApprove() }}
+                                    disabled={isApproving}
+                                >
+                                    {isApproving ? (
+                                        <>
+                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                            Approving…
+                                        </>
+                                    ) : (
+                                        "Approve & Run Import"
+                                    )}
+                                </Button>
                             </div>
                         )}
-                    </button>
+                    </CardContent>
                 </Card>
             )}
 
-            {preview && (
-                <>
-                    <Card className="p-4">
-                        <div className="flex flex-wrap items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground">Total Rows:</span>
-                                <Badge variant="secondary">{preview.total_rows}</Badge>
-                            </div>
+            {approveMessage && <CSVInlineStatusMessage tone="success" message={approveMessage} />}
+            {error && <CSVInlineStatusMessage tone="error" message={error} />}
+        </>
+    )
+}
 
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground">Matched Columns:</span>
-                                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
-                                    {preview.matched_count}
-                                </Badge>
-                            </div>
+function CSVInlineStatusMessage({
+    tone,
+    message,
+}: {
+    tone: "success" | "error"
+    message: string
+}) {
+    const isSuccess = tone === "success"
 
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground">Unmatched Columns:</span>
-                                <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-                                    {preview.unmatched_count}
-                                </Badge>
-                            </div>
+    return (
+        <Card className={isSuccess ? "bg-green-500/10 border-green-500/20" : "bg-destructive/10 border-destructive/20"}>
+            <CardContent className="py-3">
+                <div className={isSuccess ? "flex items-center gap-2 text-green-600 dark:text-green-400" : "flex items-center gap-2 text-destructive"}>
+                    {isSuccess ? <CheckIcon className="size-5" /> : <XCircleIcon className="size-5" />}
+                    <p className="font-medium">{message}</p>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
 
-                            {preview.duplicate_emails_db > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Duplicates in DB:</span>
-                                    <Badge className="bg-destructive/10 text-destructive border-destructive/20">
-                                        {preview.duplicate_emails_db}
-                                    </Badge>
-                                </div>
-                            )}
+function CSVValidationDialog({
+    open,
+    validationMode,
+    isSubmitting,
+    onOpenChange,
+    onValidationModeChange,
+    onReviewMappings,
+    onSubmit,
+}: {
+    open: boolean
+    validationMode: ValidationMode
+    isSubmitting: boolean
+    onOpenChange: (open: boolean) => void
+    onValidationModeChange: (mode: ValidationMode) => void
+    onReviewMappings: () => void
+    onSubmit: () => Promise<void>
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Handle validation issues</DialogTitle>
+                    <DialogDescription>
+                        Choose how to handle invalid values (for example phone, state, or numeric fields)
+                        before submitting this import.
+                    </DialogDescription>
+                </DialogHeader>
 
-                            {preview.duplicate_emails_csv > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Duplicates in CSV:</span>
-                                    <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-                                        {preview.duplicate_emails_csv}
-                                    </Badge>
-                                </div>
-                            )}
-
-                            {preview.validation_errors > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Validation Errors:</span>
-                                    <Badge className="bg-destructive/10 text-destructive border-destructive/20">
-                                        {preview.validation_errors}
-                                    </Badge>
-                                </div>
-                            )}
-
-                            <div className="ml-auto flex items-center gap-2">
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <FileIcon className="size-4" />
-                                    {file?.name}
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleRemoveFile}
-                                    aria-label={`Remove selected file ${file?.name ?? ""}`.trim()}
-                                >
-                                    <XIcon className="size-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-
-                    {/* Auto-applied template banner */}
-                    {preview.auto_applied_template && !templateCleared && (
-                        <Alert>
-                            <CheckIcon className="size-4" />
-                            <AlertTitle>Template auto-applied</AlertTitle>
-                            <AlertDescription className="flex items-center justify-between">
-                                <span>
-                                    &ldquo;{preview.auto_applied_template.name}&rdquo; matched{" "}
-                                    {Math.round(preview.auto_applied_template.match_score * 100)}% of columns.
-                                    {preview.template_unknown_column_behavior && (
-                                        <span className="text-muted-foreground ml-2">
-                                            Unknown columns: {preview.template_unknown_column_behavior}
-                                        </span>
-                                    )}
-                                </span>
-                                <Button
-                                    variant="link"
-                                    size="sm"
-                                    className="h-auto p-0"
-                                    onClick={async () => {
-                                        if (!file) return
-                                        dispatch({ type: "patch", patch: { templateCleared: true } })
-                                        try {
-                                            const previewData = await previewMutation.mutateAsync({
-                                                file,
-                                                applyTemplate: false,
-                                                enableAi: false,
-                                            })
-                                            const baseMappings = buildColumnMappingsFromSuggestions(
-                                                previewData.column_suggestions
-                                            )
-                                            const nextTouched = new Set<string>()
-                                            dispatch({
-                                                type: "patch",
-                                                patch: {
-                                                    preview: previewData,
-                                                    showAiPrompt:
-                                                        previewData.unmatched_count > 0 &&
-                                                        previewData.ai_available &&
-                                                        !previewData.ai_auto_triggered,
-                                                    touchedColumns: nextTouched,
-                                                    mappings: applyUnknownColumnBehavior(
-                                                        baseMappings,
-                                                        "ignore",
-                                                        nextTouched
-                                                    ),
-                                                    unknownColumnBehavior: "ignore",
-                                                },
-                                            })
-                                        } catch (err: unknown) {
-                                            dispatch({
-                                                type: "patch",
-                                                patch: {
-                                                    error: resolveErrorDetail(
-                                                        err,
-                                                        "Failed to clear template mappings"
-                                                    ),
-                                                },
-                                            })
-                                        }
-                                    }}
-                                >
-                                    Clear and map manually
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
-                    )}
-
-                    {/* AI auto-trigger indicator */}
-                    {preview.ai_auto_triggered && preview.ai_mapped_columns.length > 0 && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <SparklesIcon className="size-4" />
-                            AI suggested mappings for {preview.ai_mapped_columns.length} unmatched column(s)
-                        </div>
-                    )}
-
-                    {preview.ai_available && preview.unmatched_count > 0 && (
-                        <Dialog
-                            open={showAiPrompt}
-                            onOpenChange={(next) => dispatch({ type: "patch", patch: { showAiPrompt: next } })}
-                        >
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Unmatched columns detected</DialogTitle>
-                                    <DialogDescription>
-                                        We couldn&rsquo;t map {preview.unmatched_count} column
-                                        {preview.unmatched_count === 1 ? "" : "s"}. Want AI to suggest mappings?
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter>
-                                    <Button
-                                        variant="outline"
-                                        onClick={() =>
-                                            dispatch({ type: "patch", patch: { showAiPrompt: false } })
-                                        }
-                                    >
-                                        Not now
-                                    </Button>
-                                    <Button
-                                        onClick={async () => {
-                                            await handleAiHelp()
-                                            dispatch({ type: "patch", patch: { showAiPrompt: false } })
-                                        }}
-                                        disabled={aiMapMutation.isPending}
-                                    >
-                                        {aiMapMutation.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                        ) : (
-                                            <SparklesIcon className="mr-2 size-4" />
-                                        )}
-                                        Use AI suggestions
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    )}
-
-                    <Card className="overflow-hidden">
-                        <CardHeader>
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <CardTitle>Column Mapping</CardTitle>
-                                    <CardDescription>
-                                        Review column mappings before submitting the import.
-                                    </CardDescription>
-                                    {hasCreatedAtMapping && (
-                                        <p
-                                            className={cn(
-                                                "mt-2 text-xs",
-                                                backdateCreatedAt ? "text-muted-foreground" : "text-amber-600"
-                                            )}
-                                        >
-                                            {backdateCreatedAt
-                                                ? "Created_at will use the CSV timestamp (org timezone fallback if none is provided)."
-                                                : "Created_at will use import time; CSV values are stored as metadata unless backdating is enabled."}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <span>Default source:</span>
-                                        <Select
-                                            value={defaultSource}
-                                            onValueChange={(value) =>
-                                                dispatch({
-                                                    type: "patch",
-                                                    patch: { defaultSource: value as SurrogateSource },
-                                                })
-                                            }
-                                        >
-                                            <SelectTrigger className="h-8 w-[140px]">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {SOURCE_OPTIONS.map((option) => (
-                                                    <SelectItem key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <span>Unknown columns:</span>
-                                        <Select
-                                            value={unknownColumnBehavior}
-                                            onValueChange={(value) =>
-                                                handleUnknownBehaviorChange(value as UnknownColumnBehavior)
-                                            }
-                                        >
-                                            <SelectTrigger className="h-8 w-[140px]">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="ignore">Ignore</SelectItem>
-                                                <SelectItem value="metadata">Store metadata</SelectItem>
-                                                <SelectItem value="warn">Warn only</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <Switch
-                                                    id="backdate-created-at"
-                                                    checked={backdateCreatedAt}
-                                                    onCheckedChange={handleBackdateToggle}
-                                                    disabled={!hasCreatedAtMapping}
-                                                />
-                                                <Label htmlFor="backdate-created-at">
-                                            Use CSV created_at values
-                                                </Label>
-                                            </div>
-                                    {preview.ai_available && (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={handleAiHelp}
-                                            disabled={aiMapMutation.isPending}
-                                        >
-                                            {aiMapMutation.isPending ? (
-                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                            ) : (
-                                                <SparklesIcon className="mr-2 size-4" />
-                                            )}
-                                            Get AI help
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="max-h-[520px] overflow-auto">
-                                <Table>
-                                    <TableHeader className="sticky top-0 z-10 bg-background">
-                                        <TableRow>
-                                            <TableHead>CSV Column</TableHead>
-                                            <TableHead>Samples</TableHead>
-                                            <TableHead>Action</TableHead>
-                                            <TableHead>Map To</TableHead>
-                                            <TableHead>Transform</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {mappings.map((mapping) => {
-                                            // Get reason from original suggestion for badge
-                                            const originalSuggestion = preview.column_suggestions.find(
-                                                (s) => s.csv_column === mapping.csv_column
-                                            )
-                                            const reasonBadge = originalSuggestion
-                                                ? getReasonBadge(originalSuggestion.reason)
-                                                : null
-
-                                            return (
-                                            <TableRow key={mapping.csv_column}>
-                                                <TableCell className="font-medium">
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <span>{mapping.csv_column}</span>
-                                                            {reasonBadge && (
-                                                                <Badge
-                                                                    variant={reasonBadge.variant}
-                                                                    className="text-xs flex items-center"
-                                                                >
-                                                                    {reasonBadge.icon}
-                                                                    {reasonBadge.label}
-                                                                </Badge>
-                                                            )}
-                                                            {!reasonBadge && mapping.confidence_level !== "none" && (
-                                                                <Badge
-                                                                    variant="secondary"
-                                                                    className="text-xs capitalize"
-                                                                >
-                                                                    {mapping.confidence_level}
-                                                                </Badge>
-                                                            )}
-                                                        </div>
-                                                        {mapping.warnings?.length > 0 && (
-                                                            <p className="text-xs text-amber-600">
-                                                                {mapping.warnings[0]}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-xs text-muted-foreground">
-                                                    {(mapping.sample_values || []).slice(0, 2).join(", ") || "—"}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Select
-                                                        value={mapping.action}
-                                                        onValueChange={(value) => {
-                                                            if (value === "map") {
-                                                                updateMapping(mapping.csv_column, {
-                                                                    action: "map",
-                                                                })
-                                                            } else if (value === "custom") {
-                                                                updateMapping(mapping.csv_column, {
-                                                                    action: "custom",
-                                                                    surrogate_field: null,
-                                                                })
-                                                            } else {
-                                                                updateMapping(mapping.csv_column, {
-                                                                    action: value as ColumnMappingDraft["action"],
-                                                                    surrogate_field: null,
-                                                                    transformation: null,
-                                                                })
-                                                            }
-                                                        }}
-                                                    >
-                                                        <SelectTrigger className="w-[130px]">
-                                                            <SelectValue placeholder="Action" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {ACTION_OPTIONS.map((option) => (
-                                                                <SelectItem key={option.value} value={option.value}>
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {mapping.action === "map" ? (
-                                                        <Select
-                                                            value={mapping.surrogate_field || ""}
-                                                            onValueChange={(value) =>
-                                                                updateMapping(mapping.csv_column, {
-                                                                    surrogate_field: value || null,
-                                                                    action: "map",
-                                                                })
-                                                            }
-                                                        >
-                                                            <SelectTrigger className="w-[180px]">
-                                                                <SelectValue placeholder="Select field" />
-                                                            </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {preview.available_fields.map((field) => (
-                                                                        <SelectItem key={field} value={field}>
-                                                                            {getSurrogateFieldLabel(field) ?? "Unknown field"}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                    ) : mapping.action === "custom" ? (
-                                                        <Input
-                                                            value={mapping.custom_field_key || ""}
-                                                            onChange={(e) =>
-                                                                updateMapping(mapping.csv_column, {
-                                                                    custom_field_key: e.target.value,
-                                                                })
-                                                            }
-                                                            placeholder="custom_field_key"
-                                                            className="w-[180px]"
-                                                        />
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">No custom field</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Select
-                                                        value={mapping.transformation || ""}
-                                                        onValueChange={(value) =>
-                                                            updateMapping(mapping.csv_column, {
-                                                                transformation: value || null,
-                                                            })
-                                                        }
-                                                        disabled={mapping.action !== "map"}
-                                                    >
-                                                        <SelectTrigger className="w-[170px]">
-                                                            <SelectValue placeholder="None" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {TRANSFORM_OPTIONS.map((option) => (
-                                                                <SelectItem key={option.value || "none"} value={option.value}>
-                                                                    {option.label}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </TableCell>
-                                            </TableRow>
-                                        )})}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="overflow-hidden">
-                        <CardHeader>
-                            <CardTitle>Preview ({preview.sample_rows.length} of {preview.total_rows} rows)</CardTitle>
-                            <CardDescription>
-                                {validationMode === "drop_invalid_fields"
-                                    ? "Rows with invalid values will still be imported; invalid fields are dropped and logged."
-                                    : "Rows with validation errors will be skipped and logged."}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="max-h-[400px] overflow-auto">
-                                <Table>
-                                    <TableHeader className="sticky top-0 z-10 bg-background">
-                                        <TableRow>
-                                            {Object.keys(preview.sample_rows[0] || {}).map((header) => (
-                                                <TableHead key={header}>{header}</TableHead>
-                                            ))}
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {preview.sample_rows.map((row, rowIdx) => (
-                                            <TableRow key={rowIdx}>
-                                                {Object.keys(preview.sample_rows[0] || {}).map((header) => (
-                                                    <TableCell key={header}>
-                                                        {row[header] || <span className="text-muted-foreground">Empty</span>}
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <div className="flex items-center justify-end gap-3">
-                        <Button variant="outline" onClick={handleRemoveFile} disabled={submitMutation.isPending}>
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={submitMutation.isPending}
-                            className="min-w-[160px]"
-                        >
-                            {submitMutation.isPending ? (
-                                <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    Submitting…
-                                </>
-                            ) : (
-                                "Submit Import"
-                            )}
-                        </Button>
-                    </div>
-
-                    {submitMessage && (
-                        <Card className="bg-green-500/10 border-green-500/20">
-                            <CardContent className="py-3">
-                                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                                    <CheckIcon className="size-5" />
-                                    <p className="font-medium">{submitMessage}</p>
-                                </div>
-                                {canApprove && (
-                                    <div className="mt-3">
-                                        <Button
-                                            variant="secondary"
-                                            onClick={handleApprove}
-                                            disabled={approveMutation.isPending}
-                                        >
-                                            {approveMutation.isPending ? (
-                                                <>
-                                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                                    Approving…
-                                                </>
-                                            ) : (
-                                                "Approve & Run Import"
-                                            )}
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {approveMessage && (
-                        <Card className="bg-green-500/10 border-green-500/20">
-                            <CardContent className="py-3">
-                                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                                    <CheckIcon className="size-5" />
-                                    <p className="font-medium">{approveMessage}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {error && (
-                        <Card className="bg-destructive/10 border-destructive/20">
-                            <CardContent className="py-3">
-                                <div className="flex items-center gap-2 text-destructive">
-                                    <XCircleIcon className="size-5" />
-                                    <p className="font-medium">{error}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    <Dialog
-                        open={showValidationDialog}
-                        onOpenChange={(next) =>
-                            dispatch({ type: "patch", patch: { showValidationDialog: next } })
-                        }
+                <div className="space-y-3 py-2">
+                    <RadioGroup
+                        value={validationMode}
+                        onValueChange={(value) => onValidationModeChange(value as ValidationMode)}
+                        className="space-y-3"
                     >
-                        <DialogContent className="sm:max-w-lg">
-                            <DialogHeader>
-                                <DialogTitle>Handle validation issues</DialogTitle>
-                                <DialogDescription>
-                                    Choose how to handle invalid values (for example phone, state, or numeric fields)
-                                    before submitting this import.
-                                </DialogDescription>
-                            </DialogHeader>
+                        <CSVValidationModeOption
+                            value="drop_invalid_fields"
+                            id="validation-drop-fields"
+                            title="Import anyway (drop invalid fields)"
+                            description="Import rows even if optional fields are invalid. Invalid values are cleared and recorded as warnings."
+                        />
+                        <CSVValidationModeOption
+                            value="skip_invalid_rows"
+                            id="validation-skip-rows"
+                            title="Skip invalid rows"
+                            description="Rows with any validation errors are skipped and logged."
+                        />
+                    </RadioGroup>
+                </div>
 
-                            <div className="space-y-3 py-2">
-                                <RadioGroup
-                                    value={validationMode}
-                                    onValueChange={(value) =>
-                                        dispatch({
-                                            type: "patch",
-                                            patch: { validationMode: value as ValidationMode },
-                                        })
-                                    }
-                                    className="space-y-3"
-                                >
-                                    <div className="flex items-start gap-3 rounded-md border border-border p-3">
-                                        <RadioGroupItem value="drop_invalid_fields" id="validation-drop-fields" />
-                                        <div className="space-y-1">
-                                            <Label htmlFor="validation-drop-fields" className="font-medium">
-                                                Import anyway (drop invalid fields)
-                                            </Label>
-                                            <p className="text-xs text-muted-foreground">
-                                                Import rows even if optional fields are invalid. Invalid values are
-                                                cleared and recorded as warnings.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-3 rounded-md border border-border p-3">
-                                        <RadioGroupItem value="skip_invalid_rows" id="validation-skip-rows" />
-                                        <div className="space-y-1">
-                                            <Label htmlFor="validation-skip-rows" className="font-medium">
-                                                Skip invalid rows
-                                            </Label>
-                                            <p className="text-xs text-muted-foreground">
-                                                Rows with any validation errors are skipped and logged.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </RadioGroup>
-                            </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onReviewMappings} disabled={isSubmitting}>
+                        Review mappings
+                    </Button>
+                    <Button onClick={() => { void onSubmit() }} disabled={isSubmitting}>
+                        {isSubmitting ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                Submitting…
+                            </>
+                        ) : (
+                            "Submit import"
+                        )}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
-                            <DialogFooter>
-                                <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                        dispatch({ type: "patch", patch: { showValidationDialog: false } })
-                                    }
-                                    disabled={submitMutation.isPending}
-                                >
-                                    Review mappings
-                                </Button>
-                                <Button
-                                    onClick={async () => {
-                                        dispatch({ type: "patch", patch: { showValidationDialog: false } })
-                                        await submitImportWithMode(validationMode)
-                                    }}
-                                    disabled={submitMutation.isPending}
-                                >
-                                    {submitMutation.isPending ? (
-                                        <>
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                            Submitting…
-                                        </>
-                                    ) : (
-                                        "Submit import"
-                                    )}
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-                </>
-            )}
+function CSVValidationModeOption({
+    value,
+    id,
+    title,
+    description,
+}: {
+    value: ValidationMode
+    id: string
+    title: string
+    description: string
+}) {
+    return (
+        <div className="flex items-start gap-3 rounded-md border border-border p-3">
+            <RadioGroupItem value={value} id={id} />
+            <div className="space-y-1">
+                <Label htmlFor={id} className="font-medium">
+                    {title}
+                </Label>
+                <p className="text-xs text-muted-foreground">{description}</p>
+            </div>
         </div>
     )
 }
