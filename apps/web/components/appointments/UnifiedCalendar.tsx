@@ -60,6 +60,8 @@ import { AppointmentDetailDialog as AppointmentManagementDialog } from "@/compon
 import { LogInterviewOutcomeDialog } from "@/components/surrogates/LogInterviewOutcomeDialog"
 import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
+import type { IntendedParentListItem } from "@/lib/types/intended-parent"
+import type { SurrogateListItem } from "@/lib/types/surrogate"
 import Link from "@/components/app-link"
 import {
     format,
@@ -391,11 +393,6 @@ function AppointmentDetailDialog({
 
     if (!appointment) return null
 
-    const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
-    const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
-
-    const hasLink = appointment.surrogate_id || appointment.intended_parent_id
-
     const handleSaveLink = () => {
         updateLinkMutation.mutate(
             {
@@ -427,6 +424,12 @@ function AppointmentDetailDialog({
         })
     }
 
+    const handleCancelLink = () => {
+        setShowLinkSection(false)
+        setSelectedSurrogateId(appointment.surrogate_id)
+        setSelectedIpId(appointment.intended_parent_id)
+    }
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-md">
@@ -438,214 +441,46 @@ function AppointmentDetailDialog({
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    <div className="flex items-center gap-2">
-                        <Badge className={`${statusColor} text-white`}>
-                            {appointment.status.replace("_", " ")}
-                        </Badge>
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-muted-foreground">Client</p>
-                        <p className="font-medium flex items-center gap-2">
-                            <UserIcon className="size-4" />
-                            {appointment.client_name}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{appointment.client_email}</p>
-                        <p className="text-sm text-muted-foreground">{appointment.client_phone}</p>
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-muted-foreground">Date & Time</p>
-                        <p className="font-medium flex items-center gap-2">
-                            <CalendarIcon className="size-4" />
-                            {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
-                        </p>
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <ClockIcon className="size-4" />
-                            {format(parseISO(appointment.scheduled_start), "h:mm a")} - {format(parseISO(appointment.scheduled_end), "h:mm a")}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Your timezone: {userTimezone}
-                        </p>
-                        {showClientTimezone && (
-                            <div className="mt-2 rounded-md border border-dashed border-border bg-muted/40 p-2 text-xs text-muted-foreground">
-                                <p>Client timezone: {clientTimezone}</p>
-                                <p className="mt-1">
-                                    {formatDateInClientZone(appointment.scheduled_start)}{" "}
-                                    {formatTimeInClientZone(appointment.scheduled_start)} -{" "}
-                                    {formatTimeInClientZone(appointment.scheduled_end)}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-muted-foreground">Appointment Format</p>
-                        <p className="font-medium flex items-center gap-2 capitalize">
-                            <ModeIcon className="size-4" />
-                            {appointment.meeting_mode.replace("_", " ")}
-                        </p>
-                    </div>
-
-                    {appointment.appointment_type_name && (
-                        <div>
-                            <p className="text-sm text-muted-foreground">Appointment Type</p>
-                            <p className="font-medium">{appointment.appointment_type_name}</p>
-                        </div>
-                    )}
-
-                    {/* Linkage Section */}
+                    <AppointmentStatusPill appointment={appointment} />
+                    <AppointmentClientSummary appointment={appointment} />
+                    <AppointmentScheduleSummary
+                        appointment={appointment}
+                        timezoneDisplay={{
+                            userTimezone,
+                            clientTimezone,
+                            showClientTimezone,
+                            formatDateInClientZone,
+                            formatTimeInClientZone,
+                        }}
+                    />
+                    <AppointmentFormatSummary appointment={appointment} />
                     <div className="border-t pt-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-medium flex items-center gap-2">
-                                <LinkIcon className="size-4" />
-                                Linked To
-                            </p>
-                            {!showLinkSection && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowLinkSection(true)}
-                                >
-                                    {hasLink ? "Edit" : "Link"}
-                                </Button>
-                            )}
-                        </div>
-
-                        {!showLinkSection ? (
-                            <div className="space-y-2">
-                                {appointment.surrogate_id && appointment.surrogate_number ? (
-                                    <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                        <span className="text-sm">
-                                            <Badge variant="outline" className="mr-2">Surrogate</Badge>
-                                            #{appointment.surrogate_number}
-                                        </span>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleUnlinkSurrogate}
-                                            disabled={updateLinkMutation.isPending}
-                                            aria-label={`Unlink surrogate ${appointment.surrogate_number}`}
-                                        >
-                                            <XIcon className="size-4" />
-                                        </Button>
-                                    </div>
-                                ) : null}
-                                {appointment.intended_parent_id && appointment.intended_parent_name ? (
-                                    <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                        <span className="text-sm">
-                                            <Badge variant="outline" className="mr-2">IP</Badge>
-                                            {appointment.intended_parent_name}
-                                        </span>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleUnlinkIp}
-                                            disabled={updateLinkMutation.isPending}
-                                            aria-label={`Unlink intended parent ${appointment.intended_parent_name}`}
-                                        >
-                                            <XIcon className="size-4" />
-                                        </Button>
-                                    </div>
-                                ) : null}
-                                {!hasLink && (
-                                    <p className="text-sm text-muted-foreground">Not linked to any surrogate or IP</p>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div>
-                                    <p className="text-xs text-muted-foreground">Link to Surrogate</p>
-                                    <Select
-                                        value={selectedSurrogateId || "none"}
-                                        onValueChange={(val) => setSelectedSurrogateId(val === "none" ? null : val)}
-                                    >
-                                        <SelectTrigger className="mt-1">
-                                            <SelectValue placeholder="Select a surrogate..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">None</SelectItem>
-                                            {surrogates.map((s) => (
-                                                <SelectItem key={s.id} value={s.id}>
-                                                    #{s.surrogate_number} - {s.full_name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div>
-                                    <p className="text-xs text-muted-foreground">Link to Intended Parent</p>
-                                    {!canViewIntendedParents && permissionsLoaded ? (
-                                        <Alert className="mt-1">
-                                            <AlertDescription>
-                                                Your account does not have permission to view intended parents. Ask an admin to update your role or permissions.
-                                            </AlertDescription>
-                                        </Alert>
-                                    ) : (
-                                        <Select
-                                            value={selectedIpId || "none"}
-                                            onValueChange={(val) => setSelectedIpId(val === "none" ? null : val)}
-                                        >
-                                            <SelectTrigger className="mt-1">
-                                                <SelectValue placeholder="Select an IP..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">None</SelectItem>
-                                                {ips.map((ip) => (
-                                                    <SelectItem key={ip.id} value={ip.id}>
-                                                        {ip.intended_parent_number ? `#${ip.intended_parent_number} - ` : ""}
-                                                        {ip.full_name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center gap-2 pt-2">
-                                    <Button
-                                        size="sm"
-                                        onClick={handleSaveLink}
-                                        disabled={updateLinkMutation.isPending}
-                                    >
-                                        {updateLinkMutation.isPending ? (
-                                            <>
-                                                <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                                Saving…
-                                            </>
-                                        ) : (
-                                            "Save"
-                                        )}
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                            setShowLinkSection(false)
-                                            setSelectedSurrogateId(appointment.surrogate_id)
-                                            setSelectedIpId(appointment.intended_parent_id)
-                                        }}
-                                    >
-                                        Cancel
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="mt-3 space-y-1">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setLogOutcomeOpen(true)}
-                                disabled={!appointment.surrogate_id}
-                            >
-                                Log Interview Outcome
-                            </Button>
-                            {!appointment.surrogate_id && (
-                                <p className="text-xs text-muted-foreground">Link surrogate first</p>
-                            )}
-                        </div>
+                        <AppointmentLinkSection
+                            appointment={appointment}
+                            surrogates={surrogates}
+                            intendedParents={ips}
+                            state={{
+                                showEditor: showLinkSection,
+                                selectedSurrogateId,
+                                selectedIpId,
+                                canViewIntendedParents,
+                                permissionsLoaded,
+                                isSaving: updateLinkMutation.isPending,
+                            }}
+                            actions={{
+                                onShowEditor: () => setShowLinkSection(true),
+                                onSurrogateChange: setSelectedSurrogateId,
+                                onIntendedParentChange: setSelectedIpId,
+                                onSave: handleSaveLink,
+                                onCancel: handleCancelLink,
+                                onUnlinkSurrogate: handleUnlinkSurrogate,
+                                onUnlinkIntendedParent: handleUnlinkIp,
+                            }}
+                        />
+                        <AppointmentOutcomeAction
+                            appointment={appointment}
+                            onLogOutcome={() => setLogOutcomeOpen(true)}
+                        />
                     </div>
                 </div>
 
@@ -662,6 +497,369 @@ function AppointmentDetailDialog({
                 )}
             </DialogContent>
         </Dialog>
+    )
+}
+
+type AppointmentTimezoneDisplay = {
+    userTimezone: string
+    clientTimezone: string
+    showClientTimezone: boolean
+    formatDateInClientZone: (iso: string) => string
+    formatTimeInClientZone: (iso: string) => string
+}
+
+type AppointmentLinkSectionState = {
+    showEditor: boolean
+    selectedSurrogateId: string | null
+    selectedIpId: string | null
+    canViewIntendedParents: boolean
+    permissionsLoaded: boolean
+    isSaving: boolean
+}
+
+type AppointmentLinkSectionActions = {
+    onShowEditor: () => void
+    onSurrogateChange: (surrogateId: string | null) => void
+    onIntendedParentChange: (intendedParentId: string | null) => void
+    onSave: () => void
+    onCancel: () => void
+    onUnlinkSurrogate: () => void
+    onUnlinkIntendedParent: () => void
+}
+
+function AppointmentStatusPill({
+    appointment,
+}: {
+    appointment: AppointmentListItem
+}) {
+    const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
+
+    return (
+        <div className="flex items-center gap-2">
+            <Badge className={`${statusColor} text-white`}>
+                {appointment.status.replace("_", " ")}
+            </Badge>
+        </div>
+    )
+}
+
+function AppointmentClientSummary({
+    appointment,
+}: {
+    appointment: AppointmentListItem
+}) {
+    return (
+        <div>
+            <p className="text-sm text-muted-foreground">Client</p>
+            <p className="font-medium flex items-center gap-2">
+                <UserIcon className="size-4" />
+                {appointment.client_name}
+            </p>
+            <p className="text-sm text-muted-foreground">{appointment.client_email}</p>
+            <p className="text-sm text-muted-foreground">{appointment.client_phone}</p>
+        </div>
+    )
+}
+
+function AppointmentScheduleSummary({
+    appointment,
+    timezoneDisplay,
+}: {
+    appointment: AppointmentListItem
+    timezoneDisplay: AppointmentTimezoneDisplay
+}) {
+    return (
+        <div>
+            <p className="text-sm text-muted-foreground">Date & Time</p>
+            <p className="font-medium flex items-center gap-2">
+                <CalendarIcon className="size-4" />
+                {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
+            </p>
+            <p className="flex items-center gap-2 text-muted-foreground">
+                <ClockIcon className="size-4" />
+                {format(parseISO(appointment.scheduled_start), "h:mm a")} - {format(parseISO(appointment.scheduled_end), "h:mm a")}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+                Your timezone: {timezoneDisplay.userTimezone}
+            </p>
+            {timezoneDisplay.showClientTimezone && (
+                <div className="mt-2 rounded-md border border-dashed border-border bg-muted/40 p-2 text-xs text-muted-foreground">
+                    <p>Client timezone: {timezoneDisplay.clientTimezone}</p>
+                    <p className="mt-1">
+                        {timezoneDisplay.formatDateInClientZone(appointment.scheduled_start)}{" "}
+                        {timezoneDisplay.formatTimeInClientZone(appointment.scheduled_start)} -{" "}
+                        {timezoneDisplay.formatTimeInClientZone(appointment.scheduled_end)}
+                    </p>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function AppointmentFormatSummary({
+    appointment,
+}: {
+    appointment: AppointmentListItem
+}) {
+    const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
+
+    return (
+        <>
+            <div>
+                <p className="text-sm text-muted-foreground">Appointment Format</p>
+                <p className="font-medium flex items-center gap-2 capitalize">
+                    <ModeIcon className="size-4" />
+                    {appointment.meeting_mode.replace("_", " ")}
+                </p>
+            </div>
+
+            {appointment.appointment_type_name && (
+                <div>
+                    <p className="text-sm text-muted-foreground">Appointment Type</p>
+                    <p className="font-medium">{appointment.appointment_type_name}</p>
+                </div>
+            )}
+        </>
+    )
+}
+
+function getSurrogateSelectLabel(value: string | null, surrogates: SurrogateListItem[]) {
+    if (!value || value === "none") return "None"
+    const surrogate = surrogates.find((candidate) => candidate.id === value)
+    return surrogate ? `#${surrogate.surrogate_number} - ${surrogate.full_name}` : "Selected surrogate"
+}
+
+function getIntendedParentSelectLabel(value: string | null, intendedParents: IntendedParentListItem[]) {
+    if (!value || value === "none") return "None"
+    const intendedParent = intendedParents.find((candidate) => candidate.id === value)
+    if (!intendedParent) return "Selected intended parent"
+    return intendedParent.intended_parent_number
+        ? `#${intendedParent.intended_parent_number} - ${intendedParent.full_name}`
+        : intendedParent.full_name
+}
+
+function AppointmentLinkSection({
+    appointment,
+    surrogates,
+    intendedParents,
+    state,
+    actions,
+}: {
+    appointment: AppointmentListItem
+    surrogates: SurrogateListItem[]
+    intendedParents: IntendedParentListItem[]
+    state: AppointmentLinkSectionState
+    actions: AppointmentLinkSectionActions
+}) {
+    const hasLink = appointment.surrogate_id || appointment.intended_parent_id
+
+    return (
+        <>
+            <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium flex items-center gap-2">
+                    <LinkIcon className="size-4" />
+                    Linked To
+                </p>
+                {!state.showEditor && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={actions.onShowEditor}
+                    >
+                        {hasLink ? "Edit" : "Link"}
+                    </Button>
+                )}
+            </div>
+
+            {!state.showEditor ? (
+                <AppointmentLinkedEntities
+                    appointment={appointment}
+                    isSaving={state.isSaving}
+                    onUnlinkSurrogate={actions.onUnlinkSurrogate}
+                    onUnlinkIntendedParent={actions.onUnlinkIntendedParent}
+                />
+            ) : (
+                <AppointmentLinkEditor
+                    surrogates={surrogates}
+                    intendedParents={intendedParents}
+                    state={state}
+                    actions={actions}
+                />
+            )}
+        </>
+    )
+}
+
+function AppointmentLinkedEntities({
+    appointment,
+    isSaving,
+    onUnlinkSurrogate,
+    onUnlinkIntendedParent,
+}: {
+    appointment: AppointmentListItem
+    isSaving: boolean
+    onUnlinkSurrogate: () => void
+    onUnlinkIntendedParent: () => void
+}) {
+    const hasLink = appointment.surrogate_id || appointment.intended_parent_id
+
+    return (
+        <div className="space-y-2">
+            {appointment.surrogate_id && appointment.surrogate_number ? (
+                <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                    <span className="text-sm">
+                        <Badge variant="outline" className="mr-2">Surrogate</Badge>
+                        #{appointment.surrogate_number}
+                    </span>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onUnlinkSurrogate}
+                        disabled={isSaving}
+                        aria-label={`Unlink surrogate ${appointment.surrogate_number}`}
+                    >
+                        <XIcon className="size-4" />
+                    </Button>
+                </div>
+            ) : null}
+            {appointment.intended_parent_id && appointment.intended_parent_name ? (
+                <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
+                    <span className="text-sm">
+                        <Badge variant="outline" className="mr-2">IP</Badge>
+                        {appointment.intended_parent_name}
+                    </span>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onUnlinkIntendedParent}
+                        disabled={isSaving}
+                        aria-label={`Unlink intended parent ${appointment.intended_parent_name}`}
+                    >
+                        <XIcon className="size-4" />
+                    </Button>
+                </div>
+            ) : null}
+            {!hasLink && (
+                <p className="text-sm text-muted-foreground">Not linked to any surrogate or IP</p>
+            )}
+        </div>
+    )
+}
+
+function AppointmentLinkEditor({
+    surrogates,
+    intendedParents,
+    state,
+    actions,
+}: {
+    surrogates: SurrogateListItem[]
+    intendedParents: IntendedParentListItem[]
+    state: AppointmentLinkSectionState
+    actions: AppointmentLinkSectionActions
+}) {
+    return (
+        <div className="space-y-3">
+            <div>
+                <p className="text-xs text-muted-foreground">Link to Surrogate</p>
+                <Select
+                    value={state.selectedSurrogateId || "none"}
+                    onValueChange={(value) => actions.onSurrogateChange(value === "none" ? null : value)}
+                >
+                    <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select a surrogate...">
+                            {(value: string | null) => getSurrogateSelectLabel(value, surrogates)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {surrogates.map((surrogate) => (
+                            <SelectItem key={surrogate.id} value={surrogate.id}>
+                                #{surrogate.surrogate_number} - {surrogate.full_name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+
+            <div>
+                <p className="text-xs text-muted-foreground">Link to Intended Parent</p>
+                {!state.canViewIntendedParents && state.permissionsLoaded ? (
+                    <Alert className="mt-1">
+                        <AlertDescription>
+                            Your account does not have permission to view intended parents. Ask an admin to update your role or permissions.
+                        </AlertDescription>
+                    </Alert>
+                ) : (
+                    <Select
+                        value={state.selectedIpId || "none"}
+                        onValueChange={(value) => actions.onIntendedParentChange(value === "none" ? null : value)}
+                    >
+                        <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select an IP...">
+                                {(value: string | null) => getIntendedParentSelectLabel(value, intendedParents)}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {intendedParents.map((intendedParent) => (
+                                <SelectItem key={intendedParent.id} value={intendedParent.id}>
+                                    {intendedParent.intended_parent_number ? `#${intendedParent.intended_parent_number} - ` : ""}
+                                    {intendedParent.full_name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+                <Button
+                    size="sm"
+                    onClick={actions.onSave}
+                    disabled={state.isSaving}
+                >
+                    {state.isSaving ? (
+                        <>
+                            <Loader2Icon className="size-4 mr-2 animate-spin" />
+                            Saving…
+                        </>
+                    ) : (
+                        "Save"
+                    )}
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={actions.onCancel}
+                >
+                    Cancel
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function AppointmentOutcomeAction({
+    appointment,
+    onLogOutcome,
+}: {
+    appointment: AppointmentListItem
+    onLogOutcome: () => void
+}) {
+    return (
+        <div className="mt-3 space-y-1">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={onLogOutcome}
+                disabled={!appointment.surrogate_id}
+            >
+                Log Interview Outcome
+            </Button>
+            {!appointment.surrogate_id && (
+                <p className="text-xs text-muted-foreground">Link surrogate first</p>
+            )}
+        </div>
     )
 }
 

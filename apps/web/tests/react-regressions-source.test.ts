@@ -2727,6 +2727,27 @@ describe("React regression guards (source)", () => {
         expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setLogOutcomeOpen\(false\)[\s\S]*\}, \[appointment, open\]\)/)
     })
 
+    it("keeps unified calendar appointment detail rendering split into focused helpers", () => {
+        const source = readSource("components/appointments/UnifiedCalendar.tsx")
+        const dialogSource = readFunctionSource(source, "AppointmentDetailDialog")
+
+        expect(source).toContain("function AppointmentStatusPill")
+        expect(source).toContain("function AppointmentClientSummary")
+        expect(source).toContain("function AppointmentScheduleSummary")
+        expect(source).toContain("function AppointmentFormatSummary")
+        expect(source).toContain("function AppointmentLinkSection")
+        expect(source).toContain("function AppointmentOutcomeAction")
+        expect(source).toContain("function getSurrogateSelectLabel")
+        expect(source).toContain("function getIntendedParentSelectLabel")
+        expect(dialogSource).toContain("useUpdateAppointmentLink()")
+        expect(dialogSource).toContain("useEffectivePermissions(")
+        expect(dialogSource).toContain("const handleSaveLink =")
+        expect(dialogSource).toContain("setLogOutcomeOpen")
+        expect(dialogSource).not.toContain("Client timezone:")
+        expect(dialogSource).not.toContain("Linked To")
+        expect(dialogSource).not.toContain("Log Interview Outcome")
+    })
+
     it("keeps appointment detail dialog state and rendering split", () => {
         const source = readSource("components/appointments/AppointmentsList.tsx")
         const dialogIndex = source.indexOf("export function AppointmentDetailDialog(")
