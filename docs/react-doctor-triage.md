@@ -4840,3 +4840,23 @@ Full command after Batch 226: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 11 warnings`
 - Removed globally since the last score-confirmed full run in Batch 220: Meta configuration, appointment types, unified calendar shell, appointment detail dialog, intended parents list, and match detail `no-giant-component` warnings (`6` maintainability warnings).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-edb74418-2e21-4635-8129-64c7e3f43141`
+
+## Batch 227
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/surrogates/interviews/InterviewTab/context.tsx:164` | Valid. `InterviewTabProvider` still owned interview selection/data fetching, dialog/form state, upload/transcription state, interview CRUD mutations, attachment upload actions, AI summary, note mutations, permissions, polling, and context assembly in one provider. | High | Extracted `useInterviewDialogFormState` for dialog/form state and setters, and `useInterviewAttachmentActions` for upload state, upload validation/concurrency, and transcription requests. Preserved the existing context shape and kept interview CRUD, note mutations, selected interview state, polling, permissions, and context assembly in `InterviewTabProvider`. Extended the source guard to require the provider split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "interview tab context"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "interview tab context"`; `pnpm test --run tests/interview-tab.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 227: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 227: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `20`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 10 warnings`
+- Removed globally since Batch 226: Interview tab provider `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-6869f7f4-4423-4ca8-9850-d3021ad78ad4`
