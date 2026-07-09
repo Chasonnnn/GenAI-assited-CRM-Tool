@@ -2461,7 +2461,867 @@ function ZapierMonitoringSection({ variant = "page" }: { variant?: "page" | "dia
     )
 }
 
-function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+type ZapierInboundWebhookView = {
+    webhook_id: string
+    webhook_url: string
+    is_active: boolean
+    created_at: string
+    label?: string | null
+}
+
+type ZapierMetaFormOption = {
+    id: string
+    form_name?: string | null
+    form_external_id?: string | null
+}
+
+type UpdateZapierWebhookDraft = (
+    updater: (draft: ZapierWebhookDraftState) => ZapierWebhookDraftState,
+) => void
+
+type UpdateZapierOutboundForm = <K extends keyof ZapierOutboundFormState>(
+    field: K,
+    value: ZapierOutboundFormState[K],
+) => void
+
+function ZapierDetectedFormsAlert({
+    formCount,
+    mappingHref,
+}: {
+    formCount: number
+    mappingHref: string
+}) {
+    return (
+        <Alert>
+            <AlertTitle>Zapier form detected</AlertTitle>
+            <AlertDescription>
+                We detected {formCount} Zapier form
+                {formCount === 1 ? "" : "s"}. Map fields so inbound Zapier leads can
+                convert automatically.{" "}
+                <Link href={mappingHref} className="text-primary underline">
+                    Manage mapping
+                </Link>
+            </AlertDescription>
+        </Alert>
+    )
+}
+
+function ZapierInboundWebhooksCard({
+    isDialog,
+    inboundWebhooks,
+    webhookSecrets,
+    labelDrafts,
+    createPending,
+    rotatePending,
+    rotatingWebhookId,
+    deletingWebhookId,
+    onCreateInbound,
+    onUpdateWebhookDraft,
+    onLabelBlur,
+    onToggleInbound,
+    onRotateInbound,
+    onDeleteInbound,
+    children,
+}: {
+    isDialog: boolean
+    inboundWebhooks: ZapierInboundWebhookView[]
+    webhookSecrets: Record<string, string>
+    labelDrafts: Record<string, string>
+    createPending: boolean
+    rotatePending: boolean
+    rotatingWebhookId: string | null
+    deletingWebhookId: string | null
+    onCreateInbound: () => void
+    onUpdateWebhookDraft: UpdateZapierWebhookDraft
+    onLabelBlur: (webhookId: string) => Promise<void>
+    onToggleInbound: (webhookId: string, enabled: boolean) => Promise<void>
+    onRotateInbound: (webhookId: string) => Promise<void>
+    onDeleteInbound: (webhookId: string) => Promise<void>
+    children: ReactNode
+}) {
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
+                        <LinkIcon className="size-5 text-primary" aria-hidden="true" />
+                    </div>
+                    <div>
+                        <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
+                        <CardDescription className="text-xs">
+                            Send a POST request with lead data when a new lead arrives.
+                        </CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+                <div className="space-y-4">
+                    <div
+                        className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-center md:justify-between"}`}
+                        data-testid="zapier-inbound-header"
+                    >
+                        <div>
+                            <Label>Inbound Webhooks</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Create a webhook per Zapier flow or lead source.
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            onClick={onCreateInbound}
+                            disabled={createPending}
+                        >
+                            {createPending ? (
+                                <>
+                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Creating…
+                                </>
+                            ) : (
+                                <>
+                                    <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                                    Add webhook
+                                </>
+                            )}
+                        </Button>
+                    </div>
+
+                    {!inboundWebhooks.length ? (
+                        <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {inboundWebhooks.map((webhook) => (
+                                <ZapierInboundWebhookItem
+                                    key={webhook.webhook_id}
+                                    webhook={webhook}
+                                    labelValue={labelDrafts[webhook.webhook_id] ?? ""}
+                                    secret={webhookSecrets[webhook.webhook_id]}
+                                    canDelete={inboundWebhooks.length > 1}
+                                    isDialog={isDialog}
+                                    rotatePending={rotatePending}
+                                    rotatingWebhookId={rotatingWebhookId}
+                                    deletingWebhookId={deletingWebhookId}
+                                    onUpdateWebhookDraft={onUpdateWebhookDraft}
+                                    onLabelBlur={onLabelBlur}
+                                    onToggleInbound={onToggleInbound}
+                                    onRotateInbound={onRotateInbound}
+                                    onDeleteInbound={onDeleteInbound}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {children}
+            </CardContent>
+        </Card>
+    )
+}
+
+function ZapierInboundWebhookItem({
+    webhook,
+    labelValue,
+    secret,
+    canDelete,
+    isDialog,
+    rotatePending,
+    rotatingWebhookId,
+    deletingWebhookId,
+    onUpdateWebhookDraft,
+    onLabelBlur,
+    onToggleInbound,
+    onRotateInbound,
+    onDeleteInbound,
+}: {
+    webhook: ZapierInboundWebhookView
+    labelValue: string
+    secret: string | undefined
+    canDelete: boolean
+    isDialog: boolean
+    rotatePending: boolean
+    rotatingWebhookId: string | null
+    deletingWebhookId: string | null
+    onUpdateWebhookDraft: UpdateZapierWebhookDraft
+    onLabelBlur: (webhookId: string) => Promise<void>
+    onToggleInbound: (webhookId: string, enabled: boolean) => Promise<void>
+    onRotateInbound: (webhookId: string) => Promise<void>
+    onDeleteInbound: (webhookId: string) => Promise<void>
+}) {
+    const isRotating = rotatePending && rotatingWebhookId === webhook.webhook_id
+    const isDeleting = deletingWebhookId === webhook.webhook_id
+
+    return (
+        <div className="space-y-3 rounded-md border p-4">
+            <div className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-start md:justify-between"}`}>
+                <div className="flex-1 space-y-2">
+                    <Label>Label</Label>
+                    <Input
+                        value={labelValue}
+                        onChange={(event) =>
+                            onUpdateWebhookDraft((current) => ({
+                                ...current,
+                                labelDrafts: {
+                                    ...current.labelDrafts,
+                                    [webhook.webhook_id]: event.target.value,
+                                },
+                            }))
+                        }
+                        onBlur={() => {
+                            void onLabelBlur(webhook.webhook_id)
+                        }}
+                        placeholder="Optional label"
+                        name={`zapier-label-${webhook.webhook_id}`}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Created {formatRelativeTime(webhook.created_at)}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Badge variant={webhook.is_active ? "default" : "secondary"}>
+                        {webhook.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <Switch
+                        checked={webhook.is_active}
+                        onCheckedChange={(checked) => {
+                            void onToggleInbound(webhook.webhook_id, checked)
+                        }}
+                        aria-label={`Toggle ${webhook.webhook_id}`}
+                    />
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Webhook URL</Label>
+                <div className="flex min-w-0 gap-2">
+                    <div
+                        className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-xs dark:bg-input/30"
+                        title={webhook.webhook_url}
+                    >
+                        <span className="min-w-0 flex-1 truncate">
+                            {webhook.webhook_url}
+                        </span>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(webhook.webhook_url)}
+                        aria-label="Copy webhook URL"
+                    >
+                        <CopyIcon className="size-4" aria-hidden="true" />
+                    </Button>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Authentication Header</Label>
+                <div className="rounded-md border border-dashed bg-muted/50 p-3 text-xs">
+                    <div className="flex items-center justify-between">
+                        <span>X-Webhook-Token: &lt;your secret&gt;</span>
+                    </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Rotate the secret if you need to reconfigure Zapier.
+                </p>
+            </div>
+
+            <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            void onRotateInbound(webhook.webhook_id)
+                        }}
+                        disabled={isRotating}
+                    >
+                        {isRotating ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Rotating…
+                            </>
+                        ) : (
+                            <>
+                                <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
+                                Rotate Webhook Secret
+                            </>
+                        )}
+                    </Button>
+
+                    <AlertDialog>
+                        <AlertDialogTrigger
+                            disabled={!canDelete || isDeleting}
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    className="text-destructive hover:text-destructive"
+                                    disabled={!canDelete || isDeleting}
+                                >
+                                    <TrashIcon className="mr-2 size-4" aria-hidden="true" />
+                                    Delete Webhook
+                                </Button>
+                            }
+                        />
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete webhook?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will disable the incoming URL immediately. Any Zapier
+                                    flows using it will fail until updated.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={() => {
+                                        void onDeleteInbound(webhook.webhook_id)
+                                    }}
+                                    disabled={!canDelete || isDeleting}
+                                >
+                                    {isDeleting ? "Deleting…" : "Delete"}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
+
+                {!canDelete ? (
+                    <p className="text-xs text-muted-foreground">
+                        Keep at least one inbound webhook active.
+                    </p>
+                ) : null}
+
+                {secret ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
+                        <p className="mb-2 font-medium">
+                            New Webhook Secret (copy now, shown once):
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <code className="flex-1 break-all">
+                                {secret}
+                            </code>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => copyToClipboard(secret)}
+                                aria-label="Copy webhook secret"
+                            >
+                                <CopyIcon className="size-4" aria-hidden="true" />
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    )
+}
+
+function ZapierFieldPasteCard({
+    isDialog,
+    inboundWebhooks,
+    activeWebhookId,
+    fieldPaste,
+    fieldPasteResult,
+    parsePending,
+    onWebhookChange,
+    onFieldPasteChange,
+    onParse,
+    onClear,
+}: {
+    isDialog: boolean
+    inboundWebhooks: ZapierInboundWebhookView[]
+    activeWebhookId: string
+    fieldPaste: string
+    fieldPasteResult: ZapierFieldPasteResponse | null
+    parsePending: boolean
+    onWebhookChange: (webhookId: string) => void
+    onFieldPasteChange: (value: string) => void
+    onParse: () => void
+    onClear: () => void
+}) {
+    return (
+        <div className="space-y-4 border-t pt-4">
+            <div className="space-y-2">
+                <Label>Paste Zapier Field List</Label>
+                <p className="text-xs text-muted-foreground">
+                    Paste the field list from Zapier (either the token lines or the sample field/value list).
+                    We’ll extract keys, build a form schema, and open the mapping suggestions.
+                </p>
+            </div>
+
+            {inboundWebhooks.length ? (
+                <div className="space-y-2">
+                    <Label>Webhook</Label>
+                    <Select value={activeWebhookId} onValueChange={(value) => onWebhookChange(value ?? "")}>
+                        <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-72"} aria-label="Select webhook">
+                            <SelectValue placeholder="Select webhook">
+                                {(value: string | null) => getWebhookSelectLabel(inboundWebhooks, value)}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {inboundWebhooks.map((webhook) => (
+                                <SelectItem key={webhook.webhook_id} value={webhook.webhook_id}>
+                                    {webhook.label || `Webhook ${webhook.webhook_id.slice(0, 8)}`}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                        Pick the webhook this form belongs to if you have more than one.
+                    </p>
+                </div>
+            ) : null}
+
+            <Textarea
+                value={fieldPaste}
+                onChange={(event) => onFieldPasteChange(event.target.value)}
+                placeholder={'Paste lines like {{=gives["312067957"]["full_name"]}} or "Full Name: Jane Doe"'}
+                rows={6}
+                name="zapier-field-paste"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+                <Button
+                    variant="outline"
+                    onClick={onParse}
+                    disabled={parsePending}
+                >
+                    {parsePending ? (
+                        <>
+                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            Extracting…
+                        </>
+                    ) : (
+                        <>
+                            <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
+                            Extract Fields
+                        </>
+                    )}
+                </Button>
+                <Button variant="ghost" onClick={onClear}>
+                    Clear
+                </Button>
+            </div>
+
+            {fieldPasteResult ? (
+                <Alert>
+                    <AlertTitle>Fields detected</AlertTitle>
+                    <AlertDescription>
+                        Found {fieldPasteResult.field_count} fields for{" "}
+                        {fieldPasteResult.form_name || fieldPasteResult.form_id}.{" "}
+                        <Link href={fieldPasteResult.mapping_url} className="text-primary underline">
+                            Open mapping
+                        </Link>
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+        </div>
+    )
+}
+
+function ZapierTestLeadControls({
+    activeTestFormId,
+    zapierForms,
+    sendPending,
+    onTestFormIdChange,
+    onSendTestLead,
+}: {
+    activeTestFormId: string
+    zapierForms: ZapierMetaFormOption[]
+    sendPending: boolean
+    onTestFormIdChange: (value: string) => void
+    onSendTestLead: () => void
+}) {
+    return (
+        <div className="space-y-3 border-t pt-4">
+            <div className="space-y-2">
+                <Label>Test Lead</Label>
+                <Input
+                    placeholder="Zapier Form ID (optional if only one active Zapier form exists)"
+                    value={activeTestFormId}
+                    onChange={(event) => onTestFormIdChange(event.target.value)}
+                    name="zapier-test-form-id"
+                    autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                    Sends a dummy lead through the same inbound mapping pipeline as Zapier leads.
+                </p>
+                {zapierForms.length === 1 ? (
+                    <p className="text-xs text-muted-foreground">
+                        Defaulting to {zapierForms[0]?.form_name || zapierForms[0]?.form_external_id}.
+                    </p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                    Mapping for Zapier leads is managed in Meta Lead Forms.{" "}
+                    <Link href="/settings/integrations/meta/forms" className="text-primary underline">
+                        Manage form mappings
+                    </Link>
+                </p>
+            </div>
+            <Button
+                variant="outline"
+                onClick={onSendTestLead}
+                disabled={sendPending}
+            >
+                {sendPending ? (
+                    <>
+                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        Sending…
+                    </>
+                ) : (
+                    <>
+                        <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
+                        Send Test Lead
+                    </>
+                )}
+            </Button>
+        </div>
+    )
+}
+
+function ZapierOutboundSettingsCard({
+    isDialog,
+    outboundForm,
+    outboundSecret,
+    outboundSecretConfigured,
+    outboundTestLeadId,
+    savePending,
+    testPending,
+    recommendedBucketByStage,
+    getStageKeyLabel,
+    onOutboundFormChange,
+    onOutboundSecretChange,
+    onOutboundTestLeadIdChange,
+    onSaveOutbound,
+    onSendOutboundTest,
+    onApplyRecommendedMapping,
+}: {
+    isDialog: boolean
+    outboundForm: ZapierOutboundFormState
+    outboundSecret: string
+    outboundSecretConfigured: boolean
+    outboundTestLeadId: string
+    savePending: boolean
+    testPending: boolean
+    recommendedBucketByStage: Record<string, ZapierStageBucket>
+    getStageKeyLabel: (stageKey: string) => string
+    onOutboundFormChange: UpdateZapierOutboundForm
+    onOutboundSecretChange: (value: string) => void
+    onOutboundTestLeadIdChange: (value: string) => void
+    onSaveOutbound: () => void
+    onSendOutboundTest: () => void
+    onApplyRecommendedMapping: () => void
+}) {
+    return (
+        <div className="space-y-4 border-t pt-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-sm font-medium">Outbound Stage Events</p>
+                    <p className="text-xs text-muted-foreground">
+                        Send surrogate stage changes to Zapier for Meta Conversions.
+                    </p>
+                </div>
+                <Switch
+                    checked={outboundForm.outboundEnabled}
+                    onCheckedChange={(checked) => onOutboundFormChange("outboundEnabled", checked)}
+                    aria-label="Enable outbound stage events"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Label>Outbound Webhook URL</Label>
+                <Input
+                    value={outboundForm.outboundUrl}
+                    onChange={(event) => onOutboundFormChange("outboundUrl", event.target.value)}
+                    placeholder="https://hooks.zapier.com/hooks/catch/…"
+                    name="zapier-outbound-url"
+                    autoComplete="off"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Label>Webhook Secret (optional)</Label>
+                <Input
+                    type="password"
+                    value={outboundSecret}
+                    onChange={(event) => onOutboundSecretChange(event.target.value)}
+                    placeholder={outboundSecretConfigured ? "•••••••• (set)" : "Enter secret"}
+                    name="zapier-outbound-secret"
+                    autoComplete="off"
+                />
+                <p className="text-xs text-muted-foreground">
+                    If provided, we send it as X-Webhook-Token header.
+                </p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                    <p className="text-sm font-medium">Include hashed PII</p>
+                    <p className="text-xs text-muted-foreground">
+                        Optional hashed email/phone for better match rates.
+                    </p>
+                </div>
+                <Switch
+                    checked={outboundForm.sendHashedPii}
+                    onCheckedChange={(checked) => onOutboundFormChange("sendHashedPii", checked)}
+                    aria-label="Include hashed PII"
+                />
+            </div>
+
+            <ZapierStageMappingRows
+                eventMapping={outboundForm.eventMapping}
+                isDialog={isDialog}
+                recommendedBucketByStage={recommendedBucketByStage}
+                getStageKeyLabel={getStageKeyLabel}
+                onOutboundFormChange={onOutboundFormChange}
+                onApplyRecommendedMapping={onApplyRecommendedMapping}
+            />
+
+            <ZapierOutboundTestControls
+                isDialog={isDialog}
+                outboundForm={outboundForm}
+                outboundTestLeadId={outboundTestLeadId}
+                savePending={savePending}
+                testPending={testPending}
+                getStageKeyLabel={getStageKeyLabel}
+                onOutboundFormChange={onOutboundFormChange}
+                onOutboundTestLeadIdChange={onOutboundTestLeadIdChange}
+                onSaveOutbound={onSaveOutbound}
+                onSendOutboundTest={onSendOutboundTest}
+            />
+        </div>
+    )
+}
+
+function ZapierStageMappingRows({
+    eventMapping,
+    isDialog,
+    recommendedBucketByStage,
+    getStageKeyLabel,
+    onOutboundFormChange,
+    onApplyRecommendedMapping,
+}: {
+    eventMapping: ZapierEventMappingItem[]
+    isDialog: boolean
+    recommendedBucketByStage: Record<string, ZapierStageBucket>
+    getStageKeyLabel: (stageKey: string) => string
+    onOutboundFormChange: UpdateZapierOutboundForm
+    onApplyRecommendedMapping: () => void
+}) {
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <Label>Stage → Event Mapping</Label>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onApplyRecommendedMapping}
+                >
+                    Apply Recommended Mapping
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Set each stage bucket for Meta conversion status mapping. Dedupe runs once per lead per bucket.
+            </p>
+            <div className="space-y-2">
+                {eventMapping.map((item, index) => (
+                    <ZapierStageMappingRow
+                        key={item.stage_key}
+                        item={item}
+                        index={index}
+                        eventMapping={eventMapping}
+                        isDialog={isDialog}
+                        recommendedBucketByStage={recommendedBucketByStage}
+                        getStageKeyLabel={getStageKeyLabel}
+                        onOutboundFormChange={onOutboundFormChange}
+                    />
+                ))}
+            </div>
+        </div>
+    )
+}
+
+function ZapierStageMappingRow({
+    item,
+    index,
+    eventMapping,
+    isDialog,
+    recommendedBucketByStage,
+    getStageKeyLabel,
+    onOutboundFormChange,
+}: {
+    item: ZapierEventMappingItem
+    index: number
+    eventMapping: ZapierEventMappingItem[]
+    isDialog: boolean
+    recommendedBucketByStage: Record<string, ZapierStageBucket>
+    getStageKeyLabel: (stageKey: string) => string
+    onOutboundFormChange: UpdateZapierOutboundForm
+}) {
+    const updateItem = (updater: (existing: ZapierEventMappingItem) => ZapierEventMappingItem) => {
+        const next = [...eventMapping]
+        const existing = next[index]
+        if (!existing) return
+        next[index] = updater(existing)
+        onOutboundFormChange("eventMapping", next)
+    }
+
+    return (
+        <div className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
+            <div className="w-32 text-sm font-medium">
+                {getStageKeyLabel(item.stage_key)}
+            </div>
+            <Select
+                value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
+                onValueChange={(value) => {
+                    if (value === UNTRACKED_BUCKET_VALUE) {
+                        updateItem((existing) => ({
+                            ...existing,
+                            bucket: null,
+                            enabled: recommendedBucketByStage[existing.stage_key]
+                                ? false
+                                : existing.enabled,
+                        }))
+                    } else if (isZapierStageBucket(value)) {
+                        updateItem((existing) => ({
+                            ...existing,
+                            bucket: value,
+                            event_name: ZAPIER_BUCKET_EVENT_NAME[value],
+                            enabled: true,
+                        }))
+                    }
+                }}
+            >
+                <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
+                    <SelectValue placeholder="Bucket">
+                        {(value: string | null) => getBucketSelectLabel(value)}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
+                    {ZAPIER_BUCKET_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {!isZapierStageBucket(item.bucket) ? (
+                <Input
+                    value={item.event_name}
+                    onChange={(event) => {
+                        updateItem((existing) => ({ ...existing, event_name: event.target.value }))
+                    }}
+                    placeholder="Event name"
+                    name={`zapier-event-${item.stage_key}`}
+                    autoComplete="off"
+                />
+            ) : null}
+            <div className="flex items-center gap-2">
+                <Switch
+                    checked={item.enabled}
+                    onCheckedChange={(checked) => {
+                        updateItem((existing) => ({ ...existing, enabled: checked }))
+                    }}
+                    aria-label={`Enable ${item.stage_key} event`}
+                />
+                <span className="text-xs text-muted-foreground">Enabled</span>
+            </div>
+        </div>
+    )
+}
+
+function ZapierOutboundTestControls({
+    isDialog,
+    outboundForm,
+    outboundTestLeadId,
+    savePending,
+    testPending,
+    getStageKeyLabel,
+    onOutboundFormChange,
+    onOutboundTestLeadIdChange,
+    onSaveOutbound,
+    onSendOutboundTest,
+}: {
+    isDialog: boolean
+    outboundForm: ZapierOutboundFormState
+    outboundTestLeadId: string
+    savePending: boolean
+    testPending: boolean
+    getStageKeyLabel: (stageKey: string) => string
+    onOutboundFormChange: UpdateZapierOutboundForm
+    onOutboundTestLeadIdChange: (value: string) => void
+    onSaveOutbound: () => void
+    onSendOutboundTest: () => void
+}) {
+    return (
+        <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
+            <Button onClick={onSaveOutbound} disabled={savePending}>
+                {savePending ? (
+                    <>
+                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        Saving…
+                    </>
+                ) : (
+                    "Save Outbound Settings"
+                )}
+            </Button>
+            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
+                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                    <Label htmlFor="zapier-outbound-test-lead-id">Meta Lead ID (optional)</Label>
+                    <Input
+                        id="zapier-outbound-test-lead-id"
+                        value={outboundTestLeadId}
+                        onChange={(event) => onOutboundTestLeadIdChange(event.target.value)}
+                        placeholder="Use a real Meta lead ID for end-to-end testing"
+                        name="zapier-outbound-test-lead-id"
+                        autoComplete="off"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        Real Meta funnel updates generally only work for leads created within 90 days.
+                    </p>
+                </div>
+                <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
+                    <Select
+                        value={outboundForm.selectedOutboundStage}
+                        onValueChange={(value) => onOutboundFormChange("selectedOutboundStage", value ?? "")}
+                    >
+                        <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select stage">
+                            <SelectValue placeholder="Select stage">
+                                {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {outboundForm.eventMapping.map((item) => (
+                                <SelectItem key={item.stage_key} value={item.stage_key}>
+                                    {getStageKeyLabel(item.stage_key)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        variant="outline"
+                        onClick={onSendOutboundTest}
+                        disabled={testPending || !outboundForm.outboundEnabled}
+                        className={isDialog ? "w-full" : undefined}
+                    >
+                        {testPending ? (
+                            <>
+                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                Sending…
+                            </>
+                        ) : (
+                            <>
+                                <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
+                                Send Test Event
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function useZapierWebhookController(variant: "page" | "dialog") {
     const { data: pipelines } = usePipelines()
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
     const stageLabelByKey = buildStageLabelByKey(pipelines)
@@ -2751,10 +3611,64 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
         ? `/settings/integrations/meta/forms/${singleZapierForm.id}`
         : "/settings/integrations/meta/forms"
 
-    if (isLoading) {
+    return {
+        activeFieldPasteWebhookId,
+        activeTestFormId,
+        applyRecommendedBucketMapping,
+        containerClass,
+        createInboundPending: createInboundWebhook.isPending,
+        deletingWebhookId,
+        fieldPaste,
+        fieldPasteResult,
+        getStageKeyLabel,
+        handleCreateInbound,
+        handleDeleteInbound,
+        handleFieldPaste,
+        handleFieldPasteClear,
+        handleLabelBlur,
+        handleOutboundTest,
+        handleRotateInbound,
+        handleSaveOutbound,
+        handleTestLead,
+        handleToggleInbound,
+        inboundWebhooks,
+        isDialog,
+        isLoading,
+        labelDrafts,
+        mappingHref,
+        metaFormsLoading,
+        outboundForm,
+        outboundSecret,
+        outboundSecretConfigured: Boolean(settings?.outbound_secret_configured),
+        outboundTestLeadId,
+        parseFieldPastePending: parseFieldPaste.isPending,
+        recommendedBucketByStage,
+        rotateInboundPending: rotateInboundWebhook.isPending,
+        rotatingWebhookId,
+        sendOutboundTestPending: sendOutboundTest.isPending,
+        sendTestLeadPending: sendTestLead.isPending,
+        setFieldPaste,
+        setFieldPasteWebhookId,
+        setOutboundSecret,
+        setOutboundTestLeadId,
+        setTestFormId,
+        showHeading,
+        updateOutboundForm,
+        updateOutboundPending: updateOutbound.isPending,
+        updateWebhookDraft,
+        variant,
+        webhookSecrets,
+        zapierForms,
+    }
+}
+
+function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+    const controller = useZapierWebhookController(variant)
+
+    if (controller.isLoading) {
         return (
-            <div className={containerClass}>
-                {showHeading && (
+            <div className={controller.containerClass}>
+                {controller.showHeading && (
                     <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
                 )}
                 <div className="flex items-center justify-center py-8">
@@ -2765,8 +3679,8 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
     }
 
     return (
-        <div className={containerClass}>
-            {showHeading && (
+        <div className={controller.containerClass}>
+            {controller.showHeading && (
                 <>
                     <h2 className="mb-4 text-lg font-semibold">Zapier Webhook</h2>
                     <p className="mb-4 text-sm text-muted-foreground">
@@ -2780,582 +3694,79 @@ function ZapierWebhookSection({ variant = "page" }: { variant?: "page" | "dialog
                     <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
                 </TabsList>
                 <TabsContent value="configuration" className="space-y-4">
-                    {!metaFormsLoading && zapierForms.length > 0 && (
-                        <Alert>
-                            <AlertTitle>Zapier form detected</AlertTitle>
-                            <AlertDescription>
-                                We detected {zapierForms.length} Zapier form
-                                {zapierForms.length === 1 ? "" : "s"}. Map fields so inbound Zapier leads can
-                                convert automatically.{" "}
-                                <Link href={mappingHref} className="text-primary underline">
-                                    Manage mapping
-                                </Link>
-                            </AlertDescription>
-                        </Alert>
-                    )}
-
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
-                                    <LinkIcon className="size-5 text-primary" aria-hidden="true" />
-                                </div>
-                                <div>
-                                    <CardTitle className="text-base">Lead Intake Webhook</CardTitle>
-                                    <CardDescription className="text-xs">
-                                        Send a POST request with lead data when a new lead arrives.
-                                    </CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-
-                        <CardContent className="space-y-6">
-                            <div className="space-y-4">
-                                <div
-                                    className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-center md:justify-between"}`}
-                                    data-testid="zapier-inbound-header"
-                                >
-                                    <div>
-                                        <Label>Inbound Webhooks</Label>
-                                        <p className="text-xs text-muted-foreground">
-                                            Create a webhook per Zapier flow or lead source.
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleCreateInbound}
-                                        disabled={createInboundWebhook.isPending}
-                                    >
-                                        {createInboundWebhook.isPending ? (
-                                            <>
-                                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                                Creating…
-                                            </>
-                                        ) : (
-                                            <>
-                                                <PlusIcon className="mr-2 size-4" aria-hidden="true" />
-                                                Add webhook
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-
-                                {!settings?.inbound_webhooks?.length ? (
-                                    <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {settings.inbound_webhooks.map((webhook) => {
-                                            const secret = webhookSecrets[webhook.webhook_id]
-                                            const labelValue = labelDrafts[webhook.webhook_id] ?? ""
-                                            const canDelete = settings.inbound_webhooks.length > 1
-                                            return (
-                                            <div key={webhook.webhook_id} className="space-y-3 rounded-md border p-4">
-                                        <div className={`flex flex-col gap-3 ${isDialog ? "" : "md:flex-row md:items-start md:justify-between"}`}>
-                                            <div className="flex-1 space-y-2">
-                                                <Label>Label</Label>
-                                                <Input
-                                                    value={labelValue}
-                                                    onChange={(event) =>
-                                                        updateWebhookDraft((current) => ({
-                                                            ...current,
-                                                            labelDrafts: {
-                                                                ...current.labelDrafts,
-                                                                [webhook.webhook_id]: event.target.value,
-                                                            },
-                                                        }))
-                                                    }
-                                                    onBlur={() => handleLabelBlur(webhook.webhook_id)}
-                                                    placeholder="Optional label"
-                                                    name={`zapier-label-${webhook.webhook_id}`}
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    Created {formatRelativeTime(webhook.created_at)}
-                                                </p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant={webhook.is_active ? "default" : "secondary"}>
-                                                    {webhook.is_active ? "Active" : "Inactive"}
-                                                </Badge>
-                                                <Switch
-                                                    checked={webhook.is_active}
-                                                    onCheckedChange={(checked) =>
-                                                        handleToggleInbound(webhook.webhook_id, checked)
-                                                    }
-                                                    aria-label={`Toggle ${webhook.webhook_id}`}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Webhook URL</Label>
-                                            <div className="flex min-w-0 gap-2">
-                                                <div
-                                                    className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-xs dark:bg-input/30"
-                                                    title={webhook.webhook_url}
-                                                >
-                                                    <span className="min-w-0 flex-1 truncate">
-                                                        {webhook.webhook_url}
-                                                    </span>
-                                                </div>
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    onClick={() => copyToClipboard(webhook.webhook_url)}
-                                                    aria-label="Copy webhook URL"
-                                                >
-                                                    <CopyIcon className="size-4" aria-hidden="true" />
-                                                </Button>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Authentication Header</Label>
-                                            <div className="rounded-md border border-dashed bg-muted/50 p-3 text-xs">
-                                                <div className="flex items-center justify-between">
-                                                    <span>X-Webhook-Token: &lt;your secret&gt;</span>
-                                                </div>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground">
-                                                Rotate the secret if you need to reconfigure Zapier.
-                                            </p>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    onClick={() => handleRotateInbound(webhook.webhook_id)}
-                                                    disabled={
-                                                        rotateInboundWebhook.isPending &&
-                                                        rotatingWebhookId === webhook.webhook_id
-                                                    }
-                                                >
-                                                    {rotateInboundWebhook.isPending &&
-                                                    rotatingWebhookId === webhook.webhook_id ? (
-                                                        <>
-                                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                                            Rotating…
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
-                                                            Rotate Webhook Secret
-                                                        </>
-                                                    )}
-                                                </Button>
-
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger
-                                                        disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
-                                                        render={
-                                                            <Button
-                                                                variant="ghost"
-                                                                className="text-destructive hover:text-destructive"
-                                                                disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
-                                                            >
-                                                                <TrashIcon className="mr-2 size-4" aria-hidden="true" />
-                                                                Delete Webhook
-                                                            </Button>
-                                                        }
-                                                    />
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete webhook?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                This will disable the incoming URL immediately. Any Zapier
-                                                                flows using it will fail until updated.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction
-                                                                onClick={() => handleDeleteInbound(webhook.webhook_id)}
-                                                                disabled={!canDelete || deletingWebhookId === webhook.webhook_id}
-                                                            >
-                                                                {deletingWebhookId === webhook.webhook_id ? "Deleting…" : "Delete"}
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </div>
-
-                                            {!canDelete ? (
-                                                <p className="text-xs text-muted-foreground">
-                                                    Keep at least one inbound webhook active.
-                                                </p>
-                                            ) : null}
-
-                                            {secret ? (
-                                                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-100">
-                                                    <p className="mb-2 font-medium">
-                                                        New Webhook Secret (copy now, shown once):
-                                                    </p>
-                                                    <div className="flex items-center gap-2">
-                                                        <code className="flex-1 break-all">
-                                                            {secret}
-                                                        </code>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            onClick={() => copyToClipboard(secret)}
-                                                            aria-label="Copy webhook secret"
-                                                        >
-                                                            <CopyIcon className="size-4" aria-hidden="true" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                            </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                    <div className="space-y-4 border-t pt-4">
-                        <div className="space-y-2">
-                            <Label>Paste Zapier Field List</Label>
-                            <p className="text-xs text-muted-foreground">
-                                Paste the field list from Zapier (either the token lines or the sample field/value list).
-                                We’ll extract keys, build a form schema, and open the mapping suggestions.
-                            </p>
-                        </div>
-
-                        {settings?.inbound_webhooks?.length ? (
-                            <div className="space-y-2">
-                                <Label>Webhook</Label>
-                                <Select value={activeFieldPasteWebhookId} onValueChange={(value) => setFieldPasteWebhookId(value ?? "")}>
-                                    <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-72"} aria-label="Select webhook">
-                                        <SelectValue placeholder="Select webhook">
-                                            {(value: string | null) => getWebhookSelectLabel(settings?.inbound_webhooks, value)}
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {settings.inbound_webhooks.map((webhook) => (
-                                            <SelectItem key={webhook.webhook_id} value={webhook.webhook_id}>
-                                                {webhook.label || `Webhook ${webhook.webhook_id.slice(0, 8)}`}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Pick the webhook this form belongs to if you have more than one.
-                                </p>
-                            </div>
-                        ) : null}
-
-                        <Textarea
-                            value={fieldPaste}
-                            onChange={(event) => setFieldPaste(event.target.value)}
-                            placeholder={'Paste lines like {{=gives["312067957"]["full_name"]}} or "Full Name: Jane Doe"'}
-                            rows={6}
-                            name="zapier-field-paste"
+                    {!controller.metaFormsLoading && controller.zapierForms.length > 0 ? (
+                        <ZapierDetectedFormsAlert
+                            formCount={controller.zapierForms.length}
+                            mappingHref={controller.mappingHref}
                         />
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={handleFieldPaste}
-                                disabled={parseFieldPaste.isPending}
-                            >
-                                {parseFieldPaste.isPending ? (
-                                    <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Extracting…
-                                    </>
-                                ) : (
-                                    <>
-                                        <SparklesIcon className="mr-2 size-4" aria-hidden="true" />
-                                        Extract Fields
-                                    </>
-                                )}
-                            </Button>
-                            <Button variant="ghost" onClick={handleFieldPasteClear}>
-                                Clear
-                            </Button>
-                        </div>
+                    ) : null}
 
-                        {fieldPasteResult ? (
-                            <Alert>
-                                <AlertTitle>Fields detected</AlertTitle>
-                                <AlertDescription>
-                                    Found {fieldPasteResult.field_count} fields for{" "}
-                                    {fieldPasteResult.form_name || fieldPasteResult.form_id}.{" "}
-                                    <Link href={fieldPasteResult.mapping_url} className="text-primary underline">
-                                        Open mapping
-                                    </Link>
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                    </div>
-
-                    <div className="space-y-3 border-t pt-4">
-                        <div className="space-y-2">
-                            <Label>Test Lead</Label>
-                            <Input
-                                placeholder="Zapier Form ID (optional if only one active Zapier form exists)"
-                                value={activeTestFormId}
-                                onChange={(event) => setTestFormId(event.target.value)}
-                                name="zapier-test-form-id"
-                                autoComplete="off"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Sends a dummy lead through the same inbound mapping pipeline as Zapier leads.
-                            </p>
-                            {zapierForms.length === 1 ? (
-                                <p className="text-xs text-muted-foreground">
-                                    Defaulting to {zapierForms[0]?.form_name || zapierForms[0]?.form_external_id}.
-                                </p>
-                            ) : null}
-                            <p className="text-xs text-muted-foreground">
-                                Mapping for Zapier leads is managed in Meta Lead Forms.{" "}
-                                <Link href="/settings/integrations/meta/forms" className="text-primary underline">
-                                    Manage form mappings
-                                </Link>
-                            </p>
-                        </div>
-                        <Button
-                            variant="outline"
-                            onClick={handleTestLead}
-                            disabled={sendTestLead.isPending}
-                        >
-                            {sendTestLead.isPending ? (
-                                <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    Sending…
-                                </>
-                            ) : (
-                                <>
-                                    <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
-                                    Send Test Lead
-                                </>
-                            )}
-                        </Button>
-                    </div>
-
-                    <div className="space-y-4 border-t pt-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium">Outbound Stage Events</p>
-                                <p className="text-xs text-muted-foreground">
-                                    Send surrogate stage changes to Zapier for Meta Conversions.
-                                </p>
-                            </div>
-                            <Switch
-                                checked={outboundForm.outboundEnabled}
-                                onCheckedChange={(checked) => updateOutboundForm("outboundEnabled", checked)}
-                                aria-label="Enable outbound stage events"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Outbound Webhook URL</Label>
-                            <Input
-                                value={outboundForm.outboundUrl}
-                                onChange={(event) => updateOutboundForm("outboundUrl", event.target.value)}
-                                placeholder="https://hooks.zapier.com/hooks/catch/…"
-                                name="zapier-outbound-url"
-                                autoComplete="off"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Webhook Secret (optional)</Label>
-                            <Input
-                                type="password"
-                                value={outboundSecret}
-                                onChange={(event) => setOutboundSecret(event.target.value)}
-                                placeholder={settings?.outbound_secret_configured ? "•••••••• (set)" : "Enter secret"}
-                                name="zapier-outbound-secret"
-                                autoComplete="off"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                If provided, we send it as X-Webhook-Token header.
-                            </p>
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-md border p-3">
-                            <div>
-                                <p className="text-sm font-medium">Include hashed PII</p>
-                                <p className="text-xs text-muted-foreground">
-                                    Optional hashed email/phone for better match rates.
-                                </p>
-                            </div>
-                            <Switch
-                                checked={outboundForm.sendHashedPii}
-                                onCheckedChange={(checked) => updateOutboundForm("sendHashedPii", checked)}
-                                aria-label="Include hashed PII"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>Stage → Event Mapping</Label>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={applyRecommendedBucketMapping}
-                                >
-                                    Apply Recommended Mapping
-                                </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Set each stage bucket for Meta conversion status mapping. Dedupe runs once per lead per bucket.
-                            </p>
-                            <div className="space-y-2">
-                                {outboundForm.eventMapping.map((item, index) => (
-                                    <div
-                                        key={item.stage_key}
-                                        className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}
-                                    >
-                                        <div className="w-32 text-sm font-medium">
-                                            {getStageKeyLabel(item.stage_key)}
-                                        </div>
-                                <Select
-                                            value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
-                                            onValueChange={(value) => {
-                                                const next = [...outboundForm.eventMapping]
-                                                const existing = next[index]
-                                                if (!existing) return
-                                                if (value === UNTRACKED_BUCKET_VALUE) {
-                                                    next[index] = {
-                                                        ...existing,
-                                                        bucket: null,
-                                                        enabled: recommendedBucketByStage[existing.stage_key]
-                                                            ? false
-                                                            : existing.enabled,
-                                                    }
-                                                } else if (isZapierStageBucket(value)) {
-                                                    next[index] = {
-                                                        ...existing,
-                                                        bucket: value,
-                                                        event_name: ZAPIER_BUCKET_EVENT_NAME[value],
-                                                        enabled: true,
-                                                    }
-                                                }
-                                                updateOutboundForm("eventMapping", next)
-                                            }}
-                                        >
-                                            <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
-                                                <SelectValue placeholder="Bucket">
-                                                    {(value: string | null) => getBucketSelectLabel(value)}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
-                                                {ZAPIER_BUCKET_OPTIONS.map((option) => (
-                                                    <SelectItem key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {!isZapierStageBucket(item.bucket) ? (
-                                            <Input
-                                                value={item.event_name}
-                                                onChange={(event) => {
-                                                    const next = [...outboundForm.eventMapping]
-                                                    const existing = next[index]
-                                                    if (!existing) return
-                                                    next[index] = { ...existing, event_name: event.target.value }
-                                                    updateOutboundForm("eventMapping", next)
-                                                }}
-                                                placeholder="Event name"
-                                                name={`zapier-event-${item.stage_key}`}
-                                                autoComplete="off"
-                                            />
-                                        ) : null}
-                                        <div className="flex items-center gap-2">
-                                            <Switch
-                                                checked={item.enabled}
-                                                onCheckedChange={(checked) => {
-                                                    const next = [...outboundForm.eventMapping]
-                                                    const existing = next[index]
-                                                    if (!existing) return
-                                                    next[index] = { ...existing, enabled: checked }
-                                                    updateOutboundForm("eventMapping", next)
-                                                }}
-                                                aria-label={`Enable ${item.stage_key} event`}
-                                            />
-                                            <span className="text-xs text-muted-foreground">Enabled</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
-                            <Button onClick={handleSaveOutbound} disabled={updateOutbound.isPending}>
-                                {updateOutbound.isPending ? (
-                                    <>
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        Saving…
-                                    </>
-                                ) : (
-                                    "Save Outbound Settings"
-                                )}
-                            </Button>
-                            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
-                                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
-                                    <Label htmlFor="zapier-outbound-test-lead-id">Meta Lead ID (optional)</Label>
-                                    <Input
-                                        id="zapier-outbound-test-lead-id"
-                                        value={outboundTestLeadId}
-                                        onChange={(event) => setOutboundTestLeadId(event.target.value)}
-                                        placeholder="Use a real Meta lead ID for end-to-end testing"
-                                        name="zapier-outbound-test-lead-id"
-                                        autoComplete="off"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        Real Meta funnel updates generally only work for leads created within 90 days.
-                                    </p>
-                                </div>
-                                <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
-                                <Select
-                                    value={outboundForm.selectedOutboundStage}
-                                    onValueChange={(value) => updateOutboundForm("selectedOutboundStage", value ?? '')}
-                                >
-                                    <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select stage">
-                                        <SelectValue placeholder="Select stage">
-                                            {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {outboundForm.eventMapping.map((item) => (
-                                            <SelectItem key={item.stage_key} value={item.stage_key}>
-                                                {getStageKeyLabel(item.stage_key)}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <Button
-                                    variant="outline"
-                                    onClick={handleOutboundTest}
-                                    disabled={sendOutboundTest.isPending || !outboundForm.outboundEnabled}
-                                    className={isDialog ? "w-full" : undefined}
-                                >
-                                    {sendOutboundTest.isPending ? (
-                                        <>
-                                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                            Sending…
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
-                                            Send Test Event
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                            </div>
-                        </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <ZapierInboundWebhooksCard
+                        isDialog={controller.isDialog}
+                        inboundWebhooks={controller.inboundWebhooks}
+                        webhookSecrets={controller.webhookSecrets}
+                        labelDrafts={controller.labelDrafts}
+                        createPending={controller.createInboundPending}
+                        rotatePending={controller.rotateInboundPending}
+                        rotatingWebhookId={controller.rotatingWebhookId}
+                        deletingWebhookId={controller.deletingWebhookId}
+                        onCreateInbound={() => {
+                            void controller.handleCreateInbound()
+                        }}
+                        onUpdateWebhookDraft={controller.updateWebhookDraft}
+                        onLabelBlur={controller.handleLabelBlur}
+                        onToggleInbound={controller.handleToggleInbound}
+                        onRotateInbound={controller.handleRotateInbound}
+                        onDeleteInbound={controller.handleDeleteInbound}
+                    >
+                        <ZapierFieldPasteCard
+                            isDialog={controller.isDialog}
+                            inboundWebhooks={controller.inboundWebhooks}
+                            activeWebhookId={controller.activeFieldPasteWebhookId}
+                            fieldPaste={controller.fieldPaste}
+                            fieldPasteResult={controller.fieldPasteResult}
+                            parsePending={controller.parseFieldPastePending}
+                            onWebhookChange={controller.setFieldPasteWebhookId}
+                            onFieldPasteChange={controller.setFieldPaste}
+                            onParse={() => {
+                                void controller.handleFieldPaste()
+                            }}
+                            onClear={controller.handleFieldPasteClear}
+                        />
+                        <ZapierTestLeadControls
+                            activeTestFormId={controller.activeTestFormId}
+                            zapierForms={controller.zapierForms}
+                            sendPending={controller.sendTestLeadPending}
+                            onTestFormIdChange={controller.setTestFormId}
+                            onSendTestLead={() => {
+                                void controller.handleTestLead()
+                            }}
+                        />
+                        <ZapierOutboundSettingsCard
+                            isDialog={controller.isDialog}
+                            outboundForm={controller.outboundForm}
+                            outboundSecret={controller.outboundSecret}
+                            outboundSecretConfigured={controller.outboundSecretConfigured}
+                            outboundTestLeadId={controller.outboundTestLeadId}
+                            savePending={controller.updateOutboundPending}
+                            testPending={controller.sendOutboundTestPending}
+                            recommendedBucketByStage={controller.recommendedBucketByStage}
+                            getStageKeyLabel={controller.getStageKeyLabel}
+                            onOutboundFormChange={controller.updateOutboundForm}
+                            onOutboundSecretChange={controller.setOutboundSecret}
+                            onOutboundTestLeadIdChange={controller.setOutboundTestLeadId}
+                            onSaveOutbound={() => {
+                                void controller.handleSaveOutbound()
+                            }}
+                            onSendOutboundTest={() => {
+                                void controller.handleOutboundTest()
+                            }}
+                            onApplyRecommendedMapping={controller.applyRecommendedBucketMapping}
+                        />
+                    </ZapierInboundWebhooksCard>
                 </TabsContent>
                 <TabsContent value="monitoring" keepMounted>
-                    <ZapierMonitoringSection variant={variant} />
+                    <ZapierMonitoringSection variant={controller.variant} />
                 </TabsContent>
             </Tabs>
         </div>

@@ -1722,6 +1722,24 @@ describe("React regression guards (source)", () => {
         expect(sectionSource).not.toContain("Disconnect Meta account?")
     })
 
+    it("keeps Zapier webhook rendering split into focused helpers", () => {
+        const source = readSource("app/(app)/settings/integrations/page.tsx")
+        const sectionSource = readFunctionSource(source, "ZapierWebhookSection")
+
+        expect(source).toContain("function ZapierInboundWebhooksCard")
+        expect(source).toContain("function ZapierFieldPasteCard")
+        expect(source).toContain("function ZapierTestLeadControls")
+        expect(source).toContain("function ZapierOutboundSettingsCard")
+        expect(source).toContain("function ZapierStageMappingRows")
+        expect(source).toContain("function ZapierOutboundTestControls")
+        expect(source).toContain("function useZapierWebhookController")
+        expect(sectionSource.split("\n").length).toBeLessThan(220)
+        expect(sectionSource).not.toContain("Inbound Webhooks")
+        expect(sectionSource).not.toContain("Paste Zapier Field List")
+        expect(sectionSource).not.toContain("Outbound Stage Events")
+        expect(sectionSource).not.toContain("Send Test Event")
+    })
+
     it("keeps Zapier API response subtypes private", () => {
         const source = readSource("lib/api/zapier.ts")
         const hookSource = readSource("lib/hooks/use-zapier.ts")
