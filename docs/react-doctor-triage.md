@@ -4608,3 +4608,23 @@ Full command after Batch 213: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 24 warnings`
 - Removed globally since Batch 212: email templates `prefer-useReducer` warning (`1` bug warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-4e5f1738-377a-493d-ad78-b9601f2a5a7d`
+
+## Batch 214
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/automation/campaigns/[id]/page.client.tsx:212` | Valid. `CampaignDetailPage` still owned route/query setup, mutation handlers, header actions, stats, recipient filter summary, preview, recipient table, edit dialog, and confirmation dialogs in one component after the edit-draft reducer batch. | High | Extracted `CampaignDetailHeader`, `CampaignStatsGrid`, `CampaignFilterSummaryCard`, `CampaignTemplatePreviewCard`, `CampaignRecipientsCard`, `CampaignEditDialog`, and `CampaignConfirmationDialogs`. Kept route parsing, hooks, mutations, dialog state, filter calculation, and reducer state in the page, with non-component helpers for edit criteria and action handler construction. Changed the confirmation helper to take one dialog-state object instead of four boolean props. Added a source guard requiring the render split. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "campaign detail rendering"` failed before the split. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "campaign detail rendering\|campaign detail edit draft\|campaign selection checkbox\|single-pass filtered display"`; `pnpm test --run tests/campaign-detail-page.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 214: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 214: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `33`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 23 warnings`
+- Removed globally since Batch 213: campaign detail `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-b39a6464-9f09-4fa6-a34f-3aacc970adbf`

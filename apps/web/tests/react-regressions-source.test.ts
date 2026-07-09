@@ -2876,6 +2876,26 @@ describe("React regression guards (source)", () => {
         expect(pageSource).not.toContain("setEditScheduledAt")
     })
 
+    it("keeps campaign detail rendering split into focused sections", () => {
+        const source = readSource("app/(app)/automation/campaigns/[id]/page.client.tsx")
+        const pageSource = readFunctionSource(source, "CampaignDetailPage")
+
+        expect(source).toContain("function CampaignDetailHeader")
+        expect(source).toContain("function CampaignStatsGrid")
+        expect(source).toContain("function CampaignFilterSummaryCard")
+        expect(source).toContain("function CampaignTemplatePreviewCard")
+        expect(source).toContain("function CampaignRecipientsCard")
+        expect(source).toContain("function CampaignEditDialog")
+        expect(source).toContain("function CampaignConfirmationDialogs")
+        expect(pageSource).toContain("<CampaignDetailHeader")
+        expect(pageSource).toContain("<CampaignStatsGrid")
+        expect(pageSource).toContain("<CampaignFilterSummaryCard")
+        expect(pageSource).toContain("<CampaignTemplatePreviewCard")
+        expect(pageSource).toContain("<CampaignRecipientsCard")
+        expect(pageSource).toContain("<CampaignEditDialog")
+        expect(pageSource).toContain("<CampaignConfirmationDialogs")
+    })
+
     it("hoists Meta spend dashboard number formatters", () => {
         const source = readSource("components/reports/MetaSpendDashboard.tsx")
 
