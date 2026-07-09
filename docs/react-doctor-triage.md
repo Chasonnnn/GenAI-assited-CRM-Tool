@@ -4900,3 +4900,23 @@ Full command after Batch 229: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 8 warnings`
 - Removed globally since Batch 228: Surrogate detail layout provider `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-c1a7d48e-569d-4f04-9ea8-45fcb38a7ca3`
+
+## Batch 230
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `components/surrogates/SurrogateApplicationTab.tsx:321` | Valid. `SurrogateApplicationTab` still owned loading/error/empty states, form-link defaults, send-link dialog, submitted application header, page sections, inline field editors, file upload/download/delete UI, review footer, and approve/reject dialogs alongside the form submission, draft status, intake-link, email-template, review, edit, upload, and delete hooks. | High | Extracted loading/error/empty/submitted render helpers, `SurrogateApplicationFieldEditor`, file and review dialog helpers, grouped submitted renderer inputs, and plain handler factories for form-link, file, and review/export actions. Kept hook calls, state ownership, selected defaults, mutation ownership, and parent-facing behavior in `SurrogateApplicationTab`. Tightened the source guard to require the split and a sub-300-line exported component after React Doctor still flagged intermediate 481/433/391/328-line versions. | RED: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate application form-link"` first failed before helper extraction, then failed again after tightening the line-count guard from `<520` to `<450`, `<400`, and `<300`. GREEN: `pnpm test --run tests/react-regressions-source.test.ts -t "surrogate application form-link"`; `pnpm test --run tests/surrogate-application-tab.test.tsx`; `pnpm test --run tests/react-regressions-source.test.ts`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`. |
+
+Changed-scope command after Batch 230: `cd apps/web && npx -y react-doctor@latest . --verbose --scope changed`
+
+- Score: `100 / 100`
+- Total diagnostics in changed files: `0`
+- Summary: no issues found.
+
+Full command after Batch 230: `cd apps/web && npx -y react-doctor@latest . --verbose`
+
+- Score: `90 / 100`
+- Total diagnostics: `17`
+- Summary: `Bugs 8 warnings`, `Performance 2 warnings`, `Maintainability 7 warnings`
+- Removed globally since Batch 229: Surrogate application tab `no-giant-component` warning (`1` maintainability warning).
+- Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-3b76d411-ecfb-4edf-bf49-b3f26eb904e1`
