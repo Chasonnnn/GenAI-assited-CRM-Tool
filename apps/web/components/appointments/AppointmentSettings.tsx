@@ -175,6 +175,22 @@ type AvailabilityRulesState = {
     hasChanges: boolean
 }
 
+type AppointmentTypeFormState = {
+    name: string
+    description: string
+    duration_minutes: number
+    buffer_after_minutes: number
+    meeting_modes: MeetingMode[]
+    meeting_location: string
+    dial_in_number: string
+    auto_approve: boolean
+    reminder_hours_before: number
+}
+
+type AppointmentTypeFormUpdater = (
+    updater: (current: AppointmentTypeFormState) => AppointmentTypeFormState,
+) => void
+
 // =============================================================================
 // Booking Link Card
 // =============================================================================
@@ -460,6 +476,373 @@ function AvailabilityRulesCard() {
 // Appointment Types Card
 // =============================================================================
 
+function AppointmentTypesLoadingCard() {
+    return (
+        <Card>
+            <CardContent className="py-8 flex items-center justify-center">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+            </CardContent>
+        </Card>
+    )
+}
+
+function AppointmentTypesHeader({
+    dialogOpen,
+    editingType,
+    formData,
+    isSaving,
+    onDialogOpenChange,
+    onCreate,
+    onFormDataChange,
+    onToggleMeetingMode,
+    onSubmit,
+    onCancel,
+}: {
+    dialogOpen: boolean
+    editingType: AppointmentType | null
+    formData: AppointmentTypeFormState
+    isSaving: boolean
+    onDialogOpenChange: (open: boolean) => void
+    onCreate: () => void
+    onFormDataChange: AppointmentTypeFormUpdater
+    onToggleMeetingMode: (mode: MeetingMode, checked: boolean | "indeterminate") => void
+    onSubmit: () => void
+    onCancel: () => void
+}) {
+    return (
+        <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+                <CardTitle>Appointment Types</CardTitle>
+                <CardDescription>
+                    Different appointment types clients can book
+                </CardDescription>
+            </div>
+            <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
+                <Button onClick={onCreate}>
+                    <PlusIcon className="size-4 mr-2" />
+                    Add Type
+                </Button>
+                <AppointmentTypeDialog
+                    editingType={editingType}
+                    formData={formData}
+                    isSaving={isSaving}
+                    onFormDataChange={onFormDataChange}
+                    onToggleMeetingMode={onToggleMeetingMode}
+                    onSubmit={onSubmit}
+                    onCancel={onCancel}
+                />
+            </Dialog>
+        </CardHeader>
+    )
+}
+
+function AppointmentTypeDialog({
+    editingType,
+    formData,
+    isSaving,
+    onFormDataChange,
+    onToggleMeetingMode,
+    onSubmit,
+    onCancel,
+}: {
+    editingType: AppointmentType | null
+    formData: AppointmentTypeFormState
+    isSaving: boolean
+    onFormDataChange: AppointmentTypeFormUpdater
+    onToggleMeetingMode: (mode: MeetingMode, checked: boolean | "indeterminate") => void
+    onSubmit: () => void
+    onCancel: () => void
+}) {
+    return (
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>
+                    {editingType ? "Edit Appointment Type" : "New Appointment Type"}
+                </DialogTitle>
+                <DialogDescription>
+                    Configure the details for this appointment type
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                        value={formData.name}
+                        onChange={(e) => onFormDataChange((current) => ({ ...current, name: e.target.value }))}
+                        placeholder="e.g., Initial Consultation"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                        value={formData.description}
+                        onChange={(e) => onFormDataChange((current) => ({ ...current, description: e.target.value }))}
+                        placeholder="Brief description of this appointment type"
+                    />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Duration (minutes)</Label>
+                        <Select
+                            value={String(formData.duration_minutes)}
+                            onValueChange={(v) =>
+                                v && onFormDataChange((current) => ({ ...current, duration_minutes: parseInt(v) }))
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue>
+                                    {(value: string | null) => {
+                                        return value ? `${value} min` : "Select duration"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="15">15 min</SelectItem>
+                                <SelectItem value="30">30 min</SelectItem>
+                                <SelectItem value="45">45 min</SelectItem>
+                                <SelectItem value="60">60 min</SelectItem>
+                                <SelectItem value="90">90 min</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Buffer After</Label>
+                        <Select
+                            value={String(formData.buffer_after_minutes)}
+                            onValueChange={(v) =>
+                                v && onFormDataChange((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue>
+                                    {(value: string | null) => {
+                                        if (value === "0") return "No buffer"
+                                        return value ? `${value} min` : "Select buffer"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="0">No buffer</SelectItem>
+                                <SelectItem value="5">5 min</SelectItem>
+                                <SelectItem value="10">10 min</SelectItem>
+                                <SelectItem value="15">15 min</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                <AppointmentTypeMeetingModeFields
+                    formData={formData}
+                    onToggleMeetingMode={onToggleMeetingMode}
+                />
+                <AppointmentTypeConditionalFields
+                    formData={formData}
+                    onFormDataChange={onFormDataChange}
+                />
+            </div>
+            <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={onCancel}>Cancel</Button>
+                <Button
+                    onClick={onSubmit}
+                    disabled={!formData.name || isSaving}
+                >
+                    {isSaving ? (
+                        <Loader2Icon className="size-4 mr-2 animate-spin" />
+                    ) : null}
+                    {editingType ? "Save Changes" : "Create Type"}
+                </Button>
+            </div>
+        </DialogContent>
+    )
+}
+
+function AppointmentTypeMeetingModeFields({
+    formData,
+    onToggleMeetingMode,
+}: {
+    formData: AppointmentTypeFormState
+    onToggleMeetingMode: (mode: MeetingMode, checked: boolean | "indeterminate") => void
+}) {
+    return (
+        <div className="space-y-2">
+            <Label>Appointment Format</Label>
+            <div className="grid gap-2">
+                {MEETING_MODE_OPTIONS.map((option) => {
+                    const Icon = option.icon
+                    const checked = formData.meeting_modes.includes(option.value)
+                    const checkboxId = `appointment-format-${option.value}`
+                    return (
+                        <div
+                            key={option.value}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+                        >
+                            <Label htmlFor={checkboxId} className="flex items-center gap-2 cursor-pointer">
+                                <Icon className="size-4 text-muted-foreground" />
+                                <span>{option.label}</span>
+                            </Label>
+                            <Checkbox
+                                id={checkboxId}
+                                checked={checked}
+                                onCheckedChange={(value) => onToggleMeetingMode(option.value, value)}
+                            />
+                        </div>
+                    )
+                })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Select one or more formats for clients to choose from.
+            </p>
+        </div>
+    )
+}
+
+function AppointmentTypeConditionalFields({
+    formData,
+    onFormDataChange,
+}: {
+    formData: AppointmentTypeFormState
+    onFormDataChange: AppointmentTypeFormUpdater
+}) {
+    return (
+        <>
+            {formData.meeting_modes.includes("in_person") && (
+                <div className="space-y-2">
+                    <Label>Location</Label>
+                    <Input
+                        value={formData.meeting_location}
+                        onChange={(e) => onFormDataChange((current) => ({ ...current, meeting_location: e.target.value }))}
+                        placeholder="e.g., 123 Main St, Suite 4B"
+                    />
+                </div>
+            )}
+            {formData.meeting_modes.includes("phone") && (
+                <div className="space-y-2">
+                    <Label>Dial-in Number</Label>
+                    <Input
+                        value={formData.dial_in_number}
+                        onChange={(e) => onFormDataChange((current) => ({ ...current, dial_in_number: e.target.value }))}
+                        placeholder="e.g., +1 (555) 123-4567"
+                    />
+                </div>
+            )}
+            <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+                <Switch
+                    checked={formData.auto_approve}
+                    onCheckedChange={(checked) =>
+                        onFormDataChange((current) => ({ ...current, auto_approve: checked }))
+                    }
+                />
+                <div>
+                    <Label className="text-sm">Auto-approve bookings</Label>
+                    <p className="text-xs text-muted-foreground">
+                        Clients will be instantly confirmed without manual approval.
+                    </p>
+                </div>
+            </div>
+        </>
+    )
+}
+
+function AppointmentTypesEmptyState() {
+    return (
+        <div className="text-center py-8 text-muted-foreground">
+            <AlertCircleIcon className="size-8 mx-auto mb-2 opacity-50" />
+            <p>No appointment types yet</p>
+            <p className="text-sm">Create your first appointment type to start accepting bookings</p>
+        </div>
+    )
+}
+
+function AppointmentTypesList({
+    types,
+    onEdit,
+    onDelete,
+}: {
+    types: AppointmentType[]
+    onEdit: (type: AppointmentType) => void
+    onDelete: (typeId: string) => void
+}) {
+    return (
+        <div className="space-y-3">
+            {types.map((type) => (
+                <AppointmentTypeListItem
+                    key={type.id}
+                    type={type}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                />
+            ))}
+        </div>
+    )
+}
+
+function AppointmentTypeListItem({
+    type,
+    onEdit,
+    onDelete,
+}: {
+    type: AppointmentType
+    onEdit: (type: AppointmentType) => void
+    onDelete: (typeId: string) => void
+}) {
+    const meetingModes =
+        type.meeting_modes && type.meeting_modes.length > 0
+            ? type.meeting_modes
+            : [type.meeting_mode]
+    const primaryMode = meetingModes[0]
+    const ModeIcon = MEETING_MODE_OPTIONS.find((option) => option.value === primaryMode)?.icon || VideoIcon
+    const formatLabel = meetingModes
+        .map((mode) => MEETING_MODE_LABELS[mode] || mode)
+        .join(" / ")
+
+    return (
+        <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+            <div className="flex items-center gap-4">
+                <div className="p-2 rounded-lg bg-primary/10">
+                    <ModeIcon className="size-5 text-primary" />
+                </div>
+                <div>
+                    <h4 className="font-medium">{type.name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                        {type.duration_minutes} min
+                        {type.description && ` • ${type.description}`}
+                        {formatLabel && ` • ${formatLabel}`}
+                    </p>
+                    {meetingModes.includes("in_person") && type.meeting_location && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Location: {type.meeting_location}
+                        </p>
+                    )}
+                    {meetingModes.includes("phone") && type.dial_in_number && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Dial-in: {type.dial_in_number}
+                        </p>
+                    )}
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <Badge variant={type.is_active ? "default" : "secondary"}>
+                    {type.is_active ? "Active" : "Inactive"}
+                </Badge>
+                {type.auto_approve && (
+                    <Badge variant="outline">Auto-approve</Badge>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => onEdit(type)}>
+                    Edit
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive"
+                    onClick={() => onDelete(type.id)}
+                    aria-label={`Delete ${type.name} appointment type`}
+                >
+                    <TrashIcon className="size-4" />
+                </Button>
+            </div>
+        </div>
+    )
+}
+
 function AppointmentTypesCard() {
     const { data: types, isLoading } = useAppointmentTypes()
     const createMutation = useCreateAppointmentType()
@@ -467,7 +850,7 @@ function AppointmentTypesCard() {
     const deleteMutation = useDeleteAppointmentType()
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editingType, setEditingType] = useState<AppointmentType | null>(null)
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<AppointmentTypeFormState>({
         name: "",
         description: "",
         duration_minutes: 30,
@@ -599,255 +982,34 @@ function AppointmentTypesCard() {
     }
 
     if (isLoading) {
-        return (
-            <Card>
-                <CardContent className="py-8 flex items-center justify-center">
-                    <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
-                </CardContent>
-            </Card>
-        )
+        return <AppointmentTypesLoadingCard />
     }
 
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                    <CardTitle>Appointment Types</CardTitle>
-                    <CardDescription>
-                        Different appointment types clients can book
-                    </CardDescription>
-                </div>
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <Button onClick={openCreate}>
-                        <PlusIcon className="size-4 mr-2" />
-                        Add Type
-                    </Button>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>
-                                {editingType ? "Edit Appointment Type" : "New Appointment Type"}
-                            </DialogTitle>
-                            <DialogDescription>
-                                Configure the details for this appointment type
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                                <Label>Name</Label>
-                                <Input
-                                    value={formData.name}
-                                    onChange={(e) => setFormData((current) => ({ ...current, name: e.target.value }))}
-                                    placeholder="e.g., Initial Consultation"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Description</Label>
-                                <Textarea
-                                    value={formData.description}
-                                    onChange={(e) => setFormData((current) => ({ ...current, description: e.target.value }))}
-                                    placeholder="Brief description of this appointment type"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Duration (minutes)</Label>
-                                    <Select
-                                        value={String(formData.duration_minutes)}
-                                        onValueChange={(v) =>
-                                            v && setFormData((current) => ({ ...current, duration_minutes: parseInt(v) }))
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue>
-                                                {(value: string | null) => {
-                                                    return value ? `${value} min` : "Select duration"
-                                                }}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="15">15 min</SelectItem>
-                                            <SelectItem value="30">30 min</SelectItem>
-                                            <SelectItem value="45">45 min</SelectItem>
-                                            <SelectItem value="60">60 min</SelectItem>
-                                            <SelectItem value="90">90 min</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Buffer After</Label>
-                                    <Select
-                                        value={String(formData.buffer_after_minutes)}
-                                        onValueChange={(v) =>
-                                            v && setFormData((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue>
-                                                {(value: string | null) => {
-                                                    if (value === "0") return "No buffer"
-                                                    return value ? `${value} min` : "Select buffer"
-                                                }}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="0">No buffer</SelectItem>
-                                            <SelectItem value="5">5 min</SelectItem>
-                                            <SelectItem value="10">10 min</SelectItem>
-                                            <SelectItem value="15">15 min</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Appointment Format</Label>
-                                <div className="grid gap-2">
-                                    {MEETING_MODE_OPTIONS.map((option) => {
-                                        const Icon = option.icon
-                                        const checked = formData.meeting_modes.includes(option.value)
-                                        const checkboxId = `appointment-format-${option.value}`
-                                        return (
-                                            <div
-                                                key={option.value}
-                                                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
-                                            >
-                                                <Label htmlFor={checkboxId} className="flex items-center gap-2 cursor-pointer">
-                                                    <Icon className="size-4 text-muted-foreground" />
-                                                    <span>{option.label}</span>
-                                                </Label>
-                                                <Checkbox
-                                                    id={checkboxId}
-                                                    checked={checked}
-                                                    onCheckedChange={(value) => toggleMeetingMode(option.value, value)}
-                                                />
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Select one or more formats for clients to choose from.
-                                </p>
-                            </div>
-                            {formData.meeting_modes.includes("in_person") && (
-                                <div className="space-y-2">
-                                    <Label>Location</Label>
-                                    <Input
-                                        value={formData.meeting_location}
-                                        onChange={(e) => setFormData((current) => ({ ...current, meeting_location: e.target.value }))}
-                                        placeholder="e.g., 123 Main St, Suite 4B"
-                                    />
-                                </div>
-                            )}
-                            {formData.meeting_modes.includes("phone") && (
-                                <div className="space-y-2">
-                                    <Label>Dial-in Number</Label>
-                                    <Input
-                                        value={formData.dial_in_number}
-                                        onChange={(e) => setFormData((current) => ({ ...current, dial_in_number: e.target.value }))}
-                                        placeholder="e.g., +1 (555) 123-4567"
-                                    />
-                                </div>
-                            )}
-                            <div className="flex items-start gap-3 rounded-lg border border-border p-3">
-                                <Switch
-                                    checked={formData.auto_approve}
-                                    onCheckedChange={(checked) =>
-                                        setFormData((current) => ({ ...current, auto_approve: checked }))
-                                    }
-                                />
-                                <div>
-                                    <Label className="text-sm">Auto-approve bookings</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Clients will be instantly confirmed without manual approval.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                            <Button
-                                onClick={handleSubmit}
-                                disabled={!formData.name || createMutation.isPending || updateMutation.isPending}
-                            >
-                                {(createMutation.isPending || updateMutation.isPending) ? (
-                                    <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                ) : null}
-                                {editingType ? "Save Changes" : "Create Type"}
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-            </CardHeader>
+            <AppointmentTypesHeader
+                dialogOpen={dialogOpen}
+                editingType={editingType}
+                formData={formData}
+                isSaving={createMutation.isPending || updateMutation.isPending}
+                onDialogOpenChange={setDialogOpen}
+                onCreate={openCreate}
+                onFormDataChange={setFormData}
+                onToggleMeetingMode={toggleMeetingMode}
+                onSubmit={() => {
+                    void handleSubmit()
+                }}
+                onCancel={() => setDialogOpen(false)}
+            />
             <CardContent>
                 {types?.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                        <AlertCircleIcon className="size-8 mx-auto mb-2 opacity-50" />
-                        <p>No appointment types yet</p>
-                        <p className="text-sm">Create your first appointment type to start accepting bookings</p>
-                    </div>
+                    <AppointmentTypesEmptyState />
                 ) : (
-                    <div className="space-y-3">
-                        {types?.map((type) => {
-                            const meetingModes =
-                                type.meeting_modes && type.meeting_modes.length > 0
-                                    ? type.meeting_modes
-                                    : [type.meeting_mode]
-                            const primaryMode = meetingModes[0]
-                            const ModeIcon = MEETING_MODE_OPTIONS.find((option) => option.value === primaryMode)?.icon || VideoIcon
-                            const formatLabel = meetingModes
-                                .map((mode) => MEETING_MODE_LABELS[mode] || mode)
-                                .join(" / ")
-                            return (
-                                <div
-                                    key={type.id}
-                                    className="flex items-center justify-between p-4 rounded-lg border border-border"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="p-2 rounded-lg bg-primary/10">
-                                            <ModeIcon className="size-5 text-primary" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-medium">{type.name}</h4>
-                                            <p className="text-sm text-muted-foreground">
-                                                {type.duration_minutes} min
-                                                {type.description && ` • ${type.description}`}
-                                                {formatLabel && ` • ${formatLabel}`}
-                                            </p>
-                                            {meetingModes.includes("in_person") && type.meeting_location && (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Location: {type.meeting_location}
-                                                </p>
-                                            )}
-                                            {meetingModes.includes("phone") && type.dial_in_number && (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Dial-in: {type.dial_in_number}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant={type.is_active ? "default" : "secondary"}>
-                                            {type.is_active ? "Active" : "Inactive"}
-                                        </Badge>
-                                        {type.auto_approve && (
-                                            <Badge variant="outline">Auto-approve</Badge>
-                                        )}
-                                        <Button variant="ghost" size="sm" onClick={() => openEdit(type)}>
-                                            Edit
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            className="text-destructive"
-                                            onClick={() => handleDelete(type.id)}
-                                            aria-label={`Delete ${type.name} appointment type`}
-                                        >
-                                            <TrashIcon className="size-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                    <AppointmentTypesList
+                        types={types ?? []}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                    />
                 )}
             </CardContent>
         </Card>

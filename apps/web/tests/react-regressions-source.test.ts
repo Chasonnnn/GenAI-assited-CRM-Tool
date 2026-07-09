@@ -2391,13 +2391,15 @@ describe("React regression guards (source)", () => {
     it("uses functional updates for appointment type form fields", () => {
         const source = readSource("components/appointments/AppointmentSettings.tsx")
 
-        expect(source).toContain("setFormData((current) => ({ ...current, name: e.target.value }))")
-        expect(source).toContain("setFormData((current) => ({ ...current, description: e.target.value }))")
-        expect(source).toContain("setFormData((current) => ({ ...current, duration_minutes: parseInt(v) }))")
-        expect(source).toContain("setFormData((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))")
-        expect(source).toContain("setFormData((current) => ({ ...current, meeting_location: e.target.value }))")
-        expect(source).toContain("setFormData((current) => ({ ...current, dial_in_number: e.target.value }))")
-        expect(source).toContain("setFormData((current) => ({ ...current, auto_approve: checked }))")
+        expect(source).toContain("type AppointmentTypeFormUpdater =")
+        expect(source).toContain("onFormDataChange={setFormData}")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, name: e.target.value }))")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, description: e.target.value }))")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, duration_minutes: parseInt(v) }))")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, meeting_location: e.target.value }))")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, dial_in_number: e.target.value }))")
+        expect(source).toContain("onFormDataChange((current) => ({ ...current, auto_approve: checked }))")
         expect(source).not.toContain("setFormData({ ...formData")
     })
 
@@ -2418,6 +2420,28 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [hasChanges, setHasChanges]")
         expect(source).not.toMatch(/localRules\s*\.filter\(\(r\) => r\.enabled\)\s*\.map/)
         expect(source).not.toMatch(/MEETING_MODE_OPTIONS\.map\(\(option\) => option\.value\)\.filter/)
+    })
+
+    it("keeps appointment type rendering split into focused helpers", () => {
+        const source = readSource("components/appointments/AppointmentSettings.tsx")
+        const sectionSource = readFunctionSource(source, "AppointmentTypesCard")
+
+        expect(source).toContain("function AppointmentTypesLoadingCard")
+        expect(source).toContain("function AppointmentTypesHeader")
+        expect(source).toContain("function AppointmentTypeDialog")
+        expect(source).toContain("function AppointmentTypeMeetingModeFields")
+        expect(source).toContain("function AppointmentTypeConditionalFields")
+        expect(source).toContain("function AppointmentTypesEmptyState")
+        expect(source).toContain("function AppointmentTypesList")
+        expect(source).toContain("function AppointmentTypeListItem")
+        expect(sectionSource).toContain("useAppointmentTypes()")
+        expect(sectionSource).toContain("useCreateAppointmentType()")
+        expect(sectionSource).toContain("useUpdateAppointmentType()")
+        expect(sectionSource).toContain("useDeleteAppointmentType()")
+        expect(sectionSource).toContain("const handleSubmit = async () =>")
+        expect(sectionSource).not.toContain("Different appointment types clients can book")
+        expect(sectionSource).not.toContain("New Appointment Type")
+        expect(sectionSource).not.toContain("No appointment types yet")
     })
 
     it("derives public booking confirmation state from the response", () => {
