@@ -196,6 +196,23 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("`assistant-${Date.now()}`")
     })
 
+    it("keeps AI assistant page sections split from the chat controller", () => {
+        const source = readSource("app/(app)/ai-assistant/page.tsx")
+        const pageSource = readFunctionSource(source, "AIAssistantPage")
+
+        expect(source).toContain("function useAIAssistantChat")
+        expect(source).toContain("function AIAssistantHeader")
+        expect(source).toContain("function AIAssistantSidebar")
+        expect(source).toContain("function AIAssistantChatWindow")
+        expect(source).toContain("function AIAssistantMessageList")
+        expect(source).toContain("function AIAssistantComposer")
+        expect(source).toContain("function ProposedActionList")
+        expect(pageSource).not.toContain("Quick Actions")
+        expect(pageSource).not.toContain("Chat History")
+        expect(pageSource).not.toContain("Proposed Action")
+        expect(pageSource).not.toContain("Ask anything")
+    })
+
     it("keeps AI context state updates compiler-friendly", () => {
         const source = readSource("lib/context/ai-context.tsx")
 

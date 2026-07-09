@@ -4510,3 +4510,9 @@ Full command after Batch 207: `cd apps/web && npx -y react-doctor@latest . --ver
 - Summary: `Bugs 12 warnings`, `Performance 2 warnings`, `Maintainability 27 warnings`
 - Removed globally since Batch 206: self-service manage appointment page `no-giant-component` warning (`1` maintainability warning).
 - Diagnostics: `/var/folders/c7/6l609_kn28g79m0_9klfr8z80000gn/T/react-doctor-2e26bef8-2211-4201-bcf0-16cccc91755d`
+
+## Batch 208
+
+| Rule | Files | Verdict | Confidence | Action | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `react-doctor/no-giant-component` | `app/(app)/ai-assistant/page.tsx:297` | Valid. `AIAssistantPage` owned chat history bootstrapping, stream lifecycle, approval mutations, quick-action/sidebar rendering, message rendering, proposed-action controls, and the composer in one component. | High | Extracted `useAIAssistantChat`, `AIAssistantHeader`, `AIAssistantSidebar`, `AIAssistantChatWindow`, `AIAssistantMessageList`, `ProposedActionList`, and `AIAssistantComposer` while preserving the existing chat state, session persistence, streaming, stop, and approval handlers. Added a source guard requiring the split. | RED: `pnpm test --run tests/react-regressions-source.test.ts` failed before the split on the new AI assistant section guard. GREEN: `pnpm test --run tests/react-regressions-source.test.ts tests/ai-assistant.test.tsx`; `pnpm tsc --noEmit`; `pnpm lint`; `git diff --check`; `pnpm test --run`. React Doctor rerun was attempted but the sandbox reviewer rejected network execution of `npx -y react-doctor@latest`; rerun still needs explicit approval for the external scanner. |
