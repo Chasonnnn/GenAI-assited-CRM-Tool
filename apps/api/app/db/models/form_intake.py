@@ -84,7 +84,12 @@ class FormIntakeLink(Base):
     )
     published_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("published_intake_versions.id", ondelete="SET NULL"),
+        ForeignKey(
+            "published_intake_versions.id",
+            name="fk_form_intake_links_published_version",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
         nullable=True,
     )
     expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
@@ -194,7 +199,12 @@ class IntakeLead(Base):
     )
     form_submission_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("form_submissions.id", ondelete="SET NULL"),
+        ForeignKey(
+            "form_submissions.id",
+            name="fk_intake_leads_form_submission",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
         nullable=True,
     )
 

@@ -163,7 +163,12 @@ class Surrogate(Base):
     )
     on_hold_follow_up_task_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tasks.id", ondelete="SET NULL"),
+        ForeignKey(
+            "tasks.id",
+            name="fk_surrogates_on_hold_follow_up_task_id",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
         nullable=True,
     )
 
