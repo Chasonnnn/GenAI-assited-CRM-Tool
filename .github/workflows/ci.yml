@@ -5,11 +5,6 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-    paths-ignore:
-      - ".release-please-manifest.json"
-      - "CHANGELOG.md"
-      - "README.md"
-      - "apps/api/.release-please-version.json"
 jobs:
   backend-tests:
     name: Backend Tests
@@ -200,7 +195,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@10.28.2 --activate
+          corepack prepare pnpm@11.9.0 --activate
       
       - name: Install dependencies
         working-directory: apps/web
@@ -244,7 +239,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@10.28.2 --activate
+          corepack prepare pnpm@11.9.0 --activate
       
       - name: TypeScript check
         working-directory: apps/web
@@ -347,7 +342,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@10.28.2 --activate
+          corepack prepare pnpm@11.9.0 --activate
 
       - name: Install frontend dependencies
         working-directory: apps/web
@@ -412,3 +407,20 @@ jobs:
           name: zap-baseline-report
           path: zap-report.html
           if-no-files-found: ignore
+
+  production-artifacts:
+    name: Production Artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build API image
+        run: docker build -t crm-api:ci apps/api
+
+      - name: Build worker image
+        run: docker build -f apps/api/Dockerfile.worker -t crm-worker:ci apps/api
+
+      - name: Build web image with production API origin
+        run: docker build -f apps/web/Dockerfile --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.surrogacyforce.com -t crm-web:ci .
