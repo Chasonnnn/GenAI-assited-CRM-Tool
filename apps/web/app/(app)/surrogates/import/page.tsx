@@ -65,7 +65,7 @@ import {
 } from "@/lib/hooks/use-import"
 import type { ImportDetail, ImportHistoryItem, ValidationMode } from "@/lib/api/import"
 import { RelativeTime } from "@/components/ui/time-display"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 type NormalizedImportError = {
     id: string
@@ -446,13 +446,13 @@ function SkippedCount({
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger>
-                            <button
+                            <Button unstyled
                                 type="button"
                                 className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
                                 aria-label="Skipped breakdown"
                             >
                                 <InfoIcon className="size-3" />
-                            </button>
+                            </Button>
                         </TooltipTrigger>
                         <TooltipContent>
                             <div className="space-y-1">

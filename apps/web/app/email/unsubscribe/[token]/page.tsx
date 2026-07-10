@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button"
 import type { Metadata } from "next"
 import { headers } from "next/headers"
 import Link from "next/link"
@@ -87,12 +88,12 @@ export default async function UnsubscribePage({
                             </Link>
                         ) : (
                             <form action={confirmAction} method="post">
-                                <button
+                                <Button unstyled
                                     type="submit"
                                     className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
                                 >
                                     Unsubscribe
-                                </button>
+                                </Button>
                             </form>
                         )}
                         <Link

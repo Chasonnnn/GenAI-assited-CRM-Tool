@@ -46,7 +46,7 @@ import {
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import type { IntendedParent } from "@/lib/types/intended-parent"
 import { parseDateInput } from "@/lib/utils/date"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 
 type IntendedParentDetailState = {

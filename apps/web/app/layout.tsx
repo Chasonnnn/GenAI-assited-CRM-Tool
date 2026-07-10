@@ -3,7 +3,7 @@ import { Noto_Sans } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/lib/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toast";
 
 const notoSans = Noto_Sans({
   subsets: ["latin"],

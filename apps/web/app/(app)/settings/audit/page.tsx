@@ -533,7 +533,7 @@ function AuditAiActivityPanel({
                                 tone: "text-muted-foreground",
                             }
                             return (
-                                <button
+                                <Button unstyled
                                     type="button"
                                     key={entry.id}
                                     className="-m-1 flex w-full items-start gap-2 rounded p-1 text-left text-xs transition-colors hover:bg-muted/50"
@@ -548,7 +548,7 @@ function AuditAiActivityPanel({
                                             {formatRelativeTime(entry.created_at, "Unknown")}
                                         </div>
                                     </div>
-                                </button>
+                                </Button>
                             )
                         })
                     ) : (

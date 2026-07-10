@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Loader2Icon, CheckIcon, PlusIcon, TrashIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { usePipelines } from "@/lib/hooks/use-pipelines"
 import {
   createIntelligentSuggestionRule,

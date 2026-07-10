@@ -14,7 +14,7 @@ import {
     Trash2Icon,
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import {
     AlertDialog,

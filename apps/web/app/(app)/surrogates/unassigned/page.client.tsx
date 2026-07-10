@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "@/components/app-link"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { Loader2Icon, UserPlusIcon } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"

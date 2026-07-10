@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toast'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

@@ -51,7 +51,7 @@ import { useMembers } from "@/lib/hooks/use-permissions"
 import type { Member } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 function resolveErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error && error.message) return error.message
@@ -361,7 +361,7 @@ function QueuesTable({
                                     {queue.description || "—"}
                                 </TableCell>
                                 <TableCell>
-                                    <button
+                                    <Button unstyled
                                         type="button"
                                         onClick={() => onManageMembers(queue)}
                                         className="inline-flex"
@@ -371,7 +371,7 @@ function QueuesTable({
                                             <UsersIcon className="size-3 mr-1" aria-hidden="true" />
                                             {queue.member_ids?.length || 0}
                                         </Badge>
-                                    </button>
+                                    </Button>
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant={queue.is_active ? "default" : "secondary"}>

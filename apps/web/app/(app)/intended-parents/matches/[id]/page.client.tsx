@@ -3,7 +3,7 @@
 import { useState, type ComponentProps } from "react"
 import { useParams } from "next/navigation"
 import Link from "@/components/app-link"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"

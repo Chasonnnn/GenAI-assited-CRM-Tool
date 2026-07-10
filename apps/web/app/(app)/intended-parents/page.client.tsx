@@ -64,7 +64,7 @@ import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-rang
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { PermissionDeniedState } from "@/components/error-state"
 import { isPermissionError } from "@/lib/error-utils"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 type DateRangeSelection = { from: Date | undefined; to: Date | undefined }

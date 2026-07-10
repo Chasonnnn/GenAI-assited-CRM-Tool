@@ -55,7 +55,7 @@ import {
     PencilIcon,
 } from "lucide-react"
 import { format } from "date-fns"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { parseDateInput } from "@/lib/utils/date"
 import {
     useCampaign,

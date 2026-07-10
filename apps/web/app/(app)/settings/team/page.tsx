@@ -38,7 +38,7 @@ import {
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
 import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatRelativeTime } from "@/lib/formatters"

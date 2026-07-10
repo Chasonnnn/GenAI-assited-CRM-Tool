@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -19,7 +20,7 @@ import {
     PencilIcon,
     AlertTriangleIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
@@ -420,7 +421,7 @@ function FileUploadZone({
 
     return (
         <div className="space-y-3">
-            <button
+            <Button unstyled
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 aria-label="Upload files"
@@ -454,7 +455,7 @@ function FileUploadZone({
                 <p className="text-xs text-stone-400">
                     Up to {maxFiles} files for this field, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
                 </p>
-            </button>
+            </Button>
             <input
                 id={inputId}
                 name="public_form_file_upload"
@@ -1466,23 +1467,35 @@ export default function PublicApplicationForm({ slug }: PublicApplicationFormPro
                                                             )}
                                                         </Label>
                                                         {column.type === "select" ? (
-                                                            <select
-                                                                id={fieldInputId}
-                                                                aria-labelledby={fieldInputLabelId}
+                                                            <Select
                                                                 name={fieldInputName}
-                                                                className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm"
-                                                                value={String(row[column.key] ?? "")}
-                                                                onChange={(e) =>
-                                                                    updateRow(rowIndex, column.key, e.target.value)
+                                                                value={String(row[column.key] ?? "") || null}
+                                                                onValueChange={(nextValue) =>
+                                                                    updateRow(rowIndex, column.key, nextValue ?? "")
                                                                 }
                                                             >
-                                                                <option value="">Select…</option>
+                                                                <SelectTrigger
+                                                                    id={fieldInputId}
+                                                                    aria-labelledby={fieldInputLabelId}
+                                                                    className="h-10 rounded-lg border-stone-200 bg-white"
+                                                                >
+                                                                    <SelectValue placeholder="Select…">
+                                                                        {(selectedValue: string | null) =>
+                                                                            column.options?.find(
+                                                                                (option) => option.value === selectedValue,
+                                                                            )?.label ?? "Select…"
+                                                                        }
+                                                                    </SelectValue>
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="">Select…</SelectItem>
                                                                 {(column.options || []).map((option) => (
-                                                                    <option key={option.value} value={option.value}>
+                                                                    <SelectItem key={option.value} value={option.value}>
                                                                         {option.label}
-                                                                    </option>
+                                                                    </SelectItem>
                                                                 ))}
-                                                            </select>
+                                                                </SelectContent>
+                                                            </Select>
                                                         ) : (
                                                             <Input
                                                                 id={fieldInputId}

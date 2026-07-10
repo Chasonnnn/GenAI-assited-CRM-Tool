@@ -27,7 +27,7 @@ import {
 import { useDeleteMetaForm, useMetaForms, useSyncMetaForms } from "@/lib/hooks/use-meta-forms"
 import { formatRelativeTime } from "@/lib/formatters"
 import { AlertTriangleIcon, CheckCircleIcon, Loader2Icon, RefreshCwIcon, TrashIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 const statusBadge = (status: string) => {
     if (status === "mapped") {

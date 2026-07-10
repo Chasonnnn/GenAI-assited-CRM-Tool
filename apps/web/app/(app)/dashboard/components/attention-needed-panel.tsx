@@ -234,7 +234,7 @@ function AttentionPanelSectionHeader({
     return (
         <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-                <button
+                <Button unstyled
                     type="button"
                     onClick={onToggle}
                     className="inline-flex items-center gap-2 rounded-md text-base font-semibold text-foreground hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -244,7 +244,7 @@ function AttentionPanelSectionHeader({
                     <ChevronDownIcon
                         className={`size-4 transition-transform ${open ? "rotate-180" : "rotate-0"}`}
                     />
-                </button>
+                </Button>
                 {badge}
             </div>
             {action}

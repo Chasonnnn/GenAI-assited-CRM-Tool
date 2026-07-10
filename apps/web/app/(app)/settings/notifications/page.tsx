@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useState } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
 import { useAuth } from "@/lib/auth-context"

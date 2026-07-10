@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { RelativeTime } from '@/components/ui/time-display';
 import { AlertTriangle, CheckCircle, XCircle, AlertCircle, RefreshCw, Loader2, Building2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/toast';
 
 type SeverityConfig = { icon: ElementType; color: string; badge: string };
 

@@ -835,7 +835,7 @@ function AIAssistantSidebar({
                     <div className="text-xs text-muted-foreground">Based on your recent activity</div>
                     <div className="space-y-0">
                         {SUGGESTED_ACTIONS.map((suggestion) => (
-                            <button
+                            <Button unstyled
                                 type="button"
                                 key={suggestion}
                                 onClick={() => setMessage(suggestion)}
@@ -844,7 +844,7 @@ function AIAssistantSidebar({
                             >
                                 <SparklesIcon className="mt-0.5 size-3.5 flex-shrink-0 text-teal-500" />
                                 <span className="text-sm leading-tight">{suggestion}</span>
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 </Card>
@@ -867,7 +867,7 @@ function AIAssistantSidebar({
                         {chatHistory.length > 0 ? (
                             <div className="space-y-1">
                                 {chatHistory.map((session) => (
-                                    <button
+                                    <Button unstyled
                                         type="button"
                                         key={session.id}
                                         data-testid="chat-history-item"
@@ -889,7 +889,7 @@ function AIAssistantSidebar({
                                         <div className="truncate text-[10px] text-muted-foreground">
                                             {session.preview || "New chat"}
                                         </div>
-                                    </button>
+                                    </Button>
                                 ))}
                             </div>
                         ) : (

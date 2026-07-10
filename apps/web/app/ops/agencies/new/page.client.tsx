@@ -16,7 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { ChevronRight, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/toast';
 
 const TIMEZONES = [
     { value: 'America/Los_Angeles', label: 'Pacific Time (US)' },

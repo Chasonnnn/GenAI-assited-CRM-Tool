@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toast'
 import { ShieldAlertIcon } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'

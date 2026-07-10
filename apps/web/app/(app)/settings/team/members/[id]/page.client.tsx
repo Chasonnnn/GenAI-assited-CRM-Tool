@@ -34,7 +34,7 @@ import {
 } from "@/lib/hooks/use-permissions"
 import type { MemberDetail } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { formatDate, formatRelativeTime } from "@/lib/formatters"
 
 type DisplayedOverride = MemberDetail["overrides"][number]

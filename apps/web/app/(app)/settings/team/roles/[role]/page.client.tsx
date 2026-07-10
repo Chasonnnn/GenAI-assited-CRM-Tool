@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { ChevronLeft, Shield, Lock, Loader2, Save, AlertTriangle } from "lucide-react"
 import { useRoleDetail, useUpdateRolePermissions } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 const CATEGORY_ORDER = [
     "Navigation",

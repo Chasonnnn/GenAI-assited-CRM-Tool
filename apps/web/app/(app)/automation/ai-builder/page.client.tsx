@@ -22,7 +22,7 @@ import {
     SparklesIcon,
     MailIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import {
     generateWorkflow,
     saveAIWorkflow,
@@ -811,14 +811,14 @@ function PromptComposerCard({
                     <p className="text-sm text-muted-foreground">Try these examples:</p>
                     <div className="flex flex-wrap gap-2">
                         {suggestionList.slice(0, 3).map((suggestion) => (
-                            <button
+                            <Button unstyled
                                 type="button"
                                 key={suggestion}
                                 onClick={() => onSuggestionClick(suggestion)}
                                 className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
                             >
                                 {suggestion.length > 50 ? suggestion.slice(0, 50) + "…" : suggestion}
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 </div>

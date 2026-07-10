@@ -34,7 +34,7 @@ import { useQuery } from "@tanstack/react-query"
 import api, { ApiError } from "@/lib/api"
 import { parseDateInput } from "@/lib/utils/date"
 import { useRetryWorkflowExecution } from "@/lib/hooks/use-workflows"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 // Types for executions
 interface ExecutionAction {

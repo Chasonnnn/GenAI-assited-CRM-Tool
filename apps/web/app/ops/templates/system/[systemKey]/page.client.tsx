@@ -47,7 +47,7 @@ import {
     UploadIcon,
     UsersIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"

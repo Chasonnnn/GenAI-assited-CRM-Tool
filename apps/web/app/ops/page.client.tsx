@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, AlertTriangle, Plus, Bell, Loader2 } from 'lucide-react';
 import { getPlatformStats, listAlerts, type PlatformAlert, type PlatformStats } from '@/lib/api/platform';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/toast';
 
 
 function StatCard({

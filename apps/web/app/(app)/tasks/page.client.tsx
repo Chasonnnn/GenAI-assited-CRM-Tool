@@ -25,7 +25,7 @@ import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 import { buildRecurringDates, MAX_TASK_OCCURRENCES } from "@/lib/utils/task-recurrence"
 import { format, parseISO } from "date-fns"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 type FilterType = "all" | "my_tasks"
 const isFilterType = (value: string | null): value is FilterType =>

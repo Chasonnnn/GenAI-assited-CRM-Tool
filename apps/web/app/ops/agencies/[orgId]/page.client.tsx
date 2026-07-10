@@ -49,7 +49,7 @@ import {
     type InviteRole,
 } from '@/components/ops/agencies/agency-constants';
 import { ChevronRight, Globe, Copy, Loader2, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/toast';
 
 
 function CopyButton({ value, label }: { value: string; label: string }) {

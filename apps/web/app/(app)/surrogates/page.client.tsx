@@ -31,7 +31,7 @@ import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-rang
 import { cn } from "@/lib/utils"
 import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
 import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageModal"
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"

@@ -86,7 +86,7 @@ import { getSignaturePreview } from "@/lib/api/signature"
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import type { EmailTemplateListItem, EmailTemplateScope, EmailTemplateLibraryItem } from "@/lib/api/email-templates"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import Link from "@/components/app-link"
@@ -1706,7 +1706,7 @@ export default function EmailTemplatesPage() {
                                                         aria-label="Upload signature photo"
                                                         className="hidden"
                                                     />
-                                                    <button
+                                                    <Button unstyled
                                                         type="button"
                                                         onClick={() => signaturePhotoInputRef.current?.click()}
                                                         disabled={uploadPhotoMutation.isPending}
@@ -1718,7 +1718,7 @@ export default function EmailTemplatesPage() {
                                                         ) : (
                                                             <CameraIcon className="size-3.5" />
                                                         )}
-                                                    </button>
+                                                    </Button>
                                                 </>
                                             }
                                             customPhotoAction={

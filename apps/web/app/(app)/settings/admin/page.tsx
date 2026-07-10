@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { getCsrfHeaders } from "@/lib/csrf"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 const EXPORT_POLL_INTERVAL_MS = 2000

@@ -311,7 +311,7 @@ export default function NotificationsPage() {
                                     {notifications.map((notification) => {
                                         const Icon = getNotificationIcon(notification.type)
                                         return (
-                                            <button
+                                            <Button unstyled
                                                 type="button"
                                                 key={notification.id}
                                                 onClick={() => handleNotificationClick(notification)}
@@ -337,7 +337,7 @@ export default function NotificationsPage() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </button>
+                                            </Button>
                                         )
                                     })}
                                 </div>

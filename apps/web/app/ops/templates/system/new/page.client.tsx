@@ -3,7 +3,7 @@
 import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { ArrowLeftIcon, EyeIcon, Loader2Icon, PlusIcon } from "lucide-react"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"

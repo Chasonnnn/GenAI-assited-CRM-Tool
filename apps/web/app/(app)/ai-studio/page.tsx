@@ -426,7 +426,7 @@ function SavedDraftsPanel({
                 ) : (
                     <div className="flex flex-col gap-2">
                         {drafts.map((draft) => (
-                            <button
+                            <Button unstyled
                                 type="button"
                                 key={draft.id}
                                 onClick={() => onSelect(draft)}
@@ -443,7 +443,7 @@ function SavedDraftsPanel({
                                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
                                     {draft.caption}
                                 </p>
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 )}

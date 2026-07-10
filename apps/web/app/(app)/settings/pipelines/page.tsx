@@ -4,6 +4,7 @@ import { startTransition, useEffect, useState } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     Card,
     CardContent,
@@ -1365,16 +1366,15 @@ function StageCapabilitiesEditor({
                     key={capability.key}
                     className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm"
                 >
-                    <input
-                        type="checkbox"
+                    <Checkbox
                         checked={stage.semantics.capabilities[capability.key]}
                         disabled={stage.is_locked || RESERVED_CAPABILITY_KEYS.has(capability.key)}
-                        onChange={(event) =>
+                        onCheckedChange={(checked) =>
                             updateSemantics((semantics) => ({
                                 ...semantics,
                                 capabilities: {
                                     ...semantics.capabilities,
-                                    [capability.key]: event.target.checked,
+                                    [capability.key]: checked,
                                 },
                             }))
                         }
@@ -1390,14 +1390,13 @@ function StageCapabilitiesEditor({
                 </label>
             ))}
             <label className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
-                <input
-                    type="checkbox"
+                <Checkbox
                     checked={stage.semantics.requires_reason_on_enter}
                     disabled={stage.is_locked}
-                    onChange={(event) =>
+                    onCheckedChange={(checked) =>
                         updateSemantics((semantics) => ({
                             ...semantics,
-                            requires_reason_on_enter: event.target.checked,
+                            requires_reason_on_enter: checked,
                         }))
                     }
                     aria-label="Require reason on enter"
@@ -1743,15 +1742,14 @@ function JourneyMilestonesEditor({
                                             key={`${milestone.slug}-${stage.stageKey}`}
                                             className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2 text-sm"
                                         >
-                                            <input
-                                                type="checkbox"
+                                            <Checkbox
                                                 checked={checked}
-                                                onChange={(event) => {
+                                                onCheckedChange={(nextChecked) => {
                                                     const next = deepClone(featureConfig)
                                                     const nextMilestone = next.journey.milestones[milestoneIndex]
                                                     if (!nextMilestone) return
                                                     const nextKeys = new Set(nextMilestone.mapped_stage_keys)
-                                                    if (event.target.checked) {
+                                                    if (nextChecked) {
                                                         nextKeys.add(stage.stageKey)
                                                     } else {
                                                         nextKeys.delete(stage.stageKey)
@@ -1838,13 +1836,12 @@ function AnalyticsFunnelEditor({
                             key={stage.id}
                             className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2 text-sm"
                         >
-                            <input
-                                type="checkbox"
+                            <Checkbox
                                 checked={funnelStageKeys.has(stage.stage_key)}
-                                onChange={(event) => {
+                                onCheckedChange={(checked) => {
                                     const next = deepClone(featureConfig)
                                     const nextKeys = new Set(next.analytics.funnel_stage_keys)
-                                    if (event.target.checked) {
+                                    if (checked) {
                                         nextKeys.add(stage.stage_key)
                                     } else {
                                         nextKeys.delete(stage.stage_key)

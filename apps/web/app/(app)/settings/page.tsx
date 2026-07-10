@@ -48,7 +48,7 @@ import { useSystemHealth } from "@/lib/hooks/use-system"
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-settings"
 import type { OrgSignature, SocialLink } from "@/lib/api/signature"
 import type { OrgSettings } from "@/lib/api/settings"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { IntelligentSuggestionsSection } from "./intelligent-suggestions-section"
@@ -224,7 +224,7 @@ function SignatureTemplatePicker({
       <Label>Signature Template</Label>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5" role="radiogroup" aria-label="Signature template">
         {templates.map((templateOption) => (
-          <button
+          <Button unstyled
             key={templateOption.id}
             type="button"
             onClick={() => onSelect(templateOption.id)}
@@ -238,7 +238,7 @@ function SignatureTemplatePicker({
           >
             <div className="text-sm font-medium">{templateOption.name}</div>
             <div className="text-xs text-muted-foreground">{templateOption.description}</div>
-          </button>
+          </Button>
         ))}
       </div>
     </div>
@@ -274,7 +274,7 @@ function OrganizationLogoField({
               unoptimized
               className="h-16 w-auto rounded border"
             />
-            <button
+            <Button unstyled
               type="button"
               onClick={onDelete}
               disabled={deletePending}
@@ -282,7 +282,7 @@ function OrganizationLogoField({
               aria-label="Remove organization logo"
             >
               <TrashIcon className="size-3" aria-hidden="true" />
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="flex h-16 w-32 items-center justify-center rounded border-2 border-dashed text-muted-foreground">
@@ -621,7 +621,7 @@ function ProfileSection() {
             aria-label="Profile photo upload"
             className="hidden"
           />
-          <button
+          <Button unstyled
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadAvatarMutation.isPending}
@@ -633,9 +633,9 @@ function ProfileSection() {
             ) : (
               <CameraIcon className="size-3.5" aria-hidden="true" />
             )}
-          </button>
+          </Button>
           {user?.avatar_url && (
-          <button
+          <Button unstyled
             type="button"
             onClick={handleDeleteAvatar}
             disabled={deleteAvatarMutation.isPending}
@@ -643,7 +643,7 @@ function ProfileSection() {
             aria-label="Remove profile photo"
           >
               <TrashIcon className="size-3" aria-hidden="true" />
-            </button>
+            </Button>
           )}
         </div>
         <div>

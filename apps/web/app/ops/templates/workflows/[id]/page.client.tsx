@@ -42,7 +42,7 @@ import {
     XIcon,
     GripVerticalIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import {
     areJsonObjectsEqual,
     ConditionValueInput,
@@ -873,7 +873,7 @@ function WorkflowTemplateSurrogateUpdatedTriggerFields({
                     {selectedTriggerFields.map((field) => (
                         <Badge key={field} variant="secondary" className="gap-1">
                             {getConditionFieldLabel(field)}
-                            <button
+                            <Button unstyled
                                 type="button"
                                 className="ml-1 text-xs"
                                 aria-label="Remove field"
@@ -890,7 +890,7 @@ function WorkflowTemplateSurrogateUpdatedTriggerFields({
                                 }
                             >
                                 <XIcon className="size-3" />
-                            </button>
+                            </Button>
                         </Badge>
                     ))}
                 </div>

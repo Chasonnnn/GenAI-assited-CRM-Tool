@@ -1818,7 +1818,7 @@ export default function AutomationPageClient({
                                                 {selectedTriggerFields.map((field) => (
                                                     <Badge key={field} variant="secondary" className="gap-1">
                                                         {getConditionFieldLabel(field)}
-                                                        <button
+                                                        <Button unstyled
                                                             type="button"
                                                             className="ml-1 text-xs"
                                                             aria-label="Remove field"
@@ -1835,7 +1835,7 @@ export default function AutomationPageClient({
                                                             }
                                                         >
                                                             <XIcon className="size-3" />
-                                                        </button>
+                                                        </Button>
                                                     </Badge>
                                                 ))}
                                             </div>
@@ -2650,7 +2650,7 @@ export default function AutomationPageClient({
                                 </p>
                                 <div className="space-y-2">
                                     {testEntitySuggestions.map((item) => (
-                                        <button
+                                        <Button unstyled
                                             key={item.id}
                                             type="button"
                                             className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
@@ -2663,7 +2663,7 @@ export default function AutomationPageClient({
                                             {item.meta && (
                                                 <span className="text-xs text-muted-foreground">{item.meta}</span>
                                             )}
-                                        </button>
+                                        </Button>
                                     ))}
                                 </div>
                             </div>
