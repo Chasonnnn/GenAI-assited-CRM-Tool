@@ -15,36 +15,50 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "idx_surrogate_activity_org_surrogate_time",
-        "surrogate_activity_log",
-        ["organization_id", "surrogate_id", "created_at"],
-        unique=False,
-    )
-    op.create_index(
-        "idx_surrogate_activity_org_type_surrogate_time",
-        "surrogate_activity_log",
-        ["organization_id", "activity_type", "surrogate_id", "created_at"],
-        unique=False,
-    )
-    op.create_index(
-        "idx_appointments_org_status_surrogate",
-        "appointments",
-        ["organization_id", "status", "surrogate_id"],
-        unique=False,
-    )
+    with op.get_context().autocommit_block():
+        op.create_index(
+            "idx_surrogate_activity_org_surrogate_time",
+            "surrogate_activity_log",
+            ["organization_id", "surrogate_id", "created_at"],
+            unique=False,
+            postgresql_concurrently=True,
+            if_not_exists=True,
+        )
+        op.create_index(
+            "idx_surrogate_activity_org_type_surrogate_time",
+            "surrogate_activity_log",
+            ["organization_id", "activity_type", "surrogate_id", "created_at"],
+            unique=False,
+            postgresql_concurrently=True,
+            if_not_exists=True,
+        )
+        op.create_index(
+            "idx_appointments_org_status_surrogate",
+            "appointments",
+            ["organization_id", "status", "surrogate_id"],
+            unique=False,
+            postgresql_concurrently=True,
+            if_not_exists=True,
+        )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "idx_appointments_org_status_surrogate",
-        table_name="appointments",
-    )
-    op.drop_index(
-        "idx_surrogate_activity_org_type_surrogate_time",
-        table_name="surrogate_activity_log",
-    )
-    op.drop_index(
-        "idx_surrogate_activity_org_surrogate_time",
-        table_name="surrogate_activity_log",
-    )
+    with op.get_context().autocommit_block():
+        op.drop_index(
+            "idx_appointments_org_status_surrogate",
+            table_name="appointments",
+            postgresql_concurrently=True,
+            if_exists=True,
+        )
+        op.drop_index(
+            "idx_surrogate_activity_org_type_surrogate_time",
+            table_name="surrogate_activity_log",
+            postgresql_concurrently=True,
+            if_exists=True,
+        )
+        op.drop_index(
+            "idx_surrogate_activity_org_surrogate_time",
+            table_name="surrogate_activity_log",
+            postgresql_concurrently=True,
+            if_exists=True,
+        )
