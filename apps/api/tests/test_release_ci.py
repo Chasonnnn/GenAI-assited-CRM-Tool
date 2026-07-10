@@ -7,6 +7,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[3]
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
+RELEASE_WORKFLOW = ROOT / ".github/workflows/release-please.yml"
 
 
 def test_release_only_pull_requests_run_ci() -> None:
@@ -41,3 +42,10 @@ def test_ci_uses_the_repository_pnpm_release() -> None:
     prepared_versions = set(re.findall(r"corepack prepare pnpm@([^ ]+) --activate", workflow))
 
     assert prepared_versions == {expected_version}
+
+
+def test_release_automation_uses_the_node_24_action() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+
+    assert "uses: googleapis/release-please-action@v5" in workflow
+    assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24" not in workflow

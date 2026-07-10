@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-env:
-  # Ask GitHub-hosted runners to execute JavaScript actions under Node 24 now.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 permissions:
   contents: write
   issues: write
@@ -19,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run release-please
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           # Use a PAT or GitHub App token so Release Please PR updates are
           # attributed to a trusted actor and pull_request CI can run normally.
