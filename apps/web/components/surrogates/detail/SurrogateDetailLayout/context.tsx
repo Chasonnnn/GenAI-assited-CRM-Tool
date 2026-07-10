@@ -4,7 +4,7 @@ import * as React from "react"
 import type { Route } from "next"
 import { createContext, use, useState, useRef, useEffect, useEffectEvent } from "react"
 import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import {
     useSurrogate,
     useChangeSurrogateStatus,

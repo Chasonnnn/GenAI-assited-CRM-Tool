@@ -256,7 +256,7 @@ export function PregnancyTrackerCard({
                                 )}
                             </div>
                         ) : (
-                            <button
+                            <Button unstyled
                                 type="button"
                                 className="group -mx-1 flex w-fit cursor-pointer appearance-none items-center gap-1 rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 onClick={handleEditEmbryoStage}
@@ -269,7 +269,7 @@ export function PregnancyTrackerCard({
                                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                                     aria-hidden="true"
                                 />
-                            </button>
+                            </Button>
                         )}
                     </div>
 
@@ -311,7 +311,7 @@ export function PregnancyTrackerCard({
                                         variant={hasManualDueDate ? "outline" : "secondary"}
                                         className="text-xs cursor-pointer select-none"
                                         render={
-                                            <button
+                                            <Button unstyled
                                                 type="button"
                                                 aria-label="Edit due date"
                                                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

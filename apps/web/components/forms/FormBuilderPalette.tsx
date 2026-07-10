@@ -1,5 +1,7 @@
 "use client"
 
+
+import { Button } from "@/components/ui/button"
 import { Command, CommandInput } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -61,7 +63,7 @@ function PaletteFieldTile({
     const Icon = field.icon
 
     return (
-        <button
+        <Button unstyled
             type="button"
             data-testid={buildTileTestId(field)}
             draggable
@@ -87,7 +89,7 @@ function PaletteFieldTile({
                 <Icon className="size-4" aria-hidden="true" />
             </span>
             <div className="w-full text-[13px] font-medium leading-tight text-zinc-950">{field.label}</div>
-        </button>
+        </Button>
     )
 }
 
@@ -151,7 +153,7 @@ export function FormBuilderPalette({
                                     const isActive = activeCategory === category.id
 
                                     return (
-                                        <button
+                                        <Button unstyled
                                             key={category.id}
                                             type="button"
                                             onClick={() => onCategoryChange(category.id)}
@@ -163,7 +165,7 @@ export function FormBuilderPalette({
                                             )}
                                         >
                                             {category.label}
-                                        </button>
+                                        </Button>
                                     )
                                 })}
                             </nav>

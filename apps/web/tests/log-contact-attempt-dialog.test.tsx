@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { trackFirstContactLogged } from "@/lib/workflow-metrics"
 import { LogContactAttemptDialog } from "@/components/surrogates/LogContactAttemptDialog"
@@ -77,7 +77,7 @@ vi.mock("@/lib/workflow-metrics", () => ({
     trackFirstContactLogged: vi.fn(),
 }))
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         success: vi.fn(),
         error: vi.fn(),

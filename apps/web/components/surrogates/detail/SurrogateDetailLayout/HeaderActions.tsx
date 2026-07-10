@@ -27,7 +27,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
 import {
     useSurrogateDetailActions,

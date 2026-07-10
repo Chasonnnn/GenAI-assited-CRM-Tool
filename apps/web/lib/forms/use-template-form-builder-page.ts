@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"
 import type { FormSchema } from "@/lib/api/forms"

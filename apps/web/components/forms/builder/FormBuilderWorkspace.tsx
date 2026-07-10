@@ -238,7 +238,7 @@ function CanvasFieldSurface({
                         : "hover:border-primary/30",
                 )}
             >
-                <button
+                <Button unstyled
                     type="button"
                     draggable
                     aria-label={`Select ${fieldLabel} field`}
@@ -362,7 +362,7 @@ function PageStrip({
                             }
 
                             return (
-                                <button
+                                <Button unstyled
                                     key={page.id}
                                     type="button"
                                     role="tab"
@@ -372,7 +372,7 @@ function PageStrip({
                                     className="rounded-full px-3 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                 >
                                     {pageLabel}
-                                </button>
+                                </Button>
                             )
                         })}
                     </div>

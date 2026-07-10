@@ -12,7 +12,7 @@ vi.mock("@/lib/api/platform", () => ({
     getPlatformMe: () => mockGetPlatformMe(),
 }))
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         success: vi.fn(),
         error: vi.fn(),

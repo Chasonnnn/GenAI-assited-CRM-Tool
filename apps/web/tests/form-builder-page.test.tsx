@@ -28,7 +28,7 @@ vi.mock("qrcode.react", () => ({
     QRCodeSVG: () => <div data-testid="qr-code" />,
 }))
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         success: vi.fn(),
         error: toastError,

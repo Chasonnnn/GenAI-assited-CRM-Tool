@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react"
 import type { ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { useAuth } from "@/lib/auth-context"
 import { DEFAULT_FORM_SURROGATE_FIELD_OPTIONS } from "@/lib/api/forms"

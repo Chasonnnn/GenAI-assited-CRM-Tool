@@ -53,7 +53,7 @@ import {
     ExternalLinkIcon,
     EyeIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { ApiError } from "@/lib/api"
 import {

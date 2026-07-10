@@ -24,6 +24,13 @@ vi.mock("@/components/ui/calendar", () => ({
     ),
 }))
 
+function chooseBaseUiOption(trigger: HTMLElement, optionName: string | RegExp) {
+    fireEvent.click(trigger)
+    const option = screen.getByRole("option", { name: optionName })
+    fireEvent.mouseMove(option)
+    fireEvent.click(option)
+}
+
 describe("PublicFormFieldRenderer", () => {
     it("renders date fields with month/year dropdown navigation", () => {
         const updateField = vi.fn()
@@ -100,15 +107,14 @@ describe("PublicFormFieldRenderer", () => {
             />,
         )
 
-        fireEvent.change(screen.getByLabelText(/height feet/i), {
-            target: { value: "5" },
-        })
-        fireEvent.change(screen.getByLabelText(/height inches/i), {
-            target: { value: "7" },
-        })
+        const feetTrigger = screen.getByRole("combobox", { name: /height feet/i })
+        const inchesTrigger = screen.getByRole("combobox", { name: /height inches/i })
+        expect(feetTrigger).toHaveAttribute("data-slot", "select-trigger")
+        expect(inchesTrigger).toHaveAttribute("data-slot", "select-trigger")
 
-        expect(screen.getByLabelText(/height feet/i)).toBeInTheDocument()
-        expect(screen.getByLabelText(/height inches/i)).toBeInTheDocument()
+        chooseBaseUiOption(feetTrigger, "5 ft")
+        chooseBaseUiOption(inchesTrigger, "7 in")
+
         expect(updateField).toHaveBeenLastCalledWith("height_ft", "5.58")
     })
 
@@ -203,8 +209,8 @@ describe("PublicFormFieldRenderer", () => {
             />,
         )
 
-        expect(screen.getByLabelText(/height feet/i)).toHaveValue("6")
-        expect(screen.getByLabelText(/height inches/i)).toHaveValue("0")
+        expect(screen.getByRole("combobox", { name: /height feet/i })).toHaveTextContent("6 ft")
+        expect(screen.getByRole("combobox", { name: /height inches/i })).toHaveTextContent("0 in")
     })
 
     it("clears the stored height when both selects are reset", () => {
@@ -232,15 +238,13 @@ describe("PublicFormFieldRenderer", () => {
 
         render(<Wrapper />)
 
-        fireEvent.change(screen.getByLabelText(/height inches/i), {
-            target: { value: "" },
-        })
-        fireEvent.change(screen.getByLabelText(/height feet/i), {
-            target: { value: "" },
-        })
+        const inchesTrigger = screen.getByRole("combobox", { name: /height inches/i })
+        const feetTrigger = screen.getByRole("combobox", { name: /height feet/i })
+        chooseBaseUiOption(inchesTrigger, "e.g. 6 in")
+        chooseBaseUiOption(feetTrigger, "e.g. 5 ft")
 
-        expect(screen.getByLabelText(/height feet/i)).toHaveValue("")
-        expect(screen.getByLabelText(/height inches/i)).toHaveValue("")
+        expect(feetTrigger).toHaveTextContent("e.g. 5 ft")
+        expect(inchesTrigger).toHaveTextContent("e.g. 6 in")
     })
 
     it("renders select option labels with the same small type scale as other controls", () => {
@@ -451,7 +455,8 @@ describe("PublicFormFieldRenderer", () => {
         const row = screen.getByRole("group", { name: /surgeries row/i })
         const responseSelect = within(row).getByRole("combobox", { name: /response/i })
 
-        fireEvent.change(responseSelect, { target: { value: "yes" } })
+        expect(responseSelect).toHaveAttribute("data-slot", "select-trigger")
+        chooseBaseUiOption(responseSelect, "Yes")
 
         expect(updateField).toHaveBeenCalledWith(
             "medical_history",

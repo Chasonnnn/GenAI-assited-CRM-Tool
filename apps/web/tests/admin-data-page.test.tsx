@@ -16,7 +16,7 @@ vi.mock("@/lib/csrf", () => ({
     getCsrfHeaders: () => ({ "X-CSRF-Token": "test-token" }),
 }))
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         success: mocks.toastSuccess,
         error: mocks.toastError,

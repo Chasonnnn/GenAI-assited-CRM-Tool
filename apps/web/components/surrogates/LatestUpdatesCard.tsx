@@ -1,5 +1,7 @@
 "use client"
 
+
+import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { FileTextIcon, PaperclipIcon, ArrowRightIcon, Loader2Icon } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
@@ -79,7 +81,7 @@ export function LatestUpdatesCard({
 
                 {/* Most Recent File - click to fetch signed URL and open */}
                 {latestAttachment ? (
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => handleAttachmentClick(latestAttachment.id)}
                         disabled={isDownloading}
@@ -96,7 +98,7 @@ export function LatestUpdatesCard({
                         {isDownloading && (
                             <Loader2Icon className="size-3 animate-spin" />
                         )}
-                    </button>
+                    </Button>
                 ) : (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <PaperclipIcon className="size-4" />

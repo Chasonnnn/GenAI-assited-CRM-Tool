@@ -168,7 +168,7 @@ function AppointmentCard({
         <div
             className="flex items-center justify-between rounded-lg border border-border transition-colors hover:bg-muted/50"
         >
-            <button
+            <Button unstyled
                 type="button"
                 className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-4 rounded-lg bg-transparent p-4 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 onClick={onSelect}
@@ -210,7 +210,7 @@ function AppointmentCard({
                 {!trailingActions && (
                     <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" />
                 )}
-            </button>
+            </Button>
 
             {trailingActions && (
                 <div className="flex items-center gap-2 pr-4">

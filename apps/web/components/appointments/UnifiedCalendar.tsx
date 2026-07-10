@@ -145,13 +145,13 @@ function TaskItem({
 
         if (clickable) {
             return (
-                <button
+                <Button unstyled
                     type="button"
                     onClick={handleTaskClick}
                     className="flex w-full items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-left text-[11px] font-medium text-purple-950 transition-opacity hover:opacity-90 dark:text-purple-100"
                 >
                     {compactContent}
-                </button>
+                </Button>
             )
         }
 
@@ -177,13 +177,13 @@ function TaskItem({
 
     if (clickable) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 onClick={handleTaskClick}
                 className="w-full rounded-lg border border-purple-500/20 bg-muted/50 p-2 text-left shadow-[inset_3px_0_0_rgb(168_85_247)] hover:bg-muted"
             >
                 {fullContent}
-            </button>
+            </Button>
         )
     }
 
@@ -275,7 +275,7 @@ function EventItem({
 
         if (onClick) {
             return (
-                <button
+                <Button unstyled
                     type="button"
                     draggable={canDrag}
                     onDragStart={handleDragStart}
@@ -283,7 +283,7 @@ function EventItem({
                     className={compactClassName}
                 >
                     {time} - {appointment.client_name}
-                </button>
+                </Button>
             )
         }
 
@@ -311,7 +311,7 @@ function EventItem({
 
     if (onClick) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 draggable={canDrag}
                 onDragStart={handleDragStart}
@@ -319,7 +319,7 @@ function EventItem({
                 className={fullClassName}
             >
                 {fullContent}
-            </button>
+            </Button>
         )
     }
 
@@ -994,7 +994,7 @@ function MonthView({
                             }}
                         >
                             <div className="flex items-start justify-between gap-2">
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => onOpenDayAgenda?.(day)}
                                     disabled={!canOpenDayAgenda}
@@ -1013,7 +1013,7 @@ function MonthView({
                                     )}
                                 >
                                     {format(day, "d")}
-                                </button>
+                                </Button>
                                 {totalEvents > 0 && (
                                     <Badge
                                         variant="outline"

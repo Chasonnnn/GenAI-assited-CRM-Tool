@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { FormField } from "@/lib/api/forms"
 import { splitHeightFt, totalInchesToHeightFt } from "@/lib/height"
@@ -42,6 +43,65 @@ function formatDate(value: string | null): string {
 const publicFieldShellClassName = "space-y-2"
 const publicFieldGroupShellClassName = "space-y-3 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4"
 const publicControlClassName = "h-11 rounded-md border-stone-200 bg-white shadow-none"
+const HEIGHT_FEET_OPTIONS = Array.from({ length: 9 }, (_, value) => ({
+    label: `${value} ft`,
+    value: String(value),
+}))
+const HEIGHT_INCHES_OPTIONS = Array.from({ length: 12 }, (_, value) => ({
+    label: `${value} in`,
+    value: String(value),
+}))
+
+function PublicSelectControl({
+    id,
+    name,
+    value,
+    placeholder,
+    options,
+    onValueChange,
+    ariaLabel,
+    ariaLabelledBy,
+    className,
+}: {
+    id: string
+    name?: string
+    value: string
+    placeholder: string
+    options: ReadonlyArray<{ label: string; value: string }>
+    onValueChange: (value: string) => void
+    ariaLabel?: string
+    ariaLabelledBy?: string
+    className?: string
+}) {
+    return (
+        <Select
+            name={name}
+            value={value || null}
+            onValueChange={(nextValue) => onValueChange(nextValue ?? "")}
+        >
+            <SelectTrigger
+                id={id}
+                aria-label={ariaLabel}
+                aria-labelledby={ariaLabelledBy}
+                className={className}
+            >
+                <SelectValue placeholder={placeholder}>
+                    {(selectedValue: string | null) =>
+                        options.find((option) => option.value === selectedValue)?.label ?? placeholder
+                    }
+                </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="">{placeholder}</SelectItem>
+                {options.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    )
+}
 
 function getPublicFieldDensityStyles(density: PublicFormDensity) {
     const isCompact = density === "compact"
@@ -372,20 +432,17 @@ function FixedTableFieldInput({
                                                 ))}
                                             </div>
                                         ) : column.type === "select" ? (
-                                            <select
+                                            <PublicSelectControl
                                                 id={fieldInputId}
-                                                aria-labelledby={fieldInputLabelId}
-                                                className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
+                                                ariaLabelledBy={fieldInputLabelId}
                                                 value={normalizedValue}
-                                                onChange={(event) => updateCell(rowKey, column.key, event.target.value)}
-                                            >
-                                                <option value="">Select&hellip;</option>
-                                                {options.map((option) => (
-                                                    <option key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onValueChange={(nextValue) =>
+                                                    updateCell(rowKey, column.key, nextValue)
+                                                }
+                                                placeholder="Select…"
+                                                options={options}
+                                                className="h-11 border-stone-200 bg-white shadow-none"
+                                            />
                                         ) : column.type === "textarea" ? (
                                             <Input
                                                 id={fieldInputId}
@@ -464,20 +521,15 @@ function HeightFieldInput({
                     >
                         Feet
                     </Label>
-                    <select
+                    <PublicSelectControl
                         id={`${field.key}_ft`}
-                        aria-label={`${field.label} Feet`}
+                        ariaLabel={`${field.label} Feet`}
                         value={feetValue}
-                        onChange={(event) => syncHeight(event.target.value, inchesValue)}
-                        className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
-                    >
-                        <option value="">e.g. 5 ft</option>
-                        {Array.from({ length: 9 }, (_, value) => value).map((value) => (
-                            <option key={`feet-${value}`} value={value}>
-                                {value} ft
-                            </option>
-                        ))}
-                    </select>
+                        onValueChange={(nextValue) => syncHeight(nextValue, inchesValue)}
+                        placeholder="e.g. 5 ft"
+                        options={HEIGHT_FEET_OPTIONS}
+                        className="h-11 border-stone-200 bg-white shadow-none"
+                    />
                 </div>
                 <div className="space-y-2">
                     <Label
@@ -486,20 +538,15 @@ function HeightFieldInput({
                     >
                         Inches
                     </Label>
-                    <select
+                    <PublicSelectControl
                         id={`${field.key}_in`}
-                        aria-label={`${field.label} Inches`}
+                        ariaLabel={`${field.label} Inches`}
                         value={inchesValue}
-                        onChange={(event) => syncHeight(feetValue, event.target.value)}
-                        className="h-11 w-full rounded-md border border-stone-200 bg-white px-3 text-sm shadow-none"
-                    >
-                        <option value="">e.g. 6 in</option>
-                        {Array.from({ length: 12 }, (_, value) => value).map((value) => (
-                            <option key={`inches-${value}`} value={value}>
-                                {value} in
-                            </option>
-                        ))}
-                    </select>
+                        onValueChange={(nextValue) => syncHeight(feetValue, nextValue)}
+                        placeholder="e.g. 6 in"
+                        options={HEIGHT_INCHES_OPTIONS}
+                        className="h-11 border-stone-200 bg-white shadow-none"
+                    />
                 </div>
             </div>
             {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
@@ -521,7 +568,7 @@ function OptionCard({
     size?: "default" | "compact"
 }) {
     return (
-        <button
+        <Button unstyled
             type="button"
             role={selectionRole}
             aria-checked={selected}
@@ -550,7 +597,7 @@ function OptionCard({
                     {label}
                 </div>
             </div>
-        </button>
+        </Button>
     )
 }
 

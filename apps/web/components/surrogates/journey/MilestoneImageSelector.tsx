@@ -4,7 +4,7 @@ import Image from "next/image"
 import { useState } from "react"
 import { useQueries } from "@tanstack/react-query"
 import { CheckIcon, ImageOffIcon, Loader2Icon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -126,7 +126,7 @@ export function MilestoneImageSelector({
 
                 <div className="space-y-4">
                     {/* Default option */}
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => selectAttachmentId(null)}
                         className={cn(
@@ -149,7 +149,7 @@ export function MilestoneImageSelector({
                         {selectedId === null && (
                             <CheckIcon className="size-5 text-primary" />
                         )}
-                    </button>
+                    </Button>
 
                     {/* Image grid */}
                     {isLoading ? (
@@ -167,7 +167,7 @@ export function MilestoneImageSelector({
                                     downloadQuery?.isFetching
 
                                 return (
-                                    <button
+                                    <Button unstyled
                                         key={attachment.id}
                                         type="button"
                                         onClick={() => selectAttachmentId(attachment.id)}
@@ -204,7 +204,7 @@ export function MilestoneImageSelector({
                                         <div className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                                             {attachment.filename}
                                         </div>
-                                    </button>
+                                    </Button>
                                 )
                             })}
                         </div>

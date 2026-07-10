@@ -17,7 +17,7 @@ import type { JourneyExportVariant } from "@/lib/api/journey"
 import { useAuth } from "@/lib/auth-context"
 import { JourneyTimeline } from "./JourneyTimeline"
 import { MilestoneImageSelector } from "./MilestoneImageSelector"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
 // Roles that can edit journey images

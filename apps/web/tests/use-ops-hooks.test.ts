@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { ApiError } from "@/lib/api"
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         error: vi.fn(),
     },

@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { attachmentsApi } from "../api/attachments"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { surrogateKeys } from "./use-surrogates"
 import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 

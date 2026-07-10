@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import api from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -33,7 +34,7 @@ import {
     PlusIcon,
     UserIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
@@ -748,12 +749,13 @@ function EnableWorkflowCheckbox({
 }) {
     return (
         <div className="flex items-center gap-2">
-            <input
-                type="checkbox"
+            <Checkbox
                 id="is_enabled"
                 aria-label="Enable workflow immediately"
                 checked={isEnabled}
-                onChange={(e) => onFormDataChange((f) => ({ ...f, is_enabled: e.target.checked }))}
+                onCheckedChange={(checked) =>
+                    onFormDataChange((formData) => ({ ...formData, is_enabled: checked }))
+                }
                 className="size-4 rounded border-zinc-300"
             />
             <Label htmlFor="is_enabled">Enable workflow immediately</Label>

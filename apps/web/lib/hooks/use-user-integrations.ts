@@ -3,7 +3,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toast'
 import { ApiError } from '@/lib/api'
 import { appointmentKeys } from './use-appointments'
 import { surrogateKeys } from './use-surrogates'

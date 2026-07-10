@@ -15,7 +15,7 @@ vi.mock('@/lib/api/appointments', () => ({
         rescheduleAppointmentMock(appointmentId, scheduledStart),
 }))
 
-vi.mock('sonner', () => ({
+vi.mock('@/components/ui/toast', () => ({
     toast: {
         error: (...args: unknown[]) => toastErrorMock(...args),
     },

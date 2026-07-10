@@ -1,5 +1,7 @@
 "use client"
 
+
+import { Button } from "@/components/ui/button"
 import { CalendarCheckIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -74,7 +76,7 @@ export function SurrogateTasksListView({
                                             onCheckedChange={() => onTaskToggle(task.id, task.is_completed)}
                                         />
                                         {onTaskClick ? (
-                                            <button
+                                            <Button unstyled
                                                 type="button"
                                                 className="flex-1 min-w-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                 onClick={() => onTaskClick(task)}
@@ -104,7 +106,7 @@ export function SurrogateTasksListView({
                                                         </Badge>
                                                     )}
                                                 </div>
-                                            </button>
+                                            </Button>
                                         ) : (
                                             <div className="flex-1 min-w-0">
                                                 <span
@@ -163,13 +165,13 @@ export function SurrogateTasksListView({
                                             onCheckedChange={() => onTaskToggle(task.id, true)}
                                         />
                                         {onTaskClick ? (
-                                            <button
+                                            <Button unstyled
                                                 type="button"
                                                 className="flex-1 min-w-0 rounded-md text-left text-sm line-through text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                                 onClick={() => onTaskClick(task)}
                                             >
                                                 {task.title}
-                                            </button>
+                                            </Button>
                                         ) : (
                                             <span className="flex-1 min-w-0 text-sm line-through text-muted-foreground">
                                                 {task.title}

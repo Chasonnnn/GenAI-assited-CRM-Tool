@@ -33,7 +33,7 @@ import {
     usePreviewSurrogateMassEditStage,
     useSurrogateMassEditOptions,
 } from "@/lib/hooks/use-surrogates"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 type TriState = "any" | "true" | "false"
 type ComparisonOp = ">" | ">=" | "<" | "<=" | "="
@@ -299,14 +299,14 @@ function RaceFilterField({
                     {selectedRaces.map((raceKey) => (
                         <Badge key={raceKey} variant="secondary" className="gap-1 pr-1">
                             {formatRace(raceKey)}
-                            <button
+                            <Button unstyled
                                 type="button"
                                 className="rounded-sm p-0.5 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 onClick={() => onRaceRemove(raceKey)}
                                 aria-label={`Remove race ${formatRace(raceKey)}`}
                             >
                                 <XIcon className="size-3" aria-hidden="true" />
-                            </button>
+                            </Button>
                         </Badge>
                     ))}
                     <Button

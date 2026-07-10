@@ -333,7 +333,7 @@ function AppSidebarContent({
                         />
                     ))}
 
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => dispatch({ type: "toggleSection", section: "tasks" })}
                         className={getNavItemClass(Boolean(pathname?.startsWith("/tasks")) || Boolean(pathname?.startsWith("/appointments")) || pathname === "/settings/appointments")}
@@ -352,7 +352,7 @@ function AppSidebarContent({
                                 />
                             </>
                         )}
-                    </button>
+                    </Button>
                     {!collapsed && sections.tasks && (
                         <div className="ml-6 flex flex-col gap-1">
                             {tasksItems.map((subItem) => (
@@ -368,7 +368,7 @@ function AppSidebarContent({
                         </div>
                     )}
 
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => dispatch({ type: "toggleSection", section: "automation" })}
                         className={getNavItemClass(Boolean(pathname?.startsWith("/automation")))}
@@ -387,7 +387,7 @@ function AppSidebarContent({
                                 />
                             </>
                         )}
-                    </button>
+                    </Button>
                     {!collapsed && sections.automation && (
                         <div className="ml-6 flex flex-col gap-1">
                             {automationItems.map((subItem) => (
@@ -427,7 +427,7 @@ function AppSidebarContent({
                         />
                     )}
 
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => dispatch({ type: "toggleSection", section: "settings" })}
                         className={getNavItemClass(Boolean(pathname?.startsWith("/settings")) && !pathname?.startsWith("/settings/appointments"))}
@@ -446,7 +446,7 @@ function AppSidebarContent({
                                 />
                             </>
                         )}
-                    </button>
+                    </Button>
                     {!collapsed && sections.settings && (
                         <div className="ml-6 flex flex-col gap-1">
                             {settingsItems.map((subItem) => (
@@ -468,7 +468,7 @@ function AppSidebarContent({
                 <DropdownMenu>
                     <DropdownMenuTrigger
                         render={
-                            <button
+                            <Button unstyled
                                 type="button"
                                 className={cn(
                                     "w-full rounded-lg data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
@@ -733,7 +733,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     return (
         <div className="flex min-h-svh w-full bg-sidebar">
             {isMobile && mobileOpen && (
-                <button
+                <Button unstyled
                     type="button"
                     className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm appearance-none border-0 p-0 m-0"
                     onClick={() => dispatch({ type: "setMobileOpen", mobileOpen: false })}

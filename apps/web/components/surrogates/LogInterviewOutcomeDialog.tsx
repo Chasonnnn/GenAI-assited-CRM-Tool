@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select"
 import { useLogInterviewOutcome } from "@/lib/hooks/use-surrogates"
 import type { InterviewOutcome, InterviewOutcomeCreatePayload } from "@/lib/api/surrogates"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 interface LogInterviewOutcomeDialogProps {
     open: boolean

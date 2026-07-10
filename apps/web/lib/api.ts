@@ -5,7 +5,7 @@
 
 import { getCsrfHeaders } from '@/lib/csrf';
 import { getApiBase } from '@/lib/api-base';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/toast';
 
 const API_BASE = getApiBase();
 

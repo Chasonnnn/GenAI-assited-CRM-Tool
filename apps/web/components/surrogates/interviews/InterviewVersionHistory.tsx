@@ -38,7 +38,7 @@ import {
     useRestoreInterviewVersion,
 } from "@/lib/hooks/use-interviews"
 import type { InterviewVersionListItem } from "@/lib/api/interviews"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 interface InterviewVersionHistoryProps {
     interviewId: string

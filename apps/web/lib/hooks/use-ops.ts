@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/toast';
 import * as opsApi from '../api/ops';
 import { getErrorMessage } from '../error-utils';
 import type { AlertsListParams } from '../api/ops';

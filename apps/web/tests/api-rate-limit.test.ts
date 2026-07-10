@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('sonner', () => ({
+vi.mock('@/components/ui/toast', () => ({
     toast: {
         error: vi.fn(),
     },

@@ -758,7 +758,7 @@ function CSVUploadDropzone({
                     if (selectedFile) void onFileSelect(selectedFile)
                 }}
             />
-            <button
+            <Button unstyled
                 type="button"
                 className={cn(
                     "relative flex min-h-[300px] w-full cursor-pointer flex-col items-center justify-center border-2 border-dashed bg-transparent p-12 text-center transition-colors",
@@ -795,7 +795,7 @@ function CSVUploadDropzone({
                         {error}
                     </div>
                 )}
-            </button>
+            </Button>
         </Card>
     )
 }

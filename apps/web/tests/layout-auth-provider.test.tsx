@@ -31,7 +31,7 @@ vi.mock("@/components/theme-provider", () => ({
     ),
 }))
 
-vi.mock("@/components/ui/sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     Toaster: () => <div data-testid="toaster" />,
 }))
 

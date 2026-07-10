@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import type { BuilderPaletteField } from "@/lib/forms/form-builder-library"
 import {

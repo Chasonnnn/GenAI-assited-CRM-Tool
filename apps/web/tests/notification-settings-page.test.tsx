@@ -40,7 +40,7 @@ vi.mock("@/lib/hooks/use-notifications", () => ({
     }),
 }))
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: toastMocks,
 }))
 

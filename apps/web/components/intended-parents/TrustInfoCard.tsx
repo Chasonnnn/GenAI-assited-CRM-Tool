@@ -162,7 +162,7 @@ function TrustAddressField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className="group flex items-center gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={openAddressEditor}
@@ -175,7 +175,7 @@ function TrustAddressField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 
@@ -330,7 +330,7 @@ function TrustNotesField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className="group flex items-start gap-1 -mx-1 cursor-pointer appearance-none rounded border-0 bg-transparent px-1 text-left text-inherit transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={openNotesEditor}
@@ -343,7 +343,7 @@ function TrustNotesField({
                     className="mt-0.5 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 

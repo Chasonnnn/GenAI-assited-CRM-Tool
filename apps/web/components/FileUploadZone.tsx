@@ -4,6 +4,7 @@ import { useId, useState } from "react"
 import { useDropzone } from "react-dropzone"
 import { Upload, File, Loader2, X, Download, Trash2, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -202,7 +203,7 @@ export function FileUploadZone({ surrogateId, className }: FileUploadZoneProps) 
                         : "border-muted-foreground/25 hover:border-primary/50"
                 )}
             >
-                <input
+                <Input
                     {...getInputProps({
                         id: dropzoneInputId,
                         name: "surrogate_attachments",

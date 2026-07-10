@@ -1,5 +1,7 @@
 "use client"
 
+
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ClockIcon, MessageSquareIcon, PaperclipIcon, PhoneIcon, VideoIcon, UsersIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -48,7 +50,7 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
     const interviewDateLabel = formatDate(interview.conducted_at)
 
     return (
-        <button
+        <Button unstyled
             type="button"
             className={cn(
                 "w-full border-b p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -91,6 +93,6 @@ export function ListItem({ interview, isSelected, onClick }: ListItemProps) {
                     </div>
                 </div>
             </div>
-        </button>
+        </Button>
     )
 }

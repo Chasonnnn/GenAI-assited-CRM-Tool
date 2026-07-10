@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { createContext, use, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useProfile, useSyncProfile, useSaveProfileOverrides, useToggleProfileHidden } from "@/lib/hooks/use-profile"
 import { exportProfilePdf } from "@/lib/api/profile"
 import type { FormSchema } from "@/lib/api/forms"

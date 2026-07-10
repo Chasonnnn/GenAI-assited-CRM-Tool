@@ -9,7 +9,7 @@ const mockPreviewMutateAsync = vi.fn()
 const mockApplyStageMutateAsync = vi.fn()
 const mockApplyArchiveMutateAsync = vi.fn()
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         error: vi.fn(),
         info: vi.fn(),

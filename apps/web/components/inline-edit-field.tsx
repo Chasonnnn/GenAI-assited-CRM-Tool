@@ -139,7 +139,7 @@ export function InlineEditField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className={cn(
                     "group flex items-center gap-1 rounded px-1 -mx-1 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -155,7 +155,7 @@ export function InlineEditField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 

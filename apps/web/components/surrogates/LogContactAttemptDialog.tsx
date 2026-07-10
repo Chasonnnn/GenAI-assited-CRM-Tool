@@ -23,7 +23,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2Icon, PhoneIcon, MailIcon, MessageSquareIcon, CalendarIcon } from "lucide-react"
 import { useCreateContactAttempt } from "@/lib/hooks/use-surrogates"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import type { ContactMethod, ContactOutcome } from "@/lib/api/surrogates"
 import { trackFirstContactLogged } from "@/lib/workflow-metrics"
 

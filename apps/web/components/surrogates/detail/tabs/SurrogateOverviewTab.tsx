@@ -268,7 +268,7 @@ function InlineSelectField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
@@ -281,7 +281,7 @@ function InlineSelectField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 
@@ -437,7 +437,7 @@ function InlineHeightField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className="group -mx-1 flex cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
@@ -450,7 +450,7 @@ function InlineHeightField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 
@@ -568,7 +568,7 @@ function InlineRaceField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
@@ -581,7 +581,7 @@ function InlineRaceField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 
@@ -698,7 +698,7 @@ function InlineWeightField({
 
     if (!isEditing) {
         return (
-            <button
+            <Button unstyled
                 type="button"
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={handleStartEdit}
@@ -711,7 +711,7 @@ function InlineWeightField({
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                 />
-            </button>
+            </Button>
         )
     }
 
@@ -810,7 +810,7 @@ function ChecklistStatusButton({
     }
 
     return (
-        <button
+        <Button unstyled
             type="button"
             className="flex size-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60"
             onClick={cycleChecklistValue}
@@ -822,7 +822,7 @@ function ChecklistStatusButton({
             {(value === null || value === undefined) && (
                 <span className="text-sm leading-none text-muted-foreground">-</span>
             )}
-        </button>
+        </Button>
     )
 }
 
@@ -899,7 +899,7 @@ function SsnField({
         return (
             <div className="space-y-1">
                 <div className="flex min-w-0 items-center gap-2">
-                    <input
+                    <Input
                         aria-label={label}
                         value={editValue}
                         onChange={(event) => setEditValue(event.target.value)}

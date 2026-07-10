@@ -57,7 +57,7 @@ vi.mock("@/lib/api/surrogates", () => ({
     exportSurrogatePacketPdf: (...args: unknown[]) => mockExportSurrogatePacketPdf(...args),
 }))
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
     toast: {
         success: (...args: unknown[]) => mockToastSuccess(...args),
         error: (...args: unknown[]) => mockToastError(...args),

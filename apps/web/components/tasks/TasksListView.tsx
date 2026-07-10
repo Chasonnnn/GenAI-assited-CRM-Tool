@@ -90,7 +90,7 @@ function TaskListItemRow({
                 />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-                <button
+                <Button unstyled
                     type="button"
                     className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => onTaskClick(task)}
@@ -111,7 +111,7 @@ function TaskListItemRow({
                             </Badge>
                         )}
                     </div>
-                </button>
+                </Button>
                 {task.surrogate_id && (
                     <Link
                         href={`/surrogates/${task.surrogate_id}`}

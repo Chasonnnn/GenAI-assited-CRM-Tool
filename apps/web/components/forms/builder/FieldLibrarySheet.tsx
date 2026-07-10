@@ -1,5 +1,7 @@
 "use client"
 
+
+import { Button } from "@/components/ui/button"
 import { Command, CommandInput } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -62,7 +64,7 @@ function FieldTile({
     const Icon = field.icon
 
     return (
-        <button
+        <Button unstyled
             type="button"
             aria-label={buildTileAriaLabel(field, isPreset)}
             onClick={() => onInsertField(field)}
@@ -85,7 +87,7 @@ function FieldTile({
                 <Icon className="size-4" aria-hidden="true" />
             </span>
             <span className="w-full text-[13px] font-medium leading-tight text-stone-900">{field.label}</span>
-        </button>
+        </Button>
     )
 }
 
@@ -145,7 +147,7 @@ export function FieldLibrarySheet({
                                         const isActive = activeCategory === category.id
 
                                         return (
-                                            <button
+                                            <Button unstyled
                                                 key={category.id}
                                                 type="button"
                                                 onClick={() => onCategoryChange(category.id)}
@@ -158,7 +160,7 @@ export function FieldLibrarySheet({
                                                 )}
                                             >
                                                 {category.label}
-                                            </button>
+                                            </Button>
                                         )
                                     })}
                                 </div>

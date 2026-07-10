@@ -206,7 +206,7 @@ function StageSelectionList({
                     const isSelected = stage.id === selectedStageId
 
                     return (
-                        <button
+                        <Button unstyled
                             key={stage.id}
                             type="button"
                             disabled={isCurrent}
@@ -227,7 +227,7 @@ function StageSelectionList({
                                 <span className="text-xs text-muted-foreground">Current</span>
                             ) : null}
                             {isSelected ? <CheckIcon className="size-4 text-primary" /> : null}
-                        </button>
+                        </Button>
                     )
                 })}
             </div>
@@ -348,7 +348,7 @@ function OnHoldFollowUpSection({
                 {FOLLOW_UP_OPTIONS.map((option) => {
                     const isSelected = selectedMonths === option.value
                     return (
-                        <button
+                        <Button unstyled
                             key={option.value}
                             type="button"
                             onClick={() => onSelectedMonthsChange(option.value)}
@@ -367,7 +367,7 @@ function OnHoldFollowUpSection({
                             <div className="mt-1 text-xs text-muted-foreground">
                                 {option.description}
                             </div>
-                        </button>
+                        </Button>
                     )
                 })}
             </div>

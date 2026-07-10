@@ -1,5 +1,7 @@
 "use client"
 
+
+import { Button } from "@/components/ui/button"
 import * as React from "react"
 import { useAIContext } from "@/lib/context/ai-context"
 import { AIChatPanel } from "./AIChatPanel"
@@ -27,7 +29,7 @@ export function AIChatDrawer() {
     return (
         <>
             {/* Backdrop for mobile */}
-            <button
+            <Button unstyled
                 type="button"
                 aria-label="Close AI chat drawer"
                 className={cn(

@@ -39,7 +39,7 @@ vi.mock('@/lib/api/forms', async () => {
     }
 })
 
-vi.mock('sonner', () => ({
+vi.mock('@/components/ui/toast', () => ({
     toast: {
         success: vi.fn(),
         error: vi.fn(),
@@ -341,8 +341,8 @@ describe('Shared Intake Public Page', () => {
         expect(screen.getByPlaceholderText('e.g. jane@example.com')).toBeInTheDocument()
         expect(screen.getByPlaceholderText('e.g. 150 lb')).toBeInTheDocument()
         expect(screen.getByPlaceholderText('Share any relevant details')).toBeInTheDocument()
-        expect(screen.getByRole('option', { name: 'e.g. 5 ft' })).toBeInTheDocument()
-        expect(screen.getByRole('option', { name: 'e.g. 6 in' })).toBeInTheDocument()
+        expect(screen.getByRole('combobox', { name: 'Height Feet' })).toHaveTextContent('e.g. 5 ft')
+        expect(screen.getByRole('combobox', { name: 'Height Inches' })).toHaveTextContent('e.g. 6 in')
         expect(screen.queryByPlaceholderText('Full Name')).not.toBeInTheDocument()
         expect(screen.queryByPlaceholderText('Phone')).not.toBeInTheDocument()
         expect(screen.queryByPlaceholderText('Email')).not.toBeInTheDocument()

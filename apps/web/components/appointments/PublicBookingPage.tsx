@@ -56,7 +56,7 @@ import type {
     MeetingMode,
 } from "@/lib/api/appointments"
 import { format, addDays, parseISO } from "date-fns"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import {
     formatDateKeyInTimeZone,
     formatPlainDateKey,

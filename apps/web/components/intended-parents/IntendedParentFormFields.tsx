@@ -3,11 +3,53 @@
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { US_STATES } from "@/lib/constants/us-states"
 import type { IntendedParentFormValues } from "./intended-parent-form-values"
 
 const PRONOUN_OPTIONS = ["He/Him", "She/Her", "They/Them", "Other"]
+
+function FormSelect({
+    id,
+    label,
+    value,
+    onChange,
+    placeholder,
+    options,
+}: {
+    id: string
+    label: string
+    value: string
+    onChange: (value: string) => void
+    placeholder: string
+    options: ReadonlyArray<{ label: string; value: string }>
+}) {
+    const labelId = `${id}-label`
+
+    return (
+        <div className="space-y-2">
+            <Label id={labelId} htmlFor={id}>{label}</Label>
+            <Select value={value || null} onValueChange={(nextValue) => onChange(nextValue ?? "")}>
+                <SelectTrigger id={id} aria-labelledby={labelId}>
+                    <SelectValue placeholder={placeholder}>
+                        {(selectedValue: string | null) =>
+                            options.find((option) => option.value === selectedValue)?.label ?? placeholder
+                        }
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="">{placeholder}</SelectItem>
+                    {options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    )
+}
 
 interface IntendedParentFormFieldsProps {
     values: IntendedParentFormValues
@@ -32,26 +74,15 @@ function PronounsField({
     value: string
     onChange: (value: string) => void
 }) {
-    const labelId = `${id}-label`
-
     return (
-        <div className="space-y-2">
-            <Label id={labelId} htmlFor={id}>{label}</Label>
-            <select
-                id={id}
-                aria-labelledby={labelId}
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-                <option value="">Select pronouns</option>
-                {PRONOUN_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                        {option}
-                    </option>
-                ))}
-            </select>
-        </div>
+        <FormSelect
+            id={id}
+            label={label}
+            value={value}
+            onChange={onChange}
+            placeholder="Select pronouns"
+            options={PRONOUN_OPTIONS.map((option) => ({ label: option, value: option }))}
+        />
     )
 }
 
@@ -66,26 +97,18 @@ function StateField({
     value: string
     onChange: (value: string) => void
 }) {
-    const labelId = `${id}-label`
-
     return (
-        <div className="space-y-2">
-            <Label id={labelId} htmlFor={id}>{label}</Label>
-            <select
-                id={id}
-                aria-labelledby={labelId}
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-                <option value="">Select a state</option>
-                {US_STATES.map((state) => (
-                    <option key={state.value} value={state.value}>
-                        {state.label} ({state.value})
-                    </option>
-                ))}
-            </select>
-        </div>
+        <FormSelect
+            id={id}
+            label={label}
+            value={value}
+            onChange={onChange}
+            placeholder="Select a state"
+            options={US_STATES.map((state) => ({
+                label: `${state.label} (${state.value})`,
+                value: state.value,
+            }))}
+        />
     )
 }
 
