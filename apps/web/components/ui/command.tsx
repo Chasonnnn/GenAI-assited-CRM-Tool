@@ -1,35 +1,50 @@
 "use client"
 
 import * as React from "react"
-import { Command as CommandPrimitive } from "cmdk"
+import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox"
+import { CheckIcon, SearchIcon } from "lucide-react"
 
-import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog"
 import {
   InputGroup,
   InputGroupAddon,
-} from '@/components/ui/input-group'
-import { SearchIcon, CheckIcon } from "lucide-react"
+} from "@/components/ui/input-group"
+import { cn } from "@/lib/utils"
+
+type CommandProps = React.ComponentProps<"div"> & {
+  shouldFilter?: boolean | undefined
+}
 
 function Command({
   className,
+  children,
+  shouldFilter = true,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive>) {
+}: CommandProps) {
   return (
-    <CommandPrimitive
-      data-slot="command"
-      className={cn(
-        "bg-popover text-popover-foreground rounded-4xl p-1 flex size-full flex-col overflow-hidden",
-        className
-      )}
-      {...props}
-    />
+    <ComboboxPrimitive.Root
+      inline
+      open
+      autoComplete={shouldFilter ? "list" : "none"}
+      filter={shouldFilter ? undefined : null}
+    >
+      <div
+        data-slot="command"
+        className={cn(
+          "bg-popover text-popover-foreground flex size-full flex-col overflow-hidden rounded-4xl p-1",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    </ComboboxPrimitive.Root>
   )
 }
 
@@ -54,7 +69,7 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
-        className={cn("rounded-4xl! p-0 overflow-hidden p-0", className)}
+        className={cn("overflow-hidden rounded-4xl! p-0", className)}
         showCloseButton={showCloseButton}
       >
         {children}
@@ -63,19 +78,30 @@ function CommandDialog({
   )
 }
 
+type CommandInputProps = Omit<ComboboxPrimitive.Input.Props, "onChange"> & {
+  onChange?: React.ChangeEventHandler<HTMLInputElement> | undefined
+  onValueChange?: ((value: string) => void) | undefined
+}
+
 function CommandInput({
   className,
+  onChange,
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: CommandInputProps) {
   return (
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
-      <InputGroup className="bg-input/30 h-9">
-        <CommandPrimitive.Input
+      <InputGroup className="h-9 bg-input/30">
+        <ComboboxPrimitive.Input
           data-slot="command-input"
           className={cn(
             "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
-            className
+            className,
           )}
+          onChange={(event) => {
+            onChange?.(event)
+            onValueChange?.(event.currentTarget.value)
+          }}
           {...props}
         />
         <InputGroupAddon>
@@ -89,13 +115,13 @@ function CommandInput({
 function CommandList({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.List>) {
+}: ComboboxPrimitive.List.Props) {
   return (
-    <CommandPrimitive.List
+    <ComboboxPrimitive.List
       data-slot="command-list"
       className={cn(
-        "no-scrollbar max-h-72 scroll-py-1 outline-none overflow-x-hidden overflow-y-auto",
-        className
+        "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
+        className,
       )}
       {...props}
     />
@@ -105,9 +131,9 @@ function CommandList({
 function CommandEmpty({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+}: ComboboxPrimitive.Empty.Props) {
   return (
-    <CommandPrimitive.Empty
+    <ComboboxPrimitive.Empty
       data-slot="command-empty"
       className={cn("py-6 text-center text-sm", className)}
       {...props}
@@ -115,36 +141,66 @@ function CommandEmpty({
   )
 }
 
+type CommandGroupProps = Omit<ComboboxPrimitive.Group.Props, "children"> & {
+  heading?: React.ReactNode
+  children?: React.ReactNode
+}
+
 function CommandGroup({
   className,
+  heading,
+  children,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Group>) {
+}: CommandGroupProps) {
   return (
-    <CommandPrimitive.Group
+    <ComboboxPrimitive.Group
       data-slot="command-group"
-      className={cn("text-foreground [&_[cmdk-group-heading]]:text-muted-foreground overflow-hidden p-1 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium", className)}
+      className={cn("overflow-hidden p-1 text-foreground", className)}
       {...props}
-    />
+    >
+      {heading ? (
+        <ComboboxPrimitive.GroupLabel
+          data-slot="command-group-heading"
+          className="px-3 py-2 text-xs font-medium text-muted-foreground"
+        >
+          {heading}
+        </ComboboxPrimitive.GroupLabel>
+      ) : null}
+      {children}
+    </ComboboxPrimitive.Group>
   )
+}
+
+type CommandItemProps = Omit<ComboboxPrimitive.Item.Props, "onClick"> & {
+  onClick?: React.MouseEventHandler<HTMLDivElement> | undefined
+  onSelect?: ((value: string) => void) | undefined
 }
 
 function CommandItem({
   className,
   children,
+  onClick,
+  onSelect,
+  value,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+}: CommandItemProps) {
   return (
-    <CommandPrimitive.Item
+    <ComboboxPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "data-selected:bg-muted data-selected:text-foreground data-selected:*:[svg]:text-foreground relative flex cursor-default items-center gap-2 rounded-lg px-3 py-2 text-sm outline-hidden select-none [&_svg:not([class*='size-'])]:size-4 [[data-slot=dialog-content]_&]:rounded-2xl group/command-item data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-        className
+        "group/command-item relative flex cursor-default items-center gap-2 rounded-lg px-3 py-2 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted data-highlighted:text-foreground data-highlighted:*:[svg]:text-foreground [[data-slot=dialog-content]_&]:rounded-2xl [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        className,
       )}
+      value={value}
+      onClick={(event) => {
+        onClick?.(event)
+        if (!event.defaultPrevented) onSelect?.(String(value ?? ""))
+      }}
       {...props}
     >
       {children}
-      <CheckIcon className="ml-auto opacity-0 group-has-[[data-slot=command-shortcut]]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
-    </CommandPrimitive.Item>
+      <CheckIcon className="ml-auto opacity-0 group-has-[[data-slot=command-shortcut]]/command-item:hidden group-data-selected/command-item:opacity-100" />
+    </ComboboxPrimitive.Item>
   )
 }
 
@@ -155,7 +211,10 @@ function CommandShortcut({
   return (
     <span
       data-slot="command-shortcut"
-      className={cn("text-muted-foreground group-data-selected/command-item:text-foreground ml-auto text-xs tracking-widest", className)}
+      className={cn(
+        "ml-auto text-xs tracking-widest text-muted-foreground group-data-highlighted/command-item:text-foreground",
+        className,
+      )}
       {...props}
     />
   )

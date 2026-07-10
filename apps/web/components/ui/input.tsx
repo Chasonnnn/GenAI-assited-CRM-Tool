@@ -1,6 +1,11 @@
 import * as React from "react"
+import { Input as InputPrimitive } from "@base-ui/react/input"
 
 import { cn } from "@/lib/utils"
+
+type InputProps = Omit<InputPrimitive.Props, "className"> & {
+  className?: string | undefined
+}
 
 function Input({
   className,
@@ -8,12 +13,12 @@ function Input({
   id,
   name,
   ...props
-}: React.ComponentProps<"input">) {
+}: InputProps) {
   const generatedId = React.useId()
   const resolvedId = id ?? (name ? undefined : generatedId)
 
   return (
-    <input
+    <InputPrimitive
       type={type}
       id={resolvedId}
       name={name}
