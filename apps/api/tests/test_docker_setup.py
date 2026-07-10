@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -60,6 +61,26 @@ def test_web_dockerfile_pins_node_and_optimizes_cache() -> None:
     assert idx_pkg < idx_install and idx_lock < idx_install
     assert idx_copy_web > idx_install
     assert idx_copy_api > idx_install
+
+
+def test_web_dockerfile_uses_the_repository_pnpm_release_for_frozen_installs() -> None:
+    content = _read("apps/web/Dockerfile")
+    package = json.loads(_read("apps/web/package.json"))
+    pnpm_release = package["packageManager"].split("+")[0]
+
+    assert f"corepack prepare {pnpm_release} --activate" in content
+    assert "RUN pnpm install --frozen-lockfile\n" in content
+    assert "--config.optional" not in content
+
+
+def test_web_dockerfile_copies_pnpm_policy_before_the_frozen_install() -> None:
+    content = _read("apps/web/Dockerfile")
+
+    policy_idx = content.find("COPY apps/web/pnpm-workspace.yaml")
+    install_idx = content.find("RUN pnpm install --frozen-lockfile")
+
+    assert policy_idx != -1, "pnpm-workspace.yaml contains the lockfile override policy"
+    assert policy_idx < install_idx
 
 
 def test_web_dockerfile_runs_non_root_and_has_healthcheck() -> None:

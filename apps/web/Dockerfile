@@ -11,10 +11,11 @@ WORKDIR /app
 ARG CACHE_BUST=0
 RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
-RUN corepack enable && corepack prepare pnpm@9.12.1 --activate
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
 # Copy package files first for better cache utilization
 COPY apps/web/package.json apps/web/pnpm-lock.yaml ./apps/web/
+COPY apps/web/pnpm-workspace.yaml ./apps/web/
 
 # Install dependencies before copying source
 WORKDIR /app/apps/web
@@ -24,7 +25,7 @@ ENV npm_config_optional=true
 ENV PNPM_CONFIG_OPTIONAL=true
 
 RUN rm -rf node_modules
-RUN pnpm install --frozen-lockfile --config.optional=true
+RUN pnpm install --frozen-lockfile
 
 # Now copy remaining source files
 WORKDIR /app
