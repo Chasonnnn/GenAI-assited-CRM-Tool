@@ -1,7 +1,10 @@
 import fs from "node:fs"
 import path from "node:path"
-import ts from "typescript"
+import { createRequire } from "node:module"
+import type * as TypeScript from "typescript"
 import { describe, it, expect } from "vitest"
+
+const ts = createRequire(import.meta.url)("typescript") as typeof TypeScript
 
 const INTERACTIVE_TAGS = new Set([
   "a",
