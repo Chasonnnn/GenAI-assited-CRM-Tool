@@ -6,7 +6,43 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from '@/lib/utils'
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+const SelectItemLabelsContext = React.createContext<ReadonlyMap<string, React.ReactNode> | null>(null)
+
+function collectSelectItemLabels(children: React.ReactNode) {
+  const labels = new Map<string, React.ReactNode>()
+
+  const visit = (nodes: React.ReactNode) => {
+    React.Children.forEach(nodes, (child) => {
+      if (!React.isValidElement(child)) return
+
+      const element = child as React.ReactElement<{
+        children?: React.ReactNode
+        value?: unknown
+      }>
+      if (element.type === SelectItem && typeof element.props.value === "string") {
+        labels.set(element.props.value, element.props.children)
+        return
+      }
+
+      visit(element.props.children)
+    })
+  }
+
+  visit(children)
+  return labels
+}
+
+function Select<Value = string, Multiple extends boolean | undefined = false>(
+  props: SelectPrimitive.Root.Props<Value, Multiple>
+) {
+  const labels = collectSelectItemLabels(props.children)
+
+  return (
+    <SelectItemLabelsContext.Provider value={labels}>
+      <SelectPrimitive.Root {...props} />
+    </SelectItemLabelsContext.Provider>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -27,6 +63,8 @@ function SelectValue({
   placeholder?: string
   children?: (value: string | null) => React.ReactNode
 }) {
+  const itemLabels = React.useContext(SelectItemLabelsContext)
+
   if (typeof children === "function") {
     return (
       <SelectPrimitive.Value
@@ -36,6 +74,22 @@ function SelectValue({
         {...props}
       >
         {(value) => children(value as string | null)}
+      </SelectPrimitive.Value>
+    )
+  }
+
+  if (itemLabels?.size) {
+    return (
+      <SelectPrimitive.Value
+        data-slot="select-value"
+        className={cn("flex flex-1 text-left", className)}
+        placeholder={placeholder}
+        {...props}
+      >
+        {(value) => {
+          if (typeof value !== "string") return null
+          return itemLabels.get(value) ?? "Unknown selection"
+        }}
       </SelectPrimitive.Value>
     )
   }

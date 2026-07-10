@@ -1,7 +1,13 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
-import { Select, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 describe("SelectValue", () => {
     it("shows the selected item label instead of the raw stored value", () => {
@@ -35,5 +41,22 @@ describe("SelectValue", () => {
         )
 
         expect(screen.getByText("Past Due Review")).toBeInTheDocument()
+    })
+
+    it("derives the selected label from SelectItem children without an items prop", () => {
+        render(
+            <Select defaultValue="past_due">
+                <SelectTrigger>
+                    <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="past_due">Past Due</SelectItem>
+                </SelectContent>
+            </Select>
+        )
+
+        expect(screen.getByText("Past Due")).toBeInTheDocument()
+        expect(screen.queryByText(/^past_due$/)).not.toBeInTheDocument()
     })
 })
