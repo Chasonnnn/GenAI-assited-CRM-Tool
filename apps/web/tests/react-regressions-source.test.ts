@@ -2314,11 +2314,13 @@ describe("React regression guards (source)", () => {
         expectKeyAfterLastSpread(commentCardSource, "ReplyItem", "key={reply.id}")
     })
 
-    it("keeps appointment cards on native button semantics", () => {
+    it("keeps appointment cards on shared Base UI button semantics", () => {
         const source = readSource("components/appointments/AppointmentsList.tsx")
 
-        expect(source).toContain("<button")
+        expect(source).toContain('import { Button } from "@/components/ui/button"')
+        expect(source).toContain("<Button unstyled")
         expect(source).toContain('type="button"')
+        expect(source).not.toContain("<button")
         expect(source).not.toContain('role="button"')
         expect(source).not.toContain("tabIndex={0}")
         expect(source).not.toContain("onKeyDown={(e)")
@@ -3153,7 +3155,7 @@ describe("React regression guards (source)", () => {
         const agencyInvitesSource = readSource("components/ops/agencies/AgencyInvitesTab.tsx")
         const sessionExpiredSource = readSource("components/session-expired-dialog.tsx")
         const notesSource = readSource("components/surrogates/tabs/SurrogateNotesTab.tsx")
-        const sonnerSource = readSource("components/ui/sonner.tsx")
+        const toastSource = readSource("components/ui/toast.tsx")
         const versionHistorySource = readSource("components/version-history-modal.tsx")
 
         expect(attentionSource).toContain("function formatUpcomingItemTime")
@@ -3176,8 +3178,8 @@ describe("React regression guards (source)", () => {
         expect(sessionExpiredSource).not.toContain("const handleLogin =")
         expect(notesSource).toContain("function getNoteAuthorInitials")
         expect(notesSource).not.toContain("const getInitials =")
-        expect(sonnerSource).toContain("function resolveToasterTheme")
-        expect(sonnerSource).not.toContain("const resolveTheme =")
+        expect(toastSource).toContain("function addToast")
+        expect(toastSource).toContain("function ToastViewport")
         expect(versionHistorySource).toContain("function formatVersionHistoryDate")
         expect(versionHistorySource).not.toContain("const formatDate =")
     })
@@ -4392,8 +4394,10 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("inlineEditFieldReducer")
         expect(source).toContain('type: "startEdit"')
-        expect(source).toContain('<button')
+        expect(source).toContain('import { Button } from "@/components/ui/button"')
+        expect(source).toContain('<Button unstyled')
         expect(source).toContain('type="button"')
+        expect(source).not.toContain('<button')
         expect(source).not.toContain('role="button"')
         expect(source).not.toContain("handleDisplayKeyDown")
         expect(source).not.toMatch(/useEffect\(\(\) => \{\s*setEditValue\(value \|\| ""\)/)
@@ -4407,18 +4411,19 @@ describe("React regression guards (source)", () => {
         expect(hostedIntakeSource).toContain("const fieldInputId = `${field.key}-${rowIndex}-${column.key}`")
         expect(hostedIntakeSource).toContain("const fieldInputLabelId = `${fieldInputId}-label`")
         expect(hostedIntakeSource).toMatch(/<Label[\s\S]*?id=\{fieldInputLabelId\}[\s\S]*?htmlFor=\{fieldInputId\}/)
-        expect(hostedIntakeSource).toMatch(/<select\s+id=\{fieldInputId\}\s+aria-labelledby=\{fieldInputLabelId\}/)
+        expect(hostedIntakeSource).toMatch(/<SelectTrigger[\s\S]*?id=\{fieldInputId\}[\s\S]*?aria-labelledby=\{fieldInputLabelId\}/)
 
         expect(publicFieldRendererSource).toContain("const fieldInputId = `${field.key}-${rowKey}-${column.key}`")
         expect(publicFieldRendererSource).toContain("const fieldInputLabelId = `${fieldInputId}-label`")
         expect(publicFieldRendererSource).toMatch(/<Label[\s\S]*?htmlFor=\{fieldInputId\}/)
-        expect(publicFieldRendererSource).toMatch(/<select\s+id=\{fieldInputId\}\s+aria-labelledby=\{fieldInputLabelId\}/)
+        expect(publicFieldRendererSource).toContain("ariaLabelledBy={fieldInputLabelId}")
+        expect(publicFieldRendererSource).toMatch(/<SelectTrigger[\s\S]*?id=\{id\}[\s\S]*?aria-labelledby=\{ariaLabelledBy\}/)
         expect(publicFieldRendererSource).toContain("const selectedValueSet = new Set(selectedValues)")
         expect(publicFieldRendererSource).not.toContain("selectedValues.includes(")
 
         expect(intendedParentFieldsSource).toContain("const labelId = `${id}-label`")
         expect(intendedParentFieldsSource).toContain("<Label id={labelId} htmlFor={id}>{label}</Label>")
-        expect(intendedParentFieldsSource).toMatch(/<select\s+id=\{id\}\s+aria-labelledby=\{labelId\}/)
+        expect(intendedParentFieldsSource).toMatch(/<SelectTrigger[\s\S]*?id=\{id\}[\s\S]*?aria-labelledby=\{labelId\}/)
     })
 
     it("keeps the interview transcript pane on a native labeled region", () => {
