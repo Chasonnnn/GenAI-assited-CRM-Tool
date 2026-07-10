@@ -8,8 +8,16 @@ const mockUseMatches = vi.fn()
 const mockUseMatchStats = vi.fn()
 const mockUseSurrogates = vi.fn()
 const mockUseDefaultPipeline = vi.fn()
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
 
 vi.mock("next/link", () => ({
+    default: ({ children, href }: { children: ReactNode; href: string }) => (
+        <a href={href}>{children}</a>
+    ),
+}))
+
+vi.mock("@/components/app-link", () => ({
     default: ({ children, href }: { children: ReactNode; href: string }) => (
         <a href={href}>{children}</a>
     ),
@@ -50,9 +58,17 @@ vi.mock("@tanstack/react-query", () => ({
     }),
 }))
 
+vi.mock("@/lib/auth-context", () => ({
+    useAuth: () => mockUseAuth(),
+}))
+
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: (...args: unknown[]) => mockUseEffectivePermissions(...args),
+}))
+
 vi.mock("@/lib/hooks/use-matches", () => ({
     useMatches: (params: unknown) => mockUseMatches(params),
-    useMatchStats: () => mockUseMatchStats(),
+    useMatchStats: (options?: unknown) => mockUseMatchStats(options),
     useCreateMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
@@ -72,6 +88,11 @@ describe("MatchesPage", () => {
     beforeEach(() => {
         mockUseMatches.mockClear()
         mockUseMatchStats.mockReset()
+        mockUseAuth.mockReturnValue({ user: { user_id: "user-1", role: "admin" } })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_matches", "view_intended_parents"] },
+            isLoading: false,
+        })
 
         mockUseMatches.mockReturnValue({
             data: {
@@ -188,6 +209,23 @@ describe("MatchesPage", () => {
         expect(screen.getByText("4")).toBeInTheDocument()
         expect(screen.getByText("3")).toBeInTheDocument()
         expect(screen.getByText("2")).toBeInTheDocument()
+    })
+
+    it("does not mount match queries when the current user lacks match access", () => {
+        mockUseAuth.mockReturnValue({
+            user: { user_id: "intake-1", role: "intake_specialist" },
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: [] },
+            isLoading: false,
+        })
+
+        render(<MatchesPage />)
+
+        expect(screen.getByText("Permission required")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /new match/i })).not.toBeInTheDocument()
+        expect(mockUseMatchStats).toHaveBeenCalledWith({ enabled: false })
+        expect(mockUseMatches).not.toHaveBeenCalled()
     })
 
     it("uses pipeline semantics to show protected handoff-stage surrogates in the new match dialog", () => {

@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Loader2 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { useAuth } from "@/lib/auth-context"
 import api from "@/lib/api"
@@ -46,6 +46,8 @@ type WelcomeFormData = z.infer<typeof welcomeSchema>
  * After completing the form, redirects to the dashboard.
  */
 export default function WelcomePage() {
+    "use no memo"
+
     const { push, replace } = useRouter()
     const { user, refetch } = useAuth()
     const [isSubmitting, setIsSubmitting] = useState(false)

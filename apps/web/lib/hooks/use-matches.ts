@@ -63,10 +63,11 @@ export function useMatch(matchId: string) {
 /**
  * Get match counts by status.
  */
-export function useMatchStats() {
+export function useMatchStats(options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: matchKeys.stats(),
         queryFn: getMatchStats,
+        enabled: options.enabled ?? true,
     })
 }
 

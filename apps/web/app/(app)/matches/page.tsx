@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 import { useQueryClient } from "@tanstack/react-query"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { parseDateInput } from "@/lib/utils/date"
@@ -32,6 +32,9 @@ import {
     isMatchStatus,
     MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
+import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { PermissionDeniedState } from "@/components/error-state"
 
 function StatusBadge({ status }: { status: MatchStatus }) {
     return (
@@ -328,7 +331,33 @@ export default function MatchesPage() {
         return () => clearTimeout(timer)
     }, [search])
 
-    const { data: matchStats } = useMatchStats()
+    const { user } = useAuth()
+    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
+    const permissions = permissionsQuery.data?.permissions ?? []
+    const isDeveloper = user?.role === "developer"
+    const canViewMatches = isDeveloper || permissions.includes("view_matches")
+    const permissionsLoaded = isDeveloper || !permissionsQuery.isLoading
+    const { data: matchStats } = useMatchStats({
+        enabled: permissionsLoaded && canViewMatches,
+    })
+
+    if (!permissionsLoaded) {
+        return (
+            <div className="flex min-h-[18rem] items-center justify-center p-6">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Checking permissions…</span>
+            </div>
+        )
+    }
+
+    if (!canViewMatches) {
+        return (
+            <PermissionDeniedState
+                description="Your account does not have permission to view matches. Ask an admin to update your role or permissions."
+                secondaryHref="/dashboard"
+            />
+        )
+    }
 
     return (
         <div className="flex flex-1 flex-col gap-6 p-6">
