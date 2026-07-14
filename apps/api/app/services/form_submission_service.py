@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import UploadFile
 from pydantic import EmailStr, TypeAdapter
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -314,16 +315,21 @@ def add_submission_file(
     )
     resolved_field_key = resolved_keys[0] if resolved_keys else None
 
+    file_count_filters = (
+        FormSubmissionFile.organization_id == org_id,
+        FormSubmissionFile.submission_id == submission.id,
+        FormSubmissionFile.deleted_at.is_(None),
+    )
+
     if resolved_field_key:
-        existing_field_count = (
-            db.query(FormSubmissionFile)
-            .filter(
-                FormSubmissionFile.submission_id == submission.id,
-                FormSubmissionFile.field_key == resolved_field_key,
-                FormSubmissionFile.deleted_at.is_(None),
-            )
-            .count()
-        )
+        existing_count, existing_field_count = db.execute(
+            select(
+                func.count(FormSubmissionFile.id),
+                func.count(FormSubmissionFile.id).filter(
+                    FormSubmissionFile.field_key == resolved_field_key
+                ),
+            ).where(*file_count_filters)
+        ).one()
         if existing_field_count >= PER_FILE_FIELD_MAX_COUNT:
             # Use direct indexing so static type checkers don't treat `.get()` as optional.
             label = (
@@ -331,15 +337,10 @@ def add_submission_file(
             )
             label_text = label or resolved_field_key
             raise ValueError(f"Maximum {PER_FILE_FIELD_MAX_COUNT} files allowed for {label_text}")
-
-    existing_count = (
-        db.query(FormSubmissionFile)
-        .filter(
-            FormSubmissionFile.submission_id == submission.id,
-            FormSubmissionFile.deleted_at.is_(None),
+    else:
+        existing_count = (
+            db.scalar(select(func.count(FormSubmissionFile.id)).where(*file_count_filters)) or 0
         )
-        .count()
-    )
     max_count = form.max_file_count or DEFAULT_MAX_FILE_COUNT
     if existing_count >= max_count:
         raise ValueError(f"Maximum {max_count} files allowed")
