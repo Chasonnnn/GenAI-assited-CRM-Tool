@@ -87,7 +87,6 @@ export const options = {
     },
     thresholds: {
         http_req_failed: ["rate<0.01"],
-        http_req_duration: ["p(95)<800"],
     },
 };
 
@@ -172,6 +171,12 @@ export function dashboardFlow() {
         ],
         upcoming: ["GET", `${BASE_URL}/dashboard/upcoming?days=7&include_overdue=true`, null, params],
         attention: ["GET", `${BASE_URL}/dashboard/attention?days_unreached=7&days_stuck=30`, null, params],
+        intelligent_suggestions: [
+            "GET",
+            `${BASE_URL}/surrogates/intelligent-suggestions/summary`,
+            null,
+            params,
+        ],
     };
 
     if (ENABLE_ANALYTICS) {
@@ -186,6 +191,10 @@ export function dashboardFlow() {
     check(res.tasks, { "dashboard tasks ok": (r) => r.status === 200 });
     check(res.upcoming, { "dashboard upcoming ok": (r) => r.status === 200 });
     check(res.attention, { "dashboard attention ok": (r) => r.status === 200 });
+    check(res.intelligent_suggestions, {
+        "intelligent suggestions ok": (r) =>
+            r.status === 200 || (ALLOW_FORBIDDEN && r.status === 403),
+    });
 
     if (ENABLE_ANALYTICS) {
         check(res.analytics_summary, {

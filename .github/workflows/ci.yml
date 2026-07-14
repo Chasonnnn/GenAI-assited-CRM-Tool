@@ -12,7 +12,7 @@ jobs:
     
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.1
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -127,7 +127,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.1
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -177,6 +177,88 @@ jobs:
             tests/test_case_email.py \
             tests/test_surrogates_email_attachments.py \
             tests/test_compliance.py
+
+  performance-gates:
+    name: Deterministic Query Performance Gates
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18.1
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
+      JWT_SECRET: test-jwt-secret-0123456789abcdef
+      PII_HASH_KEY: ${{ secrets.PII_HASH_KEY || 'test-pii-hash-key-please-change' }}
+      DEV_BYPASS_AUTH: "False"
+      ENV: test
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: ${{ github.job }}
+
+      - name: Install dependencies
+        working-directory: apps/api
+        run: uv sync --frozen --extra test
+
+      - name: Run migrations
+        working-directory: apps/api
+        run: uv run -m alembic upgrade head
+
+      # This job deliberately excludes k6 and every wall-clock threshold. Only
+      # deterministic query counts, plan structure, and database-work budgets
+      # are allowed to block a pull request.
+      - name: Run deterministic performance gates
+        working-directory: apps/api
+        run: |
+          PYTHONPATH=. uv run -m pytest -v --tb=short \
+            tests/test_performance_capture.py \
+            tests/test_performance_infrastructure.py \
+            tests/test_performance_repository_config.py \
+            tests/test_performance_tooling.py \
+            tests/test_query_insights_tags.py \
+            tests/test_seed_mock_data.py \
+            tests/test_surrogate_stats_query_efficiency.py \
+            tests/test_analytics_query_efficiency.py \
+            tests/test_workflow_stats_query_efficiency.py \
+            tests/test_surrogates_eager_loading.py
+
+      - name: Compare deterministic PostgreSQL work against merge base
+        working-directory: apps/api
+        env:
+          PERFORMANCE_ADMIN_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
+        run: |
+          BASE_REF="HEAD^"
+          if [ -n "${GITHUB_BASE_REF:-}" ]; then
+            BASE_REF="origin/${GITHUB_BASE_REF}"
+          fi
+          uv run python -m scripts.performance compare \
+            --base "${BASE_REF}" \
+            --candidate HEAD \
+            --mode deterministic \
+            --seed-profile production
 
   frontend-tests:
     name: Frontend Tests
@@ -286,7 +368,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.1
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
