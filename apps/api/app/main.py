@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -21,6 +21,7 @@ from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, set_csrf_cookie, valida
 from app.core.gcp_monitoring import report_exception, setup_gcp_monitoring
 from app.core import migrations as db_migrations
 from app.core.protobuf_guard import apply_protobuf_json_depth_guard
+from app.core.query_insights import query_insights_request_context
 from app.core.request_audit_context import (
     explicit_event_emitted,
     reset_request_audit_context,
@@ -225,6 +226,7 @@ app = FastAPI(
     docs_url="/docs" if settings.is_dev else None,
     redoc_url="/redoc" if settings.is_dev else None,
     lifespan=lifespan,
+    dependencies=[Depends(query_insights_request_context)],
 )
 
 if settings.TRUST_PROXY_HEADERS:

@@ -7,6 +7,7 @@ locals {
     "cloudbuild.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
+    "cloudtrace.googleapis.com",
     "iam.googleapis.com",
     "compute.googleapis.com",
     "servicenetworking.googleapis.com",

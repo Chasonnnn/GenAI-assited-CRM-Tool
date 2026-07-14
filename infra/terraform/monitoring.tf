@@ -10,6 +10,67 @@ resource "google_monitoring_notification_channel" "ops_webhook" {
   }
 }
 
+resource "google_monitoring_service" "api" {
+  count = var.gcp_monitoring_enabled ? 1 : 0
+
+  service_id   = "${var.api_service_name}-api"
+  display_name = "CRM API"
+
+  basic_service {
+    service_type = "CLOUD_RUN"
+    service_labels = {
+      service_name = var.api_service_name
+      location     = var.run_region
+    }
+  }
+}
+
+resource "google_monitoring_slo" "api_latency" {
+  count = var.gcp_monitoring_enabled ? 1 : 0
+
+  service             = google_monitoring_service.api[0].service_id
+  slo_id              = "request-latency"
+  display_name        = "CRM API request latency"
+  goal                = var.api_latency_slo_goal
+  rolling_period_days = var.api_latency_slo_rolling_period_days
+
+  basic_sli {
+    latency {
+      threshold = var.api_latency_slo_threshold
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_latency_error_budget_burn" {
+  count = var.gcp_monitoring_enabled && local.alerting_enabled ? 1 : 0
+
+  display_name          = "CRM API latency error-budget burn"
+  combiner              = "OR"
+  notification_channels = local.alert_notification_channels
+
+  documentation {
+    content   = "The Cloud Run API request-latency SLO is consuming its error budget faster than the configured burn-rate threshold. Compare canary and stable revisions before promoting traffic."
+    mime_type = "text/markdown"
+  }
+
+  conditions {
+    display_name = "Latency error budget burn rate is high"
+    condition_threshold {
+      filter = format(
+        "select_slo_burn_rate(\"%s\", \"%s\")",
+        google_monitoring_slo.api_latency[0].name,
+        var.api_latency_slo_burn_rate_window,
+      )
+      comparison      = "COMPARISON_GT"
+      threshold_value = var.api_latency_slo_burn_rate_threshold
+      duration        = "0s"
+      trigger {
+        count = 1
+      }
+    }
+  }
+}
+
 resource "google_monitoring_alert_policy" "cloudsql_cpu_high" {
   count = local.alerting_enabled ? 1 : 0
 

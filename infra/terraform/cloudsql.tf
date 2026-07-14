@@ -15,6 +15,13 @@ resource "google_sql_database_instance" "crm" {
       start_time                     = var.backup_start_time
       point_in_time_recovery_enabled = var.enable_pitr
     }
+    insights_config {
+      query_insights_enabled  = var.query_insights_enabled
+      query_string_length     = var.query_insights_query_string_length
+      query_plans_per_minute  = var.query_insights_query_plans_per_minute
+      record_application_tags = true
+      record_client_address   = false
+    }
   }
 
   deletion_protection = var.database_deletion_protection

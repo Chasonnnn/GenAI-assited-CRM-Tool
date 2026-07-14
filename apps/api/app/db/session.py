@@ -3,6 +3,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings, settings
+from app.core.query_insights import install_query_insights_tags
 
 
 def create_engine_with_settings(config: Settings):
@@ -32,4 +33,5 @@ def create_engine_with_settings(config: Settings):
 
 
 engine = create_engine_with_settings(settings)
+install_query_insights_tags(engine)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

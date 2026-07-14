@@ -242,6 +242,41 @@ variable "database_deletion_protection" {
   default     = true
 }
 
+variable "query_insights_enabled" {
+  description = "Enable Cloud SQL Query Insights for normalized query analysis."
+  type        = bool
+  default     = true
+}
+
+variable "query_insights_query_string_length" {
+  description = "Maximum normalized query text length retained by Cloud SQL Query Insights."
+  type        = number
+  default     = 1024
+
+  validation {
+    condition = (
+      var.query_insights_query_string_length >= 256 &&
+      var.query_insights_query_string_length <= 4500
+    )
+    error_message = "query_insights_query_string_length must be between 256 and 4500."
+  }
+}
+
+variable "query_insights_query_plans_per_minute" {
+  description = "Maximum query plans captured per minute across Cloud SQL Query Insights."
+  type        = number
+  default     = 5
+
+  validation {
+    condition = (
+      var.query_insights_query_plans_per_minute >= 0 &&
+      var.query_insights_query_plans_per_minute <= 20 &&
+      floor(var.query_insights_query_plans_per_minute) == var.query_insights_query_plans_per_minute
+    )
+    error_message = "query_insights_query_plans_per_minute must be a whole number between 0 and 20."
+  }
+}
+
 variable "database_name" {
   description = "Name of the PostgreSQL database."
   type        = string
@@ -483,6 +518,68 @@ variable "gcp_monitoring_enabled" {
   description = "Enable GCP Cloud Monitoring integration."
   type        = bool
   default     = true
+}
+
+variable "api_latency_slo_goal" {
+  description = "Fraction of API requests that must complete within the latency objective."
+  type        = number
+  default     = 0.95
+
+  validation {
+    condition     = var.api_latency_slo_goal > 0 && var.api_latency_slo_goal < 1
+    error_message = "api_latency_slo_goal must be greater than 0 and less than 1."
+  }
+}
+
+variable "api_latency_slo_threshold" {
+  description = "Maximum request latency counted as good by the Cloud Run API SLO."
+  type        = string
+  default     = "1s"
+
+  validation {
+    condition = (
+      can(regex("^[0-9]+(\\.[0-9]{1,9})?s$", var.api_latency_slo_threshold)) &&
+      try(tonumber(trimsuffix(var.api_latency_slo_threshold, "s")) > 0, false)
+    )
+    error_message = "api_latency_slo_threshold must be a positive duration such as 0.5s or 1s."
+  }
+}
+
+variable "api_latency_slo_rolling_period_days" {
+  description = "Rolling evaluation period in days for the API request-latency SLO."
+  type        = number
+  default     = 30
+
+  validation {
+    condition = (
+      var.api_latency_slo_rolling_period_days >= 1 &&
+      var.api_latency_slo_rolling_period_days <= 30 &&
+      floor(var.api_latency_slo_rolling_period_days) == var.api_latency_slo_rolling_period_days
+    )
+    error_message = "api_latency_slo_rolling_period_days must be a whole number between 1 and 30."
+  }
+}
+
+variable "api_latency_slo_burn_rate_window" {
+  description = "Lookback window used by the API latency error-budget burn alert."
+  type        = string
+  default     = "60m"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*[smhd]$", var.api_latency_slo_burn_rate_window))
+    error_message = "api_latency_slo_burn_rate_window must be a positive duration such as 60m or 1h."
+  }
+}
+
+variable "api_latency_slo_burn_rate_threshold" {
+  description = "Error-budget burn multiple that opens the API latency alert."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.api_latency_slo_burn_rate_threshold > 0
+    error_message = "api_latency_slo_burn_rate_threshold must be greater than 0."
+  }
 }
 
 variable "db_migration_check" {
