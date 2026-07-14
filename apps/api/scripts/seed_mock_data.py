@@ -15,6 +15,7 @@ from app.core.encryption import hash_email, hash_phone
 from sqlalchemy import func
 from app.db.session import SessionLocal
 from app.db.models import (
+    AuthIdentity,
     EntityNote,
     IntendedParentStatusHistory,
     Match,
@@ -26,9 +27,11 @@ from app.db.models import (
     SurrogateActivityLog,
     SurrogateContactAttempt,
     SurrogateStatusHistory,
+    Task,
     User,
 )
 from app.db.enums import (
+    AuthProvider,
     ContactMethod,
     ContactOutcome,
     IntendedParentStatus,
@@ -39,6 +42,11 @@ from app.db.enums import (
 )
 from app.services import dev_service, match_service, pipeline_service, template_seeder
 from app.utils.height import total_inches_to_height_ft
+from scripts.performance.profiles import (
+    SeedOrganizationProfile,
+    benchmark_user_id,
+    get_seed_profile,
+)
 
 # Sample data pools
 FIRST_NAMES_FEMALE = [
@@ -1211,6 +1219,57 @@ def create_matches(
     return created_matches
 
 
+def create_tasks(
+    db,
+    *,
+    org_id: UUID,
+    users_by_role: dict[str, User],
+    count: int,
+) -> list[Task]:
+    """Create deterministic open/completed task work for queue and dashboard queries."""
+    print(f"Creating {count} tasks...")
+    if count <= 0:
+        return []
+    surrogates = (
+        db.query(Surrogate.id)
+        .filter(Surrogate.organization_id == org_id, Surrogate.is_archived.is_(False))
+        .order_by(Surrogate.created_at.asc(), Surrogate.id.asc())
+        .all()
+    )
+    if not surrogates:
+        return []
+    owners = [users_by_role[role] for role in sorted(users_by_role)]
+    created: list[Task] = []
+    today = date.today()
+    for index in range(count):
+        owner = owners[index % len(owners)]
+        completed = index % 5 == 0
+        completed_at = (
+            datetime.now(timezone.utc) - timedelta(days=index % 30) if completed else None
+        )
+        task = Task(
+            organization_id=org_id,
+            surrogate_id=surrogates[index % len(surrogates)][0],
+            created_by_user_id=owner.id,
+            owner_type="user",
+            owner_id=owner.id,
+            title=f"Synthetic performance follow-up {index + 1}",
+            description="Synthetic benchmark task with no production content.",
+            task_type="other",
+            due_date=today + timedelta(days=(index % 45) - 15),
+            is_completed=completed,
+            completed_at=completed_at,
+            completed_by_user_id=owner.id if completed else None,
+        )
+        db.add(task)
+        created.append(task)
+        if (index + 1) % 1_000 == 0:
+            db.flush()
+    db.commit()
+    print(f"Created {len(created)} tasks")
+    return created
+
+
 def _load_users_by_role(db, org_id: UUID) -> dict[str, User]:
     rows = (
         db.query(Membership.role, User)
@@ -1237,7 +1296,13 @@ def _env_int(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer, got: {raw}") from exc
 
 
-def _build_summary(db, org_id: UUID, users_by_role: dict[str, User]) -> dict:
+def _build_summary(
+    db,
+    org_id: UUID,
+    users_by_role: dict[str, User],
+    *,
+    redact_login_ids: bool = False,
+) -> dict:
     stage_rows = (
         db.query(PipelineStage.slug, func.count(Surrogate.id))
         .join(Surrogate, Surrogate.stage_id == PipelineStage.id)
@@ -1257,10 +1322,13 @@ def _build_summary(db, org_id: UUID, users_by_role: dict[str, User]) -> dict:
         .group_by(Match.status)
         .all()
     )
-    login_ids = {
-        user.email: str(user.id)
-        for user in sorted(users_by_role.values(), key=lambda item: item.email.lower())
-    }
+    if redact_login_ids:
+        login_ids = {role: str(user.id) for role, user in sorted(users_by_role.items())}
+    else:
+        login_ids = {
+            user.email: str(user.id)
+            for user in sorted(users_by_role.values(), key=lambda item: item.email.lower())
+        }
     return {
         "org_id": str(org_id),
         "surrogates_total": int(
@@ -1288,6 +1356,9 @@ def _build_summary(db, org_id: UUID, users_by_role: dict[str, User]) -> dict:
         "matches_total": int(
             db.query(func.count(Match.id)).filter(Match.organization_id == org_id).scalar() or 0
         ),
+        "tasks_total": int(
+            db.query(func.count(Task.id)).filter(Task.organization_id == org_id).scalar() or 0
+        ),
         "surrogate_stage_counts": {slug: int(count) for slug, count in stage_rows},
         "intended_parent_status_counts": {status: int(count) for status, count in ip_rows},
         "match_status_counts": {status: int(count) for status, count in match_rows},
@@ -1312,118 +1383,222 @@ def _ensure_context(db, org_slug: str | None) -> tuple[Organization, dict[str, U
     return org, users_by_role
 
 
-def main():
-    """Main entry point."""
-    print("Seeding mock data...")
-
-    db = SessionLocal()
-
-    try:
-        seed_random = _env_int("SEED_RANDOM_SEED", 20260224)
-        random.seed(seed_random)
-
-        org_slug = os.getenv("SEED_ORG_SLUG")
-        org, users_by_role = _ensure_context(db, org_slug)
-        print(f"Using organization: {org.name} ({org.id})")
-        print(f"Seed random: {seed_random}")
-
-        actor = _pick_actor(
-            users_by_role,
-            [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
+def _ensure_benchmark_context(
+    db,
+    *,
+    profile_name: str,
+    organization_profile: SeedOrganizationProfile,
+) -> tuple[Organization, dict[str, User]]:
+    org_slug = f"perf-{profile_name}-{organization_profile.slug}"
+    org = db.query(Organization).filter(Organization.slug == org_slug).first()
+    if not org:
+        org = Organization(
+            id=organization_profile.organization_id,
+            name=f"Performance {profile_name.title()} {organization_profile.slug.title()}",
+            slug=org_slug,
         )
-        print(f"Using actor: {mask_email(actor.email)} ({actor.id})")
+        db.add(org)
+        db.flush()
 
-        pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, actor.id)
-        print(f"Using pipeline: {pipeline.name}")
-
-        stages_sorted = (
-            db.query(PipelineStage)
-            .filter(PipelineStage.pipeline_id == pipeline.id)
-            .order_by(PipelineStage.order.asc())
-            .all()
+    for role in (Role.DEVELOPER, Role.ADMIN, Role.INTAKE_SPECIALIST, Role.CASE_MANAGER):
+        email = f"perf-{profile_name}-{organization_profile.slug}-{role.value}@example.test"
+        user = db.query(User).filter(func.lower(User.email) == email).first()
+        if not user:
+            user = User(
+                id=benchmark_user_id(profile_name, organization_profile.slug, role.value),
+                email=email,
+                display_name=f"Performance {role.value.replace('_', ' ').title()}",
+                is_active=True,
+            )
+            db.add(user)
+            db.flush()
+        membership = db.query(Membership).filter(Membership.user_id == user.id).first()
+        if not membership:
+            db.add(
+                Membership(
+                    user_id=user.id,
+                    organization_id=org.id,
+                    role=role.value,
+                    is_active=True,
+                )
+            )
+        identity = (
+            db.query(AuthIdentity)
+            .filter(
+                AuthIdentity.user_id == user.id,
+                AuthIdentity.provider == AuthProvider.GOOGLE.value,
+            )
+            .first()
         )
+        if not identity:
+            db.add(
+                AuthIdentity(
+                    user_id=user.id,
+                    provider=AuthProvider.GOOGLE.value,
+                    provider_subject=f"performance-{profile_name}-{organization_profile.slug}-{role.value}",
+                    email=email,
+                )
+            )
+    db.commit()
+    return org, _load_users_by_role(db, org.id)
 
-        if not stages_sorted:
-            print("ERROR: No pipeline stages found.")
-            return
 
-        print(f"Using pipeline stages: {len(stages_sorted)}")
+def _seed_organization(
+    db,
+    *,
+    org: Organization,
+    users_by_role: dict[str, User],
+    surrogate_count: int,
+    intended_parent_count: int,
+    match_count: int,
+    task_count: int,
+    match_mode: str,
+    activity_mode: str,
+    redact_summary: bool,
+) -> dict:
+    print(f"Using organization: {org.name} ({org.id})")
+    actor = _pick_actor(
+        users_by_role,
+        [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
+    )
+    print(f"Using actor: {mask_email(actor.email)} ({actor.id})")
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, actor.id)
+    stages_sorted = (
+        db.query(PipelineStage)
+        .filter(PipelineStage.pipeline_id == pipeline.id)
+        .order_by(PipelineStage.order.asc())
+        .all()
+    )
+    if not stages_sorted:
+        raise ValueError(f"No pipeline stages found for organization {org.id}")
 
-        template_result = template_seeder.seed_all(db, org.id, actor.id)
-        print(
-            f"Seeded templates: {template_result['templates_created']}, workflows: {template_result['workflows_created']}"
-        )
+    template_result = template_seeder.seed_all(db, org.id, actor.id)
+    print(
+        f"Seeded templates: {template_result['templates_created']}, "
+        f"workflows: {template_result['workflows_created']}"
+    )
+    org.signature_company_name = org.name
+    org.signature_address = "123 Market St, Austin, TX"
+    org.signature_phone = "+1 (512) 555-0199"
+    org.signature_website = "https://surrogacycrm.test"
+    org.signature_primary_color = "#0ea5e9"
+    org.signature_disclaimer = (
+        "This message contains confidential information intended only for the recipient."
+    )
+    org.signature_social_links = [
+        {"platform": "linkedin", "url": "https://linkedin.com/company/surrogacy-crm"},
+        {"platform": "instagram", "url": "https://instagram.com/surrogacy-crm"},
+    ]
+    actor.signature_name = actor.display_name
+    actor.signature_title = "Case Manager"
+    actor.signature_phone = "+1 (512) 555-0142"
+    actor.signature_linkedin = "https://linkedin.com/in/case-manager"
+    actor.signature_twitter = "https://twitter.com/surrogacycrm"
+    db.commit()
 
-        org.signature_company_name = org.name
-        org.signature_address = "123 Market St, Austin, TX"
-        org.signature_phone = "+1 (512) 555-0199"
-        org.signature_website = "https://surrogacycrm.test"
-        org.signature_primary_color = "#0ea5e9"
-        org.signature_disclaimer = (
-            "This message contains confidential information intended only for the recipient."
-        )
-        org.signature_social_links = [
-            {"platform": "linkedin", "url": "https://linkedin.com/company/surrogacy-crm"},
-            {"platform": "instagram", "url": "https://instagram.com/surrogacy-crm"},
-        ]
-        actor.signature_name = actor.display_name
-        actor.signature_title = "Case Manager"
-        actor.signature_phone = "+1 (512) 555-0142"
-        actor.signature_linkedin = "https://linkedin.com/in/case-manager"
-        actor.signature_twitter = "https://twitter.com/surrogacycrm"
-
-        db.commit()
-
-        surrogate_count = _env_int("SEED_SURROGATES", 500)
-        intended_parent_count = _env_int("SEED_INTENDED_PARENTS", 10)
-        default_match_count = max(10, min(40, max(1, intended_parent_count) * 3))
-        match_count = _env_int("SEED_MATCH_COUNT", default_match_count)
-        match_mode = os.getenv("SEED_MATCH_MODE", "balanced")
-        activity_mode = os.getenv("SEED_ACTIVITY_MODE", "rich_core")
-
-        print(
-            "Config:",
-            json.dumps(
-                {
-                    "SEED_SURROGATES": surrogate_count,
-                    "SEED_INTENDED_PARENTS": intended_parent_count,
-                    "SEED_MATCH_MODE": match_mode,
-                    "SEED_MATCH_COUNT": match_count,
-                    "SEED_ACTIVITY_MODE": activity_mode,
-                },
-                sort_keys=True,
-            ),
-        )
-
-        create_surrogates(
+    create_surrogates(
+        db,
+        org.id,
+        actor.id,
+        stages_sorted,
+        count=surrogate_count,
+        users_by_role=users_by_role,
+        activity_mode=activity_mode,
+    )
+    if intended_parent_count > 0:
+        create_intended_parents(
             db,
             org.id,
             actor.id,
-            stages_sorted,
-            count=surrogate_count,
+            count=intended_parent_count,
             users_by_role=users_by_role,
-            activity_mode=activity_mode,
         )
-        if intended_parent_count > 0:
-            create_intended_parents(
-                db,
-                org.id,
-                actor.id,
-                count=intended_parent_count,
-                users_by_role=users_by_role,
-            )
-        if match_count > 0 and intended_parent_count > 0:
-            create_matches(
-                db=db,
-                org_id=org.id,
-                users_by_role=users_by_role,
-                count=match_count,
-                mode=match_mode,
+    if match_count > 0 and intended_parent_count > 0:
+        create_matches(
+            db=db,
+            org_id=org.id,
+            users_by_role=users_by_role,
+            count=match_count,
+            mode=match_mode,
+        )
+    create_tasks(
+        db,
+        org_id=org.id,
+        users_by_role=users_by_role,
+        count=task_count,
+    )
+    return _build_summary(
+        db,
+        org.id,
+        users_by_role,
+        redact_login_ids=redact_summary,
+    )
+
+
+def main():
+    """Main entry point."""
+    print("Seeding mock data...")
+    db = SessionLocal()
+
+    try:
+        profile_name = os.getenv("SEED_PROFILE", "").strip()
+        redact_summary = os.getenv("SEED_REDACT_SUMMARY", "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        summaries: list[dict] = []
+        if profile_name:
+            profile = get_seed_profile(profile_name)
+            seed_random = _env_int("SEED_RANDOM_SEED", profile.random_seed)
+            random.seed(seed_random)
+            print(f"Seed profile: {profile.name}; random seed: {seed_random}")
+            for organization_profile in profile.organizations:
+                org, users_by_role = _ensure_benchmark_context(
+                    db,
+                    profile_name=profile.name,
+                    organization_profile=organization_profile,
+                )
+                summaries.append(
+                    _seed_organization(
+                        db,
+                        org=org,
+                        users_by_role=users_by_role,
+                        surrogate_count=organization_profile.surrogates,
+                        intended_parent_count=organization_profile.intended_parents,
+                        match_count=organization_profile.matches,
+                        task_count=organization_profile.tasks,
+                        match_mode=profile.match_mode,
+                        activity_mode=profile.activity_mode,
+                        redact_summary=redact_summary,
+                    )
+                )
+        else:
+            seed_random = _env_int("SEED_RANDOM_SEED", 20260224)
+            random.seed(seed_random)
+            org, users_by_role = _ensure_context(db, os.getenv("SEED_ORG_SLUG"))
+            intended_parent_count = _env_int("SEED_INTENDED_PARENTS", 10)
+            surrogate_count = _env_int("SEED_SURROGATES", 500)
+            default_match_count = max(10, min(40, max(1, intended_parent_count) * 3))
+            summaries.append(
+                _seed_organization(
+                    db,
+                    org=org,
+                    users_by_role=users_by_role,
+                    surrogate_count=surrogate_count,
+                    intended_parent_count=intended_parent_count,
+                    match_count=_env_int("SEED_MATCH_COUNT", default_match_count),
+                    task_count=_env_int("SEED_TASKS", max(20, surrogate_count // 5)),
+                    match_mode=os.getenv("SEED_MATCH_MODE", "balanced"),
+                    activity_mode=os.getenv("SEED_ACTIVITY_MODE", "rich_core"),
+                    redact_summary=redact_summary,
+                )
             )
 
-        summary = _build_summary(db, org.id, users_by_role)
         print("\nMock data seeded successfully!")
-        print("SEED_SUMMARY " + json.dumps(summary, sort_keys=True))
+        for summary in summaries:
+            print("SEED_SUMMARY " + json.dumps(summary, sort_keys=True))
 
     except Exception as e:
         print(f"ERROR: {e}")

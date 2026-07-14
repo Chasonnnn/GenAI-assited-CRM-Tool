@@ -1,0 +1,179 @@
+{
+  "public.analytics_snapshots": {
+    "columns": [
+      "organization_id",
+      "snapshot_type",
+      "range_start",
+      "range_end",
+      "created_at",
+      "expires_at"
+    ]
+  },
+  "public.automation_workflows": {
+    "columns": [
+      "organization_id",
+      "trigger_type",
+      "is_enabled",
+      "recurrence_mode",
+      "scope",
+      "requires_review",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "public.intended_parents": {
+    "columns": [
+      "organization_id",
+      "stage_id",
+      "status",
+      "owner_type",
+      "is_archived",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "public.matches": {
+    "columns": [
+      "organization_id",
+      "surrogate_id",
+      "intended_parent_id",
+      "status",
+      "proposed_at",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "public.org_intelligent_suggestion_rules": {
+    "columns": [
+      "organization_id",
+      "template_key",
+      "rule_kind",
+      "stage_slug",
+      "business_days",
+      "enabled",
+      "sort_order"
+    ]
+  },
+  "public.org_intelligent_suggestion_settings": {
+    "columns": [
+      "organization_id",
+      "enabled",
+      "new_unread_enabled",
+      "new_unread_business_days",
+      "meeting_outcome_enabled",
+      "meeting_outcome_business_days",
+      "stuck_enabled",
+      "stuck_business_days",
+      "daily_digest_enabled",
+      "digest_hour_local"
+    ]
+  },
+  "public.pipeline_stages": {
+    "columns": [
+      "pipeline_id",
+      "stage_key",
+      "slug",
+      "stage_type",
+      "order",
+      "is_active",
+      "deleted_at",
+      "is_intake_stage"
+    ]
+  },
+  "public.pipelines": {
+    "columns": [
+      "organization_id",
+      "entity_type",
+      "is_default",
+      "current_version",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "public.request_metrics_rollup": {
+    "columns": [
+      "organization_id",
+      "period_start",
+      "period_type",
+      "route",
+      "method",
+      "status_2xx",
+      "status_4xx",
+      "status_5xx",
+      "total_duration_ms",
+      "request_count"
+    ]
+  },
+  "public.surrogate_activity_log": {
+    "columns": [
+      "surrogate_id",
+      "organization_id",
+      "activity_type",
+      "created_at"
+    ]
+  },
+  "public.surrogate_contact_attempts": {
+    "columns": [
+      "surrogate_id",
+      "organization_id",
+      "outcome",
+      "attempted_at",
+      "created_at"
+    ]
+  },
+  "public.surrogate_status_history": {
+    "columns": [
+      "surrogate_id",
+      "organization_id",
+      "from_stage_id",
+      "to_stage_id",
+      "changed_at",
+      "effective_at",
+      "recorded_at",
+      "is_undo"
+    ]
+  },
+  "public.surrogates": {
+    "columns": [
+      "organization_id",
+      "stage_id",
+      "status_label",
+      "source",
+      "is_priority",
+      "owner_type",
+      "contact_status",
+      "is_archived",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "public.tasks": {
+    "columns": [
+      "organization_id",
+      "surrogate_id",
+      "intended_parent_id",
+      "owner_type",
+      "task_type",
+      "is_completed",
+      "status",
+      "due_date",
+      "due_at",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "public.workflow_executions": {
+    "columns": [
+      "organization_id",
+      "workflow_id",
+      "depth",
+      "event_source",
+      "entity_type",
+      "matched_conditions",
+      "status",
+      "duration_ms",
+      "executed_at",
+      "paused_at_action_index"
+    ]
+  }
+}

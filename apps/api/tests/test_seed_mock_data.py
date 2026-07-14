@@ -10,6 +10,7 @@ from app.db.models import (
     Surrogate,
     SurrogateActivityLog,
     SurrogateStatusHistory,
+    Task,
     User,
 )
 from app.services import pipeline_service
@@ -75,6 +76,36 @@ def test_create_intended_parents_generates_status_history(db, test_org, test_use
 
     ip_history_count = db.query(IntendedParentStatusHistory).count()
     assert ip_history_count >= 10
+
+
+def test_create_tasks_generates_open_and_completed_org_scoped_work(db, test_org, test_user) -> None:
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+    stages = (
+        db.query(PipelineStage)
+        .filter(PipelineStage.pipeline_id == pipeline.id)
+        .order_by(PipelineStage.order.asc())
+        .all()
+    )
+    seed_mock_data.create_surrogates(
+        db,
+        test_org.id,
+        test_user.id,
+        stages,
+        count=5,
+        activity_mode="rich_core",
+    )
+
+    seed_mock_data.create_tasks(
+        db,
+        org_id=test_org.id,
+        users_by_role={"developer": test_user},
+        count=10,
+    )
+
+    tasks = db.query(Task).filter(Task.organization_id == test_org.id).all()
+    assert len(tasks) == 10
+    assert {task.is_completed for task in tasks} == {False, True}
+    assert all(task.surrogate_id is not None for task in tasks)
 
 
 def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:

@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "queries": {
+    "analytics_surrogates_by_stage": {
+      "required_nodes": [],
+      "forbidden_nodes": [],
+      "required_joins": [
+        "Left"
+      ],
+      "forbidden_joins": [],
+      "required_relations": [
+        "pipeline_stages",
+        "surrogates"
+      ],
+      "required_indexes": [
+        "idx_surrogates_org_stage"
+      ],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": true,
+      "max_temp_blocks": 0
+    },
+    "dashboard_surrogate_counts": {
+      "required_nodes": [
+        "Aggregate",
+        "Index Scan"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "surrogates"
+      ],
+      "required_indexes": [],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": false,
+      "max_temp_blocks": 0
+    },
+    "dashboard_upcoming_tasks": {
+      "required_nodes": [
+        "Index Scan"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "tasks"
+      ],
+      "required_indexes": [],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": false,
+      "max_temp_blocks": 0
+    },
+    "intelligent_suggestions_rules": {
+      "required_nodes": [
+        "Index Scan"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "org_intelligent_suggestion_rules"
+      ],
+      "required_indexes": [
+        "idx_intel_rules_org_enabled"
+      ],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": false,
+      "max_temp_blocks": 0
+    },
+    "pipeline_stage_dimension": {
+      "required_nodes": [],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "pipelines",
+        "pipeline_stages"
+      ],
+      "required_indexes": [
+        "pipelines_pkey"
+      ],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": true,
+      "max_temp_blocks": 0
+    },
+    "surrogates_list_by_stage": {
+      "required_nodes": [
+        "Index Scan"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "surrogates"
+      ],
+      "required_indexes": [],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": true,
+      "max_temp_blocks": 0
+    },
+    "surrogate_search": {
+      "required_nodes": [
+        "Limit",
+        "Sort"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "surrogates"
+      ],
+      "required_indexes": [],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": false,
+      "max_temp_blocks": 0
+    },
+    "tasks_open_by_owner": {
+      "required_nodes": [
+        "Index Scan"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "tasks"
+      ],
+      "required_indexes": [],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": false,
+      "max_temp_blocks": 0
+    },
+    "workflow_list": {
+      "required_nodes": [
+        "Index Scan"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "automation_workflows"
+      ],
+      "required_indexes": [
+        "idx_wf_matching"
+      ],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": false,
+      "max_temp_blocks": 0
+    },
+    "workflow_stats": {
+      "required_nodes": [
+        "Aggregate"
+      ],
+      "forbidden_nodes": [],
+      "required_joins": [],
+      "forbidden_joins": [],
+      "required_relations": [
+        "workflow_executions"
+      ],
+      "required_indexes": [],
+      "forbidden_indexes": [],
+      "allow_sequential_scan": true,
+      "max_temp_blocks": 0
+    }
+  }
+}

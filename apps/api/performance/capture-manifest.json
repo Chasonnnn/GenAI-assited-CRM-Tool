@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "queries": [
+    {
+      "id": "surrogates_list_by_stage",
+      "sql": "SELECT s.id, s.stage_id, s.status_label, s.owner_type, s.owner_id, s.created_at FROM pipeline_stages AS ps JOIN surrogates AS s ON s.stage_id = ps.id WHERE s.organization_id = $1 AND ps.slug = $2 AND s.is_archived = FALSE ORDER BY s.created_at DESC LIMIT 20",
+      "parameter_types": ["uuid", "text"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201", "new_unread"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203", "new_unread"]}
+      ]
+    },
+    {
+      "id": "tasks_open_by_owner",
+      "sql": "SELECT t.id, t.surrogate_id, t.intended_parent_id, t.task_type, t.due_date, t.status FROM tasks AS t WHERE t.organization_id = $1 AND t.owner_type = $2 AND t.owner_id = $3 AND t.is_completed = FALSE ORDER BY t.due_date NULLS LAST, t.created_at DESC LIMIT 20",
+      "parameter_types": ["uuid", "text", "uuid"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201", "user", "6286c75f-e453-59a4-baf8-6807e9e10fd3"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203", "user", "5e220de2-cf9b-52d2-a6aa-a765ff3aceae"]}
+      ]
+    },
+    {
+      "id": "dashboard_surrogate_counts",
+      "sql": "SELECT s.stage_id, count(*) FROM surrogates AS s WHERE s.organization_id = $1 AND s.is_archived = FALSE GROUP BY s.stage_id",
+      "parameter_types": ["uuid"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203"]}
+      ]
+    },
+    {
+      "id": "dashboard_upcoming_tasks",
+      "sql": "SELECT t.id, t.surrogate_id, t.intended_parent_id, t.due_date, t.status FROM tasks AS t WHERE t.organization_id = $1 AND t.is_completed = FALSE AND t.due_date <= $2 ORDER BY t.due_date NULLS LAST LIMIT 20",
+      "parameter_types": ["uuid", "date"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201", "2099-12-31"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203", "2099-12-31"]}
+      ]
+    },
+    {
+      "id": "analytics_surrogates_by_stage",
+      "sql": "SELECT ps.stage_type, count(s.id) FROM pipelines AS p JOIN pipeline_stages AS ps ON ps.pipeline_id = p.id LEFT JOIN surrogates AS s ON s.stage_id = ps.id AND s.organization_id = $1 AND s.is_archived = FALSE WHERE p.organization_id = $1 AND p.entity_type = 'surrogate' AND ps.is_active = TRUE GROUP BY ps.stage_type, ps.order ORDER BY ps.order",
+      "parameter_types": ["uuid"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203"]}
+      ]
+    },
+    {
+      "id": "workflow_list",
+      "sql": "SELECT w.id, w.trigger_type, w.is_enabled, w.scope, w.run_count, w.last_run_at FROM automation_workflows AS w WHERE w.organization_id = $1 AND (w.scope = $2 OR w.owner_user_id = $3) ORDER BY w.updated_at DESC",
+      "parameter_types": ["uuid", "text", "uuid"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201", "org", "6286c75f-e453-59a4-baf8-6807e9e10fd3"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203", "org", "5e220de2-cf9b-52d2-a6aa-a765ff3aceae"]}
+      ]
+    },
+    {
+      "id": "workflow_stats",
+      "sql": "SELECT e.status, count(*), avg(e.duration_ms) FROM workflow_executions AS e WHERE e.organization_id = $1 AND e.executed_at >= $2 GROUP BY e.status",
+      "parameter_types": ["uuid", "timestamptz"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201", "2000-01-01T00:00:00Z"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203", "2000-01-01T00:00:00Z"]}
+      ]
+    },
+    {
+      "id": "intelligent_suggestions_rules",
+      "sql": "SELECT r.rule_kind, r.stage_slug, r.business_days, r.sort_order FROM org_intelligent_suggestion_rules AS r WHERE r.organization_id = $1 AND r.enabled = TRUE ORDER BY r.sort_order",
+      "parameter_types": ["uuid"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203"]}
+      ]
+    },
+    {
+      "id": "surrogate_search",
+      "sql": "SELECT s.id, s.stage_id, s.status_label FROM surrogates AS s WHERE s.organization_id = $1 AND s.is_archived = FALSE AND s.search_vector @@ websearch_to_tsquery('simple', $2) ORDER BY ts_rank(s.search_vector, websearch_to_tsquery('simple', $2)) DESC LIMIT 10",
+      "parameter_types": ["uuid", "text"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201", "smith"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203", "smith"]}
+      ]
+    },
+    {
+      "id": "pipeline_stage_dimension",
+      "sql": "SELECT ps.id, ps.stage_key, ps.stage_type, ps.order FROM pipelines AS p JOIN pipeline_stages AS ps ON ps.pipeline_id = p.id WHERE p.organization_id = $1 AND ps.is_active = TRUE ORDER BY ps.order",
+      "parameter_types": ["uuid"],
+      "prepared_plan_modes": ["generic", "custom", "automatic"],
+      "capture_modes": ["estimated", "analyze"],
+      "scenarios": [
+        {"name": "hot", "parameters": ["00000000-0000-5000-8000-000000000201"]},
+        {"name": "cold", "parameters": ["00000000-0000-5000-8000-000000000203"]}
+      ]
+    }
+  ]
+}

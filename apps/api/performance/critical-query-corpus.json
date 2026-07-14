@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "queries": [
+    {
+      "name": "surrogates_list_by_stage",
+      "route": "GET /surrogates",
+      "critical_reason": "Primary case-management list and required index invariant",
+      "query": "SELECT s.id, s.stage_id, s.status_label, s.owner_type, s.owner_id, s.created_at FROM surrogates AS s WHERE s.organization_id = $1 AND s.stage_id = $2 AND s.is_archived = FALSE ORDER BY s.created_at DESC LIMIT $3 OFFSET $4"
+    },
+    {
+      "name": "surrogate_detail",
+      "route": "GET /surrogates/{surrogate_id}",
+      "critical_reason": "Primary case detail",
+      "query": "SELECT s.id, s.stage_id, s.status_label, s.owner_type, s.owner_id, s.created_at, s.updated_at FROM surrogates AS s WHERE s.organization_id = $1 AND s.id = $2 AND s.is_archived = FALSE"
+    },
+    {
+      "name": "tasks_open_by_owner",
+      "route": "GET /tasks",
+      "critical_reason": "Daily work queue",
+      "query": "SELECT t.id, t.surrogate_id, t.intended_parent_id, t.task_type, t.due_date, t.status FROM tasks AS t WHERE t.organization_id = $1 AND t.owner_type = $2 AND t.owner_id = $3 AND t.is_completed = FALSE ORDER BY t.due_date NULLS LAST, t.created_at DESC LIMIT $4 OFFSET $5"
+    },
+    {
+      "name": "dashboard_surrogate_counts",
+      "route": "GET /surrogates/stats",
+      "critical_reason": "Dashboard initial load",
+      "query": "SELECT s.stage_id, count(*) FROM surrogates AS s WHERE s.organization_id = $1 AND s.is_archived = FALSE GROUP BY s.stage_id"
+    },
+    {
+      "name": "dashboard_upcoming_tasks",
+      "route": "GET /dashboard/upcoming",
+      "critical_reason": "Dashboard initial load",
+      "query": "SELECT t.id, t.surrogate_id, t.intended_parent_id, t.due_date, t.status FROM tasks AS t WHERE t.organization_id = $1 AND t.is_completed = FALSE AND t.due_date <= $2 ORDER BY t.due_date NULLS LAST LIMIT $3"
+    },
+    {
+      "name": "analytics_surrogates_by_stage",
+      "route": "GET /analytics/surrogates/by-status",
+      "critical_reason": "Reports and dashboard analytics",
+      "query": "SELECT ps.stage_type, count(*) FROM pipeline_stages AS ps LEFT JOIN surrogates AS s ON s.stage_id = ps.id AND s.organization_id = $1 AND s.is_archived = FALSE WHERE ps.pipeline_id = $2 AND ps.is_active = TRUE GROUP BY ps.stage_type, ps.order ORDER BY ps.order"
+    },
+    {
+      "name": "workflow_list",
+      "route": "GET /workflows",
+      "critical_reason": "Automation management",
+      "query": "SELECT w.id, w.trigger_type, w.is_enabled, w.scope, w.run_count, w.last_run_at FROM automation_workflows AS w WHERE w.organization_id = $1 AND (w.scope = $2 OR w.owner_user_id = $3) ORDER BY w.updated_at DESC"
+    },
+    {
+      "name": "workflow_stats",
+      "route": "GET /workflows/stats",
+      "critical_reason": "Automation dashboard",
+      "query": "SELECT e.status, count(*), avg(e.duration_ms) FROM workflow_executions AS e WHERE e.organization_id = $1 AND e.executed_at >= $2 GROUP BY e.status"
+    },
+    {
+      "name": "intelligent_suggestions_rules",
+      "route": "GET /surrogates/intelligent-suggestions/summary",
+      "critical_reason": "Latency-sensitive intelligent suggestions summary",
+      "query": "SELECT r.rule_kind, r.stage_slug, r.business_days, r.sort_order FROM org_intelligent_suggestion_rules AS r WHERE r.organization_id = $1 AND r.enabled = TRUE ORDER BY r.sort_order"
+    },
+    {
+      "name": "surrogate_search",
+      "route": "GET /search",
+      "critical_reason": "Rate-limited global search",
+      "query": "SELECT s.id, s.stage_id, s.status_label FROM surrogates AS s WHERE s.organization_id = $1 AND s.is_archived = FALSE AND s.search_vector @@ websearch_to_tsquery('simple', $2) ORDER BY ts_rank(s.search_vector, websearch_to_tsquery('simple', $2)) DESC LIMIT $3"
+    },
+    {
+      "name": "complete_task_mutation",
+      "route": "PATCH /tasks/{task_id}",
+      "critical_reason": "Representative org-scoped mutation",
+      "query": "UPDATE tasks SET is_completed = TRUE, completed_at = $3, updated_at = $3 WHERE organization_id = $1 AND id = $2 RETURNING id"
+    },
+    {
+      "name": "pipeline_stage_dimension",
+      "route": "GET /pipelines",
+      "critical_reason": "Acceptance case where a small-table sequential scan is legitimate",
+      "query": "SELECT ps.id, ps.stage_key, ps.stage_type, ps.order FROM pipeline_stages AS ps WHERE ps.pipeline_id = $1 AND ps.is_active = TRUE ORDER BY ps.order"
+    }
+  ]
+}

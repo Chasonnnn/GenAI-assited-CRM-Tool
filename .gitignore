@@ -64,3 +64,6 @@ infra/terraform/tfplan
 # next-agents-md
 .next-docs/
 .gstack/
+# Local query-performance artifacts (encrypted statistics are distributed out of band)
+apps/api/performance/artifacts/
+*.stats.enc
