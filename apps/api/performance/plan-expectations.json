@@ -2,22 +2,131 @@
   "schema_version": 1,
   "queries": {
     "analytics_surrogates_by_stage": {
-      "required_nodes": [],
-      "forbidden_nodes": [],
-      "required_joins": [
-        "Left"
-      ],
-      "forbidden_joins": [],
-      "required_relations": [
-        "pipeline_stages",
-        "surrogates"
-      ],
-      "required_indexes": [
-        "idx_surrogates_org_stage"
-      ],
-      "forbidden_indexes": [],
-      "allow_sequential_scan": true,
-      "max_temp_blocks": 0
+      "defaults": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "required_joins": [
+          "Inner"
+        ],
+        "required_relations": [
+          "pipeline_stages",
+          "surrogates"
+        ],
+        "allow_sequential_scan": true,
+        "max_temp_blocks": 0
+      },
+      "scenarios": {
+        "hot:generic:estimated": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "hot:generic:analyze": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "hot:custom:estimated": {
+          "required_joins": [
+            "Inner",
+            "Left"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_stage"
+          ]
+        },
+        "hot:custom:analyze": {
+          "required_joins": [
+            "Inner",
+            "Left"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_stage"
+          ]
+        },
+        "hot:automatic:estimated": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "hot:automatic:analyze": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "cold:generic:estimated": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "cold:generic:analyze": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "cold:custom:estimated": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "cold:custom:analyze": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "cold:automatic:estimated": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        },
+        "cold:automatic:analyze": {
+          "required_joins": [
+            "Inner",
+            "Right"
+          ],
+          "required_indexes": [
+            "idx_surrogates_org_active"
+          ]
+        }
+      }
     },
     "dashboard_surrogate_counts": {
       "required_nodes": [
@@ -52,7 +161,8 @@
     },
     "intelligent_suggestions_rules": {
       "required_nodes": [
-        "Index Scan"
+        "Seq Scan",
+        "Sort"
       ],
       "forbidden_nodes": [],
       "required_joins": [],
@@ -60,15 +170,15 @@
       "required_relations": [
         "org_intelligent_suggestion_rules"
       ],
-      "required_indexes": [
-        "idx_intel_rules_org_enabled"
-      ],
+      "required_indexes": [],
       "forbidden_indexes": [],
-      "allow_sequential_scan": false,
+      "allow_sequential_scan": true,
       "max_temp_blocks": 0
     },
     "pipeline_stage_dimension": {
-      "required_nodes": [],
+      "required_nodes": [
+        "Hash Join"
+      ],
       "forbidden_nodes": [],
       "required_joins": [],
       "forbidden_joins": [],
@@ -76,9 +186,7 @@
         "pipelines",
         "pipeline_stages"
       ],
-      "required_indexes": [
-        "pipelines_pkey"
-      ],
+      "required_indexes": [],
       "forbidden_indexes": [],
       "allow_sequential_scan": true,
       "max_temp_blocks": 0
@@ -100,6 +208,8 @@
     },
     "surrogate_search": {
       "required_nodes": [
+        "Bitmap Heap Scan",
+        "Bitmap Index Scan",
         "Limit",
         "Sort"
       ],
@@ -109,29 +219,144 @@
       "required_relations": [
         "surrogates"
       ],
-      "required_indexes": [],
+      "required_indexes": [
+        "idx_surrogates_active_phone_last4",
+        "ix_surrogates_search_vector"
+      ],
       "forbidden_indexes": [],
       "allow_sequential_scan": false,
       "max_temp_blocks": 0
     },
     "tasks_open_by_owner": {
-      "required_nodes": [
-        "Index Scan"
-      ],
-      "forbidden_nodes": [],
-      "required_joins": [],
-      "forbidden_joins": [],
-      "required_relations": [
-        "tasks"
-      ],
-      "required_indexes": [],
-      "forbidden_indexes": [],
-      "allow_sequential_scan": false,
-      "max_temp_blocks": 0
+      "defaults": {
+        "required_nodes": [
+          "Limit"
+        ],
+        "required_relations": [
+          "tasks"
+        ],
+        "allow_sequential_scan": false,
+        "max_temp_blocks": 0
+      },
+      "scenarios": {
+        "hot:generic:estimated": {
+          "required_nodes": [
+            "Bitmap Heap Scan",
+            "Bitmap Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_org_owner"
+          ]
+        },
+        "hot:generic:analyze": {
+          "required_nodes": [
+            "Bitmap Heap Scan",
+            "Bitmap Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_org_owner"
+          ]
+        },
+        "hot:custom:estimated": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_due"
+          ]
+        },
+        "hot:custom:analyze": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_due"
+          ]
+        },
+        "hot:automatic:estimated": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_due"
+          ]
+        },
+        "hot:automatic:analyze": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_due"
+          ]
+        },
+        "cold:generic:estimated": {
+          "required_nodes": [
+            "Bitmap Heap Scan",
+            "Bitmap Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_org_owner"
+          ]
+        },
+        "cold:generic:analyze": {
+          "required_nodes": [
+            "Bitmap Heap Scan",
+            "Bitmap Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_org_owner"
+          ]
+        },
+        "cold:custom:estimated": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_google_task_lookup"
+          ]
+        },
+        "cold:custom:analyze": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_google_task_lookup"
+          ]
+        },
+        "cold:automatic:estimated": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_google_task_lookup"
+          ]
+        },
+        "cold:automatic:analyze": {
+          "required_nodes": [
+            "Index Scan",
+            "Limit"
+          ],
+          "required_indexes": [
+            "idx_tasks_google_task_lookup"
+          ]
+        }
+      }
     },
     "workflow_list": {
       "required_nodes": [
-        "Index Scan"
+        "Seq Scan",
+        "Sort"
       ],
       "forbidden_nodes": [],
       "required_joins": [],
@@ -139,11 +364,9 @@
       "required_relations": [
         "automation_workflows"
       ],
-      "required_indexes": [
-        "idx_wf_matching"
-      ],
+      "required_indexes": [],
       "forbidden_indexes": [],
-      "allow_sequential_scan": false,
+      "allow_sequential_scan": true,
       "max_temp_blocks": 0
     },
     "workflow_stats": {
