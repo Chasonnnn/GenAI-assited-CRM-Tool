@@ -237,6 +237,7 @@ jobs:
             tests/test_performance_capture.py \
             tests/test_performance_infrastructure.py \
             tests/test_performance_repository_config.py \
+            tests/test_performance_scenario_expectations.py \
             tests/test_performance_tooling.py \
             tests/test_query_insights_tags.py \
             tests/test_seed_mock_data.py \

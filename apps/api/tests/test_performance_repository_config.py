@@ -22,6 +22,7 @@ def test_all_plan_sensitive_ci_services_use_postgres_18_1() -> None:
     assert "--mode deterministic" in performance_job
     assert "--seed-profile production" in performance_job
     assert "--mode load" not in performance_job
+    assert "tests/test_performance_scenario_expectations.py" in performance_job
 
 
 def test_performance_compose_overlay_enables_benchmark_instrumentation_safely() -> None:
@@ -69,6 +70,9 @@ def test_performance_documentation_excludes_cloudsql_clones() -> None:
     assert "excluded" in documentation.lower()
     assert "10%" in documentation
     assert "statistics-only" in documentation
+    assert "scenario-specific overrides" in documentation
+    assert "controlled `VACUUM (ANALYZE)`" in documentation
+    assert "table and TOAST autovacuum" in documentation
 
 
 def test_cloud_run_canary_helper_requires_explicit_revisions_and_supports_rollback() -> None:

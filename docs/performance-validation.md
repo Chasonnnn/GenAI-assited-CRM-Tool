@@ -35,7 +35,7 @@ Default failure budgets are deliberately based on database work:
 - a configured plan-invariant violation;
 - estimated-cost growth greater than 20% when accompanied by an adverse structural change.
 
-Sequential scans are not globally forbidden. Each query owns its expectation in [`apps/api/performance/plan-expectations.json`](../apps/api/performance/plan-expectations.json). For example, small stage-dimension scans are allowed, while the stage analytics query requires the organization/stage index and upcoming-task queries require indexed access. Every query in the capture manifest must have an explicit expectation.
+Sequential scans are not globally forbidden. Each query owns its expectation in [`apps/api/performance/plan-expectations.json`](../apps/api/performance/plan-expectations.json). Queries whose correct access path changes with hot/cold selectivity or prepared-plan mode define scenario-specific overrides on top of shared defaults. For example, small stage-dimension scans are allowed, while stage analytics and owner-task queries assert the appropriate index and join behavior for each generic, custom, and automatic scenario. Every query in the capture manifest must have an explicit expectation.
 
 Base-versus-base must pass before trusting a candidate comparison. The acceptance suite also proves that an intentional N+1, a removed required index, and scan amplification fail for the expected reason.
 
@@ -50,10 +50,14 @@ uv run python -m scripts.performance compare \
 ```
 
 The orchestrator creates temporary databases and detached worktrees, migrates
-both refs, seeds the exact same candidate profile into both schemas, captures
-the checked-in manifest, evaluates the budgets, and removes all temporary
-resources in a `finally` cleanup. `HEAD` must be committed so the detached
-candidate worktree is the code being reviewed.
+both refs, disables table and TOAST autovacuum before seeding, and seeds the
+same candidate profile into both schemas. After both seeds complete, it runs a
+controlled `VACUUM (ANALYZE)` on each synthetic work database before capturing
+the checked-in manifest. This normalizes visibility maps, index pending work,
+and planner statistics without touching the separate statistics-only restore
+path. It evaluates the budgets and removes all temporary resources in a
+`finally` cleanup. `HEAD` must be committed so the detached candidate worktree
+is the code being reviewed.
 
 To compare previously captured deterministic reports:
 
