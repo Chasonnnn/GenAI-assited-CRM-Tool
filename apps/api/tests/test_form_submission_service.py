@@ -4,6 +4,7 @@ from decimal import Decimal
 from io import BytesIO
 
 import pytest
+from sqlalchemy import event
 from starlette.datastructures import UploadFile, Headers
 
 from app.core.encryption import hash_email
@@ -980,6 +981,96 @@ def test_add_submission_file_enforces_per_file_field_limit(db, test_org, test_us
         )
 
     assert "Maximum 5 files allowed" in str(exc.value)
+
+
+def test_add_submission_file_enforces_total_limit_across_file_fields(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id, multiple=True)
+    form.max_file_count = 1
+    db.flush()
+
+    upload = UploadFile(
+        filename="supporting.csv",
+        file=BytesIO(b"test"),
+        headers=Headers({"content-type": "text/csv"}),
+    )
+    submission = _create_shared_submission(
+        db=db,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        form=form,
+        answers=_answers(),
+        files=[upload],
+        file_field_keys=["supporting_docs"],
+    )
+    extra = UploadFile(
+        filename="insurance.csv",
+        file=BytesIO(b"extra"),
+        headers=Headers({"content-type": "text/csv"}),
+    )
+
+    with pytest.raises(ValueError) as exc:
+        form_submission_service.add_submission_file(
+            db=db,
+            org_id=test_org.id,
+            submission=submission,
+            file=extra,
+            field_key="insurance_docs",
+            user_id=test_user.id,
+        )
+
+    assert str(exc.value) == "Maximum 1 files allowed"
+
+
+def test_add_submission_file_checks_file_limits_with_one_direct_aggregate_query(
+    db, test_org, test_user, default_stage
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+    form = _create_published_form_with_files(db, test_org.id, test_user.id)
+    upload = UploadFile(
+        filename="doc.csv",
+        file=BytesIO(b"test"),
+        headers=Headers({"content-type": "text/csv"}),
+    )
+    submission = _create_shared_submission(
+        db=db,
+        surrogate=surrogate,
+        user_id=test_user.id,
+        form=form,
+        answers=_answers(),
+        files=[upload],
+    )
+    extra = UploadFile(
+        filename="extra.csv",
+        file=BytesIO(b"extra"),
+        headers=Headers({"content-type": "text/csv"}),
+    )
+    statements: list[str] = []
+
+    def capture_count_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if "form_submission_files" in normalized and "count(" in normalized:
+            statements.append(normalized)
+
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", capture_count_sql)
+    try:
+        form_submission_service.add_submission_file(
+            db=db,
+            org_id=test_org.id,
+            submission=submission,
+            file=extra,
+            field_key="supporting_docs",
+            user_id=test_user.id,
+        )
+    finally:
+        event.remove(bind, "before_cursor_execute", capture_count_sql)
+
+    assert len(statements) == 1
+    assert "from (select" not in statements[0]
+    assert "organization_id" in statements[0]
 
 
 def test_submission_approval_uses_mapping_snapshot(db, test_org, test_user, default_stage):

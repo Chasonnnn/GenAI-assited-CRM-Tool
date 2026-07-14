@@ -25,6 +25,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Loader2Icon } from "lucide-react"
 
 interface AddTaskDialogProps {
     open: boolean
@@ -257,7 +258,17 @@ export function AddTaskDialog({
                         onClick={handleSubmit}
                         disabled={isPending || !formState.title.trim()}
                     >
-                        {isPending ? "Creating..." : "Create Task"}
+                        {isPending ? (
+                            <>
+                                <Loader2Icon
+                                    className="mr-2 size-4 animate-spin"
+                                    aria-hidden="true"
+                                />
+                                Creating...
+                            </>
+                        ) : (
+                            "Create Task"
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>
