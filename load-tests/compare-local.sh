@@ -164,11 +164,16 @@ login_cookie() {
     local port=$1
     local user_id=$2
     local headers_file=$3
-    curl --silent --show-error --dump-header "${headers_file}" --output /dev/null \
+    local cookie
+    curl --silent --show-error --fail --dump-header "${headers_file}" --output /dev/null \
         --request POST --header "X-Dev-Secret: ${DEV_SECRET}" \
         "http://127.0.0.1:${port}/dev/login-as/${user_id}"
-    awk 'BEGIN { IGNORECASE=1 } /^Set-Cookie:/ { sub(/^Set-Cookie:[[:space:]]*/, ""); split($0, parts, ";"); cookies[++count]=parts[1] } END { for (i=1; i<=count; i++) printf "%s%s", (i>1 ? "; " : ""), cookies[i] }' \
-        "${headers_file}"
+    cookie="$(awk 'tolower($0) ~ /^set-cookie:/ { line=$0; sub(/^[^:]*:[[:space:]]*/, "", line); split(line, parts, ";"); sub(/\r$/, "", parts[1]); cookies[++count]=parts[1] } END { for (i=1; i<=count; i++) printf "%s%s", (i>1 ? "; " : ""), cookies[i] }' "${headers_file}")"
+    if [[ "${cookie}" != *"crm_session="* ]]; then
+        echo "Login did not return a session cookie for API port ${port}" >&2
+        return 1
+    fi
+    printf '%s' "${cookie}"
 }
 
 BASE_COOKIE="$(login_cookie 18080 "$(developer_id perf_base)" "${TMP_DIR}/base-headers")"

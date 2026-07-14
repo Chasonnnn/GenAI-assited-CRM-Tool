@@ -63,6 +63,14 @@ def test_k6_runner_uses_identical_candidate_seed_data_and_fixture_keys() -> None
         )
 
 
+def test_k6_runner_extracts_login_cookies_portably_and_fails_fast() -> None:
+    runner = _read("load-tests/compare-local.sh")
+
+    assert "curl --silent --show-error --fail" in runner
+    assert "tolower($0) ~ /^set-cookie:/" in runner
+    assert "Login did not return a session cookie" in runner
+
+
 def test_performance_artifacts_are_ignored() -> None:
     gitignore = _read(".gitignore")
 
