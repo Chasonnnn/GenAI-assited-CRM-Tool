@@ -318,6 +318,7 @@ SELECT * FROM pg_catalog.pg_restore_attribute_stats(
 
     assert len(restored_sql) == 1
     assert "pg_restore_relation_stats" in restored_sql[0]
+    assert "ANALYZE" not in restored_sql[0].upper()
 
 
 def test_plan_metrics_use_root_buffers_and_relation_scan_work() -> None:
@@ -494,7 +495,9 @@ def test_deterministic_orchestrator_cleans_up_after_interrupt(tmp_path, monkeypa
     monkeypatch.setattr(orchestrator, "_worktree", fake_worktree)
     monkeypatch.setattr(orchestrator, "_create_database", lambda *_args: None)
     monkeypatch.setattr(orchestrator, "_prepare_database", lambda *_args: None)
+    monkeypatch.setattr(orchestrator, "_disable_autovacuum", lambda *_args: None)
     monkeypatch.setattr(orchestrator, "_seed_database", lambda *_args: None)
+    monkeypatch.setattr(orchestrator, "_normalize_database", lambda *_args: None)
     monkeypatch.setattr(
         orchestrator,
         "_capture_database",
@@ -523,3 +526,149 @@ def test_deterministic_orchestrator_cleans_up_after_interrupt(tmp_path, monkeypa
     assert len(dropped) == 2
     assert len(removed) == 2
     assert all(not destination.exists() for destination in removed)
+
+
+def test_deterministic_orchestrator_disables_autovacuum_before_seeding_and_normalizes_before_capture(
+    tmp_path, monkeypatch
+) -> None:
+    events = []
+
+    def fake_worktree(_repository_root, destination, _git_ref):
+        destination.mkdir(parents=True)
+
+    def fake_capture(_checkout, database_url, output_path):
+        events.append(("capture", database_url))
+        output_path.write_text("{}")
+
+    monkeypatch.setattr(orchestrator, "_worktree", fake_worktree)
+    monkeypatch.setattr(orchestrator, "_create_database", lambda *_args: None)
+    monkeypatch.setattr(
+        orchestrator,
+        "_prepare_database",
+        lambda _checkout, database_url: events.append(("prepare", database_url)),
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_disable_autovacuum",
+        lambda database_url: events.append(("disable_autovacuum", database_url)),
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_seed_database",
+        lambda _checkout, database_url, _profile: events.append(("seed", database_url)),
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_normalize_database",
+        lambda database_url: events.append(("normalize", database_url)),
+    )
+    monkeypatch.setattr(orchestrator, "_capture_database", fake_capture)
+    monkeypatch.setattr(orchestrator, "_drop_database", lambda *_args: None)
+    monkeypatch.setattr(orchestrator, "_remove_worktree", lambda *_args: None)
+
+    orchestrator.run_deterministic_comparison(
+        repository_root=tmp_path,
+        base_ref="base",
+        candidate_ref="candidate",
+        admin_database_url="postgresql+psycopg://postgres:postgres@localhost/crm",
+        results_dir=tmp_path / "results",
+    )
+
+    assert [event for event, _database_url in events] == [
+        "prepare",
+        "prepare",
+        "disable_autovacuum",
+        "disable_autovacuum",
+        "seed",
+        "seed",
+        "normalize",
+        "normalize",
+        "capture",
+        "capture",
+    ]
+
+
+def test_database_normalization_uses_safe_table_identifiers_and_controlled_vacuum(
+    monkeypatch,
+) -> None:
+    statements: list[str] = []
+    connection_options: list[dict[str, object]] = []
+
+    class Result:
+        def fetchall(self):
+            return [("public", "surrogates"), ("public", 'odd"table')]
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, statement):
+            rendered = statement.as_string() if hasattr(statement, "as_string") else statement
+            statements.append(rendered)
+            return Result()
+
+    def fake_connect(_database_url, **options):
+        connection_options.append(options)
+        return Connection()
+
+    monkeypatch.setattr(orchestrator.psycopg, "connect", fake_connect)
+
+    database_url = "postgresql+psycopg://postgres:postgres@localhost/performance"
+    orchestrator._disable_autovacuum(database_url)
+    orchestrator._normalize_database(database_url)
+
+    assert connection_options == [{"autocommit": True}, {"autocommit": True}]
+    assert "c.relkind = 'r'" in statements[0]
+    assert "n.nspname = 'public'" in statements[0]
+    assert statements[1] == (
+        'ALTER TABLE "public"."surrogates" SET '
+        "(autovacuum_enabled = false, toast.autovacuum_enabled = false)"
+    )
+    assert statements[2] == (
+        'ALTER TABLE "public"."odd""table" SET '
+        "(autovacuum_enabled = false, toast.autovacuum_enabled = false)"
+    )
+    assert statements[3] == "VACUUM (ANALYZE)"
+
+
+def test_deterministic_orchestrator_seeding_sets_isolated_encryption_key(
+    tmp_path, monkeypatch
+) -> None:
+    captured_environment = {}
+    for key in (
+        "VERSION_ENCRYPTION_KEY",
+        "META_ENCRYPTION_KEY",
+        "DATA_ENCRYPTION_KEY",
+        "FERNET_KEY",
+        "PII_HASH_KEY",
+        "JWT_SECRET",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    def fake_run(_command, *, cwd, env=None):
+        assert cwd == tmp_path / "apps" / "api"
+        captured_environment.update(env or {})
+
+    monkeypatch.setattr(orchestrator, "_run", fake_run)
+
+    orchestrator._seed_database(
+        tmp_path,
+        "postgresql+psycopg://postgres:postgres@localhost/performance",
+        "production",
+    )
+
+    assert captured_environment["ENV"] == "test"
+    assert captured_environment["SEED_PROFILE"] == "production"
+    assert captured_environment["SEED_REDACT_SUMMARY"] == "1"
+    for key in (
+        "VERSION_ENCRYPTION_KEY",
+        "META_ENCRYPTION_KEY",
+        "DATA_ENCRYPTION_KEY",
+        "FERNET_KEY",
+    ):
+        Fernet(captured_environment[key].encode("ascii"))
+    assert captured_environment["PII_HASH_KEY"].startswith("local-performance-")
+    assert captured_environment["JWT_SECRET"].startswith("local-performance-")

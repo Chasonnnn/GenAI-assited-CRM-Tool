@@ -13,6 +13,14 @@ from psycopg import sql
 from sqlalchemy.engine import make_url
 
 
+# Public, non-production fixture key used only inside disposable benchmark
+# databases. Supplying it explicitly prevents a developer's real encryption
+# environment from leaking into detached seed processes.
+_BENCHMARK_FERNET_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+_BENCHMARK_HASH_KEY = "local-performance-pii-hash-key-not-a-secret"
+_BENCHMARK_JWT_SECRET = "local-performance-jwt-secret-not-a-secret"
+
+
 @dataclass(frozen=True)
 class DeterministicComparisonResult:
     base_report: Path
@@ -75,6 +83,29 @@ def _prepare_database(checkout: Path, database_url: str) -> None:
     _run(["uv", "run", "-m", "alembic", "upgrade", "head"], cwd=api_root, env=environment)
 
 
+def _disable_autovacuum(database_url: str) -> None:
+    """Disable automatic vacuum/analyze on migrated benchmark tables."""
+    with psycopg.connect(_psycopg_url(database_url), autocommit=True) as connection:
+        relations = connection.execute(
+            """
+            SELECT n.nspname, c.relname
+            FROM pg_catalog.pg_class AS c
+            JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'r'
+              AND NOT c.relispartition
+            ORDER BY n.nspname, c.relname
+            """
+        ).fetchall()
+        for schema_name, relation_name in relations:
+            connection.execute(
+                sql.SQL(
+                    "ALTER TABLE {}.{} SET "
+                    "(autovacuum_enabled = false, toast.autovacuum_enabled = false)"
+                ).format(sql.Identifier(schema_name), sql.Identifier(relation_name))
+            )
+
+
 def _seed_database(
     harness_checkout: Path,
     database_url: str,
@@ -88,6 +119,12 @@ def _seed_database(
             "ENV": "test",
             "SEED_PROFILE": seed_profile,
             "SEED_REDACT_SUMMARY": "1",
+            "VERSION_ENCRYPTION_KEY": _BENCHMARK_FERNET_KEY,
+            "META_ENCRYPTION_KEY": _BENCHMARK_FERNET_KEY,
+            "DATA_ENCRYPTION_KEY": _BENCHMARK_FERNET_KEY,
+            "FERNET_KEY": _BENCHMARK_FERNET_KEY,
+            "PII_HASH_KEY": _BENCHMARK_HASH_KEY,
+            "JWT_SECRET": _BENCHMARK_JWT_SECRET,
         }
     )
     _run(
@@ -95,6 +132,12 @@ def _seed_database(
         cwd=api_root,
         env=environment,
     )
+
+
+def _normalize_database(database_url: str) -> None:
+    """Normalize maintenance state and planner statistics after deterministic seeding."""
+    with psycopg.connect(_psycopg_url(database_url), autocommit=True) as connection:
+        connection.execute("VACUUM (ANALYZE)")
 
 
 def _capture_database(
@@ -176,11 +219,25 @@ def run_deterministic_comparison(
             _prepare_database(base_checkout, base_sqlalchemy_url)
             _prepare_database(candidate_checkout, candidate_sqlalchemy_url)
 
+            # PostgreSQL's global autovacuum setting cannot be changed per database.
+            # Disable it with table reloptions after migrations create the schema and
+            # before either deterministic seed starts modifying rows.
+            _disable_autovacuum(base_sqlalchemy_url)
+            _disable_autovacuum(candidate_sqlalchemy_url)
+
             # The candidate harness intentionally seeds both databases. This pins the
             # distribution even when seed code changes between refs. A schema-incompatible
             # seed fails the comparison explicitly rather than silently changing data.
             _seed_database(candidate_checkout, base_sqlalchemy_url, seed_profile)
             _seed_database(candidate_checkout, candidate_sqlalchemy_url, seed_profile)
+
+            # Normalize both synthetic databases only after both seeds finish so
+            # visibility maps, index pending work, and planner inputs are controlled
+            # before either capture.
+            # Production statistics-only databases use the separate restore path
+            # and must never call this function.
+            _normalize_database(base_sqlalchemy_url)
+            _normalize_database(candidate_sqlalchemy_url)
 
             _capture_database(candidate_checkout, base_sqlalchemy_url, base_report)
             _capture_database(candidate_checkout, candidate_sqlalchemy_url, candidate_report)
