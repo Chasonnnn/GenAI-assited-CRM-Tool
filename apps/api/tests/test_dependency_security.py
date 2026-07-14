@@ -32,7 +32,7 @@ def test_dependency_pins_match_security_fixes():
     expected_exact_pins = {
         "fastapi": "0.136.3",
         "idna": "3.15",
-        "pillow": "12.2.0",
+        "pillow": "12.3.0",
         "pydantic-settings": "2.14.2",
         "pypdf": "6.13.3",
         "python-multipart": "0.0.31",
