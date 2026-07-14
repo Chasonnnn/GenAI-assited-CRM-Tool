@@ -6,6 +6,7 @@ import subprocess
 import pytest
 from cryptography.fernet import Fernet
 
+from scripts.performance import __main__ as performance_main
 from scripts.performance import orchestrator
 from scripts.performance.corpus import QueryFingerprint, normalize_query, select_corpus
 from scripts.performance.gates import compare_plan_reports
@@ -62,6 +63,61 @@ def _plan(
     if index_name is not None:
         node["Index Name"] = index_name
     return [{"Plan": node}]
+
+
+def test_k6_summary_parser_supports_current_flat_export_schema(tmp_path) -> None:
+    summary = tmp_path / "summary.json"
+    summary.write_text(
+        json.dumps(
+            {
+                "metrics": {
+                    "http_req_duration": {
+                        "med": 44.328,
+                        "p(95)": 106.7264,
+                        "p(99)": 242.73936,
+                    },
+                    "http_reqs": {"count": 2653, "rate": 21.938715},
+                    "http_req_failed": {"value": 0.0018846588},
+                }
+            }
+        )
+    )
+
+    assert performance_main._k6_summary(summary) == {
+        "error_rate": pytest.approx(0.0018846588),
+        "p50_ms": pytest.approx(44.328),
+        "p95_ms": pytest.approx(106.7264),
+        "p99_ms": pytest.approx(242.73936),
+        "request_count": pytest.approx(2653),
+        "throughput_rps": pytest.approx(21.938715),
+    }
+
+
+def test_database_work_is_normalized_per_http_request() -> None:
+    assert performance_main._database_work_per_request(
+        {
+            "calls": 200,
+            "logical_blocks": 1_000,
+            "rows_returned_or_affected": 500,
+            "temp_blocks": 0,
+        },
+        request_count=100,
+    ) == {
+        "calls": 2.0,
+        "logical_blocks": 10.0,
+        "rows_returned_or_affected": 5.0,
+        "temp_blocks": 0.0,
+    }
+
+
+def test_load_report_uses_null_for_delta_from_zero_baseline() -> None:
+    comparison = compare_load_summaries(
+        base={"error_rate": 0.0},
+        candidate={"error_rate": 0.01},
+    )
+
+    assert comparison.metrics["error_rate"]["delta_percent"] is None
+    assert "Infinity" not in serialize_safe_report({"metrics": comparison.metrics})
 
 
 def test_seed_profiles_are_deterministic_multi_tenant_and_growth_scaled() -> None:

@@ -134,16 +134,74 @@ def _export_corpus(args: argparse.Namespace) -> int:
 def _k6_summary(path: Path) -> dict[str, float]:
     payload = json.loads(path.read_text())
     metrics = payload.get("metrics", {})
-    duration = metrics.get("http_req_duration", {}).get("values", {})
-    requests = metrics.get("http_reqs", {}).get("values", {})
-    errors = metrics.get("http_req_failed", {}).get("values", {})
+    duration_metric = metrics.get("http_req_duration", {})
+    requests_metric = metrics.get("http_reqs", {})
+    errors_metric = metrics.get("http_req_failed", {})
+    duration = duration_metric.get("values", duration_metric)
+    requests = requests_metric.get("values", requests_metric)
+    errors = errors_metric.get("values", errors_metric)
     return {
         "p50_ms": float(duration.get("med", 0)),
         "p95_ms": float(duration.get("p(95)", 0)),
         "p99_ms": float(duration.get("p(99)", 0)),
         "throughput_rps": float(requests.get("rate", 0)),
-        "error_rate": float(errors.get("rate", 0)),
+        "request_count": float(requests.get("count", 0)),
+        "error_rate": float(errors.get("rate", errors.get("value", 0))),
     }
+
+
+def _database_work_per_request(
+    work: dict[str, Any],
+    *,
+    request_count: float,
+) -> dict[str, float]:
+    if request_count <= 0:
+        return {key: 0.0 for key in work}
+    return {
+        key: round(float(value) / request_count, 6)
+        for key, value in work.items()
+        if isinstance(value, int | float)
+    }
+
+
+def _write_load_comparison_report(
+    args: argparse.Namespace,
+    results_dir: Path,
+) -> int:
+    base = _k6_summary(results_dir / "base-summary.json")
+    candidate = _k6_summary(results_dir / "candidate-summary.json")
+    comparison = compare_load_summaries(base=base, candidate=candidate)
+    database_totals: dict[str, dict[str, Any]] = {}
+    for side in ("base", "candidate"):
+        path = results_dir / f"{side}-db.json"
+        database_totals[side] = json.loads(path.read_text()) if path.exists() else {}
+    database_per_request = compare_load_summaries(
+        base=_database_work_per_request(
+            database_totals["base"],
+            request_count=base["request_count"],
+        ),
+        candidate=_database_work_per_request(
+            database_totals["candidate"],
+            request_count=candidate["request_count"],
+        ),
+    )
+    report = {
+        "schema_version": 2,
+        "advisory": True,
+        "base_ref": args.base,
+        "candidate_ref": args.candidate,
+        "wall_clock": comparison.metrics,
+        "database_work": {
+            "totals": database_totals,
+            "per_request": database_per_request.metrics,
+        },
+        "gate_failures": [],
+    }
+    rendered = serialize_safe_report(report)
+    (results_dir / "comparison.json").write_text(rendered + "\n")
+    print(rendered)
+    print("Advisory only: wall-clock latency can never fail a merge.")
+    return 0
 
 
 def _load_comparison(args: argparse.Namespace) -> int:
@@ -158,28 +216,7 @@ def _load_comparison(args: argparse.Namespace) -> int:
         env=environment,
         check=True,
     )
-
-    base = _k6_summary(results_dir / "base-summary.json")
-    candidate = _k6_summary(results_dir / "candidate-summary.json")
-    comparison = compare_load_summaries(base=base, candidate=candidate)
-    database_work: dict[str, Any] = {}
-    for side in ("base", "candidate"):
-        path = results_dir / f"{side}-db.json"
-        database_work[side] = json.loads(path.read_text()) if path.exists() else {}
-    report = {
-        "schema_version": 1,
-        "advisory": True,
-        "base_ref": args.base,
-        "candidate_ref": args.candidate,
-        "wall_clock": comparison.metrics,
-        "database_work": database_work,
-        "gate_failures": [],
-    }
-    rendered = serialize_safe_report(report)
-    (results_dir / "comparison.json").write_text(rendered + "\n")
-    print(rendered)
-    print("Advisory only: wall-clock latency can never fail a merge.")
-    return 0
+    return _write_load_comparison_report(args, results_dir)
 
 
 def _compare(args: argparse.Namespace) -> int:

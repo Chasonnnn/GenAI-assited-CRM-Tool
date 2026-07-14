@@ -22,13 +22,13 @@ _SAFE_SENSITIVE_COUNTS = {"parameter_count"}
 @dataclass(frozen=True)
 class LoadComparison:
     advisory: bool
-    metrics: dict[str, dict[str, float]]
+    metrics: dict[str, dict[str, float | None]]
     gate_failures: tuple[str, ...] = ()
 
 
-def _percent_delta(base: float, candidate: float) -> float:
+def _percent_delta(base: float, candidate: float) -> float | None:
     if base == 0:
-        return 0.0 if candidate == 0 else float("inf")
+        return 0.0 if candidate == 0 else None
     return round((candidate - base) / base * 100, 3)
 
 
@@ -37,7 +37,7 @@ def compare_load_summaries(
     base: Mapping[str, float | int],
     candidate: Mapping[str, float | int],
 ) -> LoadComparison:
-    metrics: dict[str, dict[str, float]] = {}
+    metrics: dict[str, dict[str, float | None]] = {}
     for name in sorted(set(base) | set(candidate)):
         base_value = float(base.get(name, 0))
         candidate_value = float(candidate.get(name, 0))
