@@ -1,4 +1,6 @@
+import random
 import uuid
+from types import SimpleNamespace
 
 from app.db.enums import IntendedParentStatus, SurrogateSource
 from app.db.models import (
@@ -191,3 +193,114 @@ def test_create_matches_balanced_statuses(db, test_org, test_user) -> None:
         .all()
     ]
     assert len(accepted_surrogate_ids) == len(set(accepted_surrogate_ids))
+
+
+def test_create_matches_is_independent_of_database_row_order(monkeypatch) -> None:
+    """Identical logical seed data must choose identical match candidates."""
+
+    class FakeQuery:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def join(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return list(self.rows)
+
+    class FakeDb:
+        def __init__(self, surrogate_rows, intended_parents):
+            self.surrogate_rows = surrogate_rows
+            self.intended_parents = intended_parents
+            self.query_count = 0
+
+        def query(self, *entities):
+            self.query_count += 1
+            if self.query_count == 1:
+                return FakeQuery(self.surrogate_rows)
+            return FakeQuery(self.intended_parents)
+
+        def refresh(self, instance):
+            return None
+
+    users_by_role = {
+        "case_manager": SimpleNamespace(id=uuid.UUID(int=101)),
+        "admin": SimpleNamespace(id=uuid.UUID(int=102)),
+        "developer": SimpleNamespace(id=uuid.UUID(int=103)),
+    }
+    surrogate_rows = [
+        (
+            SimpleNamespace(id=uuid.UUID(int=index), surrogate_number=f"S{10000 + index}"),
+            "ready_to_match",
+        )
+        for index in range(1, 9)
+    ]
+    intended_parents = [
+        SimpleNamespace(id=uuid.UUID(int=100 + index), intended_parent_number=f"I{10000 + index}")
+        for index in range(1, 7)
+    ]
+
+    selected_runs: list[list[tuple[str, str, str]]] = []
+
+    def run(rows, ips):
+        selected: list[tuple[str, str, str]] = []
+
+        def create_match(*, surrogate_id, intended_parent_id, notes, **kwargs):
+            surrogate = next(row[0] for row in surrogate_rows if row[0].id == surrogate_id)
+            intended_parent = next(ip for ip in intended_parents if ip.id == intended_parent_id)
+            selected.append(
+                (surrogate.surrogate_number, intended_parent.intended_parent_number, notes)
+            )
+            return SimpleNamespace(
+                id=uuid.uuid4(),
+                surrogate_id=surrogate_id,
+                intended_parent_id=intended_parent_id,
+                status="proposed",
+            )
+
+        def set_status(*, match, **kwargs):
+            match.status = kwargs.get("status", match.status)
+            return match
+
+        monkeypatch.setattr(
+            seed_mock_data.match_service, "get_existing_match", lambda *a, **k: None
+        )
+        monkeypatch.setattr(seed_mock_data.match_service, "create_match", create_match)
+        monkeypatch.setattr(
+            seed_mock_data.match_service,
+            "mark_match_reviewing_if_needed",
+            lambda *, match, **kwargs: set_status(match=match, status="reviewing"),
+        )
+        monkeypatch.setattr(
+            seed_mock_data.match_service,
+            "accept_match",
+            lambda *, match, **kwargs: set_status(match=match, status="accepted"),
+        )
+        monkeypatch.setattr(
+            seed_mock_data.match_service,
+            "reject_match",
+            lambda *, match, **kwargs: set_status(match=match, status="rejected"),
+        )
+        monkeypatch.setattr(
+            seed_mock_data.match_service,
+            "cancel_match",
+            lambda *, match, **kwargs: set_status(match=match, status="cancelled"),
+        )
+
+        random.seed(20260714)
+        seed_mock_data.create_matches(
+            db=FakeDb(rows, ips),
+            org_id=uuid.UUID(int=999),
+            users_by_role=users_by_role,
+            count=10,
+            mode="balanced",
+        )
+        selected_runs.append(selected)
+
+    run(surrogate_rows, intended_parents)
+    run(list(reversed(surrogate_rows)), list(reversed(intended_parents)))
+
+    assert selected_runs[0] == selected_runs[1]

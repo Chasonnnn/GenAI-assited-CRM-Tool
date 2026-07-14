@@ -1060,6 +1060,18 @@ def create_matches(
         print("Skipping matches (requires seeded surrogates and intended parents).")
         return []
 
+    surrogate_rows = sorted(
+        surrogate_rows,
+        key=lambda row: (row[0].surrogate_number, str(row[0].id), row[1]),
+    )
+    ips = sorted(
+        ips,
+        key=lambda intended_parent: (
+            intended_parent.intended_parent_number,
+            str(intended_parent.id),
+        ),
+    )
+
     general_surrogates = [s for s, slug in surrogate_rows if slug not in TERMINAL_STAGE_SLUGS]
     accepted_surrogates = [
         s for s, slug in surrogate_rows if slug in MATCH_ACCEPTABLE_SURROGATE_STAGES
