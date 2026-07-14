@@ -44,6 +44,25 @@ def test_k6_wall_clock_metrics_have_no_latency_threshold() -> None:
     assert "intelligent-suggestions/summary" in suite
 
 
+def test_k6_runner_uses_identical_candidate_seed_data_and_fixture_keys() -> None:
+    runner = _read("load-tests/compare-local.sh")
+
+    assert 'seed_checkout "${CANDIDATE_DIR}" perf_base' in runner
+    assert 'seed_checkout "${CANDIDATE_DIR}" perf_candidate' in runner
+    assert 'seed_checkout "${BASE_DIR}" perf_base' not in runner
+    for key in (
+        "VERSION_ENCRYPTION_KEY",
+        "META_ENCRYPTION_KEY",
+        "DATA_ENCRYPTION_KEY",
+        "FERNET_KEY",
+        "PII_HASH_KEY",
+    ):
+        assert (
+            runner.count(f'{key}="${{BENCHMARK_FERNET_KEY}}"') >= 2
+            or runner.count(f'{key}="${{BENCHMARK_HASH_KEY}}"') >= 2
+        )
+
+
 def test_performance_artifacts_are_ignored() -> None:
     gitignore = _read(".gitignore")
 

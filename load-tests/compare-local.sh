@@ -9,6 +9,9 @@ PERF_DB_PORT="${PERF_DB_PORT:-55432}"
 PERF_DB_CONTAINER="crm_perf_db_${PPID}"
 COMPOSE_PROJECT="crm-perf-${PPID}"
 DEV_SECRET="local-performance-secret"
+BENCHMARK_FERNET_KEY="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+BENCHMARK_HASH_KEY="local-performance-pii-hash-key-not-a-secret"
+BENCHMARK_JWT_SECRET="local-performance-jwt-secret-not-a-secret"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/crm-query-performance.XXXXXX")"
 BASE_DIR="${TMP_DIR}/base"
 CANDIDATE_DIR="${TMP_DIR}/candidate"
@@ -81,23 +84,36 @@ seed_checkout() {
     (
         cd "${checkout}/apps/api"
         if [[ "${profile_supported}" == "1" ]]; then
-            DATABASE_URL="$(database_url "${database}")" ENV=dev SEED_PROFILE=production \
-                SEED_REDACT_SUMMARY=1 uv run python -m scripts.seed_mock_data
+            DATABASE_URL="$(database_url "${database}")" ENV=test SEED_PROFILE=production \
+                SEED_REDACT_SUMMARY=1 \
+                VERSION_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+                META_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+                DATA_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+                FERNET_KEY="${BENCHMARK_FERNET_KEY}" \
+                PII_HASH_KEY="${BENCHMARK_HASH_KEY}" \
+                JWT_SECRET="${BENCHMARK_JWT_SECRET}" \
+                uv run python -m scripts.seed_mock_data
         else
-            DATABASE_URL="$(database_url "${database}")" ENV=dev \
+            DATABASE_URL="$(database_url "${database}")" ENV=test \
                 SEED_RANDOM_SEED=20260713 SEED_SURROGATES=5000 \
                 SEED_INTENDED_PARENTS=500 SEED_MATCH_COUNT=1000 \
-                SEED_REDACT_SUMMARY=1 uv run python -m scripts.seed_mock_data
+                SEED_REDACT_SUMMARY=1 \
+                VERSION_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+                META_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+                DATA_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+                FERNET_KEY="${BENCHMARK_FERNET_KEY}" \
+                PII_HASH_KEY="${BENCHMARK_HASH_KEY}" \
+                JWT_SECRET="${BENCHMARK_JWT_SECRET}" \
+                uv run python -m scripts.seed_mock_data
         fi
     ) >"${RESULTS_DIR}/${database}-seed.log" 2>&1
 }
 
 PROFILE_SUPPORTED=0
-if [[ -f "${BASE_DIR}/apps/api/scripts/performance/profiles.py" \
-      && -f "${CANDIDATE_DIR}/apps/api/scripts/performance/profiles.py" ]]; then
+if [[ -f "${CANDIDATE_DIR}/apps/api/scripts/performance/profiles.py" ]]; then
     PROFILE_SUPPORTED=1
 fi
-seed_checkout "${BASE_DIR}" perf_base "${PROFILE_SUPPORTED}"
+seed_checkout "${CANDIDATE_DIR}" perf_base "${PROFILE_SUPPORTED}"
 seed_checkout "${CANDIDATE_DIR}" perf_candidate "${PROFILE_SUPPORTED}"
 
 start_api() {
@@ -108,7 +124,11 @@ start_api() {
     (
         cd "${checkout}/apps/api"
         ENV=dev DATABASE_URL="$(database_url "${database}")" DEV_SECRET="${DEV_SECRET}" \
-            JWT_SECRET="local-performance-jwt-secret-at-least-32-characters" \
+            VERSION_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+            META_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+            DATA_ENCRYPTION_KEY="${BENCHMARK_FERNET_KEY}" \
+            FERNET_KEY="${BENCHMARK_FERNET_KEY}" \
+            PII_HASH_KEY="${BENCHMARK_HASH_KEY}" JWT_SECRET="${BENCHMARK_JWT_SECRET}" \
             API_BASE_URL="http://127.0.0.1:${port}" FRONTEND_URL="http://127.0.0.1:3000" \
             CORS_ORIGINS="http://127.0.0.1:3000" \
             uv run -- uvicorn app.main:app --host 127.0.0.1 --port "${port}"
