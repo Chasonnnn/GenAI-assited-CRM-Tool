@@ -378,8 +378,9 @@ pnpm lint
 pnpm check             # typecheck + lint + test
 ```
 
-> Note: CI runs backend tests against `postgres:16` while local development uses `postgres:18.1`
-> (see `docker-compose.yml`); this divergence is intentional.
+> Note: CI and local development use the QueryProof-supported PostgreSQL 18.4
+> Trixie image pinned to the same immutable manifest digest (see
+> `docker-compose.yml`).
 
 ---
 

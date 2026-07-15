@@ -11,11 +11,15 @@ def _read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text()
 
 
-def test_ci_uses_postgres_18_1_and_separates_deterministic_performance_gates() -> None:
+def test_ci_uses_queryproof_supported_postgres_and_separates_deterministic_gates() -> None:
     workflow = _read(".github/workflows/ci.yml")
 
     assert "postgres:16" not in workflow
-    assert workflow.count("postgres:18.1") >= 4
+    supported_image = (
+        "postgres:18.4-trixie@sha256:"
+        "b913fd5699b8bd23fa4b06d72ecdd939fad43b80fb8651bac06caa0e6d135cac"
+    )
+    assert workflow.count(supported_image) == 4
     assert "performance-gates:" in workflow
 
     performance_job = workflow.split("  performance-gates:", maxsplit=1)[1].split(

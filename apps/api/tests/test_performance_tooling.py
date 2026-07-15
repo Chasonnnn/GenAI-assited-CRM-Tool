@@ -27,6 +27,8 @@ from scripts.performance.statistics import (
     sanitize_statistics_dump,
 )
 from scripts.performance.statistics_artifacts import (
+    StatisticsArtifactError,
+    _require_postgres_18_4,
     export_encrypted_statistics,
     restore_encrypted_statistics,
 )
@@ -329,6 +331,34 @@ SELECT dangerous_function(), pg_catalog.pg_restore_relation_stats(
         sanitize_statistics_dump(dump, allowlist)
 
 
+@pytest.mark.parametrize("version", ["18.3", "19.0", "not-postgres"])
+def test_statistics_tools_reject_unsupported_postgres_clients(version: str, monkeypatch) -> None:
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"pg_dump (PostgreSQL) {version}\n",
+        )
+
+    monkeypatch.setattr("scripts.performance.statistics_artifacts.subprocess.run", fake_run)
+
+    with pytest.raises(StatisticsArtifactError, match="18.4"):
+        _require_postgres_18_4("pg_dump")
+
+
+def test_statistics_tools_accept_postgres_18_4_client(monkeypatch) -> None:
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="pg_dump (PostgreSQL) 18.4\n",
+        )
+
+    monkeypatch.setattr("scripts.performance.statistics_artifacts.subprocess.run", fake_run)
+
+    _require_postgres_18_4("pg_dump")
+
+
 def test_statistics_artifact_is_encrypted_and_restored_without_plaintext_files(
     tmp_path, monkeypatch
 ) -> None:
@@ -346,7 +376,7 @@ SELECT * FROM pg_catalog.pg_restore_attribute_stats(
 
     def fake_run(command, **kwargs):
         if "--version" in command:
-            return subprocess.CompletedProcess(command, 0, stdout="pg_dump (PostgreSQL) 18.1\n")
+            return subprocess.CompletedProcess(command, 0, stdout="pg_dump (PostgreSQL) 18.4\n")
         if command[0] == "pg_dump":
             return subprocess.CompletedProcess(command, 0, stdout=dump, stderr="")
         restored_sql.append(kwargs["input"])

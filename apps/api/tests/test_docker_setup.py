@@ -96,7 +96,10 @@ def test_web_dockerfile_runs_non_root_and_has_healthcheck() -> None:
     assert "/health" in content[health_idx:], "HEALTHCHECK should target /health"
 
 
-def test_compose_uses_postgres_18_1_with_new_pgdata() -> None:
+def test_compose_uses_queryproof_supported_postgres_with_new_pgdata() -> None:
     content = _read("docker-compose.yml")
-    assert "image: postgres:18.1" in content
+    assert (
+        "image: postgres:18.4-trixie@sha256:"
+        "b913fd5699b8bd23fa4b06d72ecdd939fad43b80fb8651bac06caa0e6d135cac"
+    ) in content
     assert "- pgdata:/var/lib/postgresql" in content

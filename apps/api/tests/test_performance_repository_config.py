@@ -11,11 +11,15 @@ def _read(rel_path: str) -> str:
     return (ROOT / rel_path).read_text()
 
 
-def test_all_plan_sensitive_ci_services_use_postgres_18_1() -> None:
+def test_all_plan_sensitive_ci_services_use_queryproof_supported_postgres() -> None:
     workflow = _read(".github/workflows/ci.yml")
 
     assert "postgres:16" not in workflow
-    assert workflow.count("postgres:18.1") >= 3
+    supported_image = (
+        "postgres:18.4-trixie@sha256:"
+        "b913fd5699b8bd23fa4b06d72ecdd939fad43b80fb8651bac06caa0e6d135cac"
+    )
+    assert workflow.count(supported_image) == 4
     performance_job = workflow.split("  performance-gates:", 1)[1].split("\n  frontend-tests:", 1)[
         0
     ]
@@ -74,8 +78,13 @@ def test_k6_runner_extracts_login_cookies_portably_and_fails_fast() -> None:
 def test_performance_artifacts_are_ignored() -> None:
     gitignore = _read(".gitignore")
 
-    assert "apps/api/performance/artifacts/" in gitignore
-    assert "*.stats.enc" in gitignore
+    for pattern in (
+        "apps/api/performance/artifacts/",
+        "apps/api/performance/stats/",
+        "queryproof-statistics.age",
+        "*.stats.enc",
+    ):
+        assert pattern in gitignore
 
 
 def test_cloudsql_query_insights_and_cloud_run_slo_are_declared() -> None:

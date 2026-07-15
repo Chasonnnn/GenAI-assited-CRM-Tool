@@ -66,4 +66,6 @@ infra/terraform/tfplan
 .gstack/
 # Local query-performance artifacts (encrypted statistics are distributed out of band)
 apps/api/performance/artifacts/
+apps/api/performance/stats/
+queryproof-statistics.age
 *.stats.enc

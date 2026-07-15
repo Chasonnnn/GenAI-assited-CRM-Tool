@@ -28,16 +28,19 @@ def _fernet_from_environment(key_environment_variable: str) -> Fernet:
         ) from exc
 
 
-def _require_postgres_18(executable: str) -> None:
+def _require_postgres_18_4(executable: str) -> None:
     result = subprocess.run(
         [executable, "--version"],
         check=True,
         capture_output=True,
         text=True,
     )
-    match = re.search(r"PostgreSQL\)\s+(\d+)", result.stdout)
-    if not match or int(match.group(1)) < 18:
-        raise StatisticsArtifactError(f"{executable} 18 or newer is required")
+    match = re.search(r"PostgreSQL\)\s+(\d+)\.(\d+)", result.stdout)
+    supported = bool(match and int(match.group(1)) == 18 and int(match.group(2)) >= 4)
+    if not supported:
+        raise StatisticsArtifactError(
+            f"{executable} 18.4 or newer within PostgreSQL 18 is required"
+        )
 
 
 def export_encrypted_statistics(
@@ -49,7 +52,7 @@ def export_encrypted_statistics(
     pg_dump_executable: str = "pg_dump",
 ) -> None:
     """Dump, sanitize, and encrypt statistics without writing plaintext to disk."""
-    _require_postgres_18(pg_dump_executable)
+    _require_postgres_18_4(pg_dump_executable)
     allowlist = StatisticsAllowlist.from_json_file(allowlist_path)
     result = subprocess.run(
         [
@@ -82,7 +85,7 @@ def restore_encrypted_statistics(
     psql_executable: str = "psql",
 ) -> None:
     """Decrypt in memory and stream sanitized statistics directly to PostgreSQL."""
-    _require_postgres_18(psql_executable)
+    _require_postgres_18_4(psql_executable)
     fernet = _fernet_from_environment(key_environment_variable)
     try:
         plaintext = fernet.decrypt(artifact_path.read_bytes()).decode("utf-8")

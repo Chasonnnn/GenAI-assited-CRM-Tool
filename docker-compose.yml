@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18.1
+    image: postgres:18.4-trixie@sha256:b913fd5699b8bd23fa4b06d72ecdd939fad43b80fb8651bac06caa0e6d135cac
     container_name: crm_db
     restart: unless-stopped
     environment:

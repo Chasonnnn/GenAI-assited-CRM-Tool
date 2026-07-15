@@ -12,6 +12,16 @@ The system separates three questions that need different evidence:
 
 Production rows never leave GCP. Local and CI execution use deterministic synthetic profiles. The only production-derived database artifact permitted locally is a sanitized, encrypted PostgreSQL 18 planner-statistics artifact; it contains no table rows and is never committed.
 
+## Supported PostgreSQL image
+
+Plan-sensitive CI and local Compose use `postgres:18.4-trixie` at the same
+immutable manifest digest as QueryProof. PostgreSQL 18.4 is required because
+the statistics-restore path exercises the function corrected by
+[CVE-2026-6575](https://www.postgresql.org/support/security/CVE-2026-6575/);
+see the official [PostgreSQL 18.4 release
+notes](https://www.postgresql.org/docs/release/18.4/). A reviewed maintenance
+change must update the tag and digest together.
+
 ## Deterministic PR gates
 
 The hard gate compares the merge base and candidate against the same schema, seed profile, query corpus, PostgreSQL version, and planner settings. It records structured `EXPLAIN (FORMAT JSON)` documents rather than plan hashes.
