@@ -329,6 +329,46 @@ async def test_calendar_discovery_failure_does_not_cancel_confirmed_appointment(
     assert existing.cancellation_reason is None
 
 
+@pytest.mark.asyncio
+async def test_incomplete_calendar_event_snapshot_does_not_cancel_confirmed_appointment(
+    db, test_org, test_user, monkeypatch
+):
+    existing = _create_appointment(
+        db, test_org.id, test_user.id, None, status=AppointmentStatus.CONFIRMED.value
+    )
+    existing.google_event_id = "team-calendar-event"
+    db.commit()
+
+    async def _calendar_ids(**_kwargs):
+        return ["primary", "team-calendar"]
+
+    async def _calendar_events(*, calendar_id, **_kwargs):
+        if calendar_id == "team-calendar":
+            return {
+                "connected": True,
+                "events": [],
+                "error": "incomplete",
+                "complete": False,
+            }
+        return {"connected": True, "events": [], "error": None, "complete": True}
+
+    monkeypatch.setattr(
+        "app.services.calendar_service.list_user_google_calendar_ids", _calendar_ids
+    )
+    monkeypatch.setattr("app.services.calendar_service.get_user_calendar_events", _calendar_events)
+
+    changed = await appointment_integrations.sync_manual_google_events_for_appointments_async(
+        db,
+        user_id=test_user.id,
+        org_id=test_org.id,
+    )
+
+    db.refresh(existing)
+    assert changed == 0
+    assert existing.status == AppointmentStatus.CONFIRMED.value
+    assert existing.cancellation_reason is None
+
+
 def test_zoom_and_google_meet_creation_failure_paths(monkeypatch):
     appointment = SimpleNamespace(
         id=uuid4(),

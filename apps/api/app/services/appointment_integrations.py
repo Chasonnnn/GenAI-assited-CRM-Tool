@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+class CalendarSyncIncompleteError(RuntimeError):
+    """Raised when strict reconciliation lacks a complete calendar snapshot."""
+
+
 def _run_async(coro: Coroutine[object, object, T]) -> T | None:
     """
     Run an async coroutine from sync code.
@@ -216,12 +220,15 @@ async def _sync_manual_google_events_for_appointments_async(
     org_id: UUID,
     date_start: date | None = None,
     date_end: date | None = None,
+    strict: bool = False,
 ) -> int:
     """
-    Import/reconcile timed Google Calendar events into appointments (best-effort).
+    Import/reconcile timed Google Calendar events into appointments.
 
     Upserts by `(organization_id, user_id, google_event_id)` in-memory scope to
-    avoid duplicates across repeated syncs. Google failures are swallowed.
+    avoid duplicates across repeated syncs. Google failures are swallowed by
+    default; strict workers receive `CalendarSyncIncompleteError` when the
+    source snapshot is incomplete so the job can be retried.
     """
     from app.services import calendar_service
 
@@ -262,6 +269,8 @@ async def _sync_manual_google_events_for_appointments_async(
             "Google Calendar discovery failed; skipping appointment reconciliation error_type=%s",
             type(exc).__name__,
         )
+        if strict:
+            raise CalendarSyncIncompleteError("Google Calendar discovery incomplete") from exc
         return 0
 
     calendar_ids = discovered_calendar_ids or ["primary"]
@@ -278,11 +287,20 @@ async def _sync_manual_google_events_for_appointments_async(
                 calendar_id=calendar_id,
             )
         )
-        if not result:
-            continue
-        if result.get("connected"):
-            any_connected = True
-            raw_events.extend(result.get("events") or [])
+        if (
+            not result
+            or not result.get("connected")
+            or result.get("error")
+            or result.get("complete") is False
+        ):
+            logger.warning(
+                "Google Calendar event snapshot incomplete; skipping appointment reconciliation"
+            )
+            if strict:
+                raise CalendarSyncIncompleteError("Google Calendar event snapshot incomplete")
+            return 0
+        any_connected = True
+        raw_events.extend(result.get("events") or [])
 
     if not any_connected:
         return 0
@@ -460,8 +478,9 @@ async def sync_manual_google_events_for_appointments_async(
     org_id: UUID,
     date_start: date | None = None,
     date_end: date | None = None,
+    strict: bool = False,
 ) -> int:
-    """Async-safe Google Calendar appointment reconciliation."""
+    """Reconcile appointments, optionally surfacing incomplete snapshots for retry."""
     try:
         return await _sync_manual_google_events_for_appointments_async(
             db=db,
@@ -469,7 +488,12 @@ async def sync_manual_google_events_for_appointments_async(
             org_id=org_id,
             date_start=date_start,
             date_end=date_end,
+            strict=strict,
         )
+    except CalendarSyncIncompleteError:
+        if strict:
+            raise
+        return 0
     except Exception as exc:
         logger.warning(
             "Google calendar appointment async sync failed user=%s org=%s error=%s",

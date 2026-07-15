@@ -11,7 +11,7 @@ Note: Requires calendar.readonly and calendar.events scopes.
 from datetime import datetime, timedelta, timezone
 import logging
 import secrets
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from urllib.parse import quote, unquote
 from uuid import UUID, uuid4
 
@@ -58,6 +58,14 @@ class CalendarEventsResult(TypedDict):
     connected: bool
     events: list[CalendarEvent]
     error: str | None
+    complete: NotRequired[bool]
+
+
+class _CalendarEventSnapshot(TypedDict):
+    """Events collected from one calendar and whether the snapshot is complete."""
+
+    events: list[CalendarEvent]
+    complete: bool
 
 
 class CalendarWatchResult(TypedDict):
@@ -391,16 +399,16 @@ async def get_google_busy_slots(
 # =============================================================================
 
 
-async def get_google_events(
+async def _fetch_google_events_snapshot(
     access_token: str,
     calendar_id: str,
     time_min: datetime,
     time_max: datetime,
     max_results_per_page: int = 250,
     max_total_results: int = 500,
-) -> list[CalendarEvent]:
+) -> _CalendarEventSnapshot:
     """
-    Fetch events from Google Calendar for display.
+    Fetch one Google Calendar event snapshot with completeness metadata.
 
     Features:
     - singleEvents=true: Expands recurring events into individual instances
@@ -408,10 +416,12 @@ async def get_google_events(
     - Detects all-day events (date vs dateTime)
     - Caps total results to prevent runaway loops
 
-    Returns empty list if API fails.
+    A snapshot is incomplete if a request fails, Google returns a non-success
+    response, or the local result cap is reached while another page remains.
     """
     events: list[CalendarEvent] = []
     page_token: str | None = None
+    complete = False
 
     try:
         async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
@@ -493,12 +503,33 @@ async def get_google_events(
                 # Check for more pages
                 page_token = data.get("nextPageToken")
                 if not page_token:
+                    complete = True
                     break
 
     except Exception as exc:
         logger.warning("Google Calendar events fetch failed error_type=%s", type(exc).__name__)
 
-    return events
+    return {"events": events, "complete": complete}
+
+
+async def get_google_events(
+    access_token: str,
+    calendar_id: str,
+    time_min: datetime,
+    time_max: datetime,
+    max_results_per_page: int = 250,
+    max_total_results: int = 500,
+) -> list[CalendarEvent]:
+    """Fetch Google Calendar events while preserving the legacy list API."""
+    snapshot = await _fetch_google_events_snapshot(
+        access_token=access_token,
+        calendar_id=calendar_id,
+        time_min=time_min,
+        time_max=time_max,
+        max_results_per_page=max_results_per_page,
+        max_total_results=max_total_results,
+    )
+    return snapshot["events"]
 
 
 async def list_google_calendar_ids(
@@ -679,19 +710,34 @@ async def get_user_calendar_events(
     """
     integration = oauth_service.get_user_integration(db, user_id, "google_calendar")
     if not integration:
-        return {"connected": False, "events": [], "error": "not_connected"}
+        return {
+            "connected": False,
+            "events": [],
+            "error": "not_connected",
+            "complete": False,
+        }
 
     access_token = await get_google_access_token(db, user_id)
     if not access_token:
-        return {"connected": False, "events": [], "error": "token_expired"}
+        return {
+            "connected": False,
+            "events": [],
+            "error": "token_expired",
+            "complete": False,
+        }
 
-    events = await get_google_events(
+    snapshot = await _fetch_google_events_snapshot(
         access_token=access_token,
         calendar_id=calendar_id,
         time_min=time_min,
         time_max=time_max,
     )
-    return {"connected": True, "events": events, "error": None}
+    return {
+        "connected": True,
+        "events": snapshot["events"],
+        "error": None if snapshot["complete"] else "incomplete",
+        "complete": snapshot["complete"],
+    }
 
 
 # =============================================================================
