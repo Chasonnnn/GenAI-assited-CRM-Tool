@@ -51,6 +51,7 @@ async def process_google_calendar_sync(db, job) -> None:
         org_id=job.organization_id,
         date_start=date_start,
         date_end=date_end,
+        strict=True,
     )
     db.commit()
     logger.info(
