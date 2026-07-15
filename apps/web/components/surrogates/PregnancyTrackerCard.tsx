@@ -27,15 +27,132 @@ function formatEmbryoStage(stage: EmbryoStage | null | undefined) {
     return EMBRYO_STAGE_OPTIONS.find((option) => option.value === stage)?.label ?? "Unknown / not provided"
 }
 
-interface PregnancyData {
-    daysSinceTransfer: number         // Can be negative if transfer date is in future
-    gestationalDays: number           // IVF gestational age estimate
-    gestationalWeeks: number          // Clamped to 0 minimum
-    dueDate: Date                     // The effective due date (manual or calculated)
-    calculatedDueDate: Date           // Calculated from transfer date and embryo stage when known
-    trimester: 'First' | 'Second' | 'Third'
+interface PregnancyDataBase {
+    daysSinceTransfer: number
+}
+
+interface KnownStagePregnancyData extends PregnancyDataBase {
+    status: "known"
+    gestationalDays: number
+    gestationalWeeks: number
+    dueDate: Date
+    calculatedDueDate: Date
+    trimester: "First" | "Second" | "Third"
     daysRemaining: number
-    progress: number                  // Clamped to 0-100
+    progress: number
+}
+
+interface UnknownStagePregnancyData extends PregnancyDataBase {
+    status: "unknown"
+    dueDate: Date | null
+    daysRemaining: number | null
+}
+
+type PregnancyData = KnownStagePregnancyData | UnknownStagePregnancyData
+
+function formatPostTransferDuration(daysSinceTransfer: number) {
+    const weeks = Math.floor(daysSinceTransfer / 7)
+    const days = daysSinceTransfer % 7
+    return `(${weeks}w ${days}d post transfer)`
+}
+
+function PregnancySummary({ pregnancy }: { pregnancy: PregnancyData }) {
+    if (pregnancy.daysSinceTransfer < 0) return null
+
+    return (
+        <div className="space-y-2">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Gestational Age
+            </div>
+            {pregnancy.status === "known" ? (
+                <div className="flex items-center gap-4">
+                    <div className="text-center">
+                        <div className="text-3xl font-bold text-primary">
+                            {pregnancy.gestationalWeeks}
+                        </div>
+                        <div className="text-xs text-muted-foreground">weeks</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-3xl font-bold">
+                            {pregnancy.gestationalDays % 7}
+                        </div>
+                        <div className="text-xs text-muted-foreground">days</div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                            <div
+                                className="h-full rounded-full bg-pink-500 transition-all"
+                                style={{ width: `${pregnancy.progress}%` }}
+                            />
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                            {pregnancy.daysRemaining} days remaining
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-1">
+                    <div className="text-3xl font-bold text-muted-foreground">—</div>
+                    <div className="text-sm text-muted-foreground">
+                        Unavailable until embryo stage is set
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function DueDateDisplay({
+    pregnancy,
+    hasManualDueDate,
+    onEdit,
+}: {
+    pregnancy: PregnancyData | null
+    hasManualDueDate: boolean
+    onEdit: () => void
+}) {
+    if (!pregnancy?.dueDate) {
+        return (
+            <Button unstyled
+                type="button"
+                className="-mx-1 rounded px-1 text-left text-sm text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={onEdit}
+                aria-label="Edit due date"
+            >
+                Select embryo stage to calculate
+            </Button>
+        )
+    }
+
+    return (
+        <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">
+                    {format(pregnancy.dueDate, "MMM d, yyyy")}
+                </span>
+                <Badge
+                    variant={hasManualDueDate ? "outline" : "secondary"}
+                    className="cursor-pointer select-none text-xs"
+                    render={
+                        <Button unstyled
+                            type="button"
+                            aria-label="Edit due date"
+                            className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        />
+                    }
+                    onClick={onEdit}
+                    title="Edit due date"
+                >
+                    {hasManualDueDate ? "manual" : "calculated"}
+                </Badge>
+            </div>
+            {pregnancy.status === "unknown" && pregnancy.daysRemaining != null && (
+                <div className="text-xs text-muted-foreground">
+                    {pregnancy.daysRemaining} days remaining · based on manual due date
+                </div>
+            )}
+        </div>
+    )
 }
 
 function usePregnancyTracker(
@@ -51,18 +168,35 @@ function usePregnancyTracker(
     const today = new Date()
     const embryoAgeDays = getEmbryoAgeDays(embryoStage)
     const daysSinceTransfer = differenceInDays(today, start)
-    const gestationalDaysAtTransfer = embryoAgeDays == null ? 0 : 14 + embryoAgeDays
-    const calculatedDueDateOffset = embryoAgeDays == null ? 280 : 266 - embryoAgeDays
 
-    // For known IVF embryo stages, transfer date already includes embryo age.
-    // Unknown preserves legacy LMP-style tracking until the clinic provides the stage.
-    const gestationalDays = daysSinceTransfer + gestationalDaysAtTransfer
+    if (embryoAgeDays == null) {
+        let dueDate: Date | null = null
+        if (dueDateOverride) {
+            const parsed = parseISO(dueDateOverride)
+            if (isValid(parsed)) {
+                dueDate = parsed
+            }
+        }
+
+        return {
+            status: "unknown",
+            daysSinceTransfer,
+            dueDate,
+            daysRemaining: dueDate
+                ? Math.max(0, differenceInDays(dueDate, today))
+                : null,
+        }
+    }
+
+    // IVF gestational age starts two weeks before fertilization and includes
+    // the embryo's age on transfer day.
+    const gestationalDays = daysSinceTransfer + 14 + embryoAgeDays
 
     // Clamp weeks to 0 minimum (don't show negative weeks)
     const gestationalWeeks = Math.max(0, Math.floor(gestationalDays / 7))
 
     // Always calculate what due date would be (for "Reset to calculated")
-    const calculatedDueDate = addDays(start, calculatedDueDateOffset)
+    const calculatedDueDate = addDays(start, 266 - embryoAgeDays)
 
     // Due date: use override if provided and valid, else use calculated
     let dueDate = calculatedDueDate
@@ -85,6 +219,7 @@ function usePregnancyTracker(
     const progress = Math.max(0, Math.min(100, (gestationalDays / 280) * 100))
 
     return {
+        status: "known",
         daysSinceTransfer,
         gestationalDays,
         gestationalWeeks,
@@ -162,35 +297,7 @@ export function PregnancyTrackerCard({
                 </CardTitle>
             </CardHeader>
             <CardContent className="px-4 space-y-3">
-                {/* Week/Day Display - only show if start date is set and not future */}
-                {pregnancy && pregnancy.daysSinceTransfer >= 0 && (
-                    <div className="flex items-center gap-4">
-                        <div className="text-center">
-                            <div className="text-3xl font-bold text-primary">
-                                {pregnancy.gestationalWeeks}
-                            </div>
-                            <div className="text-xs text-muted-foreground">weeks</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-3xl font-bold">
-                                {pregnancy.gestationalDays % 7}
-                            </div>
-                            <div className="text-xs text-muted-foreground">days</div>
-                        </div>
-                        <div className="flex-1">
-                            {/* Progress bar */}
-                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-pink-500 rounded-full transition-all"
-                                    style={{ width: `${pregnancy.progress}%` }}
-                                />
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                                {pregnancy.daysRemaining} days remaining
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {pregnancy && <PregnancySummary pregnancy={pregnancy} />}
 
                 {/* Future date warning */}
                 {pregnancy && pregnancy.daysSinceTransfer < 0 && (
@@ -274,26 +381,33 @@ export function PregnancyTrackerCard({
                     </div>
 
                     {/* Transferred Date */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2">
                         <span className="text-sm text-muted-foreground w-28 shrink-0">Transferred Date:</span>
-                        <InlineDateField
-                            value={surrogateData.pregnancy_start_date}
-                            onSave={async (v) => {
-                                await onUpdate({ pregnancy_start_date: v })
-                            }}
-                            label="Transferred date"
-                            placeholder="Set transferred date"
-                        />
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                            <InlineDateField
+                                value={surrogateData.pregnancy_start_date}
+                                onSave={async (v) => {
+                                    await onUpdate({ pregnancy_start_date: v })
+                                }}
+                                label="Transferred date"
+                                placeholder="Set transferred date"
+                            />
+                            {pregnancy && pregnancy.daysSinceTransfer >= 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                    {formatPostTransferDuration(pregnancy.daysSinceTransfer)}
+                                </span>
+                            )}
+                        </div>
                     </div>
 
                     {/* Due Date with inline editor (only show if start date is set) */}
                     {surrogateData.pregnancy_start_date && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-start gap-2">
                             <span className="text-sm text-muted-foreground w-28 shrink-0">Due Date:</span>
 
                             {isEditingDueDate ? (
                                 <InlineDateField
-                                    value={surrogateData.pregnancy_due_date || (pregnancy?.calculatedDueDate ? format(pregnancy.calculatedDueDate, 'yyyy-MM-dd') : '')}
+                                    value={surrogateData.pregnancy_due_date || (pregnancy?.status === "known" ? format(pregnancy.calculatedDueDate, "yyyy-MM-dd") : "")}
                                     onSave={async (v) => {
                                         await onUpdate({ pregnancy_due_date: v })
                                         setIsEditingDueDate(false)
@@ -302,27 +416,11 @@ export function PregnancyTrackerCard({
                                     placeholder="Set due date"
                                 />
                             ) : (
-                                <>
-                                    <span className="text-sm font-medium">
-                                        {pregnancy?.dueDate ? format(pregnancy.dueDate, 'MMM d, yyyy') : '-'}
-                                    </span>
-
-                                    <Badge
-                                        variant={hasManualDueDate ? "outline" : "secondary"}
-                                        className="text-xs cursor-pointer select-none"
-                                        render={
-                                            <Button unstyled
-                                                type="button"
-                                                aria-label="Edit due date"
-                                                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                            />
-                                        }
-                                        onClick={handleEditDueDate}
-                                        title="Edit due date"
-                                    >
-                                        {hasManualDueDate ? "manual" : "calculated"}
-                                    </Badge>
-                                </>
+                                <DueDateDisplay
+                                    pregnancy={pregnancy}
+                                    hasManualDueDate={hasManualDueDate}
+                                    onEdit={handleEditDueDate}
+                                />
                             )}
                         </div>
                     )}
@@ -376,7 +474,7 @@ export function PregnancyTrackerCard({
                 </div>
 
                 {/* Trimester Badge */}
-                {pregnancy && pregnancy.daysSinceTransfer >= 0 && (
+                {pregnancy && pregnancy.daysSinceTransfer >= 0 && pregnancy.status === "known" && (
                     <Badge variant="secondary" className="mt-2">
                         {pregnancy.trimester} Trimester
                     </Badge>
