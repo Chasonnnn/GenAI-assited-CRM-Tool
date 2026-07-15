@@ -39,6 +39,16 @@ EXECUTOR_ONLY_INVARIANT_KEYS = {
     "max_rows_removed_by_index_recheck",
     "max_temp_blocks",
 }
+BENCHMARK_ROLE_PLAN_VARIANTS = {
+    "analytics_surrogates_by_stage:hot:generic:estimated",
+    "analytics_surrogates_by_stage:hot:generic:analyze",
+    "analytics_surrogates_by_stage:hot:automatic:estimated",
+    "analytics_surrogates_by_stage:hot:automatic:analyze",
+    "tasks_open_by_owner:hot:generic:estimated",
+    "tasks_open_by_owner:hot:generic:analyze",
+    "tasks_open_by_owner:cold:generic:estimated",
+    "tasks_open_by_owner:cold:generic:analyze",
+}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -134,6 +144,24 @@ def test_queryproof_expectations_preserve_every_legacy_capture_key() -> None:
                     expected[capture_id] = invariant
 
     actual = {capture["id"]: capture["invariant"] for capture in port["captures"]}
+    role_specific_captures: set[str] = set()
+    for tenant in ("hot", "cold"):
+        expected_index = (
+            "public.idx_tasks_due" if tenant == "hot" else "public.idx_tasks_google_task_lookup"
+        )
+        for capture_mode in ("estimated", "analyze"):
+            capture_id = f"tasks_open_by_owner:{tenant}:generic:{capture_mode}"
+            role_specific_captures.add(capture_id)
+            expected[capture_id]["required_nodes"] = ["Index Scan", "Limit"]
+            expected[capture_id]["required_indexes"] = [expected_index]
+    for plan_mode in ("generic", "automatic"):
+        for capture_mode in ("estimated", "analyze"):
+            capture_id = f"analytics_surrogates_by_stage:hot:{plan_mode}:{capture_mode}"
+            role_specific_captures.add(capture_id)
+            expected[capture_id]["required_joins"] = ["Inner", "Left"]
+            expected[capture_id]["required_indexes"] = ["public.idx_surrogates_org_stage"]
+
+    assert role_specific_captures == BENCHMARK_ROLE_PLAN_VARIANTS
     assert actual == expected
     for invariant in actual.values():
         for key in ("required_relations", "required_indexes", "forbidden_indexes"):

@@ -10,6 +10,7 @@ from scripts.performance.gates import (
     compare_plan_reports,
     parse_plan_expectations,
 )
+from scripts.performance.plans import PlanMetrics, compare_plan_metrics
 
 
 def _plan(
@@ -262,3 +263,103 @@ def test_checked_in_expectations_parse() -> None:
     parsed = parse_plan_expectations(payload)
 
     assert len(parsed) == 10
+
+
+def test_checked_in_expectations_preserve_legacy_role_plan_variants() -> None:
+    api_root = Path(__file__).resolve().parents[1]
+    payload = json.loads((api_root / "performance" / "plan-expectations.json").read_text())
+
+    parsed = parse_plan_expectations(payload)
+
+    for tenant in ("hot", "cold"):
+        for capture_mode in ("estimated", "analyze"):
+            invariant = parsed["tasks_open_by_owner"].for_scenario(
+                f"{tenant}:generic:{capture_mode}"
+            )
+            assert invariant.required_nodes == {
+                "Bitmap Heap Scan",
+                "Bitmap Index Scan",
+                "Limit",
+            }
+            assert invariant.required_indexes == {"idx_tasks_org_owner"}
+            assert invariant.allow_sequential_scan is False
+
+    tasks = parsed["tasks_open_by_owner"].for_scenario("hot:generic:analyze")
+
+    task_plan = PlanMetrics(
+        node_types=frozenset({"Bitmap Heap Scan", "Bitmap Index Scan", "Limit"}),
+        join_types=frozenset(),
+        relations=frozenset({"tasks"}),
+        indexes=frozenset({"idx_tasks_org_owner"}),
+        estimated_cost=36.24,
+        estimated_rows=20,
+        logical_blocks=3,
+        scanned_rows=8,
+        loop_count=1,
+        temp_blocks=0,
+        wal_records=0,
+        wal_fpi=0,
+        wal_bytes=0,
+    )
+    assert compare_plan_metrics(task_plan, task_plan, tasks) == []
+    missing_task_index = PlanMetrics(
+        **{**task_plan.__dict__, "indexes": frozenset({"unrelated_index"})}
+    )
+    assert [
+        failure.metric for failure in compare_plan_metrics(task_plan, missing_task_index, tasks)
+    ] == ["required_index"]
+    adverse_task_plan = PlanMetrics(
+        **{
+            **task_plan.__dict__,
+            "node_types": frozenset({"Limit", "Seq Scan"}),
+            "indexes": frozenset(),
+        }
+    )
+    assert {
+        failure.metric for failure in compare_plan_metrics(task_plan, adverse_task_plan, tasks)
+    } == {"required_node", "required_index", "forbidden_node"}
+
+    for plan_mode in ("generic", "automatic"):
+        for capture_mode in ("estimated", "analyze"):
+            invariant = parsed["analytics_surrogates_by_stage"].for_scenario(
+                f"hot:{plan_mode}:{capture_mode}"
+            )
+            assert invariant.required_joins == {"Inner", "Right"}
+            assert invariant.required_indexes == {"idx_surrogates_org_active"}
+
+    analytics = parsed["analytics_surrogates_by_stage"].for_scenario("hot:automatic:analyze")
+
+    analytics_plan = PlanMetrics(
+        node_types=frozenset({"Aggregate", "Hash", "Hash Join", "Index Scan", "Seq Scan"}),
+        join_types=frozenset({"Inner", "Right"}),
+        relations=frozenset({"pipeline_stages", "pipelines", "surrogates"}),
+        indexes=frozenset({"idx_surrogates_org_active"}),
+        estimated_cost=498.92,
+        estimated_rows=24,
+        logical_blocks=1051,
+        scanned_rows=4090,
+        loop_count=3,
+        temp_blocks=0,
+        wal_records=0,
+        wal_fpi=0,
+        wal_bytes=0,
+    )
+    assert compare_plan_metrics(analytics_plan, analytics_plan, analytics) == []
+    missing_analytics_index = PlanMetrics(
+        **{**analytics_plan.__dict__, "indexes": frozenset({"unrelated_index"})}
+    )
+    assert [
+        failure.metric
+        for failure in compare_plan_metrics(analytics_plan, missing_analytics_index, analytics)
+    ] == ["required_index"]
+    adverse_analytics_plan = PlanMetrics(
+        **{
+            **analytics_plan.__dict__,
+            "join_types": frozenset({"Inner"}),
+            "indexes": frozenset({"unrelated_index"}),
+        }
+    )
+    assert {
+        failure.metric
+        for failure in compare_plan_metrics(analytics_plan, adverse_analytics_plan, analytics)
+    } == {"required_join", "required_index"}

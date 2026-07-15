@@ -17,6 +17,14 @@ harness to QueryProof.
   runtime. The corpus JSON does contain reviewed, deterministic synthetic
   parameters required to reproduce hot/cold fixture cases.
 
+Eight captures have explicit engine-role-specific physical plans. The
+established harness captures as the database administrator and requires its
+fresh PostgreSQL 18.4 bitmap/right-join variants. QueryProof captures through
+the restricted benchmark application role and requires the separately proven
+index-scan/left-join variants. Both contracts retain exact node, join, and
+index assertions; the divergence is reviewable in the consumer asset tests and
+must not be replaced with a broad fallback invariant.
+
 The root `queryproof.toml` is the nonblocking query-only compatibility pilot.
 It configures the full 120-capture matrix, per-revision Alembic migrations,
 candidate-owned role/extension and seed hooks, and a reviewed NOLOGIN
