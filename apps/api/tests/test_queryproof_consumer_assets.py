@@ -253,6 +253,7 @@ def test_queryproof_lifecycle_uses_candidate_owned_migrations_seed_and_role_setu
         {
             "argv": ["uv", "run", "python", "-m", "alembic", "upgrade", "head"],
             "cwd": "apps/api",
+            "env": {"ENV": "test"},
         }
     ]
     assert manifest["seeds"] == [
@@ -279,6 +280,7 @@ def test_queryproof_lifecycle_uses_candidate_owned_migrations_seed_and_role_setu
                 "argv": ["uv", "run", "python", "-m", "scripts.seed_mock_data"],
                 "cwd": "apps/api",
                 "env": {
+                    "ENV": "test",
                     "SEED_PROFILE": "production",
                     "SEED_RANDOM_SEED": "20260713",
                     "SEED_REDACT_SUMMARY": "true",
