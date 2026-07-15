@@ -1,0 +1,1 @@
+SELECT ps.id, ps.stage_key, ps.stage_type, ps.order FROM public.pipelines AS p JOIN public.pipeline_stages AS ps ON ps.pipeline_id = p.id WHERE p.organization_id = $1 AND ps.is_active = TRUE ORDER BY ps.order;

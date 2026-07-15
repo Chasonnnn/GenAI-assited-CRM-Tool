@@ -1,0 +1,1 @@
+SELECT s.id, s.stage_id, s.status_label FROM public.surrogates AS s WHERE s.organization_id = $1 AND s.is_archived = FALSE AND s.search_vector @@ websearch_to_tsquery('simple', $2) ORDER BY ts_rank(s.search_vector, websearch_to_tsquery('simple', $2)) DESC LIMIT $3;

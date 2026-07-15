@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "source": "apps/api/performance/capture-manifest.json",
+  "expected_capture_count": 120,
+  "queries": [
+    {
+      "id": "surrogates_list_by_stage",
+      "path": "apps/api/performance/queryproof/queries/surrogates_list_by_stage.sql",
+      "parameter_types": [
+        "uuid",
+        "text"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201",
+            "new_unread"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203",
+            "new_unread"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tasks_open_by_owner",
+      "path": "apps/api/performance/queryproof/queries/tasks_open_by_owner.sql",
+      "parameter_types": [
+        "uuid",
+        "text",
+        "uuid"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201",
+            "user",
+            "6286c75f-e453-59a4-baf8-6807e9e10fd3"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203",
+            "user",
+            "5e220de2-cf9b-52d2-a6aa-a765ff3aceae"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dashboard_surrogate_counts",
+      "path": "apps/api/performance/queryproof/queries/dashboard_surrogate_counts.sql",
+      "parameter_types": [
+        "uuid"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dashboard_upcoming_tasks",
+      "path": "apps/api/performance/queryproof/queries/dashboard_upcoming_tasks.sql",
+      "parameter_types": [
+        "uuid",
+        "date"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201",
+            "2099-12-31"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203",
+            "2099-12-31"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "analytics_surrogates_by_stage",
+      "path": "apps/api/performance/queryproof/queries/analytics_surrogates_by_stage.sql",
+      "parameter_types": [
+        "uuid"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workflow_list",
+      "path": "apps/api/performance/queryproof/queries/workflow_list.sql",
+      "parameter_types": [
+        "uuid",
+        "text",
+        "uuid"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201",
+            "org",
+            "6286c75f-e453-59a4-baf8-6807e9e10fd3"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203",
+            "org",
+            "5e220de2-cf9b-52d2-a6aa-a765ff3aceae"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workflow_stats",
+      "path": "apps/api/performance/queryproof/queries/workflow_stats.sql",
+      "parameter_types": [
+        "uuid",
+        "timestamptz"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201",
+            "2000-01-01T00:00:00Z"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203",
+            "2000-01-01T00:00:00Z"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "intelligent_suggestions_rules",
+      "path": "apps/api/performance/queryproof/queries/intelligent_suggestions_rules.sql",
+      "parameter_types": [
+        "uuid"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "surrogate_search",
+      "path": "apps/api/performance/queryproof/queries/surrogate_search.sql",
+      "parameter_types": [
+        "uuid",
+        "text"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201",
+            "smith"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203",
+            "smith"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pipeline_stage_dimension",
+      "path": "apps/api/performance/queryproof/queries/pipeline_stage_dimension.sql",
+      "parameter_types": [
+        "uuid"
+      ],
+      "prepared_plan_modes": [
+        "generic",
+        "custom",
+        "automatic"
+      ],
+      "capture_modes": [
+        "estimated",
+        "analyze"
+      ],
+      "cases": [
+        {
+          "name": "hot",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000201"
+          ]
+        },
+        {
+          "name": "cold",
+          "parameters": [
+            "00000000-0000-5000-8000-000000000203"
+          ]
+        }
+      ]
+    }
+  ]
+}

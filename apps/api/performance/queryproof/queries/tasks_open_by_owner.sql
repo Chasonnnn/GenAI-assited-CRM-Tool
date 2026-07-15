@@ -1,0 +1,1 @@
+SELECT t.id, t.surrogate_id, t.intended_parent_id, t.task_type, t.due_date, t.status FROM public.tasks AS t WHERE t.organization_id = $1 AND t.owner_type = $2 AND t.owner_id = $3 AND t.is_completed = FALSE ORDER BY t.due_date NULLS LAST, t.created_at DESC LIMIT 20;

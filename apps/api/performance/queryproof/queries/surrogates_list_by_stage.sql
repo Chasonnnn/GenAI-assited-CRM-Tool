@@ -1,0 +1,1 @@
+SELECT s.id, s.stage_id, s.status_label, s.owner_type, s.owner_id, s.created_at FROM public.pipeline_stages AS ps JOIN public.surrogates AS s ON s.stage_id = ps.id WHERE s.organization_id = $1 AND ps.slug = $2 AND s.is_archived = FALSE ORDER BY s.created_at DESC LIMIT 20;

@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "source": "apps/api/performance/critical-query-corpus.json",
+  "queries": [
+    {
+      "name": "surrogates_list_by_stage",
+      "route": "GET /surrogates",
+      "critical_reason": "Primary case-management list and required index invariant",
+      "path": "apps/api/performance/queryproof/critical-queries/surrogates_list_by_stage.sql"
+    },
+    {
+      "name": "surrogate_detail",
+      "route": "GET /surrogates/{surrogate_id}",
+      "critical_reason": "Primary case detail",
+      "path": "apps/api/performance/queryproof/critical-queries/surrogate_detail.sql"
+    },
+    {
+      "name": "tasks_open_by_owner",
+      "route": "GET /tasks",
+      "critical_reason": "Daily work queue",
+      "path": "apps/api/performance/queryproof/critical-queries/tasks_open_by_owner.sql"
+    },
+    {
+      "name": "dashboard_surrogate_counts",
+      "route": "GET /surrogates/stats",
+      "critical_reason": "Dashboard initial load",
+      "path": "apps/api/performance/queryproof/critical-queries/dashboard_surrogate_counts.sql"
+    },
+    {
+      "name": "dashboard_upcoming_tasks",
+      "route": "GET /dashboard/upcoming",
+      "critical_reason": "Dashboard initial load",
+      "path": "apps/api/performance/queryproof/critical-queries/dashboard_upcoming_tasks.sql"
+    },
+    {
+      "name": "analytics_surrogates_by_stage",
+      "route": "GET /analytics/surrogates/by-status",
+      "critical_reason": "Reports and dashboard analytics",
+      "path": "apps/api/performance/queryproof/critical-queries/analytics_surrogates_by_stage.sql"
+    },
+    {
+      "name": "workflow_list",
+      "route": "GET /workflows",
+      "critical_reason": "Automation management",
+      "path": "apps/api/performance/queryproof/critical-queries/workflow_list.sql"
+    },
+    {
+      "name": "workflow_stats",
+      "route": "GET /workflows/stats",
+      "critical_reason": "Automation dashboard",
+      "path": "apps/api/performance/queryproof/critical-queries/workflow_stats.sql"
+    },
+    {
+      "name": "intelligent_suggestions_rules",
+      "route": "GET /surrogates/intelligent-suggestions/summary",
+      "critical_reason": "Latency-sensitive intelligent suggestions summary",
+      "path": "apps/api/performance/queryproof/critical-queries/intelligent_suggestions_rules.sql"
+    },
+    {
+      "name": "surrogate_search",
+      "route": "GET /search",
+      "critical_reason": "Rate-limited global search",
+      "path": "apps/api/performance/queryproof/critical-queries/surrogate_search.sql"
+    },
+    {
+      "name": "complete_task_mutation",
+      "route": "PATCH /tasks/{task_id}",
+      "critical_reason": "Representative org-scoped mutation",
+      "path": "apps/api/performance/queryproof/critical-queries/complete_task_mutation.sql"
+    },
+    {
+      "name": "pipeline_stage_dimension",
+      "route": "GET /pipelines",
+      "critical_reason": "Acceptance case where a small-table sequential scan is legitimate",
+      "path": "apps/api/performance/queryproof/critical-queries/pipeline_stage_dimension.sql"
+    }
+  ]
+}

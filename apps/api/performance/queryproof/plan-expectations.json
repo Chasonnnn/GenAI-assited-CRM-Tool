@@ -1,0 +1,3252 @@
+{
+  "schema_version": 2,
+  "source": "apps/api/performance/plan-expectations.json",
+  "engine_contract": "prepared-plan-and-capture-mode-invariants",
+  "identifier_schema": "public",
+  "captures": [
+    {
+      "id": "surrogates_list_by_stage:hot:generic:estimated",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:hot:generic:analyze",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:hot:custom:estimated",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:hot:custom:analyze",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:hot:automatic:estimated",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:hot:automatic:analyze",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:cold:generic:estimated",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:cold:generic:analyze",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:cold:custom:estimated",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:cold:custom:analyze",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:cold:automatic:estimated",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogates_list_by_stage:cold:automatic:analyze",
+      "query_id": "surrogates_list_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:hot:generic:estimated",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_org_owner"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:hot:generic:analyze",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_org_owner"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:hot:custom:estimated",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_due"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:hot:custom:analyze",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_due"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:hot:automatic:estimated",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_due"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:hot:automatic:analyze",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_due"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:cold:generic:estimated",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_org_owner"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:cold:generic:analyze",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_org_owner"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:cold:custom:estimated",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_google_task_lookup"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:cold:custom:analyze",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_google_task_lookup"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:cold:automatic:estimated",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_google_task_lookup"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "tasks_open_by_owner:cold:automatic:analyze",
+      "query_id": "tasks_open_by_owner",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan",
+          "Limit"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [
+          "public.idx_tasks_google_task_lookup"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:hot:generic:estimated",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:hot:generic:analyze",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:hot:custom:estimated",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:hot:custom:analyze",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:hot:automatic:estimated",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:hot:automatic:analyze",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:cold:generic:estimated",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:cold:generic:analyze",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:cold:custom:estimated",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:cold:custom:analyze",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:cold:automatic:estimated",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_surrogate_counts:cold:automatic:analyze",
+      "query_id": "dashboard_surrogate_counts",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:hot:generic:estimated",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:hot:generic:analyze",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:hot:custom:estimated",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:hot:custom:analyze",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:hot:automatic:estimated",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:hot:automatic:analyze",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:cold:generic:estimated",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:cold:generic:analyze",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:cold:custom:estimated",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:cold:custom:analyze",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:cold:automatic:estimated",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "dashboard_upcoming_tasks:cold:automatic:analyze",
+      "query_id": "dashboard_upcoming_tasks",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Index Scan"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.tasks"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:hot:generic:estimated",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:hot:generic:analyze",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:hot:custom:estimated",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Left"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_stage"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:hot:custom:analyze",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Left"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_stage"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:hot:automatic:estimated",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:hot:automatic:analyze",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:cold:generic:estimated",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:cold:generic:analyze",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:cold:custom:estimated",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:cold:custom:analyze",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:cold:automatic:estimated",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "analytics_surrogates_by_stage:cold:automatic:analyze",
+      "query_id": "analytics_surrogates_by_stage",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate",
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [
+          "Inner",
+          "Right"
+        ],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_org_active"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:hot:generic:estimated",
+      "query_id": "workflow_list",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:hot:generic:analyze",
+      "query_id": "workflow_list",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:hot:custom:estimated",
+      "query_id": "workflow_list",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:hot:custom:analyze",
+      "query_id": "workflow_list",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:hot:automatic:estimated",
+      "query_id": "workflow_list",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:hot:automatic:analyze",
+      "query_id": "workflow_list",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:cold:generic:estimated",
+      "query_id": "workflow_list",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:cold:generic:analyze",
+      "query_id": "workflow_list",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:cold:custom:estimated",
+      "query_id": "workflow_list",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:cold:custom:analyze",
+      "query_id": "workflow_list",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:cold:automatic:estimated",
+      "query_id": "workflow_list",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_list:cold:automatic:analyze",
+      "query_id": "workflow_list",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.automation_workflows"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:hot:generic:estimated",
+      "query_id": "workflow_stats",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:hot:generic:analyze",
+      "query_id": "workflow_stats",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:hot:custom:estimated",
+      "query_id": "workflow_stats",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:hot:custom:analyze",
+      "query_id": "workflow_stats",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:hot:automatic:estimated",
+      "query_id": "workflow_stats",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:hot:automatic:analyze",
+      "query_id": "workflow_stats",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:cold:generic:estimated",
+      "query_id": "workflow_stats",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:cold:generic:analyze",
+      "query_id": "workflow_stats",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:cold:custom:estimated",
+      "query_id": "workflow_stats",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:cold:custom:analyze",
+      "query_id": "workflow_stats",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:cold:automatic:estimated",
+      "query_id": "workflow_stats",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "workflow_stats:cold:automatic:analyze",
+      "query_id": "workflow_stats",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Aggregate"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.workflow_executions"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:hot:generic:estimated",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:hot:generic:analyze",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:hot:custom:estimated",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:hot:custom:analyze",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:hot:automatic:estimated",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:hot:automatic:analyze",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:cold:generic:estimated",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:cold:generic:analyze",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:cold:custom:estimated",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:cold:custom:analyze",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:cold:automatic:estimated",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "intelligent_suggestions_rules:cold:automatic:analyze",
+      "query_id": "intelligent_suggestions_rules",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Seq Scan",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.org_intelligent_suggestion_rules"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:hot:generic:estimated",
+      "query_id": "surrogate_search",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:hot:generic:analyze",
+      "query_id": "surrogate_search",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:hot:custom:estimated",
+      "query_id": "surrogate_search",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:hot:custom:analyze",
+      "query_id": "surrogate_search",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:hot:automatic:estimated",
+      "query_id": "surrogate_search",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:hot:automatic:analyze",
+      "query_id": "surrogate_search",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:cold:generic:estimated",
+      "query_id": "surrogate_search",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:cold:generic:analyze",
+      "query_id": "surrogate_search",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:cold:custom:estimated",
+      "query_id": "surrogate_search",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:cold:custom:analyze",
+      "query_id": "surrogate_search",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:cold:automatic:estimated",
+      "query_id": "surrogate_search",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "surrogate_search:cold:automatic:analyze",
+      "query_id": "surrogate_search",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Bitmap Heap Scan",
+          "Bitmap Index Scan",
+          "Limit",
+          "Sort"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.surrogates"
+        ],
+        "required_indexes": [
+          "public.idx_surrogates_active_phone_last4",
+          "public.ix_surrogates_search_vector"
+        ],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": false,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:hot:generic:estimated",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:hot:generic:analyze",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "hot",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:hot:custom:estimated",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:hot:custom:analyze",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "hot",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:hot:automatic:estimated",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:hot:automatic:analyze",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "hot",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:cold:generic:estimated",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:cold:generic:analyze",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "cold",
+      "prepared_plan_mode": "generic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:cold:custom:estimated",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:cold:custom:analyze",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "cold",
+      "prepared_plan_mode": "custom",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:cold:automatic:estimated",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "estimated",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    },
+    {
+      "id": "pipeline_stage_dimension:cold:automatic:analyze",
+      "query_id": "pipeline_stage_dimension",
+      "case_id": "cold",
+      "prepared_plan_mode": "automatic",
+      "capture_mode": "analyze",
+      "invariant": {
+        "required_nodes": [
+          "Hash Join"
+        ],
+        "forbidden_nodes": [],
+        "required_joins": [],
+        "forbidden_joins": [],
+        "required_relations": [
+          "public.pipeline_stages",
+          "public.pipelines"
+        ],
+        "required_indexes": [],
+        "forbidden_indexes": [],
+        "allow_sequential_scan": true,
+        "estimated_rows_min": null,
+        "estimated_rows_max": null,
+        "max_loop_count": null,
+        "max_temp_blocks": 0
+      }
+    }
+  ]
+}

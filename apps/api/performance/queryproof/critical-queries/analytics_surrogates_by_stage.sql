@@ -1,0 +1,1 @@
+SELECT ps.stage_type, count(*) FROM public.pipeline_stages AS ps LEFT JOIN public.surrogates AS s ON s.stage_id = ps.id AND s.organization_id = $1 AND s.is_archived = FALSE WHERE ps.pipeline_id = $2 AND ps.is_active = TRUE GROUP BY ps.stage_type, ps.order ORDER BY ps.order;

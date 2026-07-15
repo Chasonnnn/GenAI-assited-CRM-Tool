@@ -1,0 +1,1 @@
+SELECT w.id, w.trigger_type, w.is_enabled, w.scope, w.run_count, w.last_run_at FROM public.automation_workflows AS w WHERE w.organization_id = $1 AND (w.scope = $2 OR w.owner_user_id = $3) ORDER BY w.updated_at DESC;

@@ -1,0 +1,1 @@
+SELECT t.id, t.surrogate_id, t.intended_parent_id, t.due_date, t.status FROM public.tasks AS t WHERE t.organization_id = $1 AND t.is_completed = FALSE AND t.due_date <= $2 ORDER BY t.due_date NULLS LAST LIMIT 20;
