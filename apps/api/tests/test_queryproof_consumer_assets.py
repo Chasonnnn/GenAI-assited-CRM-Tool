@@ -13,6 +13,28 @@ API_ROOT = Path(__file__).resolve().parents[1]
 PERFORMANCE_ROOT = API_ROOT / "performance"
 QUERYPROOF_ROOT = PERFORMANCE_ROOT / "queryproof"
 
+ESTIMATED_INVARIANT_KEYS = {
+    "required_nodes",
+    "forbidden_nodes",
+    "required_joins",
+    "forbidden_joins",
+    "required_relations",
+    "required_indexes",
+    "forbidden_indexes",
+    "allow_sequential_scan",
+    "estimated_rows_min",
+    "estimated_rows_max",
+}
+EXECUTOR_ONLY_INVARIANT_KEYS = {
+    "max_loop_count",
+    "max_heap_fetches",
+    "max_index_searches",
+    "max_rows_removed_by_filter",
+    "max_rows_removed_by_join_filter",
+    "max_rows_removed_by_index_recheck",
+    "max_temp_blocks",
+}
+
 
 def _load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
@@ -98,15 +120,40 @@ def test_queryproof_expectations_preserve_every_legacy_capture_key() -> None:
                 for capture_mode in query["capture_modes"]:
                     scenario = f"{case['name']}:{plan_mode}:{capture_mode}"
                     capture_id = f"{query['id']}:{scenario}"
-                    expected[capture_id] = _normalized_invariant(
+                    invariant = _normalized_invariant(
                         legacy_expectations[query["id"]].for_scenario(scenario)
                     )
+                    if capture_mode == "estimated":
+                        for key in EXECUTOR_ONLY_INVARIANT_KEYS:
+                            invariant.pop(key, None)
+                    expected[capture_id] = invariant
 
     actual = {capture["id"]: capture["invariant"] for capture in port["captures"]}
     assert actual == expected
     for invariant in actual.values():
         for key in ("required_relations", "required_indexes", "forbidden_indexes"):
             assert all(value.startswith("public.") for value in invariant[key])
+
+
+def test_queryproof_expectations_separate_estimated_and_executor_evidence() -> None:
+    captures = _load(QUERYPROOF_ROOT / "plan-expectations.json")["captures"]
+    estimated = [capture for capture in captures if capture["capture_mode"] == "estimated"]
+    analyzed = [capture for capture in captures if capture["capture_mode"] == "analyze"]
+
+    assert len(estimated) == len(analyzed) == 60
+    for capture in estimated:
+        invariant = capture["invariant"]
+        assert set(invariant) == ESTIMATED_INVARIANT_KEYS
+        assert set(invariant).isdisjoint(EXECUTOR_ONLY_INVARIANT_KEYS)
+
+    for capture in analyzed:
+        invariant = capture["invariant"]
+        assert set(invariant) == ESTIMATED_INVARIANT_KEYS | {
+            "max_loop_count",
+            "max_temp_blocks",
+        }
+        assert invariant["max_loop_count"] is None
+        assert invariant["max_temp_blocks"] == 0
 
 
 def test_queryproof_critical_routes_and_statistics_allowlist_preserve_provenance() -> None:

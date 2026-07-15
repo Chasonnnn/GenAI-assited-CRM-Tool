@@ -24,9 +24,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -74,9 +72,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -124,9 +120,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -174,9 +168,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -224,9 +216,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -274,9 +264,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -328,9 +316,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -385,9 +371,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -441,9 +425,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -498,9 +480,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -555,9 +535,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -611,9 +589,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -665,9 +641,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -717,9 +691,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -769,9 +741,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -821,9 +791,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -873,9 +841,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -925,9 +891,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -976,9 +940,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1026,9 +988,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1076,9 +1036,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1126,9 +1084,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1176,9 +1132,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1226,9 +1180,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1283,9 +1235,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1347,9 +1297,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1411,9 +1359,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1475,9 +1421,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1539,9 +1483,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1603,9 +1545,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1661,9 +1601,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1713,9 +1651,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1765,9 +1701,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1817,9 +1751,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1869,9 +1801,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1921,9 +1851,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -1972,9 +1900,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2022,9 +1948,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2072,9 +1996,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2122,9 +2044,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2172,9 +2092,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2222,9 +2140,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2273,9 +2189,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2325,9 +2239,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2377,9 +2289,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2429,9 +2339,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2481,9 +2389,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2533,9 +2439,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2590,9 +2494,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2652,9 +2554,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2714,9 +2614,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2776,9 +2674,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2838,9 +2734,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2900,9 +2794,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -2957,9 +2849,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -3009,9 +2899,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -3061,9 +2949,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -3113,9 +2999,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -3165,9 +3049,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
@@ -3217,9 +3099,7 @@
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
         "estimated_rows_min": null,
-        "estimated_rows_max": null,
-        "max_loop_count": null,
-        "max_temp_blocks": 0
+        "estimated_rows_max": null
       }
     },
     {
