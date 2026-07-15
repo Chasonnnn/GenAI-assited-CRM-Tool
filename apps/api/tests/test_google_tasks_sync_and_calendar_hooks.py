@@ -619,6 +619,135 @@ async def test_get_google_events_returns_empty_after_retry_exhaustion(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_get_user_calendar_events_marks_retry_exhaustion_incomplete(monkeypatch):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+    monkeypatch.setattr(
+        calendar_service.oauth_service,
+        "get_user_integration",
+        lambda *_args, **_kwargs: SimpleNamespace(id=uuid4()),
+    )
+
+    async def _token(*_args, **_kwargs):
+        return "token"
+
+    monkeypatch.setattr(calendar_service, "get_google_access_token", _token)
+
+    calls = {"count": 0}
+    request = httpx.Request("GET", "https://calendar.example/events")
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        raise httpx.ReadTimeout("still down", request=request)
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    result = await calendar_service.get_user_calendar_events(
+        db=SimpleNamespace(),
+        user_id=uuid4(),
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert calls["count"] == 3
+    assert result == {
+        "connected": True,
+        "events": [],
+        "error": "incomplete",
+        "complete": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_google_event_snapshot_marks_later_page_failure_incomplete(monkeypatch):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+    request = httpx.Request("GET", "https://calendar.example/events")
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return _FakeResponse(
+                200,
+                {
+                    "items": [
+                        {
+                            "id": "evt-page-1",
+                            "summary": "First page",
+                            "start": {"dateTime": "2026-02-19T18:30:00Z"},
+                            "end": {"dateTime": "2026-02-19T19:30:00Z"},
+                        }
+                    ],
+                    "nextPageToken": "page-2",
+                },
+            )
+        raise httpx.ReadTimeout("page two unavailable", request=request)
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    snapshot = await calendar_service._fetch_google_events_snapshot(
+        access_token="token",
+        calendar_id="primary",
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert calls["count"] == 4
+    assert [event["id"] for event in snapshot["events"]] == ["evt-page-1"]
+    assert snapshot["complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_google_event_snapshot_marks_result_cap_incomplete(monkeypatch):
+    async def _handler(**_kwargs):
+        return _FakeResponse(
+            200,
+            {
+                "items": [
+                    {
+                        "id": "evt-cap",
+                        "summary": "At cap",
+                        "start": {"dateTime": "2026-02-19T18:30:00Z"},
+                        "end": {"dateTime": "2026-02-19T19:30:00Z"},
+                    }
+                ],
+                "nextPageToken": "more-results",
+            },
+        )
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda timeout=30.0: _AsyncClientFactory(_handler),
+    )
+
+    snapshot = await calendar_service._fetch_google_events_snapshot(
+        access_token="token",
+        calendar_id="primary",
+        time_min=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        time_max=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        max_total_results=1,
+    )
+
+    assert [event["id"] for event in snapshot["events"]] == ["evt-cap"]
+    assert snapshot["complete"] is False
+
+
+@pytest.mark.asyncio
 async def test_calendar_watch_http_paths(monkeypatch):
     async def _handler(**kwargs):
         if kwargs["url"].endswith("/watch"):

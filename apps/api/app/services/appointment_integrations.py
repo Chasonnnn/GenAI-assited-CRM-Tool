@@ -278,11 +278,18 @@ async def _sync_manual_google_events_for_appointments_async(
                 calendar_id=calendar_id,
             )
         )
-        if not result:
-            continue
-        if result.get("connected"):
-            any_connected = True
-            raw_events.extend(result.get("events") or [])
+        if (
+            not result
+            or not result.get("connected")
+            or result.get("error")
+            or result.get("complete") is False
+        ):
+            logger.warning(
+                "Google Calendar event snapshot incomplete; skipping appointment reconciliation"
+            )
+            return 0
+        any_connected = True
+        raw_events.extend(result.get("events") or [])
 
     if not any_connected:
         return 0
