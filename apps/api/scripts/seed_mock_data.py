@@ -77,6 +77,22 @@ def _seed_entity_uuid(entity: str, organization_id: UUID, index: int) -> UUID:
     return uuid4()
 
 
+def _stabilize_queryproof_pipeline_stage_ids(
+    organization_id: UUID,
+    stages: list[PipelineStage],
+) -> None:
+    """Remove UUID-driven planner-statistics drift from benchmark stage keys."""
+    if not _queryproof_deterministic_mode():
+        return
+    for stage in stages:
+        stage_key = stage.stage_key or stage.slug
+        stage.id = _seed_entity_uuid(
+            f"pipeline-stage:{stage_key}",
+            organization_id,
+            stage.order,
+        )
+
+
 # Sample data pools
 FIRST_NAMES_FEMALE = [
     "Emma",
@@ -1508,6 +1524,8 @@ def _seed_organization(
     )
     if not stages_sorted:
         raise ValueError(f"No pipeline stages found for organization {org.id}")
+    _stabilize_queryproof_pipeline_stage_ids(org.id, stages_sorted)
+    db.commit()
 
     template_result = template_seeder.seed_all(db, org.id, actor.id)
     print(

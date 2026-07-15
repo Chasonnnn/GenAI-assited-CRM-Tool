@@ -34,6 +34,24 @@ def test_queryproof_seed_freezes_clock_and_entity_ids(monkeypatch) -> None:
     )
 
 
+def test_queryproof_seed_stabilizes_pipeline_stage_ids(monkeypatch) -> None:
+    monkeypatch.setenv("QUERYPROOF_MODE", "deterministic")
+    organization_id = uuid.UUID("00000000-0000-5000-8000-000000000201")
+    stages = [
+        SimpleNamespace(id=uuid.uuid4(), stage_key="new", slug="new", order=1),
+        SimpleNamespace(id=uuid.uuid4(), stage_key="qualified", slug="qualified", order=3),
+    ]
+
+    seed_mock_data._stabilize_queryproof_pipeline_stage_ids(organization_id, stages)
+
+    assert stages[0].id == seed_mock_data._seed_entity_uuid(
+        "pipeline-stage:new", organization_id, 1
+    )
+    assert stages[1].id == seed_mock_data._seed_entity_uuid(
+        "pipeline-stage:qualified", organization_id, 3
+    )
+
+
 def test_seed_surrogate_sources_match_enum() -> None:
     allowed = {source.value for source in SurrogateSource}
     assert set(seed_mock_data.SURROGATE_SOURCES).issubset(allowed)
