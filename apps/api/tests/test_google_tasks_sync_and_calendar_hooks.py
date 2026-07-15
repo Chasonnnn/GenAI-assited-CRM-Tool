@@ -502,6 +502,85 @@ async def test_get_google_events_retries_timeout_then_success(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_list_google_calendar_ids_retries_timeout_then_success(monkeypatch):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+    request = httpx.Request("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList")
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ReadTimeout("temporary", request=request)
+        return _FakeResponse(200, {"items": [{"id": "team"}]})
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _AsyncClientFactory(_handler),
+    )
+
+    calendar_ids = await calendar_service.list_google_calendar_ids("token")
+
+    assert calls["count"] == 2
+    assert calendar_ids == ["primary", "team"]
+
+
+@pytest.mark.asyncio
+async def test_list_google_calendar_ids_raises_after_retry_exhaustion(monkeypatch):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+    request = httpx.Request("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList")
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        raise httpx.ReadTimeout("still down", request=request)
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _AsyncClientFactory(_handler),
+    )
+
+    with pytest.raises(httpx.ReadTimeout):
+        await calendar_service.list_google_calendar_ids("token")
+
+    assert calls["count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_list_google_calendar_ids_raises_after_transient_status_exhaustion(monkeypatch):
+    async def _sleep(_delay):
+        return None
+
+    monkeypatch.setattr(http_service.asyncio, "sleep", _sleep)
+
+    calls = {"count": 0}
+
+    async def _handler(**_kwargs):
+        calls["count"] += 1
+        return _FakeResponse(503, {"error": {"message": "still down"}})
+
+    monkeypatch.setattr(
+        calendar_service.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: _AsyncClientFactory(_handler),
+    )
+
+    with pytest.raises(RuntimeError, match="calendar discovery"):
+        await calendar_service.list_google_calendar_ids("token")
+
+    assert calls["count"] == 3
+
+
+@pytest.mark.asyncio
 async def test_get_google_events_returns_empty_after_retry_exhaustion(monkeypatch, caplog):
     async def _sleep(_delay):
         return None
@@ -533,7 +612,9 @@ async def test_get_google_events_returns_empty_after_retry_exhaustion(monkeypatc
     calendar_records = [
         record for record in caplog.records if record.name == "app.services.calendar_service"
     ]
-    assert calendar_records[-1].message == "Google Calendar events fetch failed error_type=ReadTimeout"
+    assert (
+        calendar_records[-1].message == "Google Calendar events fetch failed error_type=ReadTimeout"
+    )
     assert "person@example.com" not in calendar_records[-1].message
 
 

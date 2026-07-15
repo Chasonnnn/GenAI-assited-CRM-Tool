@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from app.db.enums import AppointmentStatus, MeetingMode
@@ -291,6 +292,41 @@ async def test_sync_manual_google_events_async_reconcile_paths(
         org_id=test_org.id,
     )
     assert changed_none == 0
+
+
+@pytest.mark.asyncio
+async def test_calendar_discovery_failure_does_not_cancel_confirmed_appointment(
+    db, test_org, test_user, monkeypatch
+):
+    existing = _create_appointment(
+        db, test_org.id, test_user.id, None, status=AppointmentStatus.CONFIRMED.value
+    )
+    existing.google_event_id = "secondary-calendar-event"
+    db.commit()
+
+    request = httpx.Request("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList")
+
+    async def _calendar_ids(**_kwargs):
+        raise httpx.ReadTimeout("calendar discovery failed", request=request)
+
+    async def _calendar_events(**_kwargs):
+        return {"connected": True, "events": [], "error": None}
+
+    monkeypatch.setattr(
+        "app.services.calendar_service.list_user_google_calendar_ids", _calendar_ids
+    )
+    monkeypatch.setattr("app.services.calendar_service.get_user_calendar_events", _calendar_events)
+
+    changed = await appointment_integrations._sync_manual_google_events_for_appointments_async(
+        db,
+        user_id=test_user.id,
+        org_id=test_org.id,
+    )
+
+    db.refresh(existing)
+    assert changed == 0
+    assert existing.status == AppointmentStatus.CONFIRMED.value
+    assert existing.cancellation_reason is None
 
 
 def test_zoom_and_google_meet_creation_failure_paths(monkeypatch):
