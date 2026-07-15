@@ -34,6 +34,7 @@ pnpm-debug.log*
 # Testing
 coverage/
 .pytest_cache/
+/apps/api/performance/artifacts/
 
 # Misc
 *.local
@@ -60,6 +61,7 @@ infra/terraform/tfplan
 .ruff_cache/
 .uv_cache/
 .uv-cache/
+/.playwright-cli/
 .playwright-mcp/
 # next-agents-md
 .next-docs/
