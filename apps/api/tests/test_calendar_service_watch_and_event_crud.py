@@ -184,7 +184,8 @@ async def test_calendar_get_events_and_calendar_ids_pagination(monkeypatch):
         "AsyncClient",
         lambda *args, **kwargs: _AsyncClientFactory(_calendar_list_fail),
     )
-    assert await calendar_service.list_google_calendar_ids("tok") == ["primary"]
+    with pytest.raises(calendar_service.CalendarDiscoveryError):
+        await calendar_service.list_google_calendar_ids("tok")
 
 
 @pytest.mark.asyncio
@@ -250,6 +251,19 @@ async def test_calendar_user_wrappers_and_appointment_helpers(monkeypatch, db):
     )
     assert across["connected"] is True
     assert len(across["events"]) == 1
+
+    async def _calendar_discovery_failure(*_args, **_kwargs):
+        raise RuntimeError("calendar discovery unavailable")
+
+    monkeypatch.setattr(calendar_service, "list_google_calendar_ids", _calendar_discovery_failure)
+    fallback = await calendar_service.get_user_calendar_events_across_calendars(
+        db,
+        user_id,
+        now,
+        now + timedelta(hours=1),
+    )
+    assert fallback["connected"] is True
+    assert [event["id"] for event in fallback["events"]] == ["evt1"]
 
     # Appointment helper wrappers.
     async def _event_result(**_kwargs):

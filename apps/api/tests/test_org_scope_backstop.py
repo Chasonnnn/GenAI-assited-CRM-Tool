@@ -16,12 +16,19 @@ name are required).
 """
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, BrokenBarrierError
 
 import pytest
 from sqlalchemy import select
 
 from app.db.models import Organization, Queue
-from app.db.org_scope import ORG_SCOPE_KEY, clear_org_scope, set_org_scope
+from app.db.org_scope import (
+    ORG_SCOPE_KEY,
+    clear_org_scope,
+    current_org_scope,
+    set_org_scope,
+)
 
 
 def _make_org(db, name: str) -> Organization:
@@ -219,6 +226,70 @@ def test_set_org_scope_none_clears(db, test_org):
     set_org_scope(db, None)
     assert ORG_SCOPE_KEY not in db.info
     assert q_b.id in {q.id for q in db.scalars(select(Queue)).all()}
+
+
+def test_request_db_provider_leaves_scope_teardown_to_middleware(monkeypatch):
+    """A request session has one org-scope teardown owner.
+
+    The request middleware clears the listener after ``call_next``. The database
+    dependency must only close the session; clearing in both lifecycle hooks can
+    race and make SQLAlchemy remove the same listener twice.
+    """
+    from sqlalchemy.orm import Session
+
+    from app.core import deps
+
+    session = Session()
+    monkeypatch.setattr(deps, "SessionLocal", lambda: session)
+    provider = deps.get_db()
+    yielded = next(provider)
+    org_id = uuid.uuid4()
+    set_org_scope(yielded, org_id)
+
+    provider.close()
+
+    assert current_org_scope(session) == org_id
+    clear_org_scope(session)
+
+
+def test_concurrent_request_lifecycle_has_one_scope_teardown_owner(monkeypatch):
+    """Dependency close may overlap middleware teardown without double removal.
+
+    Synchronizing listener removal makes the former two-owner implementation
+    deterministic: both cleanup paths observe the listener and attempt to remove
+    it together. With middleware as the sole owner, only its thread reaches the
+    removal barrier while the dependency independently closes the session.
+    """
+    from sqlalchemy.orm import Session
+
+    from app.core import deps
+    from app.db import org_scope
+
+    session = Session()
+    monkeypatch.setattr(deps, "SessionLocal", lambda: session)
+    provider = deps.get_db()
+    yielded = next(provider)
+    set_org_scope(yielded, uuid.uuid4())
+
+    remove_barrier = Barrier(2)
+    real_remove = org_scope.event.remove
+
+    def _synchronized_remove(target, identifier, fn):
+        try:
+            remove_barrier.wait(timeout=0.2)
+        except BrokenBarrierError:
+            pass
+        return real_remove(target, identifier, fn)
+
+    monkeypatch.setattr(org_scope.event, "remove", _synchronized_remove)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        dependency_cleanup = pool.submit(provider.close)
+        middleware_cleanup = pool.submit(clear_org_scope, session)
+
+    assert dependency_cleanup.exception() is None
+    assert middleware_cleanup.exception() is None
+    assert current_org_scope(session) is None
 
 
 @pytest.mark.asyncio

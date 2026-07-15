@@ -16,7 +16,7 @@ from app.core.security import decode_session_token
 from app.core.csrf import CSRF_HEADER, CSRF_COOKIE_NAME, validate_csrf
 from app.core.structured_logging import build_request_log_context, log_structured_event
 from app.db.session import SessionLocal
-from app.db.org_scope import clear_org_scope, set_org_scope
+from app.db.org_scope import set_org_scope
 
 logger = logging.getLogger(__name__)
 
@@ -131,10 +131,8 @@ def get_db(request: Request = None) -> Generator[Session, None, None]:
             request.state.request_db = db
         yield db
     finally:
-        # The org-scope stamp is bound to the request: never let it outlive the
-        # session. In production the session is discarded anyway, but clearing
-        # here keeps the contract explicit for any reused-session path.
-        clear_org_scope(db)
+        # Request org-scope teardown belongs to clear_org_scope_middleware.
+        # Keeping one owner avoids racing to remove the same SQLAlchemy listener.
         db.close()
 
 

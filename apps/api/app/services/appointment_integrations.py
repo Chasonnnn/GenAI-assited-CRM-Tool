@@ -252,12 +252,19 @@ async def _sync_manual_google_events_for_appointments_async(
     if time_max < time_min:
         return 0
 
-    calendar_ids = await _await_async(
-        calendar_service.list_user_google_calendar_ids(
+    try:
+        discovered_calendar_ids = await calendar_service.list_user_google_calendar_ids(
             db=db,
             user_id=user_id,
         )
-    ) or ["primary"]
+    except Exception as exc:
+        logger.warning(
+            "Google Calendar discovery failed; skipping appointment reconciliation error_type=%s",
+            type(exc).__name__,
+        )
+        return 0
+
+    calendar_ids = discovered_calendar_ids or ["primary"]
 
     raw_events: list[dict[str, object]] = []
     any_connected = False

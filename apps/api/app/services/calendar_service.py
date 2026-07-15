@@ -68,6 +68,10 @@ class CalendarWatchResult(TypedDict):
     expires_at: datetime | None
 
 
+class CalendarDiscoveryError(RuntimeError):
+    """Raised when the connected account's calendar list cannot be discovered."""
+
+
 WATCH_RENEW_BUFFER = timedelta(hours=6)
 WATCH_CHANNEL_TTL_SECONDS = 24 * 60 * 60
 
@@ -506,13 +510,17 @@ async def list_google_calendar_ids(
     """
     Fetch visible calendar IDs for the connected Google account.
 
-    Returns `["primary"]` as a fallback if the API call fails.
+    Retries transient failures and raises if discovery remains unavailable.
+
+    Callers performing read-only operations may fall back to `primary`. Callers
+    that reconcile deletions must treat discovery failure as an incomplete
+    snapshot and stop before applying destructive changes.
     """
     calendar_ids: list[str] = ["primary"]
     page_token: str | None = None
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=GOOGLE_CALENDAR_TIMEOUT_SECONDS) as client:
             while len(calendar_ids) < max_total_results:
                 params = {
                     "showDeleted": "false",
@@ -525,13 +533,25 @@ async def list_google_calendar_ids(
                 if page_token:
                     params["pageToken"] = page_token
 
-                response = await client.get(
-                    "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                    params=params,
+                async def request_fn() -> httpx.Response:
+                    return await client.get(
+                        "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        params=params,
+                    )
+
+                response = await request_with_retries(
+                    request_fn,
+                    max_attempts=GOOGLE_CALENDAR_RETRY_ATTEMPTS,
+                    base_delay=GOOGLE_CALENDAR_RETRY_BASE_DELAY,
+                    max_delay=GOOGLE_CALENDAR_RETRY_MAX_DELAY,
+                    retry_statuses=DEFAULT_RETRY_STATUSES,
                 )
                 if response.status_code != 200:
-                    break
+                    logger.warning(
+                        "Google Calendar discovery failed status=%s", response.status_code
+                    )
+                    raise CalendarDiscoveryError("calendar discovery unavailable")
 
                 data = response.json()
                 items = data.get("items", [])
@@ -545,8 +565,20 @@ async def list_google_calendar_ids(
                 page_token = data.get("nextPageToken")
                 if not page_token:
                     break
-    except Exception as e:
-        logger.exception("Google Calendar list fetch failed: %s", e)
+    except httpx.RequestError as exc:
+        logger.warning(
+            "Google Calendar discovery request failed error_type=%s",
+            type(exc).__name__,
+        )
+        raise
+    except CalendarDiscoveryError:
+        raise
+    except (AttributeError, TypeError, ValueError) as exc:
+        logger.warning(
+            "Google Calendar discovery response was invalid error_type=%s",
+            type(exc).__name__,
+        )
+        raise CalendarDiscoveryError("calendar discovery response invalid") from exc
 
     deduped: list[str] = []
     seen: set[str] = set()
@@ -599,7 +631,18 @@ async def get_user_calendar_events_across_calendars(
     if not access_token:
         return {"connected": False, "events": [], "error": "token_expired"}
 
-    ids = calendar_ids or await list_google_calendar_ids(access_token)
+    if calendar_ids:
+        ids = calendar_ids
+    else:
+        try:
+            ids = await list_google_calendar_ids(access_token)
+        except Exception as exc:
+            logger.warning(
+                "Google Calendar discovery unavailable; using primary for read-only fetch "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+            ids = ["primary"]
     if not ids:
         ids = ["primary"]
 
