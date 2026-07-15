@@ -2,6 +2,73 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.46](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.45...surrogacy-crm-platform-v0.91.46) (2026-07-14)
+
+
+### Bug Fixes
+
+* Add transcript highlight focus handling ([80ee9c5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/80ee9c5e26831a8d5bec71742e3f986359972e02))
+* Avoid Vite TypeScript sourcemap warning ([87a5259](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/87a5259ac97804c3a3a610455f1bd2cc1cbf6194))
+* Build release indexes concurrently ([e53b558](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e53b5581a136439a01b930e98b7100ba974b8902))
+* Cancel stale surrogate search commits ([c0f0eac](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c0f0eacea74022975081bd1fe4367967ab017e13))
+* Clean calendar timezone memoization ([aebd2e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aebd2e940fe01f8ecb6399a9107e913363843ba9))
+* Clean hook callback memoization ([64a2072](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/64a2072593e0ba8f3d89fdaa96764a0daeb6be29))
+* Consolidate open PR validation fixes ([756081a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/756081a3a2c6cc09986d28a56661cd17a2d7749c))
+* Defer agencies stale response guard ([5acdbde](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5acdbde1025ca421df5ea2abce8b52fdc0bdd0b8))
+* Defer MFA challenge await by return target ([085c4ca](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/085c4ca9ec423966a74656cd55891080a65d5c51))
+* Derive email template editor draft ([42f4f8d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/42f4f8d3f2d110e94b0aa30dbec647f00e1b3b0e))
+* Derive focused tasks view ([a98b40a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a98b40aede375454928010e435ff0becaf752233))
+* Derive hosted intake bootstrap state ([394241f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/394241f7a09c86ebd31260e8bab757d63a78f03d))
+* Derive intended parent filters from URL ([4608b17](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4608b17936bd54d1317c15b807f63b2b1dbab602))
+* Derive public booking timezone defaults ([8b5ba6a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8b5ba6ad27a9e6277fece5f11fdc8049034ff8c3))
+* Derive surrogate list filters from URL ([70c9be7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/70c9be71952872dff0816237f0304888a9213da7))
+* Expose AI usage invalidations ([416e98e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/416e98e4a1318324309d95a7bc13bc3edc4b391a))
+* Expose bulk surrogate invalidations ([c7578cc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c7578cc56de243593fae5160d9e5187150293b37))
+* Expose email send cache invalidations ([0cd28be](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0cd28be782c717895e4d364156056f519f9f77f8))
+* Expose form mutation invalidations ([474a63c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/474a63c93d18cd0aa4423c4347871af593d81d8e))
+* Expose import cache invalidations ([25c9938](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/25c9938f78904d2729aa3299457c24ed75c6b1dd))
+* Expose interview AI usage invalidations ([203ce61](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/203ce61d1aad31ff08c5d07841fa616904e966a0))
+* Expose workflow cache invalidations ([5696209](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/569620923cc97751d28426fe69e54ec059ed5f7b))
+* Expose Zoom integration invalidations ([8ef14db](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8ef14db802e1c263add65d86dee336733eacfc12))
+* Gate release heads on production artifacts ([44a6eec](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44a6eec0ba97ee6959359e4cfd2b3dd7e6f62420))
+* Group AI Studio settings dialog state ([21e9c12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/21e9c1216428ebe39b4d9956b523c6e4bef0ad44))
+* Group campaign edit draft state ([e672d03](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e672d03f1a177a4729a82dcf7f0c4292e38c1c30))
+* Group email template draft state ([bad6116](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bad611637c28c3b0c8fecdc2ab876f644d205631))
+* Group Meta account edit state ([41ffb2f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/41ffb2fadf27c0f68b70e46930438625e9a01066))
+* Group public booking selection state ([cae53d1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cae53d1c25095984ceeff89420319e855cbc5128))
+* Harden onboarding and match authorization ([d210cb3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d210cb37152cdfe26bf7c983facca33f2d8298e0))
+* Improve form and transcript accessibility ([e9311e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9311e3abdc035b13f26436e7c459b1bfba37bbd))
+* Initialize floating scrollbar pointer state ([3ac957e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3ac957eb3748f64a5490b4c4d7b44071bc4e648d))
+* Label public form table selects ([8488e39](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8488e393c1935093bf80a0a86ebed6c38725e784))
+* Lazy load shared chart container ([0952043](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0952043df6075432dbf05d28c0195a1689ab9f9e))
+* Let Recharts own chart sizing ([d6914cc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6914cca6d92e5982a4cd494b37591c96521d709))
+* Make web image installs deterministic ([a1398fb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a1398fb2ea4d19495e1f73a15c4b9229ce31220f))
+* Move email preview cleanup into close handler ([d99a40a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d99a40a8281ddf49d99460bcfc3b172e6c9089af))
+* Optimize form file counts and loading feedback ([#555](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/555)) ([4517caa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4517caa3452a7fb9a93be1de27b245ed943c8fcc))
+* Optimize intelligent suggestions summary ([58d745c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/58d745c0258964dfb3c6d0c5d6792e412b1a5de0))
+* Parallelize interview attachment uploads ([99294d5](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/99294d5f7e5222ab16442053b52cdfb269dcb078))
+* Preserve list keys after spreads ([a85e3c4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a85e3c41bbb8d6ecbc43a501f5254c2e2a5944c1))
+* Refresh audit logs after attachment downloads ([31baf5a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/31baf5a962c87a1e481098a7890ee2e6e2bb3e4a))
+* Render friendly select labels ([4496ec1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4496ec1955f295522cadd0799eee399010dd6461))
+* Resolve model metadata cycles ([8d50a4c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8d50a4c8893f72c82fbb4e65bde04cd8561f668b))
+* Run release automation on Node 24 ([0664b24](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0664b248bdb90123c457687c6c1942f30657ef62))
+* Set test email recipient in open handler ([a9aab5f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a9aab5f56bf22b6849e1b8eb1db96ad62a0d0c98))
+* Stabilize email template highlight keys ([d59e644](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d59e6446f53004ed71e93c10ab39275558a09315))
+* Suppress rejected websocket retry loops ([aaccf2d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aaccf2dc234b44bbd203879dccba489009feb78a))
+* Use native appointment card selection ([5a2554e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5a2554e25b0dc3d024363407ab93680e04b84470))
+* Use native calendar event controls ([fbee909](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fbee90969935fbb3b36a4ecfd520c3e17d25fd08))
+* Use native inline edit trigger ([6963d0d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6963d0dfbee4bc6c39f03dddbceeaa25864c988f))
+* Use Set for platform email variables ([7992805](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7992805386829577cb8fa959519a1ebca719990b))
+* Use Set for surrogate multiselect values ([2e6b2a7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2e6b2a70db9367dee3df87998dbd103e24cd9f7c))
+* Use Sets for campaign selections ([fe53fe4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fe53fe46c142e5cfdb11401029ec61b773b8ef66))
+* Use Sets for template variable checks ([7cd4c12](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7cd4c12ca69a6699a343672076b7428e0737c99b))
+
+
+### Maintenance
+
+* Enforce Base UI primitive boundary ([12393b3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/12393b3ff330fc42b3905e8ef4c3203143ee3f99))
+* Remove unused web dependencies ([3981c5e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3981c5e4f3eef858448e6a393011a1326e2e13b8))
+
 ## [0.91.45](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.44...surrogacy-crm-platform-v0.91.45) (2026-07-01)
 
 
