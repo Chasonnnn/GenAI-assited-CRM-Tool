@@ -1,5 +1,6 @@
 import random
 import uuid
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from app.db.enums import IntendedParentStatus, SurrogateSource
@@ -17,6 +18,20 @@ from app.db.models import (
 )
 from app.services import pipeline_service
 from scripts import seed_mock_data
+
+
+def test_queryproof_seed_freezes_clock_and_entity_ids(monkeypatch) -> None:
+    monkeypatch.setenv("QUERYPROOF_MODE", "deterministic")
+    organization_id = uuid.UUID("00000000-0000-5000-8000-000000000201")
+
+    assert seed_mock_data._seed_now() == datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    assert seed_mock_data._seed_today() == date(2026, 7, 13)
+    assert seed_mock_data._seed_entity_uuid("surrogate", organization_id, 7) == (
+        seed_mock_data._seed_entity_uuid("surrogate", organization_id, 7)
+    )
+    assert seed_mock_data._seed_entity_uuid("surrogate", organization_id, 7) != (
+        seed_mock_data._seed_entity_uuid("surrogate", organization_id, 8)
+    )
 
 
 def test_seed_surrogate_sources_match_enum() -> None:

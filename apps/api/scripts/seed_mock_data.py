@@ -9,7 +9,7 @@ import random
 import re
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from app.core.encryption import hash_email, hash_phone
 from sqlalchemy import func
@@ -47,6 +47,35 @@ from scripts.performance.profiles import (
     benchmark_user_id,
     get_seed_profile,
 )
+
+_QUERYPROOF_UUID_NAMESPACE = UUID("c27fb9ec-7b89-5e76-8d8f-f84a87e11b6a")
+_QUERYPROOF_REFERENCE_NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+
+
+def _queryproof_deterministic_mode() -> bool:
+    return os.getenv("QUERYPROOF_MODE") == "deterministic"
+
+
+def _seed_now() -> datetime:
+    return (
+        _QUERYPROOF_REFERENCE_NOW
+        if _queryproof_deterministic_mode()
+        else datetime.now(timezone.utc)
+    )
+
+
+def _seed_today() -> date:
+    return _seed_now().date() if _queryproof_deterministic_mode() else date.today()
+
+
+def _seed_entity_uuid(entity: str, organization_id: UUID, index: int) -> UUID:
+    if _queryproof_deterministic_mode():
+        return uuid5(
+            _QUERYPROOF_UUID_NAMESPACE,
+            f"{organization_id}:{entity}:{index}",
+        )
+    return uuid4()
+
 
 # Sample data pools
 FIRST_NAMES_FEMALE = [
@@ -351,7 +380,7 @@ def random_email(first: str, last: str, idx: int) -> str:
 
 def random_date_of_birth(min_age: int = 21, max_age: int = 36) -> date:
     """Generate random DOB for given age range."""
-    today = date.today()
+    today = _seed_today()
     days_offset = random.randint(min_age * 365, max_age * 365)
     return today - timedelta(days=days_offset)
 
@@ -471,7 +500,7 @@ def create_status_history(
     created_at: datetime,
 ) -> dict[str, datetime]:
     """Create status history entries for the stage path."""
-    now = datetime.now(timezone.utc)
+    now = _seed_now()
     cursor = created_at + timedelta(days=random.randint(0, 3))
     contact_times: dict[str, datetime] = {}
     previous = None
@@ -548,7 +577,7 @@ def _log_surrogate_activity(
             f"Supported: {sorted(SUPPORTED_ACTIVITY_MODES)}"
         )
 
-    now = datetime.now(timezone.utc)
+    now = _seed_now()
     created_event_time = min(created_at + timedelta(minutes=5), now)
 
     db.add(
@@ -697,16 +726,14 @@ def create_surrogates(
         hospital_addr = random_address()
         created_min = 10 + stage.order * 5
         created_max = created_min + 120
-        created_at = datetime.now(timezone.utc) - timedelta(
-            days=random.randint(created_min, created_max)
-        )
+        created_at = _seed_now() - timedelta(days=random.randint(created_min, created_max))
         assigned_at = created_at + timedelta(days=random.randint(0, 14))
 
-        pregnancy_start = date.today() - timedelta(days=random.randint(30, 220))
+        pregnancy_start = _seed_today() - timedelta(days=random.randint(30, 220))
         pregnancy_due = pregnancy_start + timedelta(days=280)
         stage_path = build_stage_path(stages_sorted, stage)
 
-        surrogate_id = uuid4()
+        surrogate_id = _seed_entity_uuid("surrogate", org_id, i)
         contact_times = create_status_history(
             db=db,
             org_id=org_id,
@@ -737,11 +764,11 @@ def create_surrogates(
         pregnancy_due_date = pregnancy_due if stage.slug in PREGNANCY_STAGE_SLUGS else None
         actual_delivery_date = None
         if stage.slug == "delivered":
-            delivered_start = date.today() - timedelta(days=random.randint(250, 330))
+            delivered_start = _seed_today() - timedelta(days=random.randint(250, 330))
             pregnancy_start_date = delivered_start
             pregnancy_due_date = delivered_start + timedelta(days=280)
             actual_delivery_date = min(
-                date.today(),
+                _seed_today(),
                 pregnancy_due_date + timedelta(days=random.randint(-10, 10)),
             )
 
@@ -886,7 +913,7 @@ def _create_ip_status_history(
     target_status: str,
     stage_ids_by_key: dict[str, UUID],
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = _seed_now()
     path = _build_ip_status_path(target_status)
     previous = None
     cursor = created_at + timedelta(days=random.randint(0, 2))
@@ -953,10 +980,10 @@ def create_intended_parents(
         phone = random_phone()
         state = random.choice(STATES)
         owner_user = _pick_owner(users_by_role, fallback_user)
-        created_at = datetime.now(timezone.utc) - timedelta(days=random.randint(5, 540))
+        created_at = _seed_now() - timedelta(days=random.randint(5, 540))
 
         intended_parent = IntendedParent(
-            id=uuid4(),
+            id=_seed_entity_uuid("intended-parent", org_id, i),
             organization_id=org_id,
             intended_parent_number=f"I{next_number + i}",
             # Contact info
@@ -978,10 +1005,10 @@ def create_intended_parents(
             owner_type="user",
             owner_id=owner_user.id,
             # Activity tracking
-            last_activity=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30)),
+            last_activity=_seed_now() - timedelta(days=random.randint(0, 30)),
             # Timestamps
             created_at=created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=_seed_now(),
         )
 
         db.add(intended_parent)
@@ -1252,13 +1279,11 @@ def create_tasks(
         return []
     owners = [users_by_role[role] for role in sorted(users_by_role)]
     created: list[Task] = []
-    today = date.today()
+    today = _seed_today()
     for index in range(count):
         owner = owners[index % len(owners)]
         completed = index % 5 == 0
-        completed_at = (
-            datetime.now(timezone.utc) - timedelta(days=index % 30) if completed else None
-        )
+        completed_at = _seed_now() - timedelta(days=index % 30) if completed else None
         task = Task(
             organization_id=org_id,
             surrogate_id=surrogates[index % len(surrogates)][0],
