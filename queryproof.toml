@@ -31,7 +31,7 @@ command = { argv = ["uv", "run", "python", "-m", "scripts.queryproof_consumer", 
 [[seeds]]
 id = "production-shaped-deterministic"
 phase = "after_migrate"
-command = { argv = ["uv", "run", "python", "-m", "scripts.seed_mock_data"], cwd = "apps/api", env = { ENV = "test", SEED_PROFILE = "production", SEED_RANDOM_SEED = "20260713", SEED_REDACT_SUMMARY = "true" } }
+command = { argv = ["uv", "run", "python", "-m", "scripts.seed_mock_data"], cwd = "apps/api", env = { ENV = "test", SEED_PROFILE = "production", SEED_RANDOM_SEED = "20260713", SEED_REDACT_SUMMARY = "true", VERSION_ENCRYPTION_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", META_ENCRYPTION_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", DATA_ENCRYPTION_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", FERNET_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", PII_HASH_KEY = "local-performance-pii-hash-key-not-a-secret", JWT_SECRET = "local-performance-jwt-secret-not-a-secret" } }
 
 [[seeds]]
 id = "queryproof-read-only-acl"
