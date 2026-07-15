@@ -206,6 +206,13 @@ def test_queryproof_manifest_is_query_only_and_preserves_all_capture_ids() -> No
     expectations = _load(QUERYPROOF_ROOT / "plan-expectations.json")
 
     assert manifest["version"] == 1
+    assert manifest["repository"] == {
+        "root": ".",
+        "web": {
+            "provider": "github",
+            "base_url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool",
+        },
+    }
     assert manifest["expectations_path"] == (
         "apps/api/performance/queryproof/plan-expectations.json"
     )

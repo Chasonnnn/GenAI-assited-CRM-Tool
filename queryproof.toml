@@ -4,6 +4,10 @@ expectations_path = "apps/api/performance/queryproof/plan-expectations.json"
 [repository]
 root = "."
 
+[repository.web]
+provider = "github"
+base_url = "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool"
+
 [database]
 admin_url_env = "QUERYPROOF_ADMIN_DATABASE_URL"
 application_url_env = "DATABASE_URL"
