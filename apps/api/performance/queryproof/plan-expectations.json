@@ -300,8 +300,7 @@
       "capture_mode": "estimated",
       "invariant": {
         "required_nodes": [
-          "Bitmap Heap Scan",
-          "Bitmap Index Scan",
+          "Index Scan",
           "Limit"
         ],
         "forbidden_nodes": [],
@@ -311,7 +310,7 @@
           "public.tasks"
         ],
         "required_indexes": [
-          "public.idx_tasks_org_owner"
+          "public.idx_tasks_due"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
@@ -327,8 +326,7 @@
       "capture_mode": "analyze",
       "invariant": {
         "required_nodes": [
-          "Bitmap Heap Scan",
-          "Bitmap Index Scan",
+          "Index Scan",
           "Limit"
         ],
         "forbidden_nodes": [],
@@ -338,7 +336,7 @@
           "public.tasks"
         ],
         "required_indexes": [
-          "public.idx_tasks_org_owner"
+          "public.idx_tasks_due"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
@@ -464,8 +462,7 @@
       "capture_mode": "estimated",
       "invariant": {
         "required_nodes": [
-          "Bitmap Heap Scan",
-          "Bitmap Index Scan",
+          "Index Scan",
           "Limit"
         ],
         "forbidden_nodes": [],
@@ -475,7 +472,7 @@
           "public.tasks"
         ],
         "required_indexes": [
-          "public.idx_tasks_org_owner"
+          "public.idx_tasks_google_task_lookup"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
@@ -491,8 +488,7 @@
       "capture_mode": "analyze",
       "invariant": {
         "required_nodes": [
-          "Bitmap Heap Scan",
-          "Bitmap Index Scan",
+          "Index Scan",
           "Limit"
         ],
         "forbidden_nodes": [],
@@ -502,7 +498,7 @@
           "public.tasks"
         ],
         "required_indexes": [
-          "public.idx_tasks_org_owner"
+          "public.idx_tasks_google_task_lookup"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": false,
@@ -1222,7 +1218,7 @@
         "forbidden_nodes": [],
         "required_joins": [
           "Inner",
-          "Right"
+          "Left"
         ],
         "forbidden_joins": [],
         "required_relations": [
@@ -1230,7 +1226,7 @@
           "public.surrogates"
         ],
         "required_indexes": [
-          "public.idx_surrogates_org_active"
+          "public.idx_surrogates_org_stage"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
@@ -1252,7 +1248,7 @@
         "forbidden_nodes": [],
         "required_joins": [
           "Inner",
-          "Right"
+          "Left"
         ],
         "forbidden_joins": [],
         "required_relations": [
@@ -1260,7 +1256,7 @@
           "public.surrogates"
         ],
         "required_indexes": [
-          "public.idx_surrogates_org_active"
+          "public.idx_surrogates_org_stage"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
@@ -1346,7 +1342,7 @@
         "forbidden_nodes": [],
         "required_joins": [
           "Inner",
-          "Right"
+          "Left"
         ],
         "forbidden_joins": [],
         "required_relations": [
@@ -1354,7 +1350,7 @@
           "public.surrogates"
         ],
         "required_indexes": [
-          "public.idx_surrogates_org_active"
+          "public.idx_surrogates_org_stage"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": true,
@@ -1376,7 +1372,7 @@
         "forbidden_nodes": [],
         "required_joins": [
           "Inner",
-          "Right"
+          "Left"
         ],
         "forbidden_joins": [],
         "required_relations": [
@@ -1384,7 +1380,7 @@
           "public.surrogates"
         ],
         "required_indexes": [
-          "public.idx_surrogates_org_active"
+          "public.idx_surrogates_org_stage"
         ],
         "forbidden_indexes": [],
         "allow_sequential_scan": true,

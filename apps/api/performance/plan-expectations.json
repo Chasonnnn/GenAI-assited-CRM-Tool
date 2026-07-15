@@ -21,19 +21,19 @@
         "hot:generic:estimated": {
           "required_joins": [
             "Inner",
-            "Right"
+            "Left"
           ],
           "required_indexes": [
-            "idx_surrogates_org_active"
+            "idx_surrogates_org_stage"
           ]
         },
         "hot:generic:analyze": {
           "required_joins": [
             "Inner",
-            "Right"
+            "Left"
           ],
           "required_indexes": [
-            "idx_surrogates_org_active"
+            "idx_surrogates_org_stage"
           ]
         },
         "hot:custom:estimated": {
@@ -57,19 +57,19 @@
         "hot:automatic:estimated": {
           "required_joins": [
             "Inner",
-            "Right"
+            "Left"
           ],
           "required_indexes": [
-            "idx_surrogates_org_active"
+            "idx_surrogates_org_stage"
           ]
         },
         "hot:automatic:analyze": {
           "required_joins": [
             "Inner",
-            "Right"
+            "Left"
           ],
           "required_indexes": [
-            "idx_surrogates_org_active"
+            "idx_surrogates_org_stage"
           ]
         },
         "cold:generic:estimated": {
@@ -241,22 +241,20 @@
       "scenarios": {
         "hot:generic:estimated": {
           "required_nodes": [
-            "Bitmap Heap Scan",
-            "Bitmap Index Scan",
+            "Index Scan",
             "Limit"
           ],
           "required_indexes": [
-            "idx_tasks_org_owner"
+            "idx_tasks_due"
           ]
         },
         "hot:generic:analyze": {
           "required_nodes": [
-            "Bitmap Heap Scan",
-            "Bitmap Index Scan",
+            "Index Scan",
             "Limit"
           ],
           "required_indexes": [
-            "idx_tasks_org_owner"
+            "idx_tasks_due"
           ]
         },
         "hot:custom:estimated": {
@@ -297,22 +295,20 @@
         },
         "cold:generic:estimated": {
           "required_nodes": [
-            "Bitmap Heap Scan",
-            "Bitmap Index Scan",
+            "Index Scan",
             "Limit"
           ],
           "required_indexes": [
-            "idx_tasks_org_owner"
+            "idx_tasks_google_task_lookup"
           ]
         },
         "cold:generic:analyze": {
           "required_nodes": [
-            "Bitmap Heap Scan",
-            "Bitmap Index Scan",
+            "Index Scan",
             "Limit"
           ],
           "required_indexes": [
-            "idx_tasks_org_owner"
+            "idx_tasks_google_task_lookup"
           ]
         },
         "cold:custom:estimated": {
