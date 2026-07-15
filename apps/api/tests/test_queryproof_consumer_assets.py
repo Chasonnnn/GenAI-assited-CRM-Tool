@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import json
+import os
 from pathlib import Path
 import re
+import tomllib
 from typing import Any
 
+import pytest
+
+from scripts import queryproof_consumer
 from scripts.performance.gates import parse_plan_expectations
 
 
@@ -193,3 +198,172 @@ def test_queryproof_json_assets_never_embed_raw_sql() -> None:
         for key in ("sql", "query", "statement"):
             assert all(key not in item for item in payload.get("queries", []))
         assert not statement.search(json.dumps(payload))
+
+
+def test_queryproof_manifest_is_query_only_and_preserves_all_capture_ids() -> None:
+    manifest = tomllib.loads((API_ROOT.parents[1] / "queryproof.toml").read_text())
+    corpus = _load(QUERYPROOF_ROOT / "capture-corpus.json")
+    expectations = _load(QUERYPROOF_ROOT / "plan-expectations.json")
+
+    assert manifest["version"] == 1
+    assert manifest["expectations_path"] == (
+        "apps/api/performance/queryproof/plan-expectations.json"
+    )
+    assert manifest["database"] == {
+        "admin_url_env": "QUERYPROOF_ADMIN_DATABASE_URL",
+        "application_url_env": "DATABASE_URL",
+        "application_url_scheme": "postgresql+psycopg",
+        "application_role": queryproof_consumer.BENCHMARK_ROLE,
+    }
+    assert "service" not in manifest
+    assert "probes" not in manifest
+    assert "load" not in manifest
+    assert set(manifest["profiles"]) == {"smoke", "production"}
+
+    expected_capture_ids = {capture["id"] for capture in expectations["captures"]}
+    actual_capture_ids: set[str] = set()
+    manifest_queries = {query["id"]: query for query in manifest["queries"]}
+    assert set(manifest_queries) == {query["id"] for query in corpus["queries"]}
+
+    for corpus_query in corpus["queries"]:
+        query = manifest_queries[corpus_query["id"]]
+        assert query["path"] == corpus_query["path"]
+        cases = {case["id"]: case for case in query["cases"]}
+        for corpus_case in corpus_query["cases"]:
+            case = cases[corpus_case["name"]]
+            assert [parameter["kind"] for parameter in case["parameters"]] == (
+                corpus_query["parameter_types"]
+            )
+            assert [parameter["value"] for parameter in case["parameters"]] == (
+                corpus_case["parameters"]
+            )
+            for capture in case["captures"]:
+                actual_capture_ids.add(
+                    f"{query['id']}:{case['id']}:{capture['plan']}:{capture['capture']}"
+                )
+
+    assert actual_capture_ids == expected_capture_ids
+    assert len(actual_capture_ids) == corpus["expected_capture_count"] == 120
+
+
+def test_queryproof_lifecycle_uses_candidate_owned_migrations_seed_and_role_setup() -> None:
+    manifest = tomllib.loads((API_ROOT.parents[1] / "queryproof.toml").read_text())
+
+    assert manifest["lifecycle"]["migrate"] == [
+        {
+            "argv": ["uv", "run", "python", "-m", "alembic", "upgrade", "head"],
+            "cwd": "apps/api",
+        }
+    ]
+    assert manifest["seeds"] == [
+        {
+            "id": "queryproof-cluster-role",
+            "phase": "before_migrate",
+            "command": {
+                "argv": [
+                    "uv",
+                    "run",
+                    "python",
+                    "-m",
+                    "scripts.queryproof_consumer",
+                    "provision-role",
+                ],
+                "cwd": "apps/api",
+                "env": {"QUERYPROOF_EXPECTED_SEED_PROFILE": "production"},
+            },
+        },
+        {
+            "id": "production-shaped-deterministic",
+            "phase": "after_migrate",
+            "command": {
+                "argv": ["uv", "run", "python", "-m", "scripts.seed_mock_data"],
+                "cwd": "apps/api",
+                "env": {
+                    "SEED_PROFILE": "production",
+                    "SEED_RANDOM_SEED": "20260713",
+                    "SEED_REDACT_SUMMARY": "true",
+                },
+            },
+        },
+        {
+            "id": "queryproof-read-only-acl",
+            "phase": "after_migrate",
+            "command": {
+                "argv": [
+                    "uv",
+                    "run",
+                    "python",
+                    "-m",
+                    "scripts.queryproof_consumer",
+                    "apply-role-acl",
+                ],
+                "cwd": "apps/api",
+                "env": {"QUERYPROOF_EXPECTED_SEED_PROFILE": "production"},
+            },
+        },
+    ]
+    dependency = manifest["dependencies"]
+    assert dependency == [
+        {
+            "id": "crm-deterministic-query-mode",
+            "check": {
+                "argv": [
+                    "uv",
+                    "run",
+                    "python",
+                    "-m",
+                    "scripts.queryproof_consumer",
+                    "doctor",
+                ],
+                "cwd": "apps/api",
+                "env": {"QUERYPROOF_EXPECTED_SEED_PROFILE": "production"},
+            },
+        }
+    ]
+
+
+def test_queryproof_benchmark_role_is_read_only_and_relation_allowlisted() -> None:
+    assert queryproof_consumer.BENCHMARK_ROLE == "crm_queryproof_app"
+    assert queryproof_consumer.READ_ONLY_RELATIONS == (
+        "automation_workflows",
+        "org_intelligent_suggestion_rules",
+        "pipeline_stages",
+        "pipelines",
+        "surrogates",
+        "tasks",
+        "workflow_executions",
+    )
+    assert queryproof_consumer.extension_statements() == (
+        "CREATE EXTENSION IF NOT EXISTS pg_stat_statements",
+    )
+    statements = queryproof_consumer.role_acl_statements()
+    combined = "\n".join(statements)
+    assert "GRANT USAGE ON SCHEMA public" in combined
+    assert "GRANT SELECT ON TABLE" in combined
+    assert "GRANT INSERT" not in combined
+    assert "GRANT UPDATE" not in combined
+    assert "GRANT DELETE" not in combined
+    assert "GRANT USAGE ON SEQUENCE" not in combined
+    assert "REVOKE ALL PRIVILEGES ON ALL SEQUENCES" in combined
+    for relation in queryproof_consumer.READ_ONLY_RELATIONS:
+        assert f'public."{relation}"' in combined
+
+    corpus_relations = {
+        qualified.split(".", maxsplit=1)[1]
+        for path in (QUERYPROOF_ROOT / "queries").glob("*.sql")
+        for qualified in re.findall(r"\bpublic\.[a-z_][a-z0-9_]*\b", path.read_text())
+    }
+    assert corpus_relations == set(queryproof_consumer.READ_ONLY_RELATIONS)
+
+
+def test_queryproof_consumer_doctor_requires_explicit_deterministic_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://local.invalid/db")
+    monkeypatch.setenv("QUERYPROOF_EXPECTED_SEED_PROFILE", "production")
+    monkeypatch.delenv("QUERYPROOF_MODE", raising=False)
+    with pytest.raises(RuntimeError, match="QUERYPROOF_MODE"):
+        queryproof_consumer.doctor(os.environ)
+
+    monkeypatch.setenv("QUERYPROOF_MODE", "deterministic")
+    queryproof_consumer.doctor(os.environ)

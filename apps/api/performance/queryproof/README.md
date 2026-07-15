@@ -17,9 +17,42 @@ harness to QueryProof.
   runtime. The corpus JSON does contain reviewed, deterministic synthetic
   parameters required to reproduce hot/cold fixture cases.
 
-The root `queryproof.toml` is deliberately not introduced by this asset-only
-change. Wiring remains blocked until the QueryProof engine accepts invariants
-scoped by both prepared-plan mode and capture mode. Collapsing the historical
-matrix to case-only invariants would discard proven hot/cold planner behavior.
-Runtime lifecycle, authentication, database-role, seed, load, and CI wiring are
-separate adoption changes.
+The root `queryproof.toml` is the nonblocking query-only compatibility pilot.
+It configures the full 120-capture matrix, per-revision Alembic migrations,
+candidate-owned role/extension and seed hooks, and a reviewed NOLOGIN
+application role. The candidate hook creates the role and
+`pg_stat_statements` before either revision migrates, then applies relation ACLs
+after each revision has created its own schema. QueryProof creates an ephemeral
+LOGIN and may only `SET ROLE` to that role. The role has `USAGE` on `public` and
+`SELECT` on the seven exact relations referenced by this corpus; it has no write
+or sequence privileges.
+
+Under `QUERYPROOF_MODE=deterministic`, the production-shaped seed freezes its
+reference clock and derives the surrogate and intended-parent UUIDs used by the
+captured corpus from stable organization/entity keys; the configured PRNG seed
+controls the remaining synthetic choices it owns. The required 120-capture
+selftest—not this helper-level claim—is the proof of complete seeded database
+determinism. Ordinary development seeding retains wall-clock timestamps and
+random UUIDs.
+
+Both the `smoke` and `production` QueryProof profiles currently use the same
+production-shaped seed distribution because QueryProof seed phases are not
+profile-specific. The names select deterministic database settings, not two
+different fixture sizes. No service, HTTP probe, authentication hook, k6
+adapter, CI gate, or retirement of the established harness is part of this
+pilot.
+
+From a reviewed QueryProof checkout, use an isolated PostgreSQL 18.4
+administrator URL and run:
+
+```bash
+QUERYPROOF_ADMIN_DATABASE_URL=postgresql://... \
+  /path/to/queryproof selftest --ref HEAD --profile smoke
+
+QUERYPROOF_ADMIN_DATABASE_URL=postgresql://... \
+  /path/to/queryproof compare --base origin/main --candidate HEAD --profile production
+```
+
+Promotion remains blocked until exact base-versus-base runs and intentional
+N+1/index/scan regressions pass the adoption criteria. The established local
+performance harness and its CI policy remain authoritative until then.

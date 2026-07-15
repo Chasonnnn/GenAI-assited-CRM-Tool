@@ -1,0 +1,319 @@
+version = 1
+expectations_path = "apps/api/performance/queryproof/plan-expectations.json"
+
+[repository]
+root = "."
+
+[database]
+admin_url_env = "QUERYPROOF_ADMIN_DATABASE_URL"
+application_url_env = "DATABASE_URL"
+application_url_scheme = "postgresql+psycopg"
+application_role = "crm_queryproof_app"
+
+[lifecycle]
+prepare = [
+  { argv = ["uv", "sync", "--extra", "test", "--locked"], cwd = "apps/api" },
+]
+migrate = [
+  { argv = ["uv", "run", "python", "-m", "alembic", "upgrade", "head"], cwd = "apps/api" },
+]
+cleanup = []
+
+[[dependencies]]
+id = "crm-deterministic-query-mode"
+check = { argv = ["uv", "run", "python", "-m", "scripts.queryproof_consumer", "doctor"], cwd = "apps/api", env = { QUERYPROOF_EXPECTED_SEED_PROFILE = "production" } }
+
+[[seeds]]
+id = "queryproof-cluster-role"
+phase = "before_migrate"
+command = { argv = ["uv", "run", "python", "-m", "scripts.queryproof_consumer", "provision-role"], cwd = "apps/api", env = { QUERYPROOF_EXPECTED_SEED_PROFILE = "production" } }
+
+[[seeds]]
+id = "production-shaped-deterministic"
+phase = "after_migrate"
+command = { argv = ["uv", "run", "python", "-m", "scripts.seed_mock_data"], cwd = "apps/api", env = { SEED_PROFILE = "production", SEED_RANDOM_SEED = "20260713", SEED_REDACT_SUMMARY = "true" } }
+
+[[seeds]]
+id = "queryproof-read-only-acl"
+phase = "after_migrate"
+command = { argv = ["uv", "run", "python", "-m", "scripts.queryproof_consumer", "apply-role-acl"], cwd = "apps/api", env = { QUERYPROOF_EXPECTED_SEED_PROFILE = "production" } }
+
+[[queries]]
+id = "surrogates_list_by_stage"
+path = "apps/api/performance/queryproof/queries/surrogates_list_by_stage.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }, { kind = "text", value = "new_unread" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }, { kind = "text", value = "new_unread" }]
+
+[[queries]]
+id = "tasks_open_by_owner"
+path = "apps/api/performance/queryproof/queries/tasks_open_by_owner.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }, { kind = "text", value = "user" }, { kind = "uuid", value = "6286c75f-e453-59a4-baf8-6807e9e10fd3" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }, { kind = "text", value = "user" }, { kind = "uuid", value = "5e220de2-cf9b-52d2-a6aa-a765ff3aceae" }]
+
+[[queries]]
+id = "dashboard_surrogate_counts"
+path = "apps/api/performance/queryproof/queries/dashboard_surrogate_counts.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }]
+
+[[queries]]
+id = "dashboard_upcoming_tasks"
+path = "apps/api/performance/queryproof/queries/dashboard_upcoming_tasks.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }, { kind = "date", value = "2099-12-31" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }, { kind = "date", value = "2099-12-31" }]
+
+[[queries]]
+id = "analytics_surrogates_by_stage"
+path = "apps/api/performance/queryproof/queries/analytics_surrogates_by_stage.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }]
+
+[[queries]]
+id = "workflow_list"
+path = "apps/api/performance/queryproof/queries/workflow_list.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }, { kind = "text", value = "org" }, { kind = "uuid", value = "6286c75f-e453-59a4-baf8-6807e9e10fd3" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }, { kind = "text", value = "org" }, { kind = "uuid", value = "5e220de2-cf9b-52d2-a6aa-a765ff3aceae" }]
+
+[[queries]]
+id = "workflow_stats"
+path = "apps/api/performance/queryproof/queries/workflow_stats.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }, { kind = "timestamptz", value = "2000-01-01T00:00:00Z" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }, { kind = "timestamptz", value = "2000-01-01T00:00:00Z" }]
+
+[[queries]]
+id = "intelligent_suggestions_rules"
+path = "apps/api/performance/queryproof/queries/intelligent_suggestions_rules.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }]
+
+[[queries]]
+id = "surrogate_search"
+path = "apps/api/performance/queryproof/queries/surrogate_search.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }, { kind = "text", value = "smith" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }, { kind = "text", value = "smith" }]
+
+[[queries]]
+id = "pipeline_stage_dimension"
+path = "apps/api/performance/queryproof/queries/pipeline_stage_dimension.sql"
+critical_route = true
+[[queries.cases]]
+id = "hot"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000201" }]
+[[queries.cases]]
+id = "cold"
+captures = [
+  { plan = "generic", capture = "estimated" }, { plan = "generic", capture = "analyze" },
+  { plan = "custom", capture = "estimated" }, { plan = "custom", capture = "analyze" },
+  { plan = "automatic", capture = "estimated" }, { plan = "automatic", capture = "analyze" },
+]
+parameters = [{ kind = "uuid", value = "00000000-0000-5000-8000-000000000203" }]
+
+[profiles.smoke]
+statistics = "analyze"
+full_sampling_row_cap = 300000
+wal_gating = false
+
+[profiles.smoke.gucs]
+work_mem = "4MB"
+max_parallel_workers_per_gather = 0
+jit = false
+seq_page_cost = 1.0
+random_page_cost = 4.0
+cpu_tuple_cost = 0.01
+cpu_index_tuple_cost = 0.005
+cpu_operator_cost = 0.0025
+effective_cache_size = "4GB"
+synchronize_seqscans = false
+timezone = "UTC"
+track_io_timing = true
+compute_query_id = true
+pg_stat_statements_track = "all"
+pg_stat_statements_track_utility = false
+
+[profiles.production]
+statistics = "analyze"
+full_sampling_row_cap = 300000
+wal_gating = false
+
+[profiles.production.gucs]
+work_mem = "4MB"
+max_parallel_workers_per_gather = 0
+jit = false
+seq_page_cost = 1.0
+random_page_cost = 4.0
+cpu_tuple_cost = 0.01
+cpu_index_tuple_cost = 0.005
+cpu_operator_cost = 0.0025
+effective_cache_size = "4GB"
+synchronize_seqscans = false
+timezone = "UTC"
+track_io_timing = true
+compute_query_id = true
+pg_stat_statements_track = "all"
+pg_stat_statements_track_utility = false
+
+[corpus]
+minimum_database_time_percent = 1.0
+top_n = 100
+critical_routes = [
+  "surrogates_list_by_stage", "tasks_open_by_owner", "dashboard_surrogate_counts",
+  "dashboard_upcoming_tasks", "analytics_surrogates_by_stage", "workflow_list",
+  "workflow_stats", "intelligent_suggestions_rules", "surrogate_search",
+  "pipeline_stage_dimension",
+]
+
+[privacy]
+require_age_encryption = true
+statistics_allowlist = [
+  "public.automation_workflows.organization_id",
+  "public.org_intelligent_suggestion_rules.organization_id",
+  "public.pipeline_stages.pipeline_id",
+  "public.pipelines.organization_id",
+  "public.surrogates.organization_id",
+  "public.tasks.organization_id",
+  "public.workflow_executions.organization_id",
+]
+
+[bencher]
+enabled = false
+project = "surrogacy-force-crm"
