@@ -12,6 +12,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4, uuid5
 
 from app.core.encryption import hash_email, hash_phone
+from app.core.stage_definitions import get_default_stage_defs
 from sqlalchemy import func
 from app.db.session import SessionLocal
 from app.db.models import (
@@ -77,20 +78,23 @@ def _seed_entity_uuid(entity: str, organization_id: UUID, index: int) -> UUID:
     return uuid4()
 
 
-def _stabilize_queryproof_pipeline_stage_ids(
+def _queryproof_pipeline_identity(
     organization_id: UUID,
-    stages: list[PipelineStage],
-) -> None:
-    """Remove UUID-driven planner-statistics drift from benchmark stage keys."""
+    entity_type: str,
+) -> tuple[UUID | None, dict[str, UUID] | None]:
+    """Return initial deterministic IDs so physical indexes are repeatable too."""
     if not _queryproof_deterministic_mode():
-        return
-    for stage in stages:
-        stage_key = stage.stage_key or stage.slug
-        stage.id = _seed_entity_uuid(
-            f"pipeline-stage:{stage_key}",
+        return None, None
+    pipeline_id = _seed_entity_uuid(f"pipeline:{entity_type}", organization_id, 0)
+    stage_ids = {
+        stage["stage_key"]: _seed_entity_uuid(
+            f"pipeline-stage:{entity_type}:{stage['stage_key']}",
             organization_id,
-            stage.order,
+            stage["order"],
         )
+        for stage in get_default_stage_defs(entity_type)
+    }
+    return pipeline_id, stage_ids
 
 
 # Sample data pools
@@ -970,11 +974,17 @@ def create_intended_parents(
 
     users_by_role = users_by_role or {}
     fallback_user = db.query(User).filter(User.id == owner_id).first()
+    pipeline_id, stage_ids_by_key = _queryproof_pipeline_identity(
+        org_id,
+        "intended_parent",
+    )
     ip_pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
         org_id,
         owner_id,
         entity_type="intended_parent",
+        pipeline_id=pipeline_id,
+        stage_ids_by_key=stage_ids_by_key,
     )
     ip_stage_ids_by_key = {
         stage.stage_key: stage.id
@@ -1515,7 +1525,14 @@ def _seed_organization(
         [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
     )
     print(f"Using actor: {mask_email(actor.email)} ({actor.id})")
-    pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, actor.id)
+    pipeline_id, stage_ids_by_key = _queryproof_pipeline_identity(org.id, "surrogate")
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        org.id,
+        actor.id,
+        pipeline_id=pipeline_id,
+        stage_ids_by_key=stage_ids_by_key,
+    )
     stages_sorted = (
         db.query(PipelineStage)
         .filter(PipelineStage.pipeline_id == pipeline.id)
@@ -1524,8 +1541,6 @@ def _seed_organization(
     )
     if not stages_sorted:
         raise ValueError(f"No pipeline stages found for organization {org.id}")
-    _stabilize_queryproof_pipeline_stage_ids(org.id, stages_sorted)
-    db.commit()
 
     template_result = template_seeder.seed_all(db, org.id, actor.id)
     print(

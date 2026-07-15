@@ -1,5 +1,6 @@
 """Pipeline service - manage org-configurable stage pipelines."""
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -616,6 +617,9 @@ def get_or_create_default_pipeline(
     org_id: UUID,
     user_id: UUID | None = None,
     entity_type: str = SURROGATE_PIPELINE_ENTITY,
+    *,
+    pipeline_id: UUID | None = None,
+    stage_ids_by_key: Mapping[str, UUID] | None = None,
 ) -> Pipeline:
     """
     Get the default pipeline for an org, creating if not exists.
@@ -635,40 +639,52 @@ def get_or_create_default_pipeline(
     )
 
     if not pipeline:
+        pipeline_values = {
+            "organization_id": org_id,
+            "entity_type": normalized_entity_type,
+            "name": "Default",
+            "is_default": True,
+            "current_version": 1,
+            "feature_config": default_pipeline_feature_config(normalized_entity_type),
+        }
+        if pipeline_id is not None:
+            pipeline_values["id"] = pipeline_id
         pipeline = Pipeline(
-            organization_id=org_id,
-            entity_type=normalized_entity_type,
-            name="Default",
-            is_default=True,
-            current_version=1,
-            feature_config=default_pipeline_feature_config(normalized_entity_type),
+            **pipeline_values,
         )
         db.add(pipeline)
         db.flush()
 
         # Create default stage rows
         stage_defs = get_default_stage_defs(normalized_entity_type)
-        db.add_all(
-            [
-                PipelineStage(
-                    pipeline_id=pipeline.id,
-                    stage_key=_normalize_stage_key(stage.get("stage_key") or stage["slug"]),
-                    slug=stage["slug"],
-                    label=stage["label"],
-                    color=stage["color"],
-                    order=stage["order"],
-                    stage_type=stage["stage_type"],
-                    semantics=default_stage_semantics(
-                        _normalize_stage_key(stage.get("stage_key") or stage["slug"]),
-                        stage["stage_type"],
-                        normalized_entity_type,
-                    ),
-                    is_intake_stage=stage["stage_type"] == "intake",
-                    is_active=True,
-                )
-                for stage in stage_defs
-            ]
-        )
+        normalized_stage_keys = {
+            _normalize_stage_key(stage.get("stage_key") or stage["slug"]) for stage in stage_defs
+        }
+        if stage_ids_by_key is not None and set(stage_ids_by_key) != normalized_stage_keys:
+            raise ValueError("explicit stage identity must cover the exact default stage set")
+        stage_rows = []
+        for stage in stage_defs:
+            stage_key = _normalize_stage_key(stage.get("stage_key") or stage["slug"])
+            stage_values = {
+                "pipeline_id": pipeline.id,
+                "stage_key": stage_key,
+                "slug": stage["slug"],
+                "label": stage["label"],
+                "color": stage["color"],
+                "order": stage["order"],
+                "stage_type": stage["stage_type"],
+                "semantics": default_stage_semantics(
+                    stage_key,
+                    stage["stage_type"],
+                    normalized_entity_type,
+                ),
+                "is_intake_stage": stage["stage_type"] == "intake",
+                "is_active": True,
+            }
+            if stage_ids_by_key is not None:
+                stage_values["id"] = stage_ids_by_key[stage_key]
+            stage_rows.append(PipelineStage(**stage_values))
+        db.add_all(stage_rows)
         db.flush()
         _validate_pipeline_configuration(db, pipeline)
 
@@ -685,6 +701,21 @@ def get_or_create_default_pipeline(
         db.commit()
         db.refresh(pipeline)
         return pipeline
+
+    if pipeline_id is not None and pipeline.id != pipeline_id:
+        raise ValueError(
+            "existing default pipeline identity does not match explicit fixture identity"
+        )
+    if stage_ids_by_key is not None:
+        existing_stage_ids = {
+            _normalize_stage_key(stage.stage_key or stage.slug): stage.id
+            for stage in pipeline.stages
+            if not stage.deleted_at
+        }
+        if existing_stage_ids != dict(stage_ids_by_key):
+            raise ValueError(
+                "existing default stage identity does not match explicit fixture identity"
+            )
 
     legacy_requires_full_default_sync = (
         not isinstance(pipeline.feature_config, dict) or not pipeline.feature_config

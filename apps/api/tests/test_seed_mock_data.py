@@ -34,21 +34,18 @@ def test_queryproof_seed_freezes_clock_and_entity_ids(monkeypatch) -> None:
     )
 
 
-def test_queryproof_seed_stabilizes_pipeline_stage_ids(monkeypatch) -> None:
+def test_queryproof_seed_stabilizes_initial_pipeline_identity(monkeypatch) -> None:
     monkeypatch.setenv("QUERYPROOF_MODE", "deterministic")
     organization_id = uuid.UUID("00000000-0000-5000-8000-000000000201")
-    stages = [
-        SimpleNamespace(id=uuid.uuid4(), stage_key="new", slug="new", order=1),
-        SimpleNamespace(id=uuid.uuid4(), stage_key="qualified", slug="qualified", order=3),
-    ]
-
-    seed_mock_data._stabilize_queryproof_pipeline_stage_ids(organization_id, stages)
-
-    assert stages[0].id == seed_mock_data._seed_entity_uuid(
-        "pipeline-stage:new", organization_id, 1
+    pipeline_id, stage_ids = seed_mock_data._queryproof_pipeline_identity(
+        organization_id,
+        "surrogate",
     )
-    assert stages[1].id == seed_mock_data._seed_entity_uuid(
-        "pipeline-stage:qualified", organization_id, 3
+
+    assert pipeline_id == seed_mock_data._seed_entity_uuid("pipeline:surrogate", organization_id, 0)
+    assert stage_ids is not None
+    assert stage_ids["new_unread"] == seed_mock_data._seed_entity_uuid(
+        "pipeline-stage:surrogate:new_unread", organization_id, 1
     )
 
 

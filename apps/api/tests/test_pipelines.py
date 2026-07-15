@@ -144,6 +144,25 @@ async def test_list_pipelines_authed(authed_client: AsyncClient):
     assert isinstance(response.json(), list)
 
 
+def test_default_pipeline_accepts_explicit_fixture_identity(db, test_org, test_user):
+    pipeline_id = uuid.UUID("00000000-0000-5000-8000-000000000401")
+    stage_ids = {
+        stage["stage_key"]: uuid.uuid5(pipeline_id, stage["stage_key"])
+        for stage in get_default_stage_defs("surrogate")
+    }
+
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        pipeline_id=pipeline_id,
+        stage_ids_by_key=stage_ids,
+    )
+
+    assert pipeline.id == pipeline_id
+    assert {stage.stage_key: stage.id for stage in pipeline.stages} == stage_ids
+
+
 def test_get_or_create_default_pipeline_prunes_legacy_feature_config_refs(db, test_org):
     pipeline = Pipeline(
         id=uuid.uuid4(),
