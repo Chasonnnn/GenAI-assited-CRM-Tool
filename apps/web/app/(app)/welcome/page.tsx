@@ -46,6 +46,11 @@ type WelcomeFormData = z.infer<typeof welcomeSchema>
  * After completing the form, redirects to the dashboard.
  */
 export default function WelcomePage() {
+    const { user } = useAuth()
+    return <WelcomePageContent key={user ? user.user_id || "loaded" : "loading"} />
+}
+
+function WelcomePageContent() {
     "use no memo"
 
     const { push, replace } = useRouter()
@@ -55,7 +60,6 @@ export default function WelcomePage() {
     const {
         register,
         handleSubmit,
-        reset,
         formState: { errors },
     } = useForm<WelcomeFormData>({
         resolver: zodResolver(welcomeSchema),
@@ -96,16 +100,6 @@ export default function WelcomePage() {
             replace("/dashboard")
         }
     }, [user, replace])
-
-    useEffect(() => {
-        if (user) {
-            reset({
-                display_name: user.display_name || "",
-                title: user.title || "",
-                phone: user.phone || "",
-            })
-        }
-    }, [user, reset])
 
     if (user?.profile_complete) {
         return null
