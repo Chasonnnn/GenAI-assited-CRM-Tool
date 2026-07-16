@@ -310,6 +310,18 @@ describe('TasksPage', () => {
         })
     })
 
+    it('clears selected tasks when the task scope changes', () => {
+        render(<TasksPage />)
+
+        fireEvent.click(screen.getByLabelText('Select task Follow up with surrogate'))
+        expect(screen.getByRole('button', { name: 'Complete selected' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'All Tasks' }))
+
+        expect(screen.getByRole('button', { name: 'Complete selected' })).toBeDisabled()
+        expect(screen.getByLabelText('Select task Follow up with surrogate')).not.toBeChecked()
+    })
+
     it('updates AI context directly from the task editor lifecycle', () => {
         render(<TasksPage />)
 
