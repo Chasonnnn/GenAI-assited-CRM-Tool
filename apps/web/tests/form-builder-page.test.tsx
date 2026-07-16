@@ -181,6 +181,42 @@ describe("FormBuilderPage", () => {
         expect(templateSelect).not.toHaveTextContent("none")
     })
 
+    it("waits for the routed form response before hydrating the builder draft", async () => {
+        const buildForm = (id: string, name: string): FormRead => ({
+            id,
+            name,
+            status: "draft",
+            purpose: "surrogate_application",
+            created_at: "2026-07-16T00:00:00Z",
+            updated_at: "2026-07-16T00:00:00Z",
+            description: null,
+            form_schema: {
+                pages: [{ title: `${name} Page`, fields: [] }],
+            },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+        })
+        const formA = buildForm("form-a", "Form A")
+        const formB = buildForm("form-b", "Form B")
+
+        navigationState.formId = formA.id
+        mockUseForm.mockReturnValue({ data: formA, isLoading: false })
+        const view = render(<FormBuilderPage />)
+        expect(await screen.findByLabelText("Form name")).toHaveValue("Form A")
+
+        navigationState.formId = formB.id
+        mockUseForm.mockReturnValue({ data: formA, isLoading: false })
+        view.rerender(<FormBuilderPage />)
+
+        mockUseForm.mockReturnValue({ data: formB, isLoading: false })
+        view.rerender(<FormBuilderPage />)
+
+        expect(await screen.findByLabelText("Form name")).toHaveValue("Form B")
+    })
+
     it("blocks publishing shared intake forms without all identity mappings", async () => {
         render(<FormBuilderPage />)
 

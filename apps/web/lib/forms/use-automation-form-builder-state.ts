@@ -11,6 +11,8 @@ type AutoSaveStatus = "idle" | "saving" | "saved" | "error"
 type PreviewDevice = "desktop" | "mobile"
 
 type AutomationBuilderState = {
+    baselineFormKey: string | null
+    formKey: string
     hasHydrated: boolean
     formName: string
     formDescription: string
@@ -48,15 +50,18 @@ type AutomationBuilderState = {
 
 type AutomationBuilderAction =
     | { type: "patch"; payload: Partial<AutomationBuilderState> }
-    | { type: "reset_for_form"; payload: { isNewForm: boolean } }
+    | { type: "reset_for_form"; payload: { formKey: string; isNewForm: boolean } }
     | {
         type: "hydrate_from_form"
         payload: {
             form: FormRead
+            orgLogoPath: string
         }
     }
 
-const buildInitialState = (isNewForm: boolean): AutomationBuilderState => ({
+const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuilderState => ({
+    baselineFormKey: null,
+    formKey,
     hasHydrated: isNewForm,
     formName: isNewForm ? "" : "Surrogate Application Form",
     formDescription: "",
@@ -97,10 +102,13 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
         case "patch":
             return { ...state, ...action.payload }
         case "reset_for_form":
-            return buildInitialState(action.payload.isNewForm)
+            return buildInitialState(action.payload.formKey, action.payload.isNewForm)
         case "hydrate_from_form": {
             const schema = action.payload.form.form_schema ?? action.payload.form.published_schema ?? null
             const metadata = schemaToMetadata(schema)
+            const isOrgLogo =
+                Boolean(action.payload.orgLogoPath) &&
+                metadata.logoUrl === action.payload.orgLogoPath
             return {
                 ...state,
                 hasHydrated: true,
@@ -119,6 +127,8 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
                     : "",
                 defaultTemplateId: action.payload.form.default_application_email_template_id ?? "",
                 isPublished: action.payload.form.status === "published",
+                useOrgLogo: isOrgLogo,
+                customLogoUrl: isOrgLogo ? "" : metadata.logoUrl,
             }
         }
         default:
@@ -126,20 +136,25 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
     }
 }
 
-export function useAutomationFormBuilderState(isNewForm: boolean) {
-    const [state, dispatch] = useReducer(reducer, buildInitialState(isNewForm))
+export function useAutomationFormBuilderState(formKey: string, isNewForm: boolean) {
+    const [state, dispatch] = useReducer(reducer, buildInitialState(formKey, isNewForm))
 
     const [patchState] = useState(() => (payload: Partial<AutomationBuilderState>) => {
         dispatch({ type: "patch", payload })
     })
 
-    const [resetForForm] = useState(() => (nextIsNewForm: boolean) => {
-        dispatch({ type: "reset_for_form", payload: { isNewForm: nextIsNewForm } })
+    const [resetForForm] = useState(() => (nextFormKey: string, nextIsNewForm: boolean) => {
+        dispatch({
+            type: "reset_for_form",
+            payload: { formKey: nextFormKey, isNewForm: nextIsNewForm },
+        })
     })
 
-    const [hydrateFromForm] = useState(() => (payload: { form: FormRead }) => {
-        dispatch({ type: "hydrate_from_form", payload })
-    })
+    const [hydrateFromForm] = useState(
+        () => (payload: { form: FormRead; orgLogoPath: string }) => {
+            dispatch({ type: "hydrate_from_form", payload })
+        },
+    )
 
     return {
         state,
