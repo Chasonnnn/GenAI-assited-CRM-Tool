@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 76 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 47 production `useEffect` calls remain.
+- 77 **REPLACE** Effects removed; 43 **CONTAIN** call sites consolidated behind twenty-four tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 46 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -53,6 +53,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - The global AI assistant keyboard shortcut now lives in a tested window-listener hook that uses `useEffectEvent` for the latest toggle callback and owns key filtering, default prevention, enabled gating, and cleanup.
 - The task editor sets and clears AI context directly in its open and close events instead of relaying `editingTask` state through an Effect.
 - Task deep-link scrolling and focus-reset behavior now share one tested `useTaskFocusNavigation` browser synchronization boundary.
+- Task selections now clear in the scope-change event and derive from currently visible rows, so stale or removed task IDs cannot keep bulk completion enabled without a pruning Effect.
 - Agency detail data, organization alerts, and platform email status now use stable TanStack Query keys, preserving fresh route data and avoiding duplicate requests across tab changes and remounts.
 - The unused carousel `setApi` relay and no-op Embla subscriptions were removed; keyboard navigation remains event-driven with no carousel Effects.
 - Interview detail polling is owned by the detail query and runs only while a selected attachment reports pending or processing transcription.
