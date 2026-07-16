@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { createContext, use, useState, useRef, useEffect } from "react"
+import { createContext, use, useState, useRef } from "react"
 import { toast } from "@/components/ui/toast"
 import {
     useInterviews,
@@ -329,9 +329,14 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
 
     // Data fetching
     const { data: interviews = [], isLoading } = useInterviews(surrogateId)
-    const { data: selectedInterview, refetch: refetchInterview } = useInterview(selectedId || "")
-    const { data: notes = [] } = useInterviewNotes(selectedId || "")
     const { data: attachments = [] } = useInterviewAttachments(selectedId || "")
+    const hasPendingTranscription = attachments.some((attachment) =>
+        ["pending", "processing"].includes(attachment.transcription_status || "")
+    )
+    const { data: selectedInterview } = useInterview(selectedId || "", {
+        pollWhileTranscribing: !!selectedId && hasPendingTranscription,
+    })
+    const { data: notes = [] } = useInterviewNotes(selectedId || "")
 
     // Mutations
     const createInterviewMutation = useCreateInterview()
@@ -346,19 +351,6 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     const canEdit = user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false
     const canDelete = user?.role ? ["admin", "developer"].includes(user.role) : false
     const canEditNotes = !!user
-
-    // Poll for transcription status
-    useEffect(() => {
-        if (!selectedId || !attachments.length) return
-        const hasPending = attachments.some((att) =>
-            ["pending", "processing"].includes(att.transcription_status || "")
-        )
-        if (!hasPending) return
-        const interval = setInterval(() => {
-            void refetchInterview()
-        }, 5000)
-        return () => clearInterval(interval)
-    }, [attachments, refetchInterview, selectedId])
 
     // Selection
     const selectInterview = (id: string | null) => {

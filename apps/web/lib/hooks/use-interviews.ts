@@ -47,11 +47,16 @@ export function useInterviews(surrogateId: string) {
 /**
  * Get interview details.
  */
-export function useInterview(interviewId: string) {
+export function useInterview(
+    interviewId: string,
+    options: { pollWhileTranscribing?: boolean } = {},
+) {
     return useQuery({
         queryKey: interviewKeys.detail(interviewId),
         queryFn: () => interviewsApi.getInterview(interviewId),
         enabled: !!interviewId,
+        refetchInterval: options.pollWhileTranscribing ? 5_000 : false,
+        refetchIntervalInBackground: options.pollWhileTranscribing ?? false,
     });
 }
 
