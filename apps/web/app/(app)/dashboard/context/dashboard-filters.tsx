@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, use, useEffect, useReducer, type ReactNode } from "react"
+import { createContext, use, useReducer, type ReactNode } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { DateRangePreset } from "@/components/ui/date-range-picker"
@@ -22,12 +22,17 @@ interface DashboardFilters {
     assigneeId?: string | undefined
 }
 
+interface DashboardFiltersState {
+    sourceKey: string
+    filters: DashboardFilters
+}
+
 type DashboardFiltersAction =
     | { type: "setDateRange"; preset: DateRangePreset }
     | { type: "setCustomRange"; range: DateRange }
     | { type: "setAssigneeId"; assigneeId: string | undefined }
-    | { type: "reset" }
-    | { type: "syncFromUrl"; filters: DashboardFilters }
+    | { type: "reset"; filters: DashboardFilters }
+    | { type: "syncFromUrl"; sourceKey: string; filters: DashboardFilters }
 
 type SearchParamReader = {
     get(name: string): string | null
@@ -88,6 +93,14 @@ const filtersEqual = (left: DashboardFilters, right: DashboardFilters) =>
     datesEqual(left.customRange.from, right.customRange.from) &&
     datesEqual(left.customRange.to, right.customRange.to)
 
+function getDashboardFilterSourceKey(
+    currentQuery: string,
+    userId: string | undefined,
+    role: string | undefined,
+) {
+    return `${currentQuery}\u0000${userId ?? ""}\u0000${role ?? ""}`
+}
+
 function readDashboardFiltersFromSearchParams(
     searchParams: SearchParamReader,
     userId: string | undefined,
@@ -109,24 +122,40 @@ function readDashboardFiltersFromSearchParams(
 }
 
 function dashboardFiltersReducer(
-    state: DashboardFilters,
+    state: DashboardFiltersState,
     action: DashboardFiltersAction,
-): DashboardFilters {
+): DashboardFiltersState {
     switch (action.type) {
         case "setDateRange":
             return {
                 ...state,
-                dateRange: action.preset,
-                customRange: action.preset === "custom" ? state.customRange : emptyDateRange(),
+                filters: {
+                    ...state.filters,
+                    dateRange: action.preset,
+                    customRange:
+                        action.preset === "custom"
+                            ? state.filters.customRange
+                            : emptyDateRange(),
+                },
             }
         case "setCustomRange":
-            return { ...state, dateRange: "custom", customRange: action.range }
+            return {
+                ...state,
+                filters: { ...state.filters, dateRange: "custom", customRange: action.range },
+            }
         case "setAssigneeId":
-            return { ...state, assigneeId: action.assigneeId }
+            return {
+                ...state,
+                filters: { ...state.filters, assigneeId: action.assigneeId },
+            }
         case "reset":
-            return { dateRange: "all", customRange: emptyDateRange(), assigneeId: undefined }
+            return filtersEqual(state.filters, action.filters)
+                ? state
+                : { ...state, filters: action.filters }
         case "syncFromUrl":
-            return filtersEqual(state, action.filters) ? state : action.filters
+            return state.sourceKey === action.sourceKey && filtersEqual(state.filters, action.filters)
+                ? state
+                : { sourceKey: action.sourceKey, filters: action.filters }
         default:
             return state
     }
@@ -159,10 +188,32 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
     const searchParams = useSearchParams()
     const { push, replace } = useRouter()
     const currentQuery = searchParams.toString()
-    const [filters, dispatchFilters] = useReducer(
-        dashboardFiltersReducer,
-        readDashboardFiltersFromSearchParams(searchParams, user?.user_id, user?.role),
+    const filterSourceKey = getDashboardFilterSourceKey(
+        currentQuery,
+        user?.user_id,
+        user?.role,
     )
+    const urlFilters = readDashboardFiltersFromSearchParams(
+        searchParams,
+        user?.user_id,
+        user?.role,
+    )
+    const [filterState, dispatchFilters] = useReducer(
+        dashboardFiltersReducer,
+        {
+            sourceKey: filterSourceKey,
+            filters: urlFilters,
+        },
+    )
+    if (filterState.sourceKey !== filterSourceKey) {
+        dispatchFilters({
+            type: "syncFromUrl",
+            sourceKey: filterSourceKey,
+            filters: urlFilters,
+        })
+    }
+    const filters =
+        filterState.sourceKey === filterSourceKey ? filterState.filters : urlFilters
     const { dateRange, customRange, assigneeId } = filters
 
     // Sync state changes back to URL
@@ -228,17 +279,16 @@ export function DashboardFiltersProvider({ children }: DashboardFiltersProviderP
 
     // Reset all filters
     const resetFilters = () => {
-        dispatchFilters({ type: "reset" })
+        dispatchFilters({
+            type: "reset",
+            filters: readDashboardFiltersFromSearchParams(
+                new URLSearchParams(),
+                user?.user_id,
+                user?.role,
+            ),
+        })
         replace("/dashboard", { scroll: false })
     }
-
-    // Sync URL changes back to state (e.g., browser back/forward)
-    useEffect(() => {
-        dispatchFilters({
-            type: "syncFromUrl",
-            filters: readDashboardFiltersFromSearchParams(searchParams, user?.user_id, user?.role),
-        })
-    }, [currentQuery, searchParams, user?.role, user?.user_id])
 
     // Compute date params for API calls
     const getDateParams = (): { from_date?: string; to_date?: string } => {

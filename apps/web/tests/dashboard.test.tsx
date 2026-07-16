@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from "react"
 import * as React from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ApiError } from '@/lib/api'
 import { formatLocalDate } from '@/lib/utils/date'
 import DashboardPage from '../app/(app)/dashboard/page'
@@ -336,6 +336,50 @@ describe('DashboardPage', () => {
         const upcomingCalls = mockUseUpcoming.mock.calls.map((call) => call[0] as Record<string, unknown>)
         expect(upcomingCalls.length).toBeGreaterThan(0)
         expect(upcomingCalls[0].assignee_id).toBe('user-1')
+    })
+
+    it('uses browser-navigation assignee filters before issuing new dashboard requests', async () => {
+        mockUseSearchParams.mockReturnValue(new URLSearchParams('assignee=user-1'))
+
+        const { rerender } = render(<DashboardPage />)
+        await screen.findByText('Surrogates Trend')
+
+        mockUseSurrogateStats.mockClear()
+        mockUseSurrogatesTrend.mockClear()
+        mockUseSurrogatesByStatus.mockClear()
+        mockUseAttention.mockClear()
+        mockUseUpcoming.mockClear()
+        mockUseSearchParams.mockReturnValue(new URLSearchParams('assignee=user-2'))
+
+        rerender(<DashboardPage />)
+
+        await waitFor(() => {
+            const calls = mockUseSurrogateStats.mock.calls
+                .map((call) => call[0] as Record<string, unknown> | undefined)
+                .filter((params): params is Record<string, unknown> => params !== undefined)
+            expect(calls.some((params) => params.owner_id === 'user-2')).toBe(true)
+        })
+
+        for (const [params] of mockUseSurrogateStats.mock.calls) {
+            if (!params) continue
+            expect((params as Record<string, unknown>).owner_id).toBe('user-2')
+        }
+        for (const [params] of mockUseSurrogatesTrend.mock.calls) {
+            if (!params) continue
+            expect((params as Record<string, unknown>).owner_id).toBe('user-2')
+        }
+        for (const [params] of mockUseSurrogatesByStatus.mock.calls) {
+            if (!params) continue
+            expect((params as Record<string, unknown>).owner_id).toBe('user-2')
+        }
+        for (const [params] of mockUseAttention.mock.calls) {
+            if (!params) continue
+            expect((params as Record<string, unknown>).assignee_id).toBe('user-2')
+        }
+        for (const [params] of mockUseUpcoming.mock.calls) {
+            if (!params) continue
+            expect((params as Record<string, unknown>).assignee_id).toBe('user-2')
+        }
     })
 
     it('formats KPI deltas without percent when values drop to zero', () => {
