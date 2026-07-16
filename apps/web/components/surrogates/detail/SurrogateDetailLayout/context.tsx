@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import type { Route } from "next"
-import { createContext, use, useState, useRef, useEffect, useEffectEvent } from "react"
-import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
+import { createContext, use, useState, useRef, useEffect } from "react"
+import { redirect, useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 import {
     useSurrogate,
@@ -282,24 +282,21 @@ function useSurrogateDetailTabNavigation({
 
     const isTabValue = (value: string | null): value is TabValue =>
         !!value && allowedTabs.includes(value as TabValue)
+    const basePath = `/surrogates/${surrogateId}`
+    const getTabUrl = (tab: TabValue) => {
+        const nextPath = tab === "overview" ? basePath : `${basePath}/${tab}`
+        return appendSearchToPath(nextPath, detailSearch)
+    }
+
+    if (segment === "overview" || (segment && !isTabValue(segment))) {
+        redirect(getTabUrl("overview") as Route)
+    }
 
     const handleTabChange = (value: string) => {
         const nextTab: TabValue = isTabValue(value) ? value : "overview"
-        const basePath = `/surrogates/${surrogateId}`
-        const nextPath = nextTab === "overview" ? basePath : `${basePath}/${nextTab}`
-        const nextUrl = appendSearchToPath(nextPath, detailSearch)
+        const nextUrl = getTabUrl(nextTab)
         replace(nextUrl as Route, { scroll: false })
     }
-
-    const normalizeInvalidTab = useEffectEvent((value: string | null) => {
-        if (value === "overview" || (value && !isTabValue(value))) {
-            handleTabChange("overview")
-        }
-    })
-
-    useEffect(() => {
-        normalizeInvalidTab(segment)
-    }, [segment])
 
     const tabsValue: SurrogateDetailTabsContextValue = {
         currentTab: isTabValue(segment) ? segment : "overview",
