@@ -441,6 +441,17 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("SmileIcon")
     })
 
+    it("keeps transcript JSON synchronization behind a tested editor boundary", () => {
+        const source = readSource("components/surrogates/interviews/TranscriptEditor.tsx")
+        const contentSyncSource = readSource("lib/hooks/use-sync-tiptap-json-content.ts")
+
+        expect(source).toContain("useSyncTipTapJsonContent(editor, content)")
+        expect(source).not.toContain("useEffect")
+        expect(contentSyncSource).toContain("const nextContent = content ?? EMPTY_TIPTAP_DOCUMENT")
+        expect(contentSyncSource).toContain("editor.commands.setContent(nextContent)")
+        expect(contentSyncSource).toContain("}, [content, editor])")
+    })
+
     it("keeps safe HTML parsing and sanitization free of manual React memoization", () => {
         const source = readSource("components/safe-html-content.tsx")
 
