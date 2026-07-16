@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { renderToString } from 'react-dom/server'
 import WelcomePage from '../app/(app)/welcome/page'
 
 const mocks = vi.hoisted(() => ({
+    redirect: vi.fn(),
     replace: vi.fn(),
     push: vi.fn(),
     useAuth: vi.fn(),
@@ -10,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('next/navigation', () => ({
+    redirect: (path: string) => mocks.redirect(path),
     useRouter: () => ({
         replace: mocks.replace,
         push: mocks.push,
@@ -35,13 +38,14 @@ vi.mock('@/components/ui/toast', () => ({
 
 describe('WelcomePage', () => {
     beforeEach(() => {
+        mocks.redirect.mockReset()
         mocks.replace.mockReset()
         mocks.push.mockReset()
         mocks.patchProfile.mockReset()
         mocks.useAuth.mockReset()
     })
 
-    it('redirects to dashboard when profile is complete', async () => {
+    it('redirects to dashboard during the initial render when profile is complete', () => {
         mocks.useAuth.mockReturnValue({
             user: {
                 profile_complete: true,
@@ -52,11 +56,10 @@ describe('WelcomePage', () => {
             refetch: vi.fn(),
         })
 
-        render(<WelcomePage />)
+        renderToString(<WelcomePage />)
 
-        await waitFor(() => {
-            expect(mocks.replace).toHaveBeenCalledWith('/dashboard')
-        })
+        expect(mocks.redirect).toHaveBeenCalledWith('/dashboard')
+        expect(mocks.replace).not.toHaveBeenCalled()
     })
 
     it('renders the profile completion form when profile is incomplete', () => {
