@@ -5,6 +5,11 @@ import type { ImgHTMLAttributes } from "react"
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
 
 const mockPush = vi.fn()
+const mockReplace = vi.fn()
+const mockCreateForm = vi.fn()
+const mockSetFormMappings = vi.fn()
+const mockPublishForm = vi.fn()
+const mockRefetchIntakeLinks = vi.fn()
 const { toastError } = vi.hoisted(() => ({
     toastError: vi.fn(),
 }))
@@ -13,7 +18,7 @@ vi.mock("next/navigation", () => ({
     useParams: () => ({ id: "new" }),
     useRouter: () => ({
         push: mockPush,
-        replace: vi.fn(),
+        replace: mockReplace,
     }),
 }))
 
@@ -56,16 +61,16 @@ vi.mock("@/lib/hooks/use-signature", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-forms", () => ({
-    useCreateForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
     useForm: () => ({ data: undefined, isLoading: false }),
     useFormEmbedHealth: () => ({ data: null, isFetching: false, refetch: vi.fn() }),
-    useFormIntakeLinks: () => ({ data: [], refetch: vi.fn() }),
+    useFormIntakeLinks: () => ({ data: [], refetch: mockRefetchIntakeLinks }),
     useFormSubmissions: () => ({ data: [], refetch: vi.fn(), isLoading: false }),
     useFormMappings: () => ({ data: [], isLoading: false }),
-    usePublishForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    usePublishForm: () => ({ mutateAsync: mockPublishForm, isPending: false }),
     useRetrySubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useResolveSubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useSetFormMappings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSetFormMappings: () => ({ mutateAsync: mockSetFormMappings, isPending: false }),
     useSetDefaultSurrogateApplicationForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSubmissionMatchCandidates: () => ({ data: [], isLoading: false }),
     usePromoteIntakeLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -78,7 +83,42 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 describe("FormBuilderPage", () => {
     beforeEach(() => {
         mockPush.mockReset()
+        mockReplace.mockReset()
+        mockCreateForm.mockReset()
+        mockSetFormMappings.mockReset()
+        mockPublishForm.mockReset()
+        mockRefetchIntakeLinks.mockReset()
         toastError.mockReset()
+        mockCreateForm.mockResolvedValue({
+            id: "form-1",
+            name: "Published Intake",
+            status: "draft",
+            updated_at: "2026-07-16T00:00:00Z",
+        })
+        mockSetFormMappings.mockResolvedValue([])
+        mockPublishForm.mockResolvedValue({
+            id: "form-1",
+            status: "published",
+        })
+        mockRefetchIntakeLinks.mockResolvedValue({
+            data: [
+                {
+                    id: "link-1",
+                    form_id: "form-1",
+                    slug: "published-intake",
+                    is_active: true,
+                    submissions_count: 0,
+                    embed_enabled: false,
+                    allowed_embed_origins: [],
+                    tracking_mode: "enhanced_match_lead",
+                    thank_you_config: {},
+                    embed_theme_json: {},
+                    intake_url: "https://example.test/intake/published-intake",
+                    created_at: "2026-07-16T00:00:00Z",
+                    updated_at: "2026-07-16T00:00:00Z",
+                },
+            ],
+        })
     })
 
     it("uses design-system tab controls for workspace sections and a dedicated settings tab", () => {
@@ -134,6 +174,28 @@ describe("FormBuilderPage", () => {
         expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Date of Birth"))
         expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Phone"))
         expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+    })
+
+    it("opens sharing from the link returned by a successful publish", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.change(screen.getByLabelText("Form name"), {
+            target: { value: "Published Intake" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Email field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Phone field" }))
+        fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add preset Date of Birth field" }))
+
+        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
+        fireEvent.click(
+            await screen.findByRole("button", { name: /^publish$/i }),
+        )
+
+        expect(
+            await screen.findByRole("heading", { name: "Share Application Intake" }),
+        ).toBeInTheDocument()
     })
 
     it("renders human-readable labels for inspector dropdown triggers", async () => {
