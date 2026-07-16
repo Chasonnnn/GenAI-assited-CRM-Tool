@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,12 +42,10 @@ type IntelligentSuggestionRuleDraft = {
 
 type IntelligentSuggestionsState = {
   settings: IntelligentSuggestionSettings | null
-  templates: IntelligentSuggestionTemplate[]
-  rules: IntelligentSuggestionRule[]
+  rules: IntelligentSuggestionRule[] | null
   newRuleDraft: IntelligentSuggestionRuleDraft | null
   editingRuleId: string | null
   editingRuleDraft: IntelligentSuggestionRuleDraft | null
-  loading: boolean
   saving: boolean
   ruleSaving: boolean
   saved: boolean
@@ -65,12 +64,10 @@ type PipelineLike = {
   stages?: ReadonlyArray<PipelineStageLike | Record<string, unknown>> | null
 }
 
-type LoadedIntelligentSuggestions = {
-  settings: IntelligentSuggestionSettings
-  templates: IntelligentSuggestionTemplate[]
-  rules: IntelligentSuggestionRule[]
-  newRuleDraft: IntelligentSuggestionRuleDraft | null
-}
+const INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY = ["settings", "intelligent-suggestions"] as const
+const INTELLIGENT_SUGGESTION_TEMPLATES_QUERY_KEY = ["settings", "intelligent-suggestions", "templates"] as const
+const INTELLIGENT_SUGGESTION_RULES_QUERY_KEY = ["settings", "intelligent-suggestions", "rules"] as const
+const INTELLIGENT_SUGGESTIONS_STALE_TIME_MS = 30_000
 
 function resolveStateUpdate<T>(updater: React.SetStateAction<T>, current: T): T {
   return typeof updater === "function"
@@ -174,25 +171,6 @@ function buildRuleDraft(
 function formatStageLabel(stageLabelByRef: Map<string, string>, stageRef: string | null | undefined): string {
   if (!stageRef) return "N/A"
   return stageLabelByRef.get(stageRef) ?? "Unknown stage"
-}
-
-async function loadIntelligentSuggestionData(
-  stageOptions: StageOption[],
-): Promise<LoadedIntelligentSuggestions> {
-  const [settingsResponse, templatesResponse, rulesResponse] = await Promise.all([
-    getIntelligentSuggestionSettings(),
-    getIntelligentSuggestionTemplates(),
-    getIntelligentSuggestionRules(),
-  ])
-  const templateSeed = templatesResponse.find((template) => template.is_default) ?? templatesResponse[0]
-  return {
-    settings: settingsResponse,
-    templates: templatesResponse,
-    rules: rulesResponse,
-    newRuleDraft: templateSeed
-      ? buildRuleDraft(templateSeed, (rulesResponse.at(-1)?.sort_order ?? 0) + 1, stageOptions)
-      : null,
-  }
 }
 
 function SuggestionStageInput({
@@ -602,57 +580,93 @@ function DailyDigestSettingsCard({
 function useIntelligentSuggestionsController() {
   const [suggestionState, setSuggestionState] = useState<IntelligentSuggestionsState>({
     settings: null,
-    templates: [],
-    rules: [],
+    rules: null,
     newRuleDraft: null,
     editingRuleId: null,
     editingRuleDraft: null,
-    loading: true,
     saving: false,
     ruleSaving: false,
     saved: false,
     error: null,
   })
   const { data: pipelines } = usePipelines()
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({
+    queryKey: INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY,
+    queryFn: getIntelligentSuggestionSettings,
+    staleTime: INTELLIGENT_SUGGESTIONS_STALE_TIME_MS,
+  })
+  const templatesQuery = useQuery({
+    queryKey: INTELLIGENT_SUGGESTION_TEMPLATES_QUERY_KEY,
+    queryFn: getIntelligentSuggestionTemplates,
+    staleTime: INTELLIGENT_SUGGESTIONS_STALE_TIME_MS,
+  })
+  const rulesQuery = useQuery({
+    queryKey: INTELLIGENT_SUGGESTION_RULES_QUERY_KEY,
+    queryFn: getIntelligentSuggestionRules,
+    staleTime: INTELLIGENT_SUGGESTIONS_STALE_TIME_MS,
+  })
   const {
-    settings,
-    templates,
-    rules,
-    newRuleDraft,
+    settings: settingsOverride,
+    rules: rulesOverride,
+    newRuleDraft: newRuleDraftOverride,
     editingRuleId,
     editingRuleDraft,
-    loading,
     saving,
     ruleSaving,
     saved,
-    error,
+    error: localError,
   } = suggestionState
+
+  const stageOptions = buildStageOptions(pipelines)
+  const hasLoadedData =
+    settingsQuery.data !== undefined &&
+    templatesQuery.data !== undefined &&
+    rulesQuery.data !== undefined
+  const settings = hasLoadedData ? settingsOverride ?? settingsQuery.data : null
+  const templates = hasLoadedData ? templatesQuery.data : []
+  const rules = hasLoadedData ? rulesOverride ?? rulesQuery.data : []
+  const templateSeed = templates.find((template) => template.is_default) ?? templates[0]
+  const defaultNewRuleDraft = templateSeed
+    ? buildRuleDraft(templateSeed, (rules.at(-1)?.sort_order ?? 0) + 1, stageOptions)
+    : null
+  const newRuleDraft = newRuleDraftOverride ?? defaultNewRuleDraft
+  const loading =
+    settingsQuery.isLoading ||
+    templatesQuery.isLoading ||
+    rulesQuery.isLoading
+  const hasLoadError =
+    settingsQuery.isError ||
+    templatesQuery.isError ||
+    rulesQuery.isError
+  const error = localError ?? (hasLoadError ? "Unable to load settings. Please retry." : null)
 
   const setSettings = (updater: React.SetStateAction<IntelligentSuggestionSettings | null>) => {
     setSuggestionState((current) => ({
       ...current,
-      settings: resolveStateUpdate(updater, current.settings),
-    }))
-  }
-
-  const setTemplates = (updater: React.SetStateAction<IntelligentSuggestionTemplate[]>) => {
-    setSuggestionState((current) => ({
-      ...current,
-      templates: resolveStateUpdate(updater, current.templates),
+      settings: resolveStateUpdate(updater, current.settings ?? settingsQuery.data ?? null),
     }))
   }
 
   const setRules = (updater: React.SetStateAction<IntelligentSuggestionRule[]>) => {
+    const queryRules = rulesQuery.data ?? []
     setSuggestionState((current) => ({
       ...current,
-      rules: resolveStateUpdate(updater, current.rules),
+      rules: resolveStateUpdate(updater, current.rules ?? queryRules),
     }))
+    queryClient.setQueryData<IntelligentSuggestionRule[]>(
+      INTELLIGENT_SUGGESTION_RULES_QUERY_KEY,
+      (current) => resolveStateUpdate(updater, current ?? queryRules),
+    )
   }
 
   const setNewRuleDraft = (updater: React.SetStateAction<IntelligentSuggestionRuleDraft | null>) => {
     setSuggestionState((current) => ({
       ...current,
-      newRuleDraft: resolveStateUpdate(updater, current.newRuleDraft),
+      newRuleDraft: resolveStateUpdate(
+        updater,
+        current.newRuleDraft ?? defaultNewRuleDraft,
+      ),
     }))
   }
 
@@ -667,13 +681,6 @@ function useIntelligentSuggestionsController() {
     setSuggestionState((current) => ({
       ...current,
       editingRuleDraft: resolveStateUpdate(updater, current.editingRuleDraft),
-    }))
-  }
-
-  const setLoading = (updater: React.SetStateAction<boolean>) => {
-    setSuggestionState((current) => ({
-      ...current,
-      loading: resolveStateUpdate(updater, current.loading),
     }))
   }
 
@@ -705,68 +712,18 @@ function useIntelligentSuggestionsController() {
     }))
   }
 
-  const stageOptions = buildStageOptions(pipelines)
   const stageLabelByRef = buildStageLabelByRef(stageOptions)
   const stageOptionByValue = buildStageOptionByValue(stageOptions)
   const templateByKey = buildTemplateByKey(templates)
 
   const loadSettings = async () => {
-    setLoading(true)
     setError(null)
-    try {
-      const loaded = await loadIntelligentSuggestionData(stageOptions)
-      setSettings(loaded.settings)
-      setTemplates(loaded.templates)
-      setRules(loaded.rules)
-      if (loaded.newRuleDraft) setNewRuleDraft(loaded.newRuleDraft)
-    } catch (loadError) {
-      console.error("Failed to load intelligent suggestion settings:", loadError)
-      setError("Unable to load settings. Please retry.")
-    }
-    setLoading(false)
+    await Promise.all([
+      settingsQuery.refetch(),
+      templatesQuery.refetch(),
+      rulesQuery.refetch(),
+    ])
   }
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadInitialSettings = async () => {
-      setSuggestionState((current) => ({
-        ...current,
-        loading: true,
-        error: null,
-      }))
-      try {
-        const loaded = await loadIntelligentSuggestionData(buildStageOptions(pipelines))
-        if (cancelled) return
-        setSuggestionState((current) => ({
-          ...current,
-          settings: loaded.settings,
-          templates: loaded.templates,
-          rules: loaded.rules,
-          newRuleDraft: loaded.newRuleDraft ?? current.newRuleDraft,
-        }))
-      } catch (loadError) {
-        if (cancelled) return
-        console.error("Failed to load intelligent suggestion settings:", loadError)
-        setSuggestionState((current) => ({
-          ...current,
-          error: "Unable to load settings. Please retry.",
-        }))
-      }
-      if (!cancelled) {
-        setSuggestionState((current) => ({
-          ...current,
-          loading: false,
-        }))
-      }
-    }
-
-    const timeoutId = window.setTimeout(() => void loadInitialSettings(), 0)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timeoutId)
-    }
-  }, [pipelines])
 
   const normalizedNewRuleDraft = (() => {
     if (!newRuleDraft) return null
@@ -794,6 +751,10 @@ function useIntelligentSuggestionsController() {
     try {
       const updated = await updateIntelligentSuggestionSettings(settings)
       setSettings(updated)
+      queryClient.setQueryData(
+        INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY,
+        updated,
+      )
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
       toast.success("Intelligent suggestion settings updated")

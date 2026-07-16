@@ -3415,7 +3415,12 @@ describe("React regression guards (source)", () => {
         const source = readSource("app/(app)/settings/intelligent-suggestions-section.tsx")
 
         expect(source).toContain("const normalizedNewRuleDraft =")
-        expect(source).toContain("window.setTimeout(() => void loadInitialSettings(), 0)")
+        expect(source).toContain("INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY")
+        expect(source).toContain("INTELLIGENT_SUGGESTION_TEMPLATES_QUERY_KEY")
+        expect(source).toContain("INTELLIGENT_SUGGESTION_RULES_QUERY_KEY")
+        expect(source).toContain("staleTime: INTELLIGENT_SUGGESTIONS_STALE_TIME_MS")
+        expect(source).not.toContain("window.setTimeout(() => void loadInitialSettings(), 0)")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("finally")
