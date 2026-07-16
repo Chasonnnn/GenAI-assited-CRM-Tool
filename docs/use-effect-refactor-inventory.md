@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 58 **REPLACE** Effects removed; 32 **CONTAIN** call sites consolidated behind thirteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 65 production `useEffect` calls remain.
+- 58 **REPLACE** Effects removed; 34 **CONTAIN** call sites consolidated behind fifteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 65 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -68,6 +68,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Signed-out and MFA-required app-shell users now redirect during the render boundary as well; protected children never mount first, and the existing ops return cookie/host semantics still select `/mfa?return_to=ops`.
 - Signed-out Duo callback visitors now route to app or ops login during rendering, while the authenticated callback verification remains the only external lifecycle in that page.
 - Authenticated Duo callback verification now lives in a tested named hook that owns URL parsing, attempt deduplication, the verification request, auth refresh, recovery-code state, unmount-safe late-response cleanup, storage cleanup, and post-MFA navigation.
+- Embedded public forms now keep parent-origin session handshakes and height reporting behind separate tested hooks; the page owns only form/query state while the hooks own message filtering, attribution sanitization, fallback timing, session deduplication, `ResizeObserver`, and all listener/timer/observer cleanup.
 - The unassigned-surrogates route now redirects unauthorized users during initial rendering and mounts queue and claim hooks only after the role boundary; authorized view analytics live in a tested named lifecycle hook and do not rerun on unrelated renders.
 - Campaign detail now consumes each URL-driven edit request once during render, so `?edit=1` still hydrates and opens the draft while an explicit Cancel remains closed instead of being immediately reopened by an Effect.
 - Controlled rich-text HTML now synchronizes with the external Tiptap editor through a tested named hook that updates changed content once and ignores matching rerenders.
