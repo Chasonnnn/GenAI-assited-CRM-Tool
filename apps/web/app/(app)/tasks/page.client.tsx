@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { startTransition, useState, useEffect } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
@@ -119,6 +119,7 @@ function useTasksPageController() {
 
     // Handle filter change
     const handleFilterChange = (newFilter: FilterType) => {
+        setSelectedTaskIds(new Set())
         setFilter(newFilter)
         updateUrlParams(newFilter)
     }
@@ -217,6 +218,14 @@ function useTasksPageController() {
 
     const { setContext: setAIContext, clearContext: clearAIContext } = useAIContext()
 
+    const visibleTaskIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
+    const visibleSelectedTaskIds = new Set<string>()
+    for (const taskId of selectedTaskIds) {
+        if (visibleTaskIds.has(taskId)) {
+            visibleSelectedTaskIds.add(taskId)
+        }
+    }
+
     const handleTaskClick = (task: TaskListItem) => {
         setAIContext({
             entityType: "task",
@@ -267,7 +276,7 @@ function useTasksPageController() {
     }
 
     const handleBulkCompleteSelected = async () => {
-        const taskIds = Array.from(selectedTaskIds)
+        const taskIds = Array.from(visibleSelectedTaskIds)
         if (taskIds.length === 0) return
         const result = await bulkCompleteTasks.mutateAsync(taskIds)
         setSelectedTaskIds(new Set())
@@ -327,25 +336,6 @@ function useTasksPageController() {
         loadingImportApprovals,
     })
 
-    useEffect(() => {
-        const visibleIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
-        startTransition(() => {
-            setSelectedTaskIds((prev) => {
-                if (prev.size === 0) return prev
-                let changed = false
-                const next = new Set<string>()
-                for (const taskId of prev) {
-                    if (visibleIds.has(taskId)) {
-                        next.add(taskId)
-                    } else {
-                        changed = true
-                    }
-                }
-                return changed ? next : prev
-            })
-        })
-    }, [incompleteTasks?.items])
-
     return {
         addTaskDialogOpen,
         addTaskPending: createTask.isPending || createTaskBatch.isPending,
@@ -374,7 +364,7 @@ function useTasksPageController() {
         pendingApprovals: pendingApprovals?.items ?? [],
         pendingImportApprovals: pendingImportApprovals ?? [],
         pendingStatusRequests: pendingStatusRequests?.items ?? [],
-        selectedTaskIds,
+        selectedTaskIds: visibleSelectedTaskIds,
         showCompleted,
         view: activeView,
         bulkCompletePending: bulkCompleteTasks.isPending,

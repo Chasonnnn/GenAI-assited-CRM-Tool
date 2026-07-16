@@ -4166,6 +4166,16 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
     })
 
+    it("keeps Tasks page selection owned by visible rows and scope events", () => {
+        const source = readSource("app/(app)/tasks/page.client.tsx")
+
+        expect(source).not.toMatch(/\buseEffect\b/)
+        expect(source).toContain("setSelectedTaskIds(new Set())\n        setFilter(newFilter)")
+        expect(source).toContain("const visibleSelectedTaskIds = new Set<string>()")
+        expect(source).toContain("const taskIds = Array.from(visibleSelectedTaskIds)")
+        expect(source).toContain("selectedTaskIds: visibleSelectedTaskIds")
+    })
+
     it("keeps Tasks page rendering split from the controller hook", () => {
         const source = readSource("app/(app)/tasks/page.client.tsx")
         const pageSource = readFunctionSource(source, "TasksPage")
