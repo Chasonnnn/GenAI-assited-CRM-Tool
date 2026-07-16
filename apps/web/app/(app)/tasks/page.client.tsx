@@ -6,7 +6,7 @@
  * Unified view showing tasks and appointments with list/calendar toggle.
  */
 
-import { startTransition, useState, useEffect, useRef } from "react"
+import { startTransition, useState, useEffect } from "react"
 import type { Route } from "next"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
@@ -20,6 +20,7 @@ import { AddTaskDialog, type TaskFormData } from "@/components/tasks/AddTaskDial
 import { useTasks, useCompleteTask, useUncompleteTask, useUpdateTask, useCreateTask, useCreateTaskBatch, useDeleteTask, useBulkCompleteTasks } from "@/lib/hooks/use-tasks"
 import { useStatusChangeRequests } from "@/lib/hooks/use-status-change-requests"
 import { usePendingImportApprovals } from "@/lib/hooks/use-import"
+import { useTaskFocusNavigation } from "@/lib/hooks/use-task-focus-navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
@@ -79,7 +80,6 @@ function useTasksPageController() {
     const canViewOtherOwners = ["admin", "developer"].includes(currentUser?.role || "")
     const ownerOverride = canViewOtherOwners && urlOwnerId ? urlOwnerId : null
     const focusTarget = isFocusTarget(urlFocus) ? urlFocus : null
-    const handledFocusRef = useRef<FocusTarget | null>(null)
 
     const [filter, setFilter] = useState<FilterType>(
         isFilterType(urlFilter) ? urlFilter : "my_tasks"
@@ -94,12 +94,6 @@ function useTasksPageController() {
         return "calendar"
     })
     const [manualViewFocusTarget, setManualViewFocusTarget] = useState<FocusTarget | null>(null)
-
-    useEffect(() => {
-        if (!focusTarget) {
-            handledFocusRef.current = null
-        }
-    }, [focusTarget])
 
     const focusRequiresListView = focusTarget !== null && focusTarget !== "approvals"
     const shouldUseListViewForFocus =
@@ -324,28 +318,14 @@ function useTasksPageController() {
         void refetchCompleted()
     }
 
-    useEffect(() => {
-        if (!focusTarget || handledFocusRef.current === focusTarget) return
-        if (focusTarget !== "approvals" && activeView !== "list") return
-        if (isLoading) return
-        if (focusTarget === "approvals" && (loadingApprovals || loadingStatusRequests || loadingImportApprovals)) return
-
-        const targetId =
-            focusTarget === "approvals"
-                ? "tasks-approvals"
-                : focusTarget === "tasks"
-                    ? "tasks-list"
-                    : `tasks-${focusTarget}`
-        const target =
-            document.getElementById(targetId) || document.getElementById("tasks-list")
-        if (!target) return
-
-        target.scrollIntoView({ behavior: "smooth", block: "start" })
-        if (focusTarget !== "approvals") {
-            localStorage.setItem("tasks-view", "list")
-        }
-        handledFocusRef.current = focusTarget
-    }, [focusTarget, activeView, isLoading, loadingApprovals, loadingStatusRequests, loadingImportApprovals])
+    useTaskFocusNavigation({
+        focusTarget,
+        activeView,
+        isLoading,
+        loadingApprovals,
+        loadingStatusRequests,
+        loadingImportApprovals,
+    })
 
     useEffect(() => {
         const visibleIds = new Set((incompleteTasks?.items ?? []).map((task) => task.id))
