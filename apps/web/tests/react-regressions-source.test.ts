@@ -4641,13 +4641,21 @@ describe("React regression guards (source)", () => {
 
     it("keeps the interview transcript pane on a native labeled region", () => {
         const source = readSource("components/surrogates/interviews/InterviewComments/TranscriptPane.tsx")
+        const interactionSource = readSource("lib/hooks/use-transcript-comment-interactions.ts")
 
         expect(source).toContain("<section")
         expect(source).toContain('aria-label="Interview Transcript"')
+        expect(source).toContain("useTranscriptCommentInteractions({")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain('role="button"')
         expect(source).not.toContain('role="region"')
         expect(source).not.toContain("onClick={")
         expect(source).not.toContain("onKeyDown={")
+        expect(interactionSource).toContain(
+            "const setHoveredCommentIdEvent = useEffectEvent(setHoveredCommentId)"
+        )
+        expect(interactionSource).toContain('container.addEventListener("focusin", handleFocusIn)')
+        expect(interactionSource).toContain('container.removeEventListener("keydown", handleKeyDown)')
     })
 
     it("delegates match detail tab rendering to a dedicated component", () => {
