@@ -74,6 +74,13 @@ function aiEntityContextReducer(
 ): EntityContextState {
     switch (action.type) {
         case "set":
+            if (
+                state.entityType === action.context.entityType &&
+                state.entityId === action.context.entityId &&
+                state.entityName === action.context.entityName
+            ) {
+                return state
+            }
             return {
                 pathname: state.pathname,
                 entityType: action.context.entityType,
@@ -119,13 +126,17 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
         setIsOpen(prev => !prev)
     })
 
-    const setContext = (ctx: EntityContext) => {
-        dispatchEntityContext({ type: "set", context: ctx })
-    }
+    const [setContext] = useState(
+        () => (ctx: EntityContext) => {
+            dispatchEntityContext({ type: "set", context: ctx })
+        },
+    )
 
-    const clearContext = () => {
-        dispatchEntityContext({ type: "clear" })
-    }
+    const [clearContext] = useState(
+        () => () => {
+            dispatchEntityContext({ type: "clear" })
+        },
+    )
 
     const togglePanel = () => {
         setIsOpen(prev => !prev)
@@ -167,13 +178,16 @@ export function useAIContext() {
 // Hook for setting context on page load
 export function useSetAIContext(ctx: EntityContext | null) {
     const { setContext, clearContext, canUseAI } = useAIContext()
+    const entityType = ctx?.entityType ?? null
+    const entityId = ctx?.entityId ?? null
+    const entityName = ctx?.entityName ?? null
 
     useEffect(() => {
-        if (ctx && canUseAI) {
-            setContext(ctx)
+        if (entityType && entityId && entityName && canUseAI) {
+            setContext({ entityType, entityId, entityName })
         }
         return () => {
             clearContext()
         }
-    }, [ctx, canUseAI, setContext, clearContext])
+    }, [canUseAI, clearContext, entityId, entityName, entityType, setContext])
 }
