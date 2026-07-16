@@ -5,6 +5,7 @@ import { createContext, use, useEffect, useReducer, useState } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { useAIToggleHotkey } from "@/lib/hooks/use-ai-toggle-hotkey"
 
 // Types
 export interface EntityContext {
@@ -114,20 +115,9 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const canUseAI =
         isAIEnabled && (effectivePermissions?.permissions || []).includes("use_ai_assistant")
 
-    // Keyboard shortcut: Cmd+Shift+A or Ctrl+Shift+A
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "a") {
-                e.preventDefault()
-                if (canUseAI) {
-                    setIsOpen(prev => !prev)
-                }
-            }
-        }
-
-        window.addEventListener("keydown", handleKeyDown)
-        return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [canUseAI])
+    useAIToggleHotkey(canUseAI, () => {
+        setIsOpen(prev => !prev)
+    })
 
     const setContext = (ctx: EntityContext) => {
         dispatchEntityContext({ type: "set", context: ctx })
