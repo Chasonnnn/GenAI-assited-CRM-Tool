@@ -215,14 +215,21 @@ describe("React regression guards (source)", () => {
 
     it("keeps AI context state updates compiler-friendly", () => {
         const source = readSource("lib/context/ai-context.tsx")
+        const hotkeySource = readSource("lib/hooks/use-ai-toggle-hotkey.ts")
 
         expect(source).toContain("function aiEntityContextReducer")
         expect(source).toContain("const [entityContext, dispatchEntityContext] = useReducer(")
+        expect(source).toContain("useAIToggleHotkey(canUseAI")
+        expect(source).not.toContain('window.addEventListener("keydown"')
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("React.useCallback")
         expect(source).not.toContain("setEntityType")
         expect(source).not.toContain("setEntityId")
         expect(source).not.toContain("setEntityName")
+        expect(hotkeySource).toContain("const onToggleEvent = useEffectEvent(onToggle)")
+        expect(hotkeySource).toContain('window.addEventListener("keydown", handleKeyDown)')
+        expect(hotkeySource).toContain('window.removeEventListener("keydown", handleKeyDown)')
+        expect(hotkeySource).toContain("}, [enabled])")
     })
 
     it("documents intentional exhaustive-deps exceptions with React Doctor rule names", () => {
