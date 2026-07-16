@@ -4233,6 +4233,8 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("type TriggerConfigSetter = Dispatch<SetStateAction<JsonObject>>")
         expect(source).toContain("setTriggerConfig((current) => ({")
         expect(source).toContain("const currentFields = Array.isArray(current.fields)")
+        expect(source).toContain("triggerConfig: normalizeTriggerConfigForUi(action.value, {}, [])")
+        expect(source).not.toContain("useEffect")
         expect(source).not.toContain("setTriggerConfig({ ...triggerConfig")
     })
 

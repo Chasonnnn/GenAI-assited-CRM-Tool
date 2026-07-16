@@ -30,7 +30,7 @@ const templateState = vi.hoisted(() => ({
 const workflowOptions = vi.hoisted(() => ({
     statuses: [] as Array<{ id?: string; value: string; label: string }>,
     action_types: [],
-    trigger_types: [],
+    trigger_types: [] as Array<{ value: string; label: string; description?: string }>,
     update_fields: [],
     condition_operators: [],
     condition_fields: [],
@@ -92,6 +92,7 @@ describe("platform workflow template draft ownership", () => {
         mutationMocks.publish.mockReset()
         mutationMocks.remove.mockReset()
         workflowOptions.statuses = []
+        workflowOptions.trigger_types = []
         templateState.data = {
             ...templateState.data,
             draft: {
@@ -164,6 +165,59 @@ describe("platform workflow template draft ownership", () => {
                     trigger_config: {
                         to_stage_id: "stage-qualified",
                     },
+                }),
+            })
+        })
+    })
+
+    it("drops obsolete scheduled fields when the trigger type changes", async () => {
+        mutationMocks.update.mockResolvedValue(templateState.data)
+        workflowOptions.trigger_types = [
+            {
+                value: "scheduled",
+                label: "Scheduled",
+            },
+            {
+                value: "status_changed",
+                label: "Status Changed",
+            },
+        ]
+        templateState.data = {
+            ...templateState.data,
+            draft: {
+                ...templateState.data.draft,
+                trigger_type: "scheduled",
+                trigger_config: {
+                    cron: "0 9 * * *",
+                    timezone: "America/New_York",
+                },
+                actions: [
+                    {
+                        action_type: "add_note",
+                        content: "Record the scheduled run.",
+                    },
+                ],
+            },
+        }
+
+        render(<PlatformWorkflowTemplatePage />)
+
+        const triggerLabel = screen.getByText("Trigger Type *")
+        const triggerSelect = triggerLabel.parentElement?.querySelector("button")
+        expect(triggerSelect).not.toBeNull()
+        fireEvent.click(triggerSelect as HTMLButtonElement)
+        const statusChangedOption = screen.getByRole("option", { name: "Status Changed" })
+        fireEvent.mouseMove(statusChangedOption)
+        fireEvent.click(statusChangedOption)
+        expect(triggerSelect).toHaveTextContent("Status Changed")
+        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+
+        await waitFor(() => {
+            expect(mutationMocks.update).toHaveBeenCalledWith({
+                id: "workflow-template-1",
+                payload: expect.objectContaining({
+                    trigger_type: "status_changed",
+                    trigger_config: {},
                 }),
             })
         })
