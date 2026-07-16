@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 55 **REPLACE** Effects removed; 31 **CONTAIN** call sites consolidated behind twelve tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 69 production `useEffect` calls remain.
+- 56 **REPLACE** Effects removed; 31 **CONTAIN** call sites consolidated behind twelve tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 68 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -55,6 +55,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Workspace tab transitions clear submission selection, manual-link input, and reviewer notes in the initiating event, preventing review text from leaking into a later submission after leaving the workspace.
 - Email attachment selection is keyed to the surrogate session, so changing recipients clears stale attachment IDs; a tested notification hook now owns query-derived safety updates and uses `useEffectEvent` without callback-ref synchronization.
 - AI assistant and contextual-panel scrolling now share a tested DOM synchronization hook; streaming content stays visible while sticky panels preserve the user's position after they scroll away, with animation-frame cancellation owned by the hook.
+- Contextual AI panel state is keyed by entity type and ID, so changing conversations remounts one self-contained draft/stream/parser session, aborts the old stream through unmount cleanup, and cannot leak unsent text into the next entity.
 - Compliance legal-hold pagination reconciles an invalid requested page during render, including zero-page result intervals, so stale page state never reappears after the dataset returns.
 - Pipeline stage detail expansion is event-owned and keyed by immutable `stage_key`, preserving open panels across refreshed versions that assign new database IDs without mirroring stage arrays through an Effect.
 - Intelligent suggestion settings, templates, and rules use separate stable TanStack Query caches; fresh remounts avoid duplicate requests while editable settings and successful rule mutations retain explicit local/cache ownership.
