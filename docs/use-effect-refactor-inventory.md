@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 58 **REPLACE** Effects removed; 34 **CONTAIN** call sites consolidated behind fifteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 65 production `useEffect` calls remain.
+- 58 **REPLACE** Effects removed; 35 **CONTAIN** call sites consolidated behind sixteen tested synchronization hooks; two baseline **CONTAIN** call sites removed after proving they synchronized no external state; 65 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -62,6 +62,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - The protected operations layout now owns platform identity and alert-count requests through stable TanStack Query keys, reuses fresh access data across remounts, and routes MFA or unauthenticated failures during render without fetch-and-redirect Effect choreography.
 - Dashboard filter state now records its URL-and-user provenance and reconciles browser navigation during render, preventing dashboard query hooks from issuing one stale-assignee request before the previous URL-sync Effect caught up.
 - The dashboard filter bar no longer reasserts non-admin assignee scope after mount; the provider remains the single render-time owner of role normalization, avoiding needless URL rewrites from presentation.
+- Development-only dashboard KPI mismatch reporting now lives in a tested diagnostic hook that suppresses duplicate warnings for equivalent filter/date payloads and emits again when the mismatch materially changes.
 - Queue settings now authorizes the route during render and mounts queue, member, and mutation hooks only inside the manager-only content boundary, preventing non-admin redirects from issuing protected queue requests first.
 - The welcome route redirects profile-complete users during initial render, before the onboarding form hooks mount, while successful form submission remains an explicit event-driven dashboard navigation.
 - The authenticated app shell now redirects incomplete profiles during initial rendering before protected children mount, while preserving the existing MFA exception and loading/unauthenticated boundaries.
