@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 44 **REPLACE** Effects removed; 22 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 83 production `useEffect` calls remain.
+- 45 **REPLACE** Effects removed; 22 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 82 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -53,6 +53,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Form publishing opens the sharing prompt directly from the intake links returned by the publish flow, removing the pending-state Effect relay and avoiding dependence on a later query render.
 - Automation and platform-template autosave now share a tested synchronization hook that owns debounce timing, cancellation, and active-draft completion while each controller retains its payload, queue, and persistence ownership.
 - Workspace tab transitions clear submission selection, manual-link input, and reviewer notes in the initiating event, preventing review text from leaking into a later submission after leaving the workspace.
+- Email attachment selection is keyed to the surrogate session, so changing recipients clears stale attachment IDs; `useEffectEvent` now supplies the latest parent notification callback without a ref-synchronization Effect.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
