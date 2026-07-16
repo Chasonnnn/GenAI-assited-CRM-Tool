@@ -1952,13 +1952,18 @@ describe("React regression guards (source)", () => {
         expect(filterBarSource).not.toContain("setAssigneeId(user.user_id)")
     })
 
-    it("redirects incomplete app-shell profiles during render", () => {
+    it("redirects app-shell auth boundaries during render", () => {
         const source = readSource("components/app-shell-client.tsx")
+        const authSource = readSource("lib/auth-context.tsx")
 
+        expect(source).toContain('redirect("/login")')
+        expect(source).toContain("redirect(getMfaRedirectPath(pathname))")
         expect(source).toContain('redirect("/welcome")')
         expect(source).not.toContain("useEffect")
         expect(source).not.toContain("useRouter")
         expect(source).not.toContain("replace(")
+        expect(authSource).not.toContain("useRequireAuth")
+        expect(authSource).not.toContain("useEffect(()")
     })
 
     it("contains unassigned queue view tracking in a named lifecycle hook", () => {
@@ -3130,6 +3135,7 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("function shouldSkipAuthFetch()")
         expect(source).toContain("useState(() => !shouldSkipAuthFetch())")
         expect(source).toContain("window.setTimeout")
+        expect(source).not.toContain("useRequireAuth")
         expect(source).not.toContain("finally")
         expect(source).not.toContain("void fetchUser();")
     })
