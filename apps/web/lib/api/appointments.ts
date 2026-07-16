@@ -5,7 +5,7 @@
  * staff operations and public booking.
  */
 
-import api, { ApiError } from '../api';
+import api, { ApiError, parseApiErrorPayload } from '../api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -23,7 +23,7 @@ async function publicRequest<T>(path: string, options: RequestInit = {}): Promis
         let message: string | undefined;
         try {
             const err = await response.json();
-            message = err.detail || err.message;
+            message = parseApiErrorPayload(err);
         } catch {
             // Ignore JSON parse errors
         }

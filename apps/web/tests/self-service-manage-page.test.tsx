@@ -9,6 +9,8 @@ const getAppointmentForManageMock = vi.fn()
 const getRescheduleSlotsByTokenMock = vi.fn()
 const rescheduleByManageTokenMock = vi.fn()
 const cancelByManageTokenMock = vi.fn()
+const ORG_ID = "11111111-1111-4111-8111-111111111111"
+const TOKEN = "token-1"
 
 vi.unmock("@tanstack/react-query")
 
@@ -48,7 +50,7 @@ const APPOINTMENT = {
 
 async function renderManagePage(
     searchParams: Record<string, string> = {},
-    routeParams: { orgId: string; token: string } = { orgId: "org-1", token: "token-1" }
+    routeParams: { orgId: string; token: string } = { orgId: ORG_ID, token: TOKEN }
 ) {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
@@ -102,6 +104,14 @@ describe("Self-service manage appointment page", () => {
         expect(screen.getByText("Appointment not found")).toBeInTheDocument()
     })
 
+    it("rejects a malformed management link before requesting appointment data", async () => {
+        await renderManagePage({}, { orgId: "not-a-valid-org", token: "not-a-valid-token" })
+
+        expect(await screen.findByText("Unable to Manage Appointment")).toBeInTheDocument()
+        expect(screen.getByText("Invalid appointment management link")).toBeInTheDocument()
+        expect(getAppointmentForManageMock).not.toHaveBeenCalled()
+    })
+
     it("completes cancel flow", async () => {
         await renderManagePage({ action: "cancel" })
 
@@ -110,7 +120,7 @@ describe("Self-service manage appointment page", () => {
         fireEvent.click(screen.getByRole("button", { name: "Cancel Appointment" }))
 
         await waitFor(() => {
-            expect(cancelByManageTokenMock).toHaveBeenCalledWith("org-1", "token-1", undefined)
+            expect(cancelByManageTokenMock).toHaveBeenCalledWith(ORG_ID, TOKEN, undefined)
         })
 
         expect(await screen.findByText("Appointment Cancelled")).toBeInTheDocument()
@@ -132,8 +142,8 @@ describe("Self-service manage appointment page", () => {
 
         await waitFor(() => {
             expect(getRescheduleSlotsByTokenMock).toHaveBeenCalledWith(
-                "org-1",
-                "token-1",
+                ORG_ID,
+                TOKEN,
                 expect.any(String),
                 expect.any(String),
                 "America/New_York"
@@ -147,8 +157,8 @@ describe("Self-service manage appointment page", () => {
 
         await waitFor(() => {
             expect(rescheduleByManageTokenMock).toHaveBeenCalledWith(
-                "org-1",
-                "token-1",
+                ORG_ID,
+                TOKEN,
                 "2026-06-04T16:00:00.000Z"
             )
         })
@@ -166,7 +176,7 @@ describe("Self-service manage appointment page", () => {
             resolveSecond = resolve
         })
         getAppointmentForManageMock.mockImplementation((_orgId: string, token: string) =>
-            token === "token-1" ? firstRequest : secondRequest
+            token === TOKEN ? firstRequest : secondRequest
         )
         const { view, queryClient } = await renderManagePage()
         await waitFor(() => expect(getAppointmentForManageMock).toHaveBeenCalledTimes(1))
@@ -176,7 +186,10 @@ describe("Self-service manage appointment page", () => {
                 <QueryClientProvider client={queryClient}>
                     <React.Suspense fallback={<div>Loading</div>}>
                         <ManageAppointmentPage
-                            params={Promise.resolve({ orgId: "org-2", token: "token-2" })}
+                            params={Promise.resolve({
+                                orgId: "22222222-2222-4222-8222-222222222222",
+                                token: "token-2",
+                            })}
                             searchParams={Promise.resolve({})}
                         />
                     </React.Suspense>
