@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { redirect, useRouter } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
@@ -9,7 +9,7 @@ import { Loader2Icon, UserPlusIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useUnassignedQueue } from "@/lib/hooks/use-surrogates"
 import { useClaimSurrogate } from "@/lib/hooks/use-queues"
-import { trackUnassignedQueueViewed } from "@/lib/workflow-metrics"
+import { useTrackUnassignedQueueView } from "@/lib/hooks/use-track-unassigned-queue-view"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -78,10 +78,7 @@ function UnassignedSurrogatesContent({
     const urlPage = parsePageParam(initialPageParam)
     const page = urlPage
 
-    useEffect(() => {
-        if (!authLoaded || !canViewUnassignedQueue) return
-        trackUnassignedQueueViewed()
-    }, [authLoaded, canViewUnassignedQueue])
+    useTrackUnassignedQueueView(authLoaded && canViewUnassignedQueue)
 
     const { data, isLoading, error, refetch } = useUnassignedQueue(
         {

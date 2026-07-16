@@ -1952,6 +1952,19 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("replace(")
     })
 
+    it("contains unassigned queue view tracking in a named lifecycle hook", () => {
+        const pageSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
+        const hookSource = readSource("lib/hooks/use-track-unassigned-queue-view.ts")
+
+        expect(pageSource).toContain(
+            "useTrackUnassignedQueueView(authLoaded && canViewUnassignedQueue)"
+        )
+        expect(pageSource).not.toContain("useEffect")
+        expect(hookSource).toContain("useEffect(() =>")
+        expect(hookSource).toContain("trackUnassignedQueueViewed()")
+        expect(hookSource).toContain("}, [enabled])")
+    })
+
     it("avoids flatMap as a filter-map in form and campaign list normalization", () => {
         const formsApiSource = readSource("lib/api/forms.ts")
         const shareDialogSource = readSource("components/forms/builder/ShareApplicationDialog.tsx")
