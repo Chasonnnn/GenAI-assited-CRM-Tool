@@ -115,10 +115,10 @@ export function DateTimePicker({
                 {...(triggerAriaLabelledBy ? { "aria-labelledby": triggerAriaLabelledBy } : {})}
             >
                 <span className="inline-flex items-center gap-2">
-                    <CalendarIcon className="size-4" />
+                    <CalendarIcon className="size-4" aria-hidden="true" />
                     {displayLabel}
                 </span>
-                <ChevronDownIcon className="size-4 opacity-50" />
+                <ChevronDownIcon className="size-4 opacity-50" aria-hidden="true" />
             </PopoverTrigger>
             <PopoverContent className="w-auto p-3" align="start">
                 <div className="space-y-3">
@@ -139,7 +139,7 @@ export function DateTimePicker({
 
                     <div className="space-y-2">
                         <Label htmlFor={resolvedTimeInputId} className="inline-flex items-center gap-2">
-                            <ClockIcon className="size-4" />
+                            <ClockIcon className="size-4" aria-hidden="true" />
                             Time
                         </Label>
                         <Input

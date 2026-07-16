@@ -53,7 +53,7 @@ export function FormBuilderHeader({
                     aria-label={backAriaLabel}
                     onClick={onBack}
                 >
-                    <ArrowLeftIcon className="size-5" />
+                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
                 </Button>
                 <Input
                     aria-label="Form name"

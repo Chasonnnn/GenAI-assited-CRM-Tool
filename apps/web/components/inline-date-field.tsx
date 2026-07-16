@@ -207,7 +207,7 @@ export function InlineDateField({
                         aria-label={label}
                         onKeyDown={handleKeyDown}
                     >
-                        <CalendarIcon className="size-3.5" />
+                        <CalendarIcon className="size-3.5" aria-hidden="true" />
                         {selectedEditDate ? format(selectedEditDate, "MMM d, yyyy") : "Select date"}
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
