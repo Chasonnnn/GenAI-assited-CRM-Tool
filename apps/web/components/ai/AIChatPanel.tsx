@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -426,7 +426,7 @@ function AIChatScheduleParser({
     )
 }
 
-export function AIChatPanel({
+function AIChatPanelContent({
     entityType,
     entityId,
     entityName,
@@ -446,7 +446,6 @@ export function AIChatPanel({
         entityId: entityId ?? null,
         entityType: entityType ?? null,
     }
-    const [trackedContext, setTrackedContext] = useState<PanelContext>(() => currentContext)
 
     // Hooks
     const { data: conversation, isLoading: loadingConversation } = useConversation(entityType, entityId)
@@ -458,17 +457,7 @@ export function AIChatPanel({
     const [messageState, setMessageState] = useState<PanelMessageState>(() =>
         createPanelMessageState(conversationKey, conversationMessages)
     )
-    const contextChanged =
-        trackedContext.entityId !== currentContext.entityId || trackedContext.entityType !== currentContext.entityType
-
-    if (contextChanged) {
-        setTrackedContext(currentContext)
-        if (isStreaming) {
-            setIsStreaming(false)
-        }
-    }
-
-    const streamVisible = isStreaming && !contextChanged
+    const streamVisible = isStreaming
     const hasCurrentMessageState =
         messageState.conversationKey === conversationKey && messageState.conversationMessages === conversationMessages
     const derivedMessageState = hasCurrentMessageState
@@ -495,14 +484,6 @@ export function AIChatPanel({
     }
 
     useAIChatScrollToLatest(scrollRef, messages, { shouldStickToBottomRef })
-
-    useEffect(() => {
-        shouldStickToBottomRef.current = true
-        abortActiveStream(streamAbortRef)
-        streamAbortRef.current = null
-        streamingMessageIdRef.current = null
-        stopRequestedRef.current = false
-    }, [currentContext.entityId, currentContext.entityType])
 
     // Focus input on mount
     useMountEffect(() => {
@@ -693,6 +674,12 @@ export function AIChatPanel({
             />
         </div>
     )
+}
+
+export function AIChatPanel(props: AIChatPanelProps) {
+    const contextKey = `${props.entityType ?? "global"}:${props.entityId ?? "global"}`
+
+    return <AIChatPanelContent key={contextKey} {...props} />
 }
 
 // Action card component
