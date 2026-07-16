@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
@@ -45,6 +45,7 @@ vi.mock('@/lib/auth-context', () => ({
 const mockGetOrgSettings = vi.fn()
 const mockUpdateOrgSettings = vi.fn()
 const mockUpdateProfile = vi.fn()
+const mockUpdateOrgSignature = vi.fn()
 const mockGetIntelligentSuggestionSettings = vi.fn()
 const mockUpdateIntelligentSuggestionSettings = vi.fn()
 const mockGetIntelligentSuggestionTemplates = vi.fn()
@@ -70,6 +71,19 @@ vi.mock('@/lib/api/settings', async (importOriginal) => {
         deleteIntelligentSuggestionRule: (ruleId: string) => mockDeleteIntelligentSuggestionRule(ruleId),
     }
 })
+
+let mockOrgSignature = {
+    signature_social_links: [
+        { platform: 'LinkedIn', url: 'https://linkedin.com/company/test' },
+    ],
+}
+
+vi.mock('@/lib/hooks/use-signature', () => ({
+    useOrgSignature: () => ({ data: mockOrgSignature, isLoading: false }),
+    useUpdateOrgSignature: () => ({ mutateAsync: mockUpdateOrgSignature, isPending: false }),
+    useUploadOrgLogo: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteOrgLogo: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotificationSettings: () => ({
@@ -159,14 +173,23 @@ vi.mock('@/lib/hooks/use-system', () => ({
 }))
 
 async function renderSettingsPage(searchParams: Record<string, string | string[] | undefined> = {}) {
+    let result: ReturnType<typeof render> | undefined
     await act(async () => {
-        render(<SettingsPage searchParams={Promise.resolve(searchParams)} />)
+        result = render(<SettingsPage searchParams={Promise.resolve(searchParams)} />)
     })
+    return result!
 }
 
 describe('SettingsPage', () => {
     beforeEach(() => {
         mockUpdateNotificationSettings.mockReset()
+        mockUpdateOrgSignature.mockReset()
+        mockUpdateOrgSignature.mockResolvedValue({})
+        mockOrgSignature = {
+            signature_social_links: [
+                { platform: 'LinkedIn', url: 'https://linkedin.com/company/test' },
+            ],
+        }
         mockRollbackPipeline.mockReset()
         versionModalSpy.mockClear()
         mockGetOrgSettings.mockResolvedValue({
@@ -251,6 +274,26 @@ describe('SettingsPage', () => {
         expect(screen.getByText('Organization Branding')).toBeInTheDocument()
         expect(screen.queryByText('Organization Info')).not.toBeInTheDocument()
         expect(screen.queryByText('Signature Branding')).not.toBeInTheDocument()
+    })
+
+    it('preserves an in-progress social link edit when equivalent signature data rerenders', async () => {
+        const view = await renderSettingsPage({ tab: 'email-signature' })
+        const platformInput = screen.getByLabelText('Social platform 1')
+
+        fireEvent.change(platformInput, { target: { value: 'Edited Network' } })
+        expect(platformInput).toHaveValue('Edited Network')
+
+        mockOrgSignature = {
+            signature_social_links: [
+                { platform: 'LinkedIn', url: 'https://linkedin.com/company/test' },
+            ],
+        }
+        await act(async () => {
+            view.rerender(<SettingsPage searchParams={Promise.resolve({ tab: 'email-signature' })} />)
+            await Promise.resolve()
+        })
+
+        expect(screen.getByLabelText('Social platform 1')).toHaveValue('Edited Network')
     })
 
     it('shows intelligent suggestions tab for admin roles', async () => {
