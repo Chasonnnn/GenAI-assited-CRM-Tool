@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useReducer, useRef, useState } from "react"
+import { useReducer, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -1054,16 +1054,20 @@ export default function AutomationPageClient({
     // Fetch full workflow when editing
     const { data: editingWorkflow } = useWorkflow(editingWorkflowId || "")
 
-    useEffect(() => {
-        if (!editingWorkflow || !editingWorkflowId || !showCreateModal) return
-        if (hydratedWorkflowId === editingWorkflowId) return
+    if (
+        editingWorkflow &&
+        editingWorkflowId &&
+        editingWorkflow.id === editingWorkflowId &&
+        showCreateModal &&
+        hydratedWorkflowId !== editingWorkflowId
+    ) {
         dispatchWorkflowBuilder({
             type: "hydrateWorkflow",
             workflow: editingWorkflow as WorkflowCreate & { scope: WorkflowScope },
             workflowId: editingWorkflowId,
             statusOptions,
         })
-    }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal, statusOptions])
+    }
 
     if (triggerType === "status_changed" && statusOptions.length > 0) {
         const normalized = normalizeTriggerConfigForUi(triggerType, triggerConfig, statusOptions)
