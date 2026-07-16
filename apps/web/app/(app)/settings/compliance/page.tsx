@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -507,6 +507,10 @@ export default function ComplianceSettingsPage() {
         page: holdsPage,
         per_page: perPage,
     })
+    const availableHoldsPages = Math.max(1, legalHolds?.pages ?? 1)
+    if (holdsPage > availableHoldsPages) {
+        setHoldsPage(availableHoldsPages)
+    }
     const createHold = useCreateLegalHold()
     const releaseHold = useReleaseLegalHold()
 
@@ -528,15 +532,6 @@ export default function ComplianceSettingsPage() {
             ...policyEditOverrides[entity.value],
         }
     }
-
-    useEffect(() => {
-        if (!legalHolds?.pages) return
-        if (holdsPage > legalHolds.pages) {
-            startTransition(() => {
-                setHoldsPage(legalHolds.pages)
-            })
-        }
-    }, [holdsPage, legalHolds?.pages])
 
     const updatePolicyEdit = (entityType: string, field: "retention_days" | "is_active", value: number | boolean) => {
         setPolicyEditOverrides((prev) => ({

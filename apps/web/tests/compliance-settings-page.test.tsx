@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import ComplianceSettingsPage from "../app/(app)/settings/compliance/page"
 
 const useRetentionPoliciesMock = vi.fn()
+const useLegalHoldsMock = vi.fn()
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({ user: { role: "admin" } }),
@@ -12,10 +13,8 @@ vi.mock("@/lib/auth-context", () => ({
 vi.mock("@/lib/hooks/use-compliance", () => ({
     useRetentionPolicies: () => useRetentionPoliciesMock(),
     useUpsertRetentionPolicy: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useLegalHolds: () => ({
-        data: { items: [], total: 0, page: 1, per_page: 20, pages: 1 },
-        isLoading: false,
-    }),
+    useLegalHolds: (params: { page: number; per_page: number }) =>
+        useLegalHoldsMock(params),
     useCreateLegalHold: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useReleaseLegalHold: () => ({ mutateAsync: vi.fn(), isPending: false }),
     usePurgePreview: () => ({ data: { items: [] }, refetch: vi.fn() }),
@@ -39,6 +38,10 @@ describe("Compliance settings page", () => {
         vi.clearAllMocks()
         useRetentionPoliciesMock.mockReturnValue({
             data: [policy("surrogates", 30), policy("tasks", 45)],
+            isLoading: false,
+        })
+        useLegalHoldsMock.mockReturnValue({
+            data: { items: [], total: 0, page: 1, per_page: 20, pages: 1 },
             isLoading: false,
         })
     })
@@ -70,5 +73,45 @@ describe("Compliance settings page", () => {
         await waitFor(() => expect(surrogateDays).toHaveValue(60))
         expect(taskDays).toHaveValue(44)
         expect(taskActive).not.toBeChecked()
+    })
+
+    it("returns to the first legal-holds page after results temporarily become empty", async () => {
+        let legalHolds = {
+            items: [],
+            total: 40,
+            page: 1,
+            per_page: 20,
+            pages: 2,
+        }
+        useLegalHoldsMock.mockImplementation(() => ({
+            data: legalHolds,
+            isLoading: false,
+        }))
+
+        const view = render(<ComplianceSettingsPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "2" }))
+        expect(screen.getByText("Showing 21-40 of 40 legal holds")).toBeInTheDocument()
+
+        legalHolds = {
+            items: [],
+            total: 0,
+            page: 1,
+            per_page: 20,
+            pages: 0,
+        }
+        view.rerender(<ComplianceSettingsPage />)
+        expect(screen.queryByText(/Showing .* legal holds/)).not.toBeInTheDocument()
+
+        legalHolds = {
+            items: [],
+            total: 40,
+            page: 1,
+            per_page: 20,
+            pages: 2,
+        }
+        view.rerender(<ComplianceSettingsPage />)
+
+        expect(screen.getByText("Showing 1-20 of 40 legal holds")).toBeInTheDocument()
     })
 })
