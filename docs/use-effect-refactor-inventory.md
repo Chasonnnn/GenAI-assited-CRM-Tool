@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 12 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 123 production `useEffect` calls remain.
+- 15 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 120 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -26,6 +26,8 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Campaign edit drafts hydrate from the explicit open action rather than campaign query identity.
 - Social-link, personal-signature, and onboarding-profile drafts now preserve user edits across equivalent query/auth refreshes.
 - Invitation and current-user loading now use separate TanStack Query keys, preventing older invitation responses from replacing the active route.
+- Email compose state is scoped to recipient/open sessions, and untouched template fields derive from live query data while explicit user edits remain stable.
+- The operations dashboard fetch is owned by a stable TanStack Query key, so fresh data survives route remounts without duplicate requests or loading flashes.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
