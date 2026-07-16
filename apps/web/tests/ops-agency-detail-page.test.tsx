@@ -122,10 +122,11 @@ vi.mock("@/components/ops/agencies/SupportSessionDialog", () => ({
     SupportSessionDialog: () => <button type="button">Start support session</button>,
 }))
 
-function renderAgencyDetailPage() {
-    const queryClient = new QueryClient({
+function renderAgencyDetailPage(
+    queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
-    })
+    }),
+) {
     return render(
         <QueryClientProvider client={queryClient}>
             <AgencyDetailPage />
@@ -182,5 +183,25 @@ describe("AgencyDetailPage", () => {
             expect(screen.getByText("Sender: resend")).toBeInTheDocument()
             expect(mockGetPlatformEmailStatus).toHaveBeenCalledTimes(1)
         })
+    })
+
+    it("reuses fresh organization alerts when the agency route remounts", async () => {
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
+
+        const firstView = renderAgencyDetailPage(queryClient)
+        expect(
+            await screen.findByRole("heading", { name: "Test Agency" }),
+        ).toBeInTheDocument()
+        await waitFor(() => expect(mockListAlerts).toHaveBeenCalledTimes(1))
+
+        firstView.unmount()
+        renderAgencyDetailPage(queryClient)
+        expect(
+            await screen.findByRole("heading", { name: "Test Agency" }),
+        ).toBeInTheDocument()
+
+        await waitFor(() => expect(mockListAlerts).toHaveBeenCalledTimes(1))
     })
 })
