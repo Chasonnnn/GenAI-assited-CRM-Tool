@@ -130,35 +130,17 @@ export function SelectionPopover({
         setSelectionActive(true)
     })
 
-    // Listen for selection changes
+    const handleDocumentKeyDown = useEffectEvent((event: KeyboardEvent) => {
+        if (event.key === "Escape" && position.visible) {
+            setPosition({ x: 0, y: 0, visible: false })
+            window.getSelection()?.removeAllRanges()
+        }
+    })
+
+    // Synchronize the popover with document selection, keyboard, and pointer events.
     useEffect(() => {
-        const handleDocumentSelectionChange = () => {
-            handleSelectionChange()
-        }
-
-        document.addEventListener("selectionchange", handleDocumentSelectionChange)
-        return () => {
-            document.removeEventListener("selectionchange", handleDocumentSelectionChange)
-        }
-    }, [])
-
-    // Handle keyboard shortcuts
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape" && position.visible) {
-                setPosition({ x: 0, y: 0, visible: false })
-                window.getSelection()?.removeAllRanges()
-            }
-        }
-
-        document.addEventListener("keydown", handleKeyDown)
-        return () => {
-            document.removeEventListener("keydown", handleKeyDown)
-        }
-    }, [position.visible])
-
-    // Handle click outside
-    useEffect(() => {
+        let clickResetTimeout: ReturnType<typeof setTimeout> | null = null
+        const handleDocumentSelectionChange = () => handleSelectionChange()
         const handleMouseDown = (e: MouseEvent) => {
             isMouseDownRef.current = true
             const target = e.target as HTMLElement
@@ -174,17 +156,22 @@ export function SelectionPopover({
         const handleMouseUp = () => {
             isMouseDownRef.current = false
             handleSelectionChange()
-            // Reset after a short delay
-            setTimeout(() => {
+            if (clickResetTimeout) clearTimeout(clickResetTimeout)
+            clickResetTimeout = setTimeout(() => {
                 isClickingPopover.current = false
             }, 100)
         }
 
+        document.addEventListener("selectionchange", handleDocumentSelectionChange)
+        document.addEventListener("keydown", handleDocumentKeyDown)
         document.addEventListener("mousedown", handleMouseDown)
         document.addEventListener("mouseup", handleMouseUp)
         return () => {
+            document.removeEventListener("selectionchange", handleDocumentSelectionChange)
+            document.removeEventListener("keydown", handleDocumentKeyDown)
             document.removeEventListener("mousedown", handleMouseDown)
             document.removeEventListener("mouseup", handleMouseUp)
+            if (clickResetTimeout) clearTimeout(clickResetTimeout)
         }
     }, [])
 
