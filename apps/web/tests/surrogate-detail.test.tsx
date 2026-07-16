@@ -7,6 +7,11 @@ import SurrogateJourneyPage from '../app/(app)/surrogates/[id]/journey/page'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
+const { mockRedirect } = vi.hoisted(() => ({
+    mockRedirect: vi.fn((url: string) => {
+        throw new Error(`NEXT_REDIRECT:${url}`)
+    }),
+}))
 const mockParams = {
     id: 'c1',
 }
@@ -16,6 +21,7 @@ const mockCreateZoomMeeting = vi.fn()
 const mockSendZoomInvite = vi.fn()
 
 vi.mock('next/navigation', () => ({
+    redirect: mockRedirect,
     useParams: () => mockParams,
     useRouter: () => ({ push: mockPush, replace: mockReplace }),
     useSelectedLayoutSegment: () => mockSegment.value,
@@ -324,6 +330,7 @@ describe('SurrogateDetailPage', () => {
 
         mockPush.mockReset()
         mockReplace.mockReset()
+        mockRedirect.mockClear()
         mockSegment.value = null
         mockDetailSearchParams.delete('return_to')
         mockChangeStatus.mockReset()
@@ -627,6 +634,22 @@ describe('SurrogateDetailPage', () => {
 
         const historyTab = screen.getByRole('tab', { name: /History/i })
         expect(historyTab).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('redirects an invalid tab before mounting its route content', () => {
+        mockSegment.value = 'not-a-surrogate-tab'
+        const InvalidRouteContent = vi.fn(() => <div>Invalid route content</div>)
+
+        expect(() => {
+            render(
+                <SurrogateDetailLayoutClient>
+                    <InvalidRouteContent />
+                </SurrogateDetailLayoutClient>
+            )
+        }).toThrow('NEXT_REDIRECT:/surrogates/c1')
+
+        expect(mockRedirect).toHaveBeenCalledWith('/surrogates/c1')
+        expect(InvalidRouteContent).not.toHaveBeenCalled()
     })
 
     it('updates url when switching tabs', () => {
