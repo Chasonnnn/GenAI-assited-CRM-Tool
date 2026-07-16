@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 43 **REPLACE** Effects removed; 21 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 85 production `useEffect` calls remain.
+- 44 **REPLACE** Effects removed; 21 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 84 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -52,6 +52,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Hidden-tab browser notification delivery now lives in a tested hook that owns permission checks, native payload mapping, and per-notification deduplication.
 - Form publishing opens the sharing prompt directly from the intake links returned by the publish flow, removing the pending-state Effect relay and avoiding dependence on a later query render.
 - Automation form autosave now lives in a tested synchronization hook that owns debounce timing, cancellation, and active-draft completion while the controller retains payload and persistence ownership.
+- Workspace tab transitions clear submission selection, manual-link input, and reviewer notes in the initiating event, preventing review text from leaking into a later submission after leaving the workspace.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
