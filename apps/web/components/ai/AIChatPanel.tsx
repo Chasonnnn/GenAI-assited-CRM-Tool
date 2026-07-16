@@ -25,6 +25,7 @@ import { useConversation, useStreamChatMessage, useApproveAction, useRejectActio
 import type { ProposedAction } from "@/lib/api/ai"
 import type { ScheduleParserDialogProps } from "@/components/ai/ScheduleParserDialog"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 const ScheduleParserDialog = dynamic<ScheduleParserDialogProps>(
     () => import("@/components/ai/ScheduleParserDialog").then((mod) => mod.ScheduleParserDialog),
@@ -523,16 +524,16 @@ export function AIChatPanel({
     }, [currentContext.entityId, currentContext.entityType])
 
     // Focus input on mount
-    useEffect(() => {
+    useMountEffect(() => {
         inputRef.current?.focus()
-    }, [])
+    })
 
-    useEffect(() => {
+    useMountEffect(() => {
         return () => {
             abortActiveStream(streamAbortRef)
             cancelAutoScrollFrame(autoScrollFrameRef)
         }
-    }, [autoScrollFrameRef, streamAbortRef])
+    })
 
     const updateMessageById = (id: string, updater: (msg: PanelMessage) => PanelMessage) => {
         updateMessages((currentMessages) => currentMessages.map((msg) => (msg.id === id ? updater(msg) : msg)))

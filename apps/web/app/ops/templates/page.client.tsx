@@ -1,6 +1,7 @@
 "use client"
 
-import { type ReactNode, startTransition, useEffect, useState } from "react"
+import { type ReactNode, startTransition, useState } from "react"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
@@ -337,7 +338,7 @@ export default function TemplatesPage() {
     const { push, replace } = useRouter()
     const [activeTab, setActiveTab] = useState<TemplatesTab>("email")
 
-    useEffect(() => {
+    useMountEffect(() => {
         const readTabFromUrl = (): TemplatesTab => {
             const tabParam = new URLSearchParams(window.location.search).get("tab")
             return TABS.includes(tabParam as TemplatesTab) ? (tabParam as TemplatesTab) : "email"
@@ -353,7 +354,7 @@ export default function TemplatesPage() {
         }
         window.addEventListener("popstate", handlePopState)
         return () => window.removeEventListener("popstate", handlePopState)
-    }, [])
+    })
 
     const {
         data: emailTemplates = [],

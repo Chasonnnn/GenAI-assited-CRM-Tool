@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon, type LucideIcon } from "lucide-react"
 import { useEffect, useReducer, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import { useStreamChatMessage, useAISettings, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
@@ -423,11 +424,11 @@ function useAIAssistantChat() {
     // The unmount cleanup intentionally aborts the latest active stream, not the
     // controller that existed when this effect was registered.
     // oxlint-disable-next-line react-doctor/exhaustive-deps
-    useEffect(() => {
+    useMountEffect(() => {
         return () => {
             streamAbortRef.current?.abort()
         }
-    }, [])
+    })
 
     const ensureSessionId = () => {
         if (activeSessionId && chatHistory.some((session) => session.id === activeSessionId)) {
