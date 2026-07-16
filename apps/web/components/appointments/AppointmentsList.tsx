@@ -10,7 +10,7 @@
  * - Detail side panel
  */
 
-import { startTransition, useEffect, useReducer, useState, type ReactNode } from "react"
+import { useReducer, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -79,7 +79,6 @@ type AppointmentDetailDialogState = {
 }
 
 type AppointmentDetailDialogAction =
-    | { type: "reset"; rescheduleDate: string; showRescheduleForm: boolean }
     | { type: "set-cancel-reason"; value: string }
     | { type: "open-cancel-form" }
     | { type: "close-cancel-form" }
@@ -103,15 +102,6 @@ function appointmentDetailDialogReducer(
     action: AppointmentDetailDialogAction
 ): AppointmentDetailDialogState {
     switch (action.type) {
-        case "reset":
-            return {
-                cancelReason: "",
-                showCancelForm: false,
-                showRescheduleForm: action.showRescheduleForm,
-                rescheduleDate: action.rescheduleDate,
-                selectedSlotStart: null,
-                rescheduleError: null,
-            }
         case "set-cancel-reason":
             return { ...state, cancelReason: action.value }
         case "open-cancel-form":
@@ -238,13 +228,103 @@ export function AppointmentDetailDialog({
     initialRescheduleDate?: string | null
     startInRescheduleMode?: boolean
 }) {
-    const { data: appointment, isLoading, isError, refetch } = useAppointment(appointmentId || "")
+    if (!appointmentId || !open) return null
+
+    return (
+        <OpenAppointmentDetailDialog
+            appointmentId={appointmentId}
+            onOpenChange={onOpenChange}
+            initialRescheduleDate={initialRescheduleDate}
+            startInRescheduleMode={startInRescheduleMode}
+        />
+    )
+}
+
+function OpenAppointmentDetailDialog({
+    appointmentId,
+    onOpenChange,
+    initialRescheduleDate,
+    startInRescheduleMode,
+}: {
+    appointmentId: string
+    onOpenChange: (open: boolean) => void
+    initialRescheduleDate: string | null
+    startInRescheduleMode: boolean
+}) {
+    const { data: appointment, isLoading, isError, refetch } = useAppointment(appointmentId)
+
+    if (isLoading) {
+        return (
+            <Dialog open onOpenChange={onOpenChange}>
+                <DialogContent>
+                    <div className="py-12 flex items-center justify-center">
+                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+                    </div>
+                </DialogContent>
+            </Dialog>
+        )
+    }
+
+    if (isError) {
+        return (
+            <Dialog open onOpenChange={onOpenChange}>
+                <DialogContent>
+                    <div className="py-10 text-center space-y-4">
+                        <AlertCircleIcon className="size-10 mx-auto text-muted-foreground/60" />
+                        <div>
+                            <p className="font-medium">Unable to load appointment details</p>
+                            <p className="text-sm text-muted-foreground">Please retry in a moment.</p>
+                        </div>
+                        <Button variant="outline" onClick={() => refetch()}>
+                            Retry
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        )
+    }
+
+    if (!appointment) return null
+
+    return (
+        <LoadedAppointmentDetailDialog
+            key={appointment.id}
+            appointment={appointment}
+            appointmentId={appointmentId}
+            onOpenChange={onOpenChange}
+            initialRescheduleDate={initialRescheduleDate}
+            startInRescheduleMode={startInRescheduleMode}
+        />
+    )
+}
+
+function LoadedAppointmentDetailDialog({
+    appointment,
+    appointmentId,
+    onOpenChange,
+    initialRescheduleDate,
+    startInRescheduleMode,
+}: {
+    appointment: Appointment
+    appointmentId: string
+    onOpenChange: (open: boolean) => void
+    initialRescheduleDate: string | null
+    startInRescheduleMode: boolean
+}) {
     const approveMutation = useApproveAppointment()
     const rescheduleMutation = useRescheduleAppointment()
     const cancelMutation = useCancelAppointment()
     const [dialogState, dispatchDialogState] = useReducer(
         appointmentDetailDialogReducer,
-        appointmentDetailDialogInitialState
+        appointmentDetailDialogInitialState,
+        (initialState) => ({
+            ...initialState,
+            showRescheduleForm:
+                startInRescheduleMode && RESCHEDULABLE_STATUSES.has(appointment.status),
+            rescheduleDate:
+                initialRescheduleDate ||
+                format(parseISO(appointment.scheduled_start), "yyyy-MM-dd"),
+        })
     )
 
     const slotsQuery = useRescheduleSlots(
@@ -254,23 +334,6 @@ export function AppointmentDetailDialog({
         appointment?.client_timezone,
         dialogState.showRescheduleForm && !!dialogState.rescheduleDate,
     )
-
-    useEffect(() => {
-        if (!open || !appointment) return
-        const canStartInRescheduleMode =
-            startInRescheduleMode && RESCHEDULABLE_STATUSES.has(appointment.status)
-        const defaultRescheduleDate = format(parseISO(appointment.scheduled_start), "yyyy-MM-dd")
-
-        startTransition(() => {
-            dispatchDialogState({
-                type: "reset",
-                showRescheduleForm: canStartInRescheduleMode,
-                rescheduleDate: initialRescheduleDate || defaultRescheduleDate,
-            })
-        })
-    }, [appointment, open, initialRescheduleDate, startInRescheduleMode])
-
-    if (!appointmentId) return null
 
     const handleApprove = () => {
         approveMutation.mutate(appointmentId, {
@@ -314,43 +377,10 @@ export function AppointmentDetailDialog({
         cancelMutation.mutate(payload, { onSuccess: () => onOpenChange(false) })
     }
 
-    if (isLoading) {
-        return (
-            <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent>
-                    <div className="py-12 flex items-center justify-center">
-                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
-                    </div>
-                </DialogContent>
-            </Dialog>
-        )
-    }
-
-    if (isError) {
-        return (
-            <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent>
-                    <div className="py-10 text-center space-y-4">
-                        <AlertCircleIcon className="size-10 mx-auto text-muted-foreground/60" />
-                        <div>
-                            <p className="font-medium">Unable to load appointment details</p>
-                            <p className="text-sm text-muted-foreground">Please retry in a moment.</p>
-                        </div>
-                        <Button variant="outline" onClick={() => refetch()}>
-                            Retry
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
-        )
-    }
-
-    if (!appointment) return null
-
     const isReschedulable = RESCHEDULABLE_STATUSES.has(appointment.status)
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open onOpenChange={onOpenChange}>
             <DialogContent className="max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Appointment Details</DialogTitle>

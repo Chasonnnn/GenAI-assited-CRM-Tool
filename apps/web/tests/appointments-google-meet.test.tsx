@@ -648,6 +648,73 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByRole("button", { name: /reschedule appointment/i })).toBeInTheDocument()
     })
 
+    it("preserves an in-progress cancellation reason when appointment data rerenders", () => {
+        const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
+        const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()
+        const appointment = {
+            id: "appt-cancel-draft",
+            user_id: "u1",
+            appointment_type_id: "type1",
+            appointment_type_name: "Initial Interview",
+            client_name: "Casey Client",
+            client_email: "casey@example.com",
+            client_phone: "555-0100",
+            client_timezone: "America/Los_Angeles",
+            client_notes: null,
+            scheduled_start: scheduledStart,
+            scheduled_end: scheduledEnd,
+            duration_minutes: 30,
+            meeting_mode: "google_meet",
+            status: "confirmed",
+            pending_expires_at: null,
+            approved_at: scheduledStart,
+            approved_by_user_id: "u1",
+            approved_by_name: "Test User",
+            cancelled_at: null,
+            cancelled_by_client: false,
+            cancellation_reason: null,
+            zoom_join_url: null,
+            google_event_id: "event-123",
+            google_meet_url: "https://meet.google.com/abc-defg-hij",
+            surrogate_id: null,
+            surrogate_number: null,
+            intended_parent_id: null,
+            intended_parent_name: null,
+            created_at: scheduledStart,
+            updated_at: scheduledStart,
+        }
+
+        mockUseAppointments.mockReturnValue({
+            data: {
+                items: [appointment],
+                total: 1,
+                page: 1,
+                per_page: 50,
+                pages: 1,
+            },
+            isLoading: false,
+        })
+        mockUseAppointment.mockImplementation(() => ({
+            data: { ...appointment },
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        }))
+
+        const { rerender } = render(<AppointmentsList />)
+        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        fireEvent.click(screen.getByRole("button", { name: /cancel appointment/i }))
+        fireEvent.change(screen.getByPlaceholderText("Enter reason for cancellation…"), {
+            target: { value: "Client requested a new date" },
+        })
+
+        rerender(<AppointmentsList />)
+
+        expect(screen.getByPlaceholderText("Enter reason for cancellation…")).toHaveValue(
+            "Client requested a new date"
+        )
+    })
+
     it("submits reschedule mutation from appointment details", () => {
         const scheduledStart = new Date("2026-02-23T20:00:00Z").toISOString()
         const scheduledEnd = new Date("2026-02-23T20:30:00Z").toISOString()
