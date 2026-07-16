@@ -907,7 +907,6 @@ export default function EmailTemplatesPage() {
         initialEmailTemplateEditorState,
     )
     const [showPreview, setShowPreview] = useState(false)
-    const [previewHtml, setPreviewHtml] = useState("")
     const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
@@ -1217,38 +1216,19 @@ export default function EmailTemplatesPage() {
     const previewSubject = previewSubjectTemplate
         .replace(/\{\{full_name\}\}/g, "John Smith")
         .replace(/\{\{org_name\}\}/g, signatureData?.org_signature_company_name || "ABC Surrogacy")
-    useEffect(() => {
-        if (!showPreview) return
-
-        const rawHtml = libraryPreviewId ? libraryTemplateDetail?.body : templateBody
-        if (libraryPreviewId && !rawHtml) return
-
-        React.startTransition(() => {
-            setPreviewHtml(buildPreviewHtml(rawHtml || "", {
+    const previewHtml = showPreview
+        ? buildPreviewHtml(
+            libraryPreviewId ? libraryTemplateDetail?.body ?? "" : templateBody,
+            {
                 orgSignatureCompanyName: signatureData?.org_signature_company_name,
                 previewScope,
                 personalSignatureHtml: personalSignaturePreview?.html,
                 orgSignatureHtml: orgSignaturePreview?.html,
-            }))
-        })
-    }, [
-        libraryPreviewId,
-        libraryTemplateDetail?.body,
-        orgSignaturePreview?.html,
-        personalSignaturePreview?.html,
-        previewScope,
-        showPreview,
-        signatureData?.org_signature_company_name,
-        templateBody,
-    ])
+            }
+        )
+        : ""
 
     const handlePreview = () => {
-        setPreviewHtml(buildPreviewHtml(templateBody, {
-            orgSignatureCompanyName: signatureData?.org_signature_company_name,
-            previewScope,
-            personalSignatureHtml: personalSignaturePreview?.html,
-            orgSignatureHtml: orgSignaturePreview?.html,
-        }))
         setShowPreview(true)
     }
 
