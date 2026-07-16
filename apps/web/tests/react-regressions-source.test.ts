@@ -419,10 +419,16 @@ describe("React regression guards (source)", () => {
 
     it("keeps RichTextEditor split and free of compiler-obsolete callbacks", () => {
         const source = readSource("components/rich-text-editor.tsx")
+        const contentSyncSource = readSource("lib/hooks/use-sync-rich-text-editor-content.ts")
 
         expect(source).not.toContain("useCallback")
+        expect(source).not.toContain("useEffect")
         expect(source).toContain("RichTextEditorLoading")
         expect(source).toContain("RichTextEditorToolbar")
+        expect(source).toContain("useSyncRichTextEditorContent(editor, content)")
+        expect(contentSyncSource).toContain("useEffect(() =>")
+        expect(contentSyncSource).toContain("editor.commands.setContent(content)")
+        expect(contentSyncSource).toContain("}, [content, editor])")
         expect(source).not.toContain("emoji-picker-react")
         expect(source).not.toContain("BoldIcon")
         expect(source).not.toContain("SmileIcon")
