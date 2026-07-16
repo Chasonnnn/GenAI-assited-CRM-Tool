@@ -1933,6 +1933,7 @@ describe("React regression guards (source)", () => {
 
     it("reconciles dashboard URL filters before child queries render", () => {
         const source = readSource("app/(app)/dashboard/context/dashboard-filters.tsx")
+        const filterBarSource = readSource("app/(app)/dashboard/components/dashboard-filter-bar.tsx")
 
         expect(source).toContain("type DashboardFiltersAction")
         expect(source).toContain("function dashboardFiltersReducer")
@@ -1947,6 +1948,8 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("setCustomRangeState")
         expect(source).not.toContain("setAssigneeIdState")
         expect(source).not.toContain("useCallback")
+        expect(filterBarSource).not.toContain("useEffect(()")
+        expect(filterBarSource).not.toContain("setAssigneeId(user.user_id)")
     })
 
     it("redirects incomplete app-shell profiles during render", () => {

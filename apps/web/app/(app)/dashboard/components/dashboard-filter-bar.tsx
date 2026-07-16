@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { DateRangePicker } from "@/components/ui/date-range-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -35,12 +35,6 @@ export function DashboardFilterBar({
     const { data: assignees } = useAssignees()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
     const showReset = filters.dateRange !== "all" || (isAdmin && !!filters.assigneeId)
-
-    useEffect(() => {
-        if (!isAdmin && user?.user_id && !filters.assigneeId) {
-            setAssigneeId(user.user_id)
-        }
-    }, [filters.assigneeId, isAdmin, setAssigneeId, user?.user_id])
 
     // The unmount cleanup intentionally clears the latest refresh hold timeout,
     // not the timeout value that existed when this effect was registered.
