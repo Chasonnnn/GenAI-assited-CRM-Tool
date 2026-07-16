@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 46 **REPLACE** Effects removed; 24 **CONTAIN** call sites consolidated behind eight tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 81 production `useEffect` calls remain.
+- 47 **REPLACE** Effects removed; 24 **CONTAIN** call sites consolidated behind eight tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 80 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -56,6 +56,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Email attachment selection is keyed to the surrogate session, so changing recipients clears stale attachment IDs; a tested notification hook now owns query-derived safety updates and uses `useEffectEvent` without callback-ref synchronization.
 - AI assistant scrolling now lives in a tested DOM synchronization hook and remains responsive to streaming content updates even when the message count does not change.
 - Compliance legal-hold pagination reconciles an invalid requested page during render, including zero-page result intervals, so stale page state never reappears after the dataset returns.
+- Pipeline stage detail expansion is event-owned and keyed by immutable `stage_key`, preserving open panels across refreshed versions that assign new database IDs without mirroring stage arrays through an Effect.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
