@@ -1966,6 +1966,17 @@ describe("React regression guards (source)", () => {
         expect(authSource).not.toContain("useEffect(()")
     })
 
+    it("redirects signed-out Duo callbacks during render and retains only verification synchronization", () => {
+        const source = readSource("app/auth/duo/callback/page.client.tsx")
+
+        expect(source).toContain(
+            'redirect(getAuthReturnTo() === "ops" ? "/ops/login" : "/login")'
+        )
+        expect(source.match(/useEffect\(\(\) =>/g)).toHaveLength(1)
+        expect(source).not.toContain('replace("/ops/login")')
+        expect(source).not.toContain('replace("/login")')
+    })
+
     it("contains unassigned queue view tracking in a named lifecycle hook", () => {
         const pageSource = readSource("app/(app)/surrogates/unassigned/page.client.tsx")
         const hookSource = readSource("lib/hooks/use-track-unassigned-queue-view.ts")

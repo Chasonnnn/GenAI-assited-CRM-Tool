@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useReducer, useState } from "react"
-import { useRouter } from "next/navigation"
+import { redirect, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -44,6 +44,22 @@ function clearStoredAuthReturnTo() {
     } catch {
         // Ignore storage errors in restricted browser contexts.
     }
+}
+
+function getAuthReturnTo(): "ops" | "app" {
+    const urlReturnTo =
+        typeof window === "undefined"
+            ? null
+            : new URLSearchParams(window.location.search).get("return_to")
+    const isOpsHost =
+        typeof window !== "undefined" && window.location.hostname.startsWith("ops.")
+
+    return getStoredAuthReturnTo() === "ops" ||
+        urlReturnTo === "ops" ||
+        hasAuthReturnToOpsCookie() ||
+        isOpsHost
+        ? "ops"
+        : "app"
 }
 
 const APP_POST_MFA_PATH = "/dashboard"
@@ -159,37 +175,10 @@ export default function DuoCallbackPage() {
     )
 
     useEffect(() => {
-        if (authLoading) return
-        if (!user) {
-            const urlReturnTo = new URLSearchParams(window.location.search).get("return_to")
-            const returnTo =
-                getStoredAuthReturnTo() === "ops" ||
-                urlReturnTo === "ops" ||
-                hasAuthReturnToOpsCookie() ||
-                window.location.hostname.startsWith("ops.")
-                    ? "ops"
-                    : "app"
-
-            if (returnTo === "ops") {
-                replace("/ops/login")
-                return
-            }
-
-            replace("/login")
-        }
-    }, [authLoading, user, replace])
-
-    useEffect(() => {
         if (authLoading || !user) return
 
         const urlParams = new URLSearchParams(window.location.search)
-        const returnTo =
-            getStoredAuthReturnTo() === "ops" ||
-            urlParams.get("return_to") === "ops" ||
-            hasAuthReturnToOpsCookie() ||
-            window.location.hostname.startsWith("ops.")
-                ? "ops"
-                : "app"
+        const returnTo = getAuthReturnTo()
 
         if (returnTo === "ops") {
             setStoredAuthReturnTo("ops")
@@ -241,6 +230,11 @@ export default function DuoCallbackPage() {
         void verify()
     }, [authLoading, user, refreshAuth, replace])
 
+    if (!authLoading && !user) {
+        redirect(getAuthReturnTo() === "ops" ? "/ops/login" : "/login")
+        return null
+    }
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
             <Card className="w-full max-w-lg shadow-lg">
@@ -282,14 +276,7 @@ export default function DuoCallbackPage() {
                     codes={recoveryCodes}
                     onClose={() => {
                         dispatch({ type: "clearRecoveryCodes" })
-                        const urlReturnTo = new URLSearchParams(window.location.search).get("return_to")
-                        const returnTo =
-                            getStoredAuthReturnTo() === "ops" ||
-                            urlReturnTo === "ops" ||
-                            hasAuthReturnToOpsCookie() ||
-                            window.location.hostname.startsWith("ops.")
-                                ? "ops"
-                                : "app"
+                        const returnTo = getAuthReturnTo()
                         if (returnTo === "ops") {
                             clearStoredAuthReturnTo()
                             replace("/ops")
