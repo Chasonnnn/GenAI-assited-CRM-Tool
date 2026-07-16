@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import QueuesSettingsPage from '../app/(app)/settings/queues/page'
 
-const mockPush = vi.fn()
+const mockRedirect = vi.fn()
 
 vi.mock('next/navigation', () => ({
-    useRouter: () => ({ push: mockPush }),
+    redirect: (path: string) => mockRedirect(path),
 }))
 
 const mockUseAuth = vi.fn()
@@ -35,7 +35,7 @@ vi.mock('@/lib/hooks/use-permissions', () => ({
 
 describe('QueuesSettingsPage', () => {
     beforeEach(() => {
-        mockPush.mockReset()
+        mockRedirect.mockReset()
         mockUseAuth.mockReset()
         mockUseQueues.mockReset()
         mockCreateQueue.mockReset()
@@ -50,8 +50,9 @@ describe('QueuesSettingsPage', () => {
         render(<QueuesSettingsPage />)
 
         await waitFor(() => {
-            expect(mockPush).toHaveBeenCalledWith('/settings')
+            expect(mockRedirect).toHaveBeenCalledWith('/settings')
         })
+        expect(mockUseQueues).not.toHaveBeenCalled()
     })
 
     it('renders queues for admin users', () => {

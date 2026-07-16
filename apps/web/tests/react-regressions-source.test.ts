@@ -2261,13 +2261,21 @@ describe("React regression guards (source)", () => {
     it("keeps queues settings rendering split into focused helpers", () => {
         const source = readSource("app/(app)/settings/queues/page.tsx")
         const componentIndex = source.indexOf("export default function QueuesSettingsPage()")
+        const contentIndex = source.indexOf("function QueuesSettingsContent()")
         const firstHelperIndex = source.indexOf("function QueuesPageHeader")
         const componentSource = source.slice(
             componentIndex,
             firstHelperIndex > componentIndex ? firstHelperIndex : undefined
         )
+        const authorizationSource = source.slice(componentIndex, contentIndex)
 
         expect(componentIndex).toBeGreaterThanOrEqual(0)
+        expect(contentIndex).toBeGreaterThan(componentIndex)
+        expect(source).toContain('redirect("/settings")')
+        expect(source).toContain("return <QueuesSettingsContent />")
+        expect(source).not.toContain("React.useEffect")
+        expect(authorizationSource).not.toContain("useQueues(")
+        expect(authorizationSource).not.toContain("useMembers(")
         expect(source).toContain("function QueuesPageHeader")
         expect(source).toContain("function QueuesStatusContent")
         expect(source).toContain("function QueuesTable")

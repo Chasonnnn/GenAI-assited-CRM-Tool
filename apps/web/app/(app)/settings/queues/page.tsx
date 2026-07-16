@@ -50,7 +50,7 @@ import {
 import { useMembers } from "@/lib/hooks/use-permissions"
 import type { Member } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
+import { redirect } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 
 function resolveErrorMessage(error: unknown, fallback: string) {
@@ -59,8 +59,25 @@ function resolveErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function QueuesSettingsPage() {
-    const { push } = useRouter()
     const { user } = useAuth()
+    const isManager = user?.role === "admin" || user?.role === "developer"
+
+    if (user && !isManager) {
+        redirect("/settings")
+    }
+
+    if (!isManager) {
+        return (
+            <div className="flex min-h-screen items-center justify-center">
+                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+            </div>
+        )
+    }
+
+    return <QueuesSettingsContent />
+}
+
+function QueuesSettingsContent() {
     const { data: queues, isLoading, error } = useQueues(true) // Include inactive
     const createQueueMutation = useCreateQueue()
     const updateQueueMutation = useUpdateQueue()
@@ -80,16 +97,6 @@ export default function QueuesSettingsPage() {
     const { data: queueMembers, isLoading: loadingMembers } = useQueueMembers(managingQueue?.id || null)
     const addMemberMutation = useAddQueueMember()
     const removeMemberMutation = useRemoveQueueMember()
-
-    // Check if user is an admin
-    const isManager = user?.role && ['admin', 'developer'].includes(user.role)
-
-    // Redirect if not admin
-    React.useEffect(() => {
-        if (user && !isManager) {
-            push('/settings')
-        }
-    }, [user, isManager, push])
 
     const handleCreateQueue = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -169,14 +176,6 @@ export default function QueuesSettingsPage() {
     const availableMembers = orgMembers?.filter(
         m => !queueMembers?.some(qm => qm.user_id === m.user_id)
     ) || []
-
-    if (!isManager) {
-        return (
-            <div className="flex min-h-screen items-center justify-center">
-                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-            </div>
-        )
-    }
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
