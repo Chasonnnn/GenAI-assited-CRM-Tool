@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 18 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 117 production `useEffect` calls remain.
+- 21 **REPLACE** Effects removed and 10 **CONTAIN** call sites consolidated behind one tested mount hook; 114 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -30,6 +30,8 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - The operations dashboard fetch is owned by a stable TanStack Query key, so fresh data survives route remounts without duplicate requests or loading flashes.
 - Platform alerts and agencies use filter-keyed queries, isolating out-of-order responses and reusing fresh route data.
 - Support-session capabilities refetch after transient failures and derive the effective access mode without hydration Effects.
+- Availability drafts derive from refreshed server rules for untouched days while explicit edits remain user-owned.
+- Automation defaults authorized admins to org scope before the first query, and email preview HTML derives from the active source without stale cross-preview state.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
