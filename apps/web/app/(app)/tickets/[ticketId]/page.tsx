@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { toast } from '@/components/ui/toast'
 import { ShieldAlertIcon } from 'lucide-react'
@@ -64,30 +64,52 @@ export default function TicketDetailPage() {
 
     const { data, isLoading } = useTicket(ticketId)
 
+    if (!isDeveloper) {
+        return (
+            <div className="p-4 md:p-6">
+                <Alert variant="destructive">
+                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
+                    <AlertDescription>
+                        Tickets are temporarily available to developers only.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        )
+    }
+
+    if (isLoading) {
+        return <div className="p-4 text-sm text-muted-foreground md:p-6">Loading ticket…</div>
+    }
+
+    if (!data?.ticket) {
+        return <div className="p-4 text-sm text-muted-foreground md:p-6">Ticket not found.</div>
+    }
+
+    return <LoadedTicketDetailPage key={data.ticket.id} ticketId={ticketId} data={data} />
+}
+
+function LoadedTicketDetailPage({
+    ticketId,
+    data,
+}: {
+    ticketId: string
+    data: TicketDetailData
+}) {
+    const ticket = data.ticket
+
     const patchMutation = usePatchTicket()
     const replyMutation = useReplyTicket()
     const addNoteMutation = useAddTicketNote()
     const linkMutation = useLinkTicketSurrogate()
 
-    const [statusValue, setStatusValue] = useState<TicketStatus>('new')
-    const [priorityValue, setPriorityValue] = useState<TicketPriority>('normal')
-    const [replyTo, setReplyTo] = useState('')
+    const [statusValue, setStatusValue] = useState<TicketStatus>(ticket.status)
+    const [priorityValue, setPriorityValue] = useState<TicketPriority>(ticket.priority)
+    const [replyTo, setReplyTo] = useState(ticket.requester_email || '')
     const [replyBody, setReplyBody] = useState('')
     const [noteBody, setNoteBody] = useState('')
-    const [surrogateId, setSurrogateId] = useState('')
-
-    useEffect(() => {
-        if (!data?.ticket) return
-        startTransition(() => {
-            setStatusValue(data.ticket.status)
-            setPriorityValue(data.ticket.priority)
-            setReplyTo(data.ticket.requester_email || '')
-            setSurrogateId(data.ticket.surrogate_id || '')
-        })
-    }, [data?.ticket])
+    const [surrogateId, setSurrogateId] = useState(ticket.surrogate_id || '')
 
     const handleUpdate = async () => {
-        if (!data?.ticket) return
         try {
             await patchMutation.mutateAsync({
                 ticketId: data.ticket.id,
@@ -104,7 +126,6 @@ export default function TicketDetailPage() {
     }
 
     const handleReply = async () => {
-        if (!data?.ticket) return
         const recipient = replyTo.trim()
         const body = replyBody.trim()
         if (!recipient || !body) {
@@ -130,7 +151,6 @@ export default function TicketDetailPage() {
     }
 
     const handleAddNote = async () => {
-        if (!data?.ticket) return
         const body = noteBody.trim()
         if (!body) {
             toast.error('Note cannot be empty')
@@ -151,7 +171,6 @@ export default function TicketDetailPage() {
     }
 
     const handleLink = async () => {
-        if (!data?.ticket) return
         try {
             await linkMutation.mutateAsync({
                 ticketId: data.ticket.id,
@@ -172,27 +191,6 @@ export default function TicketDetailPage() {
             const message = error instanceof Error ? error.message : 'Failed to get attachment URL'
             toast.error(message)
         }
-    }
-
-    if (!isDeveloper) {
-        return (
-            <div className="p-4 md:p-6">
-                <Alert variant="destructive">
-                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
-                    <AlertDescription>
-                        Tickets are temporarily available to developers only.
-                    </AlertDescription>
-                </Alert>
-            </div>
-        )
-    }
-
-    if (isLoading) {
-        return <div className="p-4 text-sm text-muted-foreground md:p-6">Loading ticket…</div>
-    }
-
-    if (!data?.ticket) {
-        return <div className="p-4 text-sm text-muted-foreground md:p-6">Ticket not found.</div>
     }
 
     return (
