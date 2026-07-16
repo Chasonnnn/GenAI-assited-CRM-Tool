@@ -120,6 +120,11 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useMemo")
         expect(source).toContain("function parseServerErrors")
         expect(source).toContain("function getActionValidationError")
+        expect(source).toContain(
+            "return { ...state, conditionLogic: action.value, serverErrors: [] }"
+        )
+        expect(source).toContain("workflowName: action.value, serverErrors: []")
+        expect(source).not.toContain('type: "clearServerErrors"')
         expect(source).not.toContain("const parseServerErrors =")
         expect(source).not.toContain("const getActionValidationError =")
     })

@@ -254,6 +254,55 @@ describe('AutomationPage', () => {
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
     })
 
+    it('clears server validation errors when condition logic changes', () => {
+        mockCreateWorkflow.mutate.mockImplementation(
+            (_data: unknown, opts?: { onError?: (err: Error) => void }) => {
+                opts?.onError?.(
+                    new Error('Action 1: title is required; Action 1: assignee is required'),
+                )
+            },
+        )
+
+        renderAutomationPage()
+
+        const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Conditional Workflow' },
+        })
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected a trigger select'),
+            { target: { value: 'surrogate_created' } },
+        )
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+        fireEvent.click(screen.getByRole('button', { name: /add condition/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add condition/i }))
+        expect(screen.getByRole('button', { name: 'AND' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected an action select'),
+            { target: { value: 'add_note' } },
+        )
+        fireEvent.change(screen.getByPlaceholderText('Note content'), {
+            target: { value: 'Record the condition result' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+        const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(saveButtons, 'Expected a save workflow button'))
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledTimes(1)
+        expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'AND' }))
+
+        expect(screen.queryByText(/Action 1: title is required/i)).not.toBeInTheDocument()
+    })
+
     it('submits only the configuration for the selected trigger type', () => {
         renderAutomationPage()
 
