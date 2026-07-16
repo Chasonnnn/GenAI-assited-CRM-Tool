@@ -195,4 +195,22 @@ describe("CampaignDetailPage", () => {
             })
         })
     })
+
+    it("preserves an in-progress campaign edit when equivalent campaign data rerenders", () => {
+        mockCampaignData = {
+            ...mockCampaignData,
+            status: "draft",
+        }
+
+        const { rerender } = render(<CampaignDetailPage />)
+        fireEvent.click(screen.getByRole("button", { name: /^edit$/i }))
+        fireEvent.change(screen.getByLabelText(/campaign name/i), {
+            target: { value: "Unsaved campaign name" },
+        })
+
+        mockCampaignData = { ...mockCampaignData }
+        rerender(<CampaignDetailPage />)
+
+        expect(screen.getByLabelText(/campaign name/i)).toHaveValue("Unsaved campaign name")
+    })
 })
