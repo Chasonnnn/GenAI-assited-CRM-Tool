@@ -10,12 +10,13 @@
  * - Click on highlighted text to scroll to note in sidebar
  */
 
-import { useEffect, useEffectEvent, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { MessageSquarePlusIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import type { TipTapDoc, TipTapNode, TipTapMark, InterviewNoteRead } from "@/lib/api/interviews"
+import { useTranscriptViewerListeners } from "@/lib/hooks/use-transcript-viewer-listeners"
 
 interface TranscriptViewerProps {
     transcriptHtml: string | null
@@ -176,7 +177,7 @@ export function TranscriptViewer({
         : transcriptHtml || ""
 
     // Handle text selection
-    const handleMouseUp = useEffectEvent(() => {
+    const handleMouseUp = () => {
         const sel = window.getSelection()
         if (!sel || sel.isCollapsed || !sel.toString().trim()) {
             setSelection(null)
@@ -198,10 +199,10 @@ export function TranscriptViewer({
             y: rect.top,
             text,
         })
-    })
+    }
 
     // Handle click on highlighted comment
-    const handleClick = useEffectEvent((e: MouseEvent) => {
+    const handleClick = (e: MouseEvent) => {
         const target = e.target as HTMLElement
         if (target.classList.contains("transcript-comment")) {
             const noteId = target.dataset.noteId
@@ -209,35 +210,23 @@ export function TranscriptViewer({
                 onNoteClick(noteId)
             }
         }
-    })
+    }
 
     // Handle keyboard dismiss
-    const handleKeyDown = useEffectEvent((e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === "Escape") {
             setSelection(null)
             window.getSelection()?.removeAllRanges()
         }
+    }
+
+    useTranscriptViewerListeners({
+        containerRef,
+        enabled: Boolean(renderedHtml),
+        onMouseUp: handleMouseUp,
+        onClick: handleClick,
+        onKeyDown: handleKeyDown,
     })
-
-    // Set up event listeners
-    useEffect(() => {
-        const container = containerRef.current
-        if (!container) return
-
-        const onMouseUp = () => handleMouseUp()
-        const onClick = (event: MouseEvent) => handleClick(event)
-        const onKeyDown = (event: KeyboardEvent) => handleKeyDown(event)
-
-        container.addEventListener("mouseup", onMouseUp)
-        container.addEventListener("click", onClick)
-        document.addEventListener("keydown", onKeyDown)
-
-        return () => {
-            container.removeEventListener("mouseup", onMouseUp)
-            container.removeEventListener("click", onClick)
-            document.removeEventListener("keydown", onKeyDown)
-        }
-    }, [])
 
     // Handle add note click
     const handleAddNoteClick = () => {
