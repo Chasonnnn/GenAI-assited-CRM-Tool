@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useReducer } from 'react';
+import { useReducer } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from "@/components/app-link";
 import { useRouter } from 'next/navigation';
-import { listOrganizations, type OrganizationSummary } from '@/lib/api/platform';
+import { listOrganizations } from '@/lib/api/platform';
 import { buttonVariants } from '@/components/ui/button-variants';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -39,9 +40,6 @@ const PLAN_BADGE_VARIANTS: Record<string, string> = {
 };
 
 type AgenciesState = {
-    agencies: OrganizationSummary[]
-    total: number
-    isLoading: boolean
     search: string
     statusFilter: string
 }
@@ -49,14 +47,8 @@ type AgenciesState = {
 type AgenciesAction =
     | { type: "set-search"; search: string }
     | { type: "set-status-filter"; statusFilter: string }
-    | { type: "load-start" }
-    | { type: "load-success"; agencies: OrganizationSummary[]; total: number }
-    | { type: "load-error" }
 
 const INITIAL_AGENCIES_STATE: AgenciesState = {
-    agencies: [],
-    total: 0,
-    isLoading: true,
     search: "",
     statusFilter: "",
 }
@@ -67,46 +59,40 @@ function agenciesReducer(state: AgenciesState, action: AgenciesAction): Agencies
             return { ...state, search: action.search }
         case "set-status-filter":
             return { ...state, statusFilter: action.statusFilter }
-        case "load-start":
-            return { ...state, isLoading: true }
-        case "load-success":
-            return { ...state, agencies: action.agencies, total: action.total, isLoading: false }
-        case "load-error":
-            return { ...state, isLoading: false }
     }
 }
 
 export default function AgenciesPage() {
     const { push } = useRouter();
     const [state, dispatch] = useReducer(agenciesReducer, INITIAL_AGENCIES_STATE);
-    const { agencies, total, isLoading, search, statusFilter } = state;
-
-    useEffect(() => {
-        let isCurrent = true;
-
-        dispatch({ type: "load-start" });
-        void listOrganizations({
-            ...(search ? { search } : {}),
-            ...(statusFilter ? { status: statusFilter } : {}),
-        })
-            .then((data) => {
-                if (!isCurrent) return;
-                dispatch({
-                    type: "load-success",
-                    agencies: data.items.filter((item) => !item.deleted_at),
-                    total: data.total,
+    const { search, statusFilter } = state;
+    const agenciesQuery = useQuery({
+        queryKey: [
+            'platform',
+            'agencies',
+            { search: search || null, status: statusFilter || null },
+        ],
+        queryFn: async () => {
+            try {
+                const data = await listOrganizations({
+                    ...(search ? { search } : {}),
+                    ...(statusFilter ? { status: statusFilter } : {}),
                 });
-            })
-            .catch((error) => {
-                if (!isCurrent) return;
+                return {
+                    ...data,
+                    items: data.items.filter((item) => !item.deleted_at),
+                };
+            } catch (error) {
                 console.error('Failed to fetch agencies:', error);
-                dispatch({ type: "load-error" });
-            });
-
-        return () => {
-            isCurrent = false;
-        };
-    }, [search, statusFilter]);
+                throw error;
+            }
+        },
+        retry: false,
+        staleTime: 30_000,
+    });
+    const agencies = agenciesQuery.data?.items ?? [];
+    const total = agenciesQuery.data?.total ?? 0;
+    const isLoading = agenciesQuery.isFetching;
 
     return (
         <div className="p-6 space-y-6">
