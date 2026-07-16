@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import dynamic from "next/dynamic"
 import { useAuth } from "@/lib/auth-context"
 import { useDashboardSocket } from "@/lib/hooks/use-dashboard-socket"
@@ -82,9 +83,9 @@ function DashboardContent() {
     // WebSocket for real-time updates
     useDashboardSocket()
 
-    useEffect(() => {
+    useMountEffect(() => {
         trackDashboardViewed()
-    }, [])
+    })
 
     // Fetch data for "last updated" calculation
     const statsQuery = useSurrogateStats(statsParams)

@@ -2,6 +2,7 @@
 
 import { createContext, use, useEffect, useState, type ReactNode } from 'react';
 import api from '@/lib/api';
+import { useMountEffect } from '@/lib/hooks/use-mount-effect';
 
 // Interface matches backend MeResponse schema
 export interface User {
@@ -77,14 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
     };
 
-    useEffect(() => {
+    useMountEffect(() => {
         if (shouldSkipAuthFetch()) return;
 
         const timeoutId = window.setTimeout(() => {
             void fetchUser()
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, []);
+    });
 
     return (
         <AuthContext.Provider value={{ user, isLoading, error, refetch: () => { void fetchUser() } }}>

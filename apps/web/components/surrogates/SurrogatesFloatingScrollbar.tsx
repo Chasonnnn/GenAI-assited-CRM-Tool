@@ -14,6 +14,7 @@ import {
     useState,
 } from "react"
 import { createPortal } from "react-dom"
+import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 
 const POINTER_QUERIES = ["(any-pointer: fine)", "(pointer: fine)"]
 const HOVER_QUERIES = ["(any-hover: hover)", "(hover: hover)"]
@@ -333,7 +334,7 @@ function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController
         activateFromScroll()
     }
 
-    useEffect(() => {
+    useMountEffect(() => {
         startTransition(() => {
             setIsMounted(true)
         })
@@ -370,7 +371,7 @@ function useSurrogatesFloatingScrollbarController(): FloatingScrollbarController
             clearTimerRef(hideTimeoutRef)
             clearTimerRef(fadeTimeoutRef)
         }
-    }, [])
+    })
 
     useEffect(() => {
         if (!isDesktopPointer) {
