@@ -82,8 +82,8 @@ const AVAILABLE_VARIABLES = [
 
 interface ComposeFormState {
     selectedTemplate: string
-    subject: string
-    body: string
+    subjectOverride: string | null
+    bodyOverride: string | null
     isPreview: boolean
     attachmentSelection: EmailAttachmentSelectionState
     isBodyDropActive: boolean
@@ -91,7 +91,6 @@ interface ComposeFormState {
 
 type ComposeFormAction =
     | { type: "selectTemplate"; templateId: string }
-    | { type: "hydrateTemplate"; subject: string; body: string }
     | { type: "setSubject"; subject: string }
     | { type: "setBody"; body: string }
     | { type: "togglePreview"; body?: string }
@@ -110,8 +109,8 @@ function createEmptyAttachmentSelection(): EmailAttachmentSelectionState {
 function createInitialComposeFormState(): ComposeFormState {
     return {
         selectedTemplate: "",
-        subject: "",
-        body: "",
+        subjectOverride: null,
+        bodyOverride: null,
         isPreview: true,
         attachmentSelection: createEmptyAttachmentSelection(),
         isBodyDropActive: false,
@@ -141,19 +140,24 @@ function composeFormReducer(state: ComposeFormState, action: ComposeFormAction):
         case "selectTemplate":
             return state.selectedTemplate === action.templateId
                 ? state
-                : { ...state, selectedTemplate: action.templateId }
-        case "hydrateTemplate":
-            return state.subject === action.subject && state.body === action.body
-                ? state
-                : { ...state, subject: action.subject, body: action.body }
+                : {
+                    ...state,
+                    selectedTemplate: action.templateId,
+                    subjectOverride: null,
+                    bodyOverride: null,
+                }
         case "setSubject":
-            return state.subject === action.subject ? state : { ...state, subject: action.subject }
+            return state.subjectOverride === action.subject
+                ? state
+                : { ...state, subjectOverride: action.subject }
         case "setBody":
-            return state.body === action.body ? state : { ...state, body: action.body }
+            return state.bodyOverride === action.body
+                ? state
+                : { ...state, bodyOverride: action.body }
         case "togglePreview":
             return {
                 ...state,
-                body: action.body ?? state.body,
+                bodyOverride: action.body ?? state.bodyOverride,
                 isPreview: !state.isPreview,
             }
         case "setAttachmentSelection":
@@ -427,14 +431,13 @@ function EmailComposeDialogSession({
     )
     const {
         selectedTemplate,
-        subject,
-        body,
+        subjectOverride,
+        bodyOverride,
         isPreview,
         attachmentSelection,
         isBodyDropActive,
     } = composeState
     const idempotencyKeyRef = React.useRef<string | null>(null)
-    const hydratedTemplateIdRef = React.useRef<string | null>(null)
     const previewEditorRef = React.useRef<HTMLDivElement | null>(null)
     const attachmentsPanelRef = React.useRef<EmailAttachmentsPanelHandle | null>(null)
     const dragDepthRef = React.useRef(0)
@@ -449,18 +452,9 @@ function EmailComposeDialogSession({
     const { data: resolvedTemplateVariables = {} } = useSurrogateTemplateVariables(surrogateData.id, {
         enabled: open && Boolean(surrogateData.id),
     })
-
-    React.useEffect(() => {
-        if (!fullTemplate?.id) return
-        if (hydratedTemplateIdRef.current === fullTemplate.id) return
-
-        hydratedTemplateIdRef.current = fullTemplate.id
-        dispatch({
-            type: "hydrateTemplate",
-            subject: fullTemplate.subject,
-            body: fullTemplate.body,
-        })
-    }, [fullTemplate])
+    const selectedFullTemplate = fullTemplate?.id === selectedTemplate ? fullTemplate : null
+    const subject = subjectOverride ?? selectedFullTemplate?.subject ?? ""
+    const body = bodyOverride ?? selectedFullTemplate?.body ?? ""
 
     const previewVariableValues = buildPreviewVariableValues(surrogateData, resolvedTemplateVariables)
     const unresolvedTemplateVariables = findUnresolvedTemplateVariables([subject, body], previewVariableValues)
