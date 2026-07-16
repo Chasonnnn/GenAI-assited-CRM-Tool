@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { listOrganizations, type OrganizationSummary } from "@/lib/api/platform"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -43,7 +43,15 @@ function createPublishDialogState(defaultPublishAll: boolean, initialOrgIds: str
     }
 }
 
-export function PublishDialog({
+export function PublishDialog(props: PublishDialogProps) {
+    return (
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+            {props.open ? <PublishDialogContent {...props} /> : null}
+        </Dialog>
+    )
+}
+
+function PublishDialogContent({
     open,
     onOpenChange,
     onPublish,
@@ -54,13 +62,6 @@ export function PublishDialog({
     initialOrgIds = EMPTY_ORG_IDS,
 }: PublishDialogProps) {
     const [state, setDialogState] = useState(() => createPublishDialogState(defaultPublishAll, initialOrgIds))
-
-    useEffect(() => {
-        if (!open) return
-        startTransition(() => {
-            setDialogState(createPublishDialogState(defaultPublishAll, initialOrgIds))
-        })
-    }, [open, defaultPublishAll, initialOrgIds])
 
     const { data, isLoading: orgsLoading } = useQuery({
         queryKey: ["platform-orgs", "publish-dialog"],
@@ -104,7 +105,6 @@ export function PublishDialog({
     const canPublish = state.mode === "all" || state.selectedOrgIds.length > 0
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
@@ -252,6 +252,5 @@ export function PublishDialog({
                     </div>
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
     )
 }
