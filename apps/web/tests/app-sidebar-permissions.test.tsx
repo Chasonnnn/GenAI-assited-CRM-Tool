@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
+import { renderToString } from "react-dom/server"
 
 import { AppSidebar } from "../components/app-sidebar"
 
@@ -326,6 +327,21 @@ describe("AppSidebar permission visibility", () => {
             "true"
         )
         expect(screen.getByLabelText("User menu")).toBeInTheDocument()
+    })
+
+    it("renders the active settings section open in the initial server HTML", () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_team", "view_audit_log"] },
+        })
+
+        const html = renderToString(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        expect(html).toContain("General")
+        expect(html).toContain("Team")
     })
 
     it("places AI Studio Preview directly under Automation when AI access is enabled", async () => {
