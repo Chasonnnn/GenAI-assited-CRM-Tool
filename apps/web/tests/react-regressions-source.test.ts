@@ -4466,9 +4466,14 @@ describe("React regression guards (source)", () => {
 
     it("keeps search command handlers compiler-friendly", () => {
         const source = readSource("components/search-command.tsx")
+        const hotkeySource = readSource("lib/hooks/use-search-hotkey.ts")
 
         expect(source).toContain('key={open ? "open" : "closed"}')
-        expect(source).toContain("useEffectEvent")
+        expect(source).not.toContain("useEffect")
+        expect(source).toContain('export { useSearchHotkey } from "@/lib/hooks/use-search-hotkey"')
+        expect(hotkeySource).toContain("useEffectEvent")
+        expect(hotkeySource).toContain('document.addEventListener("keydown", handleKeyDown)')
+        expect(hotkeySource).toContain('document.removeEventListener("keydown", handleKeyDown)')
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("startTransition")
     })

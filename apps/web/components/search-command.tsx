@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useEffectEvent, useState } from "react"
+import { useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
@@ -21,6 +21,8 @@ import {
     type SearchResponse,
 } from "@/lib/api/search"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
+
+export { useSearchHotkey } from "@/lib/hooks/use-search-hotkey"
 
 const ENTITY_CONFIG = {
     surrogate: {
@@ -148,23 +150,4 @@ function SearchCommandDialogContent({ open, onOpenChange }: SearchCommandDialogP
             </Command>
         </CommandDialog>
     )
-}
-
-/**
- * Hook to register ⌘K / Ctrl+K keyboard shortcut for search
- */
-export function useSearchHotkey(callback: () => void) {
-    const onSearchHotkey = useEffectEvent(callback)
-
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-                e.preventDefault()
-                onSearchHotkey()
-            }
-        }
-
-        document.addEventListener("keydown", handleKeyDown)
-        return () => document.removeEventListener("keydown", handleKeyDown)
-    }, [])
 }
