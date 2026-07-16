@@ -111,6 +111,36 @@ describe('AIAssistantPage', () => {
         expect(container).not.toHaveTextContent("### Funnel Actions")
     })
 
+    it('preserves partial assistant text when generation is stopped', async () => {
+        mockStreamMessage.mockImplementationOnce(
+            async (_request, onEvent, signal: AbortSignal) => {
+                onEvent({ type: 'start', data: { status: 'thinking' } })
+                onEvent({ type: 'delta', data: { text: 'Partial response worth keeping.' } })
+
+                await new Promise<void>((_resolve, reject) => {
+                    signal.addEventListener(
+                        'abort',
+                        () => reject(new DOMException('Aborted', 'AbortError')),
+                        { once: true },
+                    )
+                })
+            },
+        )
+
+        render(<AIAssistantPage />)
+
+        const input = screen.getByRole('textbox')
+        fireEvent.change(input, { target: { value: 'Start a long answer' } })
+        fireEvent.keyDown(input, { key: 'Enter', shiftKey: false })
+
+        expect(await screen.findByText('Partial response worth keeping.')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+
+        await waitFor(() => {
+            expect(screen.getByText('Partial response worth keeping.')).toBeInTheDocument()
+        })
+    })
+
     it("adds an accessible label to reject action buttons", async () => {
         render(<AIAssistantPage />)
 

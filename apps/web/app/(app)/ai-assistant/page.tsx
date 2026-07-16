@@ -413,20 +413,6 @@ function useAIAssistantChat() {
         chatStateRef,
     })
 
-    const currentSession = chatHistory.find((session) => session.id === activeSessionId) || null
-
-    useEffect(() => {
-        if (isStreaming) return
-        if (currentSession) {
-            const sessionMessages = currentSession.messages.length
-                ? currentSession.messages
-                : [createWelcomeMessage()]
-            setChatMessages(dispatchChat, chatStateRef, sessionMessages)
-            return
-        }
-        setChatMessages(dispatchChat, chatStateRef, [createWelcomeMessage()])
-    }, [currentSession, isStreaming])
-
     useAIChatScrollToLatest(scrollRef, messages)
 
     // The unmount cleanup intentionally aborts the latest active stream, not the

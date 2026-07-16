@@ -210,7 +210,8 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain(
             "useEffect(() => {\n        chatStateRef.current = chatState"
         )
-        expect(source).toContain("const currentSession = chatHistory.find")
+        expect(source).not.toContain("const currentSession = chatHistory.find")
+        expect(source).not.toContain("useEffect(() => {\n        if (isStreaming) return")
         expect(source).not.toContain("`session-${Date.now()}`")
         expect(source).not.toContain("`user-${Date.now()}`")
         expect(source).not.toContain("`assistant-${Date.now()}`")
