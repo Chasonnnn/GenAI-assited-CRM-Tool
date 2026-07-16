@@ -213,6 +213,48 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByRole("button", { name: "Copy booking link" })).toBeInTheDocument()
     })
 
+    it("saves refreshed availability for days the user did not edit", () => {
+        let rules = [
+            {
+                id: "rule-monday",
+                day_of_week: 0,
+                start_time: "09:00",
+                end_time: "17:00",
+                timezone: "America/Los_Angeles",
+            },
+        ]
+        mockUseAvailabilityRules.mockImplementation(() => ({ data: rules, isLoading: false }))
+        const view = render(<AppointmentSettings />)
+
+        rules = [
+            {
+                id: "rule-monday",
+                day_of_week: 0,
+                start_time: "10:00",
+                end_time: "17:00",
+                timezone: "America/Los_Angeles",
+            },
+        ]
+        view.rerender(<AppointmentSettings />)
+
+        fireEvent.click(screen.getAllByRole("switch")[1])
+        fireEvent.click(screen.getByRole("button", { name: "Save Availability" }))
+
+        expect(mockUseSetAvailabilityRules).toHaveBeenCalledWith(
+            {
+                rules: expect.arrayContaining([
+                    {
+                        day_of_week: 0,
+                        start_time: "10:00",
+                        end_time: "17:00",
+                    },
+                ]),
+                timezone: "America/Los_Angeles",
+            },
+            expect.any(Object)
+        )
+    })
+
     it("uses an accessible icon button for deleting appointment types", () => {
         mockUseAppointmentTypes.mockReturnValue({
             data: [

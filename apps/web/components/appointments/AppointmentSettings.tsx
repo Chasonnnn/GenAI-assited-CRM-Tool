@@ -11,7 +11,7 @@
  * - Google Calendar connection warning
  */
 
-import { startTransition, useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -170,9 +170,51 @@ type AvailabilityRuleDraft = {
 }
 
 type AvailabilityRulesState = {
+    draft: AvailabilityRulesDraft | null
+    hasChanges: boolean
+    sourceFingerprintAtSave: string | null
+}
+
+type AvailabilityRulesDraft = {
     localRules: AvailabilityRuleDraft[]
     timezone: string
-    hasChanges: boolean
+}
+
+function buildAvailabilityDraft(
+    rules: Array<{ day_of_week: number; start_time: string; end_time: string; timezone: string }>,
+    fallbackTimezone: string
+): AvailabilityRulesDraft {
+    const rulesByDay = new Map(rules.map((rule) => [rule.day_of_week, rule]))
+    return {
+        localRules: DAYS_OF_WEEK.map((day) => {
+            const existing = rulesByDay.get(day.value)
+            return {
+                day_of_week: day.value,
+                start_time: existing?.start_time || "09:00",
+                end_time: existing?.end_time || "17:00",
+                enabled: !!existing,
+            }
+        }),
+        timezone: rules[0]?.timezone ?? fallbackTimezone,
+    }
+}
+
+function getAvailabilityFingerprint(draft: AvailabilityRulesDraft): string {
+    return JSON.stringify(draft)
+}
+
+function resolveAvailabilityDraft(
+    state: AvailabilityRulesState,
+    serverDraft: AvailabilityRulesDraft,
+    serverFingerprint: string
+): AvailabilityRulesDraft {
+    if (
+        state.draft &&
+        (state.hasChanges || state.sourceFingerprintAtSave === serverFingerprint)
+    ) {
+        return state.draft
+    }
+    return serverDraft
 }
 
 type AppointmentTypeFormState = {
@@ -264,58 +306,52 @@ function AvailabilityRulesCard() {
     const { data: rules, isLoading } = useAvailabilityRules()
     const setRulesMutation = useSetAvailabilityRules()
     const [availabilityState, setAvailabilityState] = useState<AvailabilityRulesState>(() => ({
-        localRules: [],
-        timezone: user?.org_timezone || "America/Los_Angeles",
+        draft: null,
         hasChanges: false,
+        sourceFingerprintAtSave: null,
     }))
-    const { localRules, timezone, hasChanges } = availabilityState
-
-    // Initialize local rules from API data
-    useEffect(() => {
-        if (!rules) return
-
-        startTransition(() => {
-            setAvailabilityState((current) => {
-                if (current.localRules.length > 0) return current
-
-                const rulesByDay = new Map(rules.map((rule) => [rule.day_of_week, rule]))
-                const initialRules = DAYS_OF_WEEK.map((day) => {
-                    const existing = rulesByDay.get(day.value)
-                    return {
-                        day_of_week: day.value,
-                        start_time: existing?.start_time || "09:00",
-                        end_time: existing?.end_time || "17:00",
-                        enabled: !!existing,
-                    }
-                })
-                const firstRule = rules[0]
-                return {
-                    ...current,
-                    localRules: initialRules,
-                    timezone: firstRule?.timezone ?? user?.org_timezone ?? current.timezone,
-                }
-            })
-        })
-    }, [rules, user?.org_timezone])
+    const serverDraft = buildAvailabilityDraft(
+        rules ?? [],
+        user?.org_timezone || "America/Los_Angeles"
+    )
+    const serverFingerprint = getAvailabilityFingerprint(serverDraft)
+    const { localRules, timezone } = resolveAvailabilityDraft(
+        availabilityState,
+        serverDraft,
+        serverFingerprint
+    )
+    const { hasChanges } = availabilityState
 
     const toggleDay = (dayValue: number) => {
-        setAvailabilityState((current) => ({
-            ...current,
-            localRules: current.localRules.map((rule) =>
-                rule.day_of_week === dayValue ? { ...rule, enabled: !rule.enabled } : rule
-            ),
-            hasChanges: true,
-        }))
+        setAvailabilityState((current) => {
+            const currentDraft = resolveAvailabilityDraft(current, serverDraft, serverFingerprint)
+            return {
+                draft: {
+                    ...currentDraft,
+                    localRules: currentDraft.localRules.map((rule) =>
+                        rule.day_of_week === dayValue ? { ...rule, enabled: !rule.enabled } : rule
+                    ),
+                },
+                hasChanges: true,
+                sourceFingerprintAtSave: null,
+            }
+        })
     }
 
     const updateTime = (dayValue: number, field: "start_time" | "end_time", value: string) => {
-        setAvailabilityState((current) => ({
-            ...current,
-            localRules: current.localRules.map((rule) =>
-                rule.day_of_week === dayValue ? { ...rule, [field]: value } : rule
-            ),
-            hasChanges: true,
-        }))
+        setAvailabilityState((current) => {
+            const currentDraft = resolveAvailabilityDraft(current, serverDraft, serverFingerprint)
+            return {
+                draft: {
+                    ...currentDraft,
+                    localRules: currentDraft.localRules.map((rule) =>
+                        rule.day_of_week === dayValue ? { ...rule, [field]: value } : rule
+                    ),
+                },
+                hasChanges: true,
+                sourceFingerprintAtSave: null,
+            }
+        })
     }
 
     const saveRules = () => {
@@ -328,7 +364,11 @@ function AvailabilityRulesCard() {
 
         setRulesMutation.mutate({ rules: enabledRules, timezone }, {
             onSuccess: () => {
-                setAvailabilityState((current) => ({ ...current, hasChanges: false }))
+                setAvailabilityState((current) => ({
+                    ...current,
+                    hasChanges: false,
+                    sourceFingerprintAtSave: serverFingerprint,
+                }))
             },
         })
     }
@@ -427,11 +467,18 @@ function AvailabilityRulesCard() {
                             value={timezone}
                             onValueChange={(v) => {
                                 if (!v) return
-                                setAvailabilityState((current) => ({
-                                    ...current,
-                                    timezone: v,
-                                    hasChanges: true,
-                                }))
+                                setAvailabilityState((current) => {
+                                    const currentDraft = resolveAvailabilityDraft(
+                                        current,
+                                        serverDraft,
+                                        serverFingerprint
+                                    )
+                                    return {
+                                        draft: { ...currentDraft, timezone: v },
+                                        hasChanges: true,
+                                        sourceFingerprintAtSave: null,
+                                    }
+                                })
                             }}
                         >
                             <SelectTrigger className="w-48">
