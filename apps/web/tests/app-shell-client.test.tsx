@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToString } from "react-dom/server"
 
 import AppShellClient from "@/components/app-shell-client"
@@ -7,7 +7,7 @@ import AppShellClient from "@/components/app-shell-client"
 const mocks = vi.hoisted(() => ({
     redirect: vi.fn(),
     replace: vi.fn(),
-    useRequireAuth: vi.fn(),
+    useAuth: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -24,7 +24,7 @@ vi.mock("next/dynamic", () => ({
 }))
 
 vi.mock("@/lib/auth-context", () => ({
-    useRequireAuth: () => mocks.useRequireAuth(),
+    useAuth: () => mocks.useAuth(),
 }))
 
 vi.mock("@/lib/context/ai-context", () => ({
@@ -48,8 +48,71 @@ vi.mock("@/components/session-expired-dialog", () => ({
 }))
 
 describe("AppShellClient", () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        document.cookie = "auth_return_to=; max-age=0; path=/"
+    })
+
+    it("redirects signed-out users during initial rendering before protected children mount", () => {
+        mocks.useAuth.mockReturnValue({
+            user: null,
+            isLoading: false,
+        })
+
+        const html = renderToString(
+            <AppShellClient>
+                <div>Protected dashboard</div>
+            </AppShellClient>
+        )
+
+        expect(mocks.redirect).toHaveBeenCalledWith("/login")
+        expect(html).not.toContain("Protected dashboard")
+    })
+
+    it("redirects MFA-required users during initial rendering before protected children mount", () => {
+        mocks.useAuth.mockReturnValue({
+            user: {
+                user_id: "user-1",
+                profile_complete: true,
+                mfa_required: true,
+                mfa_verified: false,
+            },
+            isLoading: false,
+        })
+
+        const html = renderToString(
+            <AppShellClient>
+                <div>Protected dashboard</div>
+            </AppShellClient>
+        )
+
+        expect(mocks.redirect).toHaveBeenCalledWith("/mfa")
+        expect(html).not.toContain("Protected dashboard")
+    })
+
+    it("preserves the ops return target for MFA-required users", () => {
+        document.cookie = "auth_return_to=ops; path=/"
+        mocks.useAuth.mockReturnValue({
+            user: {
+                user_id: "user-1",
+                profile_complete: true,
+                mfa_required: true,
+                mfa_verified: false,
+            },
+            isLoading: false,
+        })
+
+        renderToString(
+            <AppShellClient>
+                <div>Protected dashboard</div>
+            </AppShellClient>
+        )
+
+        expect(mocks.redirect).toHaveBeenCalledWith("/mfa?return_to=ops")
+    })
+
     it("redirects incomplete profiles during initial rendering before protected children mount", () => {
-        mocks.useRequireAuth.mockReturnValue({
+        mocks.useAuth.mockReturnValue({
             user: {
                 user_id: "user-1",
                 profile_complete: false,

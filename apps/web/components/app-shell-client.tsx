@@ -2,7 +2,7 @@
 
 import { redirect, usePathname } from "next/navigation"
 import dynamic from "next/dynamic"
-import { useRequireAuth } from "@/lib/auth-context"
+import { useAuth } from "@/lib/auth-context"
 import { AIContextProvider } from "@/lib/context/ai-context"
 import { AIChatDrawerHost } from "@/components/ai/AIChatDrawerHost"
 import { AIFloatingButton } from "@/components/ai/AIFloatingButton"
@@ -22,12 +22,33 @@ const AppSidebar = dynamic(
   }
 )
 
+function getMfaRedirectPath(pathname: string) {
+  const hasOpsCookie =
+    typeof document !== "undefined" &&
+    document.cookie
+      .split(";")
+      .some((cookie) => cookie.trim().startsWith("auth_return_to=ops"))
+  const isOpsRoute =
+    pathname.startsWith("/ops") ||
+    (typeof window !== "undefined" && window.location.hostname.startsWith("ops."))
+
+  return hasOpsCookie || isOpsRoute ? "/mfa?return_to=ops" : "/mfa"
+}
+
+function AppShellLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
+    </div>
+  )
+}
+
 export default function AppShellClient({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading } = useRequireAuth();
+  const { user, isLoading } = useAuth();
   const pathname = usePathname();
 
   const shouldRedirectToWelcome =
@@ -39,25 +60,22 @@ export default function AppShellClient({
 
   // Show loading state while checking auth
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <AppShellLoading />;
   }
 
-  // Don't render app shell if not authenticated (redirect happens in useRequireAuth)
   if (!user) {
-    return null;
+    redirect("/login");
+    return <AppShellLoading />;
+  }
+
+  if (user.mfa_required && !user.mfa_verified) {
+    redirect(getMfaRedirectPath(pathname));
+    return <AppShellLoading />;
   }
 
   if (shouldRedirectToWelcome) {
     redirect("/welcome");
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <AppShellLoading />;
   }
 
   const inner = (
