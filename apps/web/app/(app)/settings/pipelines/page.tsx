@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useEffect, useState } from "react"
+import { useState } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1643,18 +1643,6 @@ function JourneyMilestonesEditor({
     onChange: (featureConfig: PipelineFeatureConfig) => void
 }) {
     const [expandedMilestones, setExpandedMilestones] = useState<Record<string, boolean>>({})
-
-    useEffect(() => {
-        startTransition(() => {
-            setExpandedMilestones((current) => {
-                const next: Record<string, boolean> = {}
-                for (const milestone of featureConfig.journey.milestones) {
-                    next[milestone.slug] = current[milestone.slug] ?? false
-                }
-                return next
-            })
-        })
-    }, [featureConfig.journey.milestones])
 
     const stageOptions = stages.map((stage) => ({
         stageKey: stage.stage_key,
