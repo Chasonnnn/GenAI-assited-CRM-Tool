@@ -1,7 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useQueryClient } from "@tanstack/react-query"
 import { Clock } from "lucide-react"
 import {
     AlertDialog,
@@ -13,6 +11,7 @@ import {
     AlertDialogMedia,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useSessionExpirationDetection } from "@/lib/hooks/use-session-expiration-detection"
 
 function redirectToLogin() {
     window.location.href = "/login"
@@ -26,58 +25,7 @@ function redirectToLogin() {
  * prompting the user to log in again.
  */
 export function SessionExpiredDialog() {
-    const [isExpired, setIsExpired] = useState(false)
-    const queryClient = useQueryClient()
-
-    useEffect(() => {
-        const queryCache = queryClient.getQueryCache()
-        const mutationCache = queryClient.getMutationCache()
-
-        // Check if an error is a 401 response
-        const is401Error = (error: unknown): boolean => {
-            if (!error || typeof error !== "object") return false
-            // Check for status property (fetch Response-like errors)
-            if ("status" in error && error.status === 401) return true
-            // Check for response.status (axios-like errors)
-            if (
-                "response" in error &&
-                error.response &&
-                typeof error.response === "object" &&
-                "status" in error.response &&
-                error.response.status === 401
-            ) {
-                return true
-            }
-            return false
-        }
-
-        // Subscribe to query cache events
-        const unsubscribeQueries = queryCache.subscribe((event) => {
-            if (
-                event.type === "updated" &&
-                event.action.type === "error" &&
-                is401Error(event.action.error)
-            ) {
-                setIsExpired(true)
-            }
-        })
-
-        // Subscribe to mutation cache events
-        const unsubscribeMutations = mutationCache.subscribe((event) => {
-            if (
-                event.type === "updated" &&
-                event.action.type === "error" &&
-                is401Error(event.action.error)
-            ) {
-                setIsExpired(true)
-            }
-        })
-
-        return () => {
-            unsubscribeQueries()
-            unsubscribeMutations()
-        }
-    }, [queryClient])
+    const isExpired = useSessionExpirationDetection()
 
     return (
         <AlertDialog open={isExpired}>

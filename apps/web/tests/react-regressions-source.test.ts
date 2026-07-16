@@ -3234,6 +3234,20 @@ describe("React regression guards (source)", () => {
         expect(versionHistorySource).not.toContain("const formatDate =")
     })
 
+    it("contains session-expiration cache subscriptions in a named hook", () => {
+        const dialogSource = readSource("components/session-expired-dialog.tsx")
+        const hookSource = readSource("lib/hooks/use-session-expiration-detection.ts")
+
+        expect(dialogSource).toContain("const isExpired = useSessionExpirationDetection()")
+        expect(dialogSource).not.toContain("useEffect")
+        expect(dialogSource).not.toContain("useQueryClient")
+        expect(hookSource).toContain("getQueryCache().subscribe")
+        expect(hookSource).toContain("getMutationCache().subscribe")
+        expect(hookSource).toContain("unsubscribeQueries()")
+        expect(hookSource).toContain("unsubscribeMutations()")
+        expect(hookSource).toContain("}, [queryClient])")
+    })
+
     it("uses gap spacing for integrations provider radio rows", () => {
         const source = readSource("app/(app)/settings/integrations/page.tsx")
 
