@@ -37,6 +37,7 @@ interface AIContextValue {
 const AIContext = createContext<AIContextValue | undefined>(undefined)
 
 type EntityContextState = {
+    pathname: string
     entityType: EntityContext["entityType"] | null
     entityId: string | null
     entityName: string | null
@@ -47,17 +48,22 @@ type EntityContextAction =
     | { type: "clear" }
     | { type: "sync-pathname"; pathname: string }
 
-const emptyEntityContext: EntityContextState = {
-    entityType: null,
-    entityId: null,
-    entityName: null,
+function createEmptyEntityContext(pathname: string): EntityContextState {
+    return {
+        pathname,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+    }
 }
 
 function isEntityPathname(pathname: string) {
     return (
         pathname.includes("/surrogates/") ||
         pathname.includes("/intended-parents/") ||
-        pathname.includes("/matches/")
+        pathname.includes("/matches/") ||
+        pathname === "/tasks" ||
+        pathname.startsWith("/tasks/")
     )
 }
 
@@ -68,14 +74,18 @@ function aiEntityContextReducer(
     switch (action.type) {
         case "set":
             return {
+                pathname: state.pathname,
                 entityType: action.context.entityType,
                 entityId: action.context.entityId,
                 entityName: action.context.entityName,
             }
         case "clear":
-            return state.entityId ? emptyEntityContext : state
+            return state.entityId ? createEmptyEntityContext(state.pathname) : state
         case "sync-pathname":
-            return state.entityId && !isEntityPathname(action.pathname) ? emptyEntityContext : state
+            if (state.pathname === action.pathname) return state
+            return state.entityId && !isEntityPathname(action.pathname)
+                ? createEmptyEntityContext(action.pathname)
+                : { ...state, pathname: action.pathname }
     }
 }
 
@@ -86,8 +96,13 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
 
     const [entityContext, dispatchEntityContext] = useReducer(
         aiEntityContextReducer,
-        emptyEntityContext
+        pathname,
+        createEmptyEntityContext
     )
+
+    if (entityContext.pathname !== pathname) {
+        dispatchEntityContext({ type: "sync-pathname", pathname })
+    }
 
     // Panel state
     const [isOpen, setIsOpen] = useState(false)
@@ -98,13 +113,6 @@ export function AIContextProvider({ children }: { children: React.ReactNode }) {
     const isAIEnabled = user?.ai_enabled ?? false
     const canUseAI =
         isAIEnabled && (effectivePermissions?.permissions || []).includes("use_ai_assistant")
-
-    // Clear context on route change if navigating away from entity pages.
-    useEffect(() => {
-        React.startTransition(() => {
-            dispatchEntityContext({ type: "sync-pathname", pathname })
-        })
-    }, [pathname, entityContext.entityId])
 
     // Keyboard shortcut: Cmd+Shift+A or Ctrl+Shift+A
     useEffect(() => {
