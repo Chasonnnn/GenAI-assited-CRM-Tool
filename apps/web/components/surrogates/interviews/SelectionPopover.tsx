@@ -27,41 +27,40 @@ interface PopoverPosition {
     visible: boolean
 }
 
-export function SelectionPopover({
+function useSelectionPopoverDocumentListeners({
     containerRef,
-    onAddComment,
-    disabled = false,
+    disabled,
     onSelectionStateChange,
-}: SelectionPopoverProps) {
-    const [position, setPosition] = useState<PopoverPosition>({ x: 0, y: 0, visible: false })
-    const selectedTextRef = useRef("")
-    const selectedRangeRef = useRef<Range | null>(null)
-    const popoverRef = useRef<HTMLDivElement>(null)
-    const isClickingPopover = useRef(false)
-    const isMouseDownRef = useRef(false)
-    const selectionActiveRef = useRef(false)
-    const disabledRef = useRef(disabled)
-    const containerRefRef = useRef(containerRef)
-    const onSelectionStateChangeRef = useRef(onSelectionStateChange)
-
-    useEffect(() => {
-        disabledRef.current = disabled
-        containerRefRef.current = containerRef
-        onSelectionStateChangeRef.current = onSelectionStateChange
-    }, [containerRef, disabled, onSelectionStateChange])
-
+    positionVisible,
+    setPosition,
+    selectedTextRef,
+    selectedRangeRef,
+    selectionActiveRef,
+    popoverRef,
+    isClickingPopover,
+    isMouseDownRef,
+}: {
+    containerRef: React.RefObject<HTMLElement | null>
+    disabled: boolean
+    onSelectionStateChange: ((active: boolean) => void) | undefined
+    positionVisible: boolean
+    setPosition: React.Dispatch<React.SetStateAction<PopoverPosition>>
+    selectedTextRef: React.RefObject<string>
+    selectedRangeRef: React.RefObject<Range | null>
+    selectionActiveRef: React.RefObject<boolean>
+    popoverRef: React.RefObject<HTMLDivElement | null>
+    isClickingPopover: React.RefObject<boolean>
+    isMouseDownRef: React.RefObject<boolean>
+}) {
     const setSelectionActive = (active: boolean) => {
         if (selectionActiveRef.current === active) return
         selectionActiveRef.current = active
-        onSelectionStateChangeRef.current?.(active)
+        onSelectionStateChange?.(active)
     }
 
-    // Handle text selection within the container
     const handleSelectionChange = useEffectEvent(() => {
-        // Don't update if we're clicking the popover or dragging selection
         if (isClickingPopover.current || isMouseDownRef.current) return
-
-        if (disabledRef.current) {
+        if (disabled) {
             setSelectionActive(false)
             return
         }
@@ -84,8 +83,7 @@ export function SelectionPopover({
             return
         }
 
-        // Check if selection is within our container
-        const container = containerRefRef.current.current
+        const container = containerRef.current
         if (!container) {
             setPosition({ x: 0, y: 0, visible: false })
             setSelectionActive(false)
@@ -97,23 +95,13 @@ export function SelectionPopover({
         const ancestorElement = ancestor.nodeType === Node.TEXT_NODE
             ? ancestor.parentElement
             : ancestor as Element
-
         if (!ancestorElement || !container.contains(ancestorElement)) {
             setPosition({ x: 0, y: 0, visible: false })
             setSelectionActive(false)
             return
         }
 
-        // Get position for the popover
-        const rects = range.getClientRects()
-        if (rects.length === 0) {
-            setPosition({ x: 0, y: 0, visible: false })
-            setSelectionActive(false)
-            return
-        }
-
-        // Use the first rect (first line of selection)
-        const firstRect = rects[0]
+        const firstRect = range.getClientRects()[0]
         if (!firstRect) {
             setPosition({ x: 0, y: 0, visible: false })
             setSelectionActive(false)
@@ -131,25 +119,23 @@ export function SelectionPopover({
     })
 
     const handleDocumentKeyDown = useEffectEvent((event: KeyboardEvent) => {
-        if (event.key === "Escape" && position.visible) {
+        if (event.key === "Escape" && positionVisible) {
             setPosition({ x: 0, y: 0, visible: false })
             window.getSelection()?.removeAllRanges()
         }
     })
 
-    // Synchronize the popover with document selection, keyboard, and pointer events.
     useEffect(() => {
         let clickResetTimeout: ReturnType<typeof setTimeout> | null = null
         const handleDocumentSelectionChange = () => handleSelectionChange()
-        const handleMouseDown = (e: MouseEvent) => {
+        const handleMouseDown = (event: MouseEvent) => {
             isMouseDownRef.current = true
-            const target = e.target as HTMLElement
+            const target = event.target as HTMLElement
             const popover = popoverRef.current
             if (popover && popover.contains(target)) {
                 isClickingPopover.current = true
                 return
             }
-            // Let selection change handler deal with it
             isClickingPopover.current = false
         }
 
@@ -173,7 +159,36 @@ export function SelectionPopover({
             document.removeEventListener("mouseup", handleMouseUp)
             if (clickResetTimeout) clearTimeout(clickResetTimeout)
         }
-    }, [])
+    }, [isClickingPopover, isMouseDownRef, popoverRef])
+}
+
+export function SelectionPopover({
+    containerRef,
+    onAddComment,
+    disabled = false,
+    onSelectionStateChange,
+}: SelectionPopoverProps) {
+    const [position, setPosition] = useState<PopoverPosition>({ x: 0, y: 0, visible: false })
+    const selectedTextRef = useRef("")
+    const selectedRangeRef = useRef<Range | null>(null)
+    const popoverRef = useRef<HTMLDivElement>(null)
+    const isClickingPopover = useRef(false)
+    const isMouseDownRef = useRef(false)
+    const selectionActiveRef = useRef(false)
+
+    useSelectionPopoverDocumentListeners({
+        containerRef,
+        disabled,
+        onSelectionStateChange,
+        positionVisible: position.visible,
+        setPosition,
+        selectedTextRef,
+        selectedRangeRef,
+        selectionActiveRef,
+        popoverRef,
+        isClickingPopover,
+        isMouseDownRef,
+    })
 
     const handleAddComment = () => {
         const selectedText = selectedTextRef.current
@@ -190,7 +205,10 @@ export function SelectionPopover({
         selectedTextRef.current = ""
         selectedRangeRef.current = null
         window.getSelection()?.removeAllRanges()
-        setSelectionActive(false)
+        if (selectionActiveRef.current) {
+            selectionActiveRef.current = false
+            onSelectionStateChange?.(false)
+        }
     }
 
     // Don't render if not visible or disabled
