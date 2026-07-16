@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { renderToString } from "react-dom/server"
 
 import { IntendedParentActivityTimeline } from "@/components/intended-parents/IntendedParentActivityTimeline"
 import type { Attachment } from "@/lib/api/attachments"
@@ -188,6 +189,22 @@ describe("IntendedParentActivityTimeline", () => {
         expect(screen.getByText("Current stage note")).toBeInTheDocument()
         expect(screen.queryByText("Backdated stage note")).not.toBeInTheDocument()
         expect(screen.queryByText("Next stage note")).not.toBeInTheDocument()
+    })
+
+    it("renders the current stage details in the initial server HTML", () => {
+        const html = renderToString(
+            <IntendedParentActivityTimeline
+                currentStageId="stage-2"
+                stages={stages}
+                history={history}
+                notes={notes}
+                attachments={[]}
+                tasks={[]}
+            />,
+        )
+
+        expect(html).toContain("Current stage note")
+        expect(html).not.toContain("Backdated stage note")
     })
 
     it("keeps collapse-all as a valid user state and only opens the clicked stage afterward", async () => {
