@@ -523,9 +523,12 @@ export default function ComplianceSettingsPage() {
     const [holdReason, setHoldReason] = useState("")
     const [purgeJobId, setPurgeJobId] = useState<string | null>(null)
 
+    const policyByEntityType = new Map(
+        (policies ?? []).map((policy) => [policy.entity_type, policy] as const)
+    )
     const policyEdits: PolicyEdits = {}
     for (const entity of RETENTION_OPTIONS) {
-        const policy = policies?.find((candidate) => candidate.entity_type === entity.value)
+        const policy = policyByEntityType.get(entity.value)
         policyEdits[entity.value] = {
             retention_days: policy?.retention_days ?? 0,
             is_active: policy?.is_active ?? true,

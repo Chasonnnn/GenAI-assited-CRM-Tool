@@ -639,10 +639,13 @@ function ManageAppointmentSession({
         setSelectedSlot(null)
         setIsLoadingSlots(true)
 
+        if (!orgId || !token) {
+            setSlots([])
+            setIsLoadingSlots(false)
+            return
+        }
+
         try {
-            if (!orgId || !token) {
-                throw new Error("Invalid appointment management link")
-            }
             const dateString = format(date, "yyyy-MM-dd")
             const response = await getRescheduleSlotsByToken(
                 orgId,
@@ -654,9 +657,8 @@ function ManageAppointmentSession({
             setSlots(response.slots)
         } catch {
             setSlots([])
-        } finally {
-            setIsLoadingSlots(false)
         }
+        setIsLoadingSlots(false)
     }
 
     const handleReschedule = async () => {
@@ -670,9 +672,8 @@ function ManageAppointmentSession({
             setSubmissionError(
                 err instanceof Error ? err.message : "Failed to reschedule appointment"
             )
-        } finally {
-            setIsSubmitting(false)
         }
+        setIsSubmitting(false)
     }
 
     const handleCancel = async () => {
@@ -686,9 +687,8 @@ function ManageAppointmentSession({
             setSubmissionError(
                 err instanceof Error ? err.message : "Failed to cancel appointment"
             )
-        } finally {
-            setIsSubmitting(false)
         }
+        setIsSubmitting(false)
     }
 
     if (isLoading) {

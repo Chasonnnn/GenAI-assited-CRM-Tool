@@ -680,13 +680,17 @@ export default function MetaFormMappingPage() {
                 unmatched_columns: unmatched,
                 sample_values: sampleValues,
             })
+            const suggestionByCsvColumn = new Map(
+                result.suggestions.map((suggestion) => [
+                    suggestion.csv_column,
+                    suggestion,
+                ] as const)
+            )
 
             setMappingOverrides((previous) => {
                 const next = { ...previous }
                 for (const mapping of mappings) {
-                    const suggestion = result.suggestions.find(
-                        (item) => item.csv_column === mapping.csv_column
-                    )
+                    const suggestion = suggestionByCsvColumn.get(mapping.csv_column)
                     if (!suggestion) continue
 
                     const derived = buildColumnMappingsFromSuggestions([suggestion])[0]

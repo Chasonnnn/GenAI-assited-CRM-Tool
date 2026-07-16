@@ -106,15 +106,16 @@ export function useEmbedFormSessionHandshake({
                         parentOrigin,
                         attribution,
                     )
-                    if (!active) return
-                    sessionTokenRef.current = session.session_token
-                    dispatch({ type: "created", token: session.session_token })
+                    if (active) {
+                        sessionTokenRef.current = session.session_token
+                        dispatch({ type: "created", token: session.session_token })
+                    }
                 } catch {
-                    if (!active) return
-                    dispatch({ type: "failed" })
-                } finally {
-                    sessionRequestPendingRef.current = false
+                    if (active) {
+                        dispatch({ type: "failed" })
+                    }
                 }
+                sessionRequestPendingRef.current = false
             })()
         }
         const onMessage = (event: MessageEvent<ParentMessage>) => {

@@ -1960,6 +1960,7 @@ describe("React regression guards (source)", () => {
         expect(sessionHookSource).toContain("window.clearTimeout(fallback)")
         expect(sessionHookSource).toContain("active = false")
         expect(sessionHookSource).toContain("}, [enabled, parentOrigin, slug])")
+        expect(sessionHookSource).not.toContain("finally")
         expect(resizeHookSource).toContain("new ResizeObserver(sendHeight)")
         expect(resizeHookSource).toContain("observer.disconnect()")
         expect(resizeHookSource).toContain("}, [containerRef, parentOrigin])")
@@ -3134,6 +3135,8 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("useCallback")
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("<SelectValue />")
+        expect(source).not.toContain("finally")
+        expect(source).not.toContain('throw new Error("Invalid appointment management link")')
     })
 
     it("keeps self-service manage appointment rendering split into focused helpers", () => {
@@ -3899,7 +3902,11 @@ describe("React regression guards (source)", () => {
         const metaFormMappingSource = readSource("app/(app)/settings/integrations/meta/forms/[id]/page.tsx")
         const roleDetailSource = readSource("app/(app)/settings/team/roles/[role]/page.client.tsx")
 
+        expect(complianceSource).toContain("const policyByEntityType = new Map")
+        expect(complianceSource).not.toContain("policies?.find(")
         expect(complianceSource).not.toContain("useMemo")
+        expect(metaFormMappingSource).toContain("const suggestionByCsvColumn = new Map")
+        expect(metaFormMappingSource).not.toContain("result.suggestions.find(")
         expect(metaFormMappingSource).not.toContain("useMemo")
         expect(roleDetailSource).not.toContain("useMemo")
     })
