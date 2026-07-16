@@ -77,7 +77,11 @@ function getScanBadge(attachment: Attachment) {
     )
 }
 
-export function EmailAttachmentsPanel({
+export function EmailAttachmentsPanel(props: EmailAttachmentsPanelProps) {
+    return <EmailAttachmentsPanelSession key={props.surrogateId} {...props} />
+}
+
+function EmailAttachmentsPanelSession({
     surrogateId,
     onSelectionChange,
     hideUI = false,
@@ -90,11 +94,7 @@ export function EmailAttachmentsPanel({
 
     const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<string[]>([])
     const [uploadError, setUploadError] = React.useState<string | null>(null)
-    const onSelectionChangeRef = React.useRef(onSelectionChange)
-
-    React.useEffect(() => {
-        onSelectionChangeRef.current = onSelectionChange
-    }, [onSelectionChange])
+    const notifySelectionChange = React.useEffectEvent(onSelectionChange)
 
     const selectedAttachmentIdSet = new Set(selectedAttachmentIds)
     const selectedAttachments = attachments.filter((attachment) =>
@@ -121,7 +121,7 @@ export function EmailAttachmentsPanel({
     const visibleError = uploadError || constraintError
 
     React.useEffect(() => {
-        onSelectionChangeRef.current({
+        notifySelectionChange({
             selectedAttachmentIds,
             hasBlockingAttachments,
             totalBytes,
