@@ -30,7 +30,6 @@ type AutomationBuilderState = {
     manualSurrogateId: string
     resolveReviewNotes: string
     showSharePrompt: boolean
-    pendingSharePrompt: boolean
     showPublishDialog: boolean
     showDeletePageDialog: boolean
     pageToDelete: number | null
@@ -77,7 +76,6 @@ const buildInitialState = (isNewForm: boolean): AutomationBuilderState => ({
     manualSurrogateId: "",
     resolveReviewNotes: "",
     showSharePrompt: false,
-    pendingSharePrompt: false,
     showPublishDialog: false,
     showDeletePageDialog: false,
     pageToDelete: null,

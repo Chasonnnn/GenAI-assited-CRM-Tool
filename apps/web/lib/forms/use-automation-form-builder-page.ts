@@ -771,15 +771,12 @@ export function useAutomationFormBuilderPage() {
             })
             patchState(buildSavedState(draftFingerprint, savedForm))
             await publishFormMutation.mutateAsync(savedForm.id)
-            patchState({
-                isPublished: true,
-                pendingSharePrompt: true,
-            })
+            patchState({ isPublished: true })
             const intakeLinkResult = await refetchIntakeLinks()
-            if ((intakeLinkResult.data || []).length === 0) {
-                patchState({ pendingSharePrompt: false })
-            }
-            patchState({ showPublishDialog: false })
+            patchState({
+                showPublishDialog: false,
+                showSharePrompt: (intakeLinkResult.data || []).length > 0,
+            })
             toast.success("Form published")
             finishPublishing()
         } catch {
@@ -815,15 +812,6 @@ export function useAutomationFormBuilderPage() {
             : state.submissionHistoryFilter === "processed"
                 ? processedSubmissionHistory
                 : submissionHistory
-
-    useEffect(() => {
-        if (!state.pendingSharePrompt) return
-        if (sortedIntakeLinks.length === 0) return
-        patchState({
-            showSharePrompt: true,
-            pendingSharePrompt: false,
-        })
-    }, [patchState, sortedIntakeLinks.length, state.pendingSharePrompt])
 
     const handleUpdateEmbedSettings = async ({
         link,
