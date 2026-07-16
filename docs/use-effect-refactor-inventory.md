@@ -9,15 +9,15 @@ Scope: production TypeScript under `apps/web/app`, `apps/web/components`, and `a
 ## Baseline
 
 - 144 `useEffect` calls across 75 production files.
-- 86 **REPLACE**: ordinary React data flow, direct fetching, route choreography, polling, or ref synchronization that should use a more explicit primitive.
-- 47 **CONTAIN**: valid browser or external-system synchronization that currently lives in a page or component and should move behind a narrowly named hook with complete cleanup.
+- 85 **REPLACE**: ordinary React data flow, direct fetching, route choreography, polling, or ref synchronization that should use a more explicit primitive.
+- 48 **CONTAIN**: valid browser or external-system synchronization that currently lives in a page or component and should move behind a narrowly named hook with complete cleanup.
 - 11 **RETAIN**: valid external synchronization already isolated in a named hook with dependencies and cleanup.
 
 Line numbers below identify the baseline commit. As slices land, completion evidence is the current source plus tests and validation—not the continued existence of a baseline line number.
 
 ## Progress
 
-- 45 **REPLACE** Effects removed; 22 **CONTAIN** call sites consolidated behind six tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 82 production `useEffect` calls remain.
+- 45 **REPLACE** Effects removed; 23 **CONTAIN** call sites consolidated behind seven tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 82 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -53,7 +53,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Form publishing opens the sharing prompt directly from the intake links returned by the publish flow, removing the pending-state Effect relay and avoiding dependence on a later query render.
 - Automation and platform-template autosave now share a tested synchronization hook that owns debounce timing, cancellation, and active-draft completion while each controller retains its payload, queue, and persistence ownership.
 - Workspace tab transitions clear submission selection, manual-link input, and reviewer notes in the initiating event, preventing review text from leaking into a later submission after leaving the workspace.
-- Email attachment selection is keyed to the surrogate session, so changing recipients clears stale attachment IDs; `useEffectEvent` now supplies the latest parent notification callback without a ref-synchronization Effect.
+- Email attachment selection is keyed to the surrogate session, so changing recipients clears stale attachment IDs; a tested notification hook now owns query-derived safety updates and uses `useEffectEvent` without callback-ref synchronization.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
@@ -144,7 +144,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 | `apps/web/components/app-sidebar.tsx:625` | REPLACE | Replace internal state synchronization with derivation, an event/reducer transition, or keyed mounting. |
 | `apps/web/components/appointments/AppointmentSettings.tsx:274` | REPLACE | Replace internal state synchronization with derivation, an event/reducer transition, or keyed mounting. |
 | `apps/web/components/appointments/AppointmentsList.tsx:258` | REPLACE | Replace internal state synchronization with derivation, an event/reducer transition, or keyed mounting. |
-| `apps/web/components/email/EmailAttachmentsPanel.tsx:123` | REPLACE | Replace internal state choreography with derivation, an event/reducer transition, or a keyed component boundary. |
+| `apps/web/components/email/EmailAttachmentsPanel.tsx:123` | CONTAIN | Query-driven scan and size changes must notify the parent, but that synchronization should live behind a narrowly named hook. |
 | `apps/web/components/email/EmailAttachmentsPanel.tsx:95` | REPLACE | Replace callback/state ref synchronization with useEffectEvent or a render-safe latest-value boundary. |
 | `apps/web/components/email/EmailComposeDialog.tsx:451` | REPLACE | Replace internal state synchronization with derivation, an event/reducer transition, or keyed mounting. |
 | `apps/web/components/email/EmailComposeDialog.tsx:463` | REPLACE | Replace internal state synchronization with derivation, an event/reducer transition, or keyed mounting. |
