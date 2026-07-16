@@ -434,6 +434,7 @@ type WorkflowBuilderAction =
     | { type: "setWorkflowScope"; value: WorkflowScope }
     | { type: "setTriggerType"; value: string }
     | { type: "setTriggerConfig"; value: StateUpdate<JsonObject> }
+    | { type: "normalizeTriggerConfig"; value: JsonObject }
     | { type: "setConditionLogic"; value: "AND" | "OR" }
     | { type: "addCondition" }
     | { type: "removeCondition"; index: number }
@@ -566,6 +567,8 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                 triggerConfig: typeof action.value === "function" ? action.value(state.triggerConfig) : action.value,
                 serverErrors: [],
             }
+        case "normalizeTriggerConfig":
+            return { ...state, triggerConfig: action.value }
         case "setConditionLogic":
             return { ...state, conditionLogic: action.value, serverErrors: [] }
         case "addCondition":
@@ -1062,12 +1065,12 @@ export default function AutomationPageClient({
         })
     }, [editingWorkflow, editingWorkflowId, hydratedWorkflowId, showCreateModal, statusOptions])
 
-    useEffect(() => {
-        if (triggerType !== "status_changed" || statusOptions.length === 0) return
+    if (triggerType === "status_changed" && statusOptions.length > 0) {
         const normalized = normalizeTriggerConfigForUi(triggerType, triggerConfig, statusOptions)
-        if (areJsonObjectsEqual(normalized, triggerConfig)) return
-        setTriggerConfig(normalized)
-    }, [triggerConfig, triggerType, statusOptions])
+        if (!areJsonObjectsEqual(normalized, triggerConfig)) {
+            dispatchWorkflowBuilder({ type: "normalizeTriggerConfig", value: normalized })
+        }
+    }
 
     const handleNextStep = () => {
         const error = getStepValidationError(wizardStep)

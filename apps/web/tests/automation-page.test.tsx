@@ -303,6 +303,118 @@ describe('AutomationPage', () => {
         expect(screen.queryByText(/Action 1: title is required/i)).not.toBeInTheDocument()
     })
 
+    it('preserves server errors when late status options only normalize legacy config', () => {
+        const initialOptions = {
+            trigger_types: [
+                { value: 'status_changed', label: 'Status Changed', description: '' },
+            ],
+            action_types: [
+                { value: 'add_note', label: 'Add Note', description: '' },
+            ],
+            action_types_by_trigger: {
+                status_changed: ['add_note'],
+            },
+            trigger_entity_types: {
+                status_changed: 'surrogate',
+            },
+            condition_fields: [],
+            condition_operators: [],
+            update_fields: [],
+            email_variables: [],
+            email_templates: [],
+            users: [],
+            queues: [],
+            statuses: [],
+        }
+        mockUseWorkflowOptions.mockReturnValue({
+            data: initialOptions,
+            isLoading: false,
+        })
+        mockUseWorkflows.mockReturnValue({
+            data: [
+                {
+                    id: 'workflow-legacy',
+                    name: 'Legacy Status Workflow',
+                    description: null,
+                    icon: 'activity',
+                    trigger_type: 'status_changed',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-07-01T00:00:00Z',
+                    can_edit: true,
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-legacy',
+                name: 'Legacy Status Workflow',
+                description: null,
+                scope: 'personal',
+                trigger_type: 'status_changed',
+                trigger_config: { to_status: 'qualified' },
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [
+                    {
+                        action_type: 'add_note',
+                        content: 'Record status change',
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        mockUpdateWorkflow.mutate.mockImplementation(
+            (_data: unknown, opts?: { onError?: (err: Error) => void }) => {
+                opts?.onError?.(
+                    new Error('Action 1: title is required; Action 1: assignee is required'),
+                )
+            },
+        )
+
+        const view = renderAutomationPage()
+
+        fireEvent.click(
+            screen.getByRole('button', {
+                name: 'Actions for workflow Legacy Status Workflow',
+            }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+        expect(screen.getByDisplayValue('Legacy Status Workflow')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+        expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...initialOptions,
+                statuses: [
+                    {
+                        id: 'stage-qualified',
+                        value: 'qualified',
+                        label: 'Qualified',
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        view.rerender(
+            <AutomationPage
+                initialTab="workflows"
+                initialWorkflowScopeTab="personal"
+                initialCreateOpen={false}
+            />,
+        )
+
+        expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+    })
+
     it('submits only the configuration for the selected trigger type', () => {
         renderAutomationPage()
 

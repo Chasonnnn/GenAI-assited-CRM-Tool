@@ -125,6 +125,12 @@ describe("React regression guards (source)", () => {
         )
         expect(source).toContain("workflowName: action.value, serverErrors: []")
         expect(source).not.toContain('type: "clearServerErrors"')
+        expect(source).toContain(
+            'dispatchWorkflowBuilder({ type: "normalizeTriggerConfig", value: normalized })'
+        )
+        expect(source).not.toContain(
+            "useEffect(() => {\n        if (triggerType !== \"status_changed\""
+        )
         expect(source).not.toContain("const parseServerErrors =")
         expect(source).not.toContain("const getActionValidationError =")
     })
