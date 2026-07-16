@@ -1973,6 +1973,7 @@ describe("React regression guards (source)", () => {
 
     it("keeps hosted intake draft and resume state compiler-friendly", () => {
         const source = readSource("app/intake/[slug]/page.client.tsx")
+        const autosaveSource = readSource("lib/hooks/use-hosted-intake-autosave.ts")
 
         expect(source).not.toContain("React.useCallback")
         expect(source).toContain("function isDraftValueEmpty")
@@ -2002,6 +2003,11 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain("const [formError, setFormError]")
         expect(source).not.toContain("const loadForm = async ()")
         expect(source).not.toContain("setAnswers(restored)")
+        expect(source).toContain("useHostedIntakeAutosave({")
+        expect(source).not.toContain("autosaveTimerRef")
+        expect(autosaveSource).toContain("const onSaveEvent = useEffectEvent(onSave)")
+        expect(autosaveSource).toContain("skipNextSaveRef.current = false")
+        expect(autosaveSource).toContain("}, [delay, enabled, scopeKey, skipNextSaveRef, trigger])")
         expect(source).not.toContain('throw new Error("Invalid form payload")')
         expect(source).not.toContain("finally")
         expect(source).not.toContain("if (currentStep > steps.length)")
