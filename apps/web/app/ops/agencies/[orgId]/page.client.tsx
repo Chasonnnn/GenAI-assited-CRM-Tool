@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import Link from "@/components/app-link";
 import {
@@ -29,7 +29,6 @@ import {
     type OrgMember,
     type OrgInvite,
     type AdminActionLog,
-    type PlatformAlert,
     type PlatformEmailStatus,
 } from '@/lib/api/platform';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -76,6 +75,8 @@ function useAgencyDetailController() {
     const params = useParams();
     const orgId = params.orgId as string;
     const { push } = useRouter();
+    const queryClient = useQueryClient();
+    const orgAlertsQueryKey = ['platform', 'alerts', { orgId }] as const;
 
     const [org, setOrg] = useState<OrganizationDetail | null>(null);
     const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
@@ -84,8 +85,6 @@ function useAgencyDetailController() {
     const [actionLogs, setActionLogs] = useState<AdminActionLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
-    const [orgAlerts, setOrgAlerts] = useState<PlatformAlert[]>([]);
-    const [alertsLoading, setAlertsLoading] = useState(false);
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
     const [mfaResetting, setMfaResetting] = useState<string | null>(null);
     const [inviteOpen, setInviteOpen] = useState(false);
@@ -101,7 +100,6 @@ function useAgencyDetailController() {
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [restoreSubmitting, setRestoreSubmitting] = useState(false);
     const [purgeSubmitting, setPurgeSubmitting] = useState(false);
-    const alertsRequestIdRef = useRef(0);
 
     useEffect(() => {
         let isCurrent = true;
@@ -146,67 +144,26 @@ function useAgencyDetailController() {
         };
     }, [orgId]);
 
-    const fetchOrgAlerts = async () => {
-        if (!orgId) return;
-        const requestId = alertsRequestIdRef.current + 1;
-        alertsRequestIdRef.current = requestId;
-        setAlertsLoading(true);
-        const finishAlertsLoading = () => {
-            if (requestId === alertsRequestIdRef.current) {
-                setAlertsLoading(false);
-            }
-        };
+    const alertsQuery = useQuery({
+        queryKey: orgAlertsQueryKey,
+        queryFn: async () => {
+            if (!orgId) return { items: [], total: 0 };
         try {
-            const data = await listAlerts({ org_id: orgId });
-            if (requestId === alertsRequestIdRef.current) {
-                setOrgAlerts(data.items);
-                finishAlertsLoading();
-            }
+                return await listAlerts({ org_id: orgId });
         } catch (error) {
-            if (requestId === alertsRequestIdRef.current) {
                 console.error('Failed to fetch org alerts:', error);
                 toast.error('Failed to load organization alerts');
-                finishAlertsLoading();
-            }
+                throw error;
         }
+        },
+        retry: false,
+        staleTime: 30_000,
+    });
+    const orgAlerts = alertsQuery.data?.items ?? [];
+    const alertsLoading = alertsQuery.isFetching;
+    const fetchOrgAlerts = async () => {
+        await alertsQuery.refetch();
     };
-
-    useEffect(() => {
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (cancelled) return;
-
-            const requestId = alertsRequestIdRef.current + 1;
-            alertsRequestIdRef.current = requestId;
-            setAlertsLoading(true);
-            const finishAlertsLoading = () => {
-                if (!cancelled && requestId === alertsRequestIdRef.current) {
-                    setAlertsLoading(false);
-                }
-            };
-
-            async function fetchInitialOrgAlerts() {
-                try {
-                    const data = await listAlerts({ org_id: orgId });
-                    if (!cancelled && requestId === alertsRequestIdRef.current) {
-                        setOrgAlerts(data.items);
-                        finishAlertsLoading();
-                    }
-                } catch (error) {
-                    if (!cancelled && requestId === alertsRequestIdRef.current) {
-                        console.error('Failed to fetch org alerts:', error);
-                        toast.error('Failed to load organization alerts');
-                        finishAlertsLoading();
-                    }
-                }
-            }
-
-            void fetchInitialOrgAlerts();
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [orgId]);
 
     const openAlertCount = orgAlerts.filter((alert) => alert.status === 'open').length;
 
@@ -409,10 +366,18 @@ function useAgencyDetailController() {
         const finishAlertUpdate = () => setAlertsUpdating(null);
         try {
             await acknowledgeAlert(alertId);
-            setOrgAlerts((prev) =>
-                prev.map((alert) =>
-                    alert.id === alertId ? { ...alert, status: 'acknowledged' } : alert
-                )
+            queryClient.setQueryData<Awaited<ReturnType<typeof listAlerts>>>(
+                orgAlertsQueryKey,
+                (current) => current
+                    ? {
+                        ...current,
+                        items: current.items.map((alert) =>
+                            alert.id === alertId
+                                ? { ...alert, status: 'acknowledged' }
+                                : alert
+                        ),
+                    }
+                    : current
             );
             toast.success('Alert acknowledged');
             finishAlertUpdate();
@@ -428,12 +393,22 @@ function useAgencyDetailController() {
         const finishAlertUpdate = () => setAlertsUpdating(null);
         try {
             const result = await resolveAlert(alertId);
-            setOrgAlerts((prev) =>
-                prev.map((alert) =>
-                    alert.id === alertId
-                        ? { ...alert, status: 'resolved', resolved_at: result.resolved_at }
-                        : alert
-                )
+            queryClient.setQueryData<Awaited<ReturnType<typeof listAlerts>>>(
+                orgAlertsQueryKey,
+                (current) => current
+                    ? {
+                        ...current,
+                        items: current.items.map((alert) =>
+                            alert.id === alertId
+                                ? {
+                                    ...alert,
+                                    status: 'resolved',
+                                    resolved_at: result.resolved_at,
+                                }
+                                : alert
+                        ),
+                    }
+                    : current
             );
             toast.success('Alert resolved');
             finishAlertUpdate();
