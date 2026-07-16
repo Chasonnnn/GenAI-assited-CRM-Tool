@@ -3122,7 +3122,10 @@ describe("React regression guards (source)", () => {
     it("keeps self-service manage appointment timezone defaults render-derived", () => {
         const source = readSource("app/book/self-service/[orgId]/manage/[token]/page.tsx")
 
-        expect(source).toContain("const hasManageLink = Boolean(orgId && token)")
+        expect(source).toContain("function isValidOrganizationId(")
+        expect(source).toContain(
+            "const hasManageLink = isValidOrganizationId(orgId) && Boolean(token)"
+        )
         expect(source).toContain("subscribeTimezoneSnapshot")
         expect(source).toContain("timezoneOverride")
         expect(source).toContain("viewMonthOverride")

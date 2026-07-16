@@ -27,6 +27,28 @@ export class RateLimitError extends ApiError {
     }
 }
 
+export function parseApiErrorPayload(payload: unknown): string | undefined {
+    if (!payload || typeof payload !== 'object') return undefined;
+
+    const { detail, message } = payload as { detail?: unknown; message?: unknown };
+    if (Array.isArray(detail)) {
+        const validationMessages: string[] = [];
+        for (const item of detail) {
+            if (!item || typeof item !== 'object') continue;
+            const { loc, msg } = item as { loc?: unknown; msg?: unknown };
+            if (typeof msg !== 'string') continue;
+            const path = Array.isArray(loc)
+                ? loc.slice(1).filter((part): part is string => typeof part === 'string').join('.')
+                : '';
+            validationMessages.push(path ? `${path}: ${msg}` : msg);
+        }
+        return validationMessages.length > 0 ? validationMessages.join('; ') : undefined;
+    }
+    if (typeof detail === 'string') return detail;
+    if (typeof message === 'string') return message;
+    return undefined;
+}
+
 interface RequestOptions extends Omit<RequestInit, 'body'> {
     body?: unknown;
 }
@@ -90,16 +112,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         let message: string | undefined;
         try {
             const err = await response.json();
-            // Handle FastAPI validation errors (array of {loc, msg, type})
-            if (Array.isArray(err.detail)) {
-                message = err.detail
-                    .map((e: { loc?: string[]; msg?: string }) =>
-                        e.loc ? `${e.loc.slice(1).join('.')}: ${e.msg}` : e.msg
-                    )
-                    .join('; ');
-            } else {
-                message = err.detail || err.message;
-            }
+            message = parseApiErrorPayload(err);
         } catch {
             // Ignore JSON parse errors
         }
