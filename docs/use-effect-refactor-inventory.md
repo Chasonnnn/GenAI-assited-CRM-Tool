@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 39 **REPLACE** Effects removed and 19 **CONTAIN** call sites consolidated behind four tested synchronization hooks; 90 production `useEffect` calls remain.
+- 41 **REPLACE** Effects removed; 19 **CONTAIN** call sites consolidated behind four tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 87 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -47,6 +47,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - The task editor sets and clears AI context directly in its open and close events instead of relaying `editingTask` state through an Effect.
 - Task deep-link scrolling and focus-reset behavior now share one tested `useTaskFocusNavigation` browser synchronization boundary.
 - Agency detail data, organization alerts, and platform email status now use stable TanStack Query keys, preserving fresh route data and avoiding duplicate requests across tab changes and remounts.
+- The unused carousel `setApi` relay and no-op Embla subscriptions were removed; keyboard navigation remains event-driven with no carousel Effects.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
