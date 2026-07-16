@@ -429,7 +429,6 @@ type WorkflowBuilderAction =
     | { type: "setWizardStep"; value: StateUpdate<number> }
     | { type: "setValidationError"; value: string | null }
     | { type: "setServerErrors"; value: string[] }
-    | { type: "clearServerErrors" }
     | { type: "setWorkflowName"; value: string }
     | { type: "setWorkflowDescription"; value: string }
     | { type: "setWorkflowScope"; value: WorkflowScope }
@@ -547,28 +546,28 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
             return { ...state, validationError: action.value }
         case "setServerErrors":
             return { ...state, serverErrors: action.value }
-        case "clearServerErrors":
-            return state.serverErrors.length > 0 ? { ...state, serverErrors: [] } : state
         case "setWorkflowName":
-            return { ...state, workflowName: action.value }
+            return { ...state, workflowName: action.value, serverErrors: [] }
         case "setWorkflowDescription":
-            return { ...state, workflowDescription: action.value }
+            return { ...state, workflowDescription: action.value, serverErrors: [] }
         case "setWorkflowScope":
-            return { ...state, workflowScope: action.value }
+            return { ...state, workflowScope: action.value, serverErrors: [] }
         case "setTriggerType":
             if (action.value === state.triggerType) return state
             return {
                 ...state,
                 triggerType: action.value,
                 triggerConfig: normalizeTriggerConfigForUi(action.value, {}, []),
+                serverErrors: [],
             }
         case "setTriggerConfig":
             return {
                 ...state,
                 triggerConfig: typeof action.value === "function" ? action.value(state.triggerConfig) : action.value,
+                serverErrors: [],
             }
         case "setConditionLogic":
-            return { ...state, conditionLogic: action.value }
+            return { ...state, conditionLogic: action.value, serverErrors: [] }
         case "addCondition":
             return {
                 ...state,
@@ -576,11 +575,13 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                     ...state.conditions,
                     { clientId: createClientRowId(), field: "", operator: "equals", value: "" },
                 ],
+                serverErrors: [],
             }
         case "removeCondition":
             return {
                 ...state,
                 conditions: state.conditions.filter((_, index) => index !== action.index),
+                serverErrors: [],
             }
         case "updateCondition":
             return {
@@ -615,16 +616,19 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                     }
                     return next
                 }),
+                serverErrors: [],
             }
         case "addAction":
             return {
                 ...state,
                 actions: [...state.actions, { clientId: createClientRowId(), action_type: "" }],
+                serverErrors: [],
             }
         case "removeAction":
             return {
                 ...state,
                 actions: state.actions.filter((_, index) => index !== action.index),
+                serverErrors: [],
             }
         case "updateAction":
             return {
@@ -632,6 +636,7 @@ function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBui
                 actions: state.actions.map((currentAction, index) =>
                     index === action.index ? mergeActionConfig(currentAction, action.updates) : currentAction
                 ),
+                serverErrors: [],
             }
         default:
             return state
@@ -891,10 +896,6 @@ export default function AutomationPageClient({
     const duplicateWorkflow = useDuplicateWorkflow()
     const deleteWorkflow = useDeleteWorkflow()
     const testWorkflowMutation = useTestWorkflow()
-
-    useEffect(() => {
-        dispatchWorkflowBuilder({ type: "clearServerErrors" })
-    }, [workflowName, workflowDescription, triggerType, triggerConfig, conditions, actions])
 
     // Email template hooks
     const createTemplate = useCreateEmailTemplate()
