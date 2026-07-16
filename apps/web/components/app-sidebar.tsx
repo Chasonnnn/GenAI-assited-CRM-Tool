@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useEffect, useReducer } from "react"
+import { useReducer } from "react"
 import type { Route } from "next"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -626,13 +626,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
         }
         setExpanded(!isExpanded)
     }
-
-    // Sync cookie on mount when switching between mobile/desktop
-    useEffect(() => {
-        if (!isMobile) {
-            dispatch({ type: "setExpanded", isExpanded: readSidebarCookie() })
-        }
-    }, [isMobile])
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { renderToString } from "react-dom/server"
 
@@ -9,6 +9,9 @@ const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
 const mockNavigationState = vi.hoisted(() => ({
     pathname: "/settings/team",
+}))
+const mockMobileState = vi.hoisted(() => ({
+    isMobile: false,
 }))
 
 vi.mock("@/lib/auth-context", () => ({
@@ -44,7 +47,7 @@ vi.mock("next/link", () => ({
 }))
 
 vi.mock("@/hooks/use-mobile", () => ({
-    useIsMobile: () => false,
+    useIsMobile: () => mockMobileState.isMobile,
 }))
 
 vi.mock("@/components/search-command", () => ({
@@ -70,10 +73,12 @@ vi.mock("@/components/ui/button", () => ({
     Button: ({
         children,
         render,
+        unstyled: _unstyled,
         ...props
     }: {
         children?: ReactNode
         render?: ReactNode
+        unstyled?: boolean
     }) => (render ? render : <button type="button" {...props}>{children}</button>),
 }))
 
@@ -98,6 +103,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 describe("AppSidebar permission visibility", () => {
     beforeEach(() => {
         mockNavigationState.pathname = "/settings/team"
+        mockMobileState.isMobile = false
         mockUseAuth.mockReturnValue({
             user: {
                 user_id: "user-1",
@@ -390,5 +396,52 @@ describe("AppSidebar permission visibility", () => {
             expect(screen.getByRole("navigation", { name: "Navigation" })).toBeInTheDocument()
         })
         expect(screen.queryByText("Navigation")).not.toBeInTheDocument()
+    })
+
+    it("preserves the live desktop expansion choice across mobile layout changes", () => {
+        const cookieDescriptor = Object.getOwnPropertyDescriptor(document, "cookie")
+        document.cookie = "sidebar_state=false"
+        Object.defineProperty(document, "cookie", {
+            configurable: true,
+            get: () => "sidebar_state=false",
+            set: () => undefined,
+        })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_team", "view_audit_log"] },
+        })
+
+        try {
+            const view = render(
+                <AppSidebar>
+                    <div>content</div>
+                </AppSidebar>
+            )
+            const sidebar = view.container.querySelector("aside")
+            expect(sidebar).toHaveClass("w-12")
+
+            fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }))
+            expect(sidebar).toHaveClass("w-64")
+
+            mockMobileState.isMobile = true
+            view.rerender(
+                <AppSidebar>
+                    <div>content</div>
+                </AppSidebar>
+            )
+            mockMobileState.isMobile = false
+            view.rerender(
+                <AppSidebar>
+                    <div>content</div>
+                </AppSidebar>
+            )
+
+            expect(sidebar).toHaveClass("w-64")
+        } finally {
+            if (cookieDescriptor) {
+                Object.defineProperty(document, "cookie", cookieDescriptor)
+            } else {
+                Reflect.deleteProperty(document, "cookie")
+            }
+        }
     })
 })
