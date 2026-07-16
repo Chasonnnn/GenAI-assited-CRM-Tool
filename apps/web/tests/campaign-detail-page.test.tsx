@@ -5,6 +5,7 @@ import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page.clie
 const mockPush = vi.fn()
 const mockUseRunRecipients = vi.fn()
 const mockUpdateCampaign = vi.fn()
+let mockSearchParams = new URLSearchParams()
 let mockCampaignData = {
     id: "camp1",
     name: "Test Campaign",
@@ -35,7 +36,7 @@ vi.mock("next/link", () => ({
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: "camp1" }),
     useRouter: () => ({ push: mockPush }),
-    useSearchParams: () => new URLSearchParams(),
+    useSearchParams: () => mockSearchParams,
 }))
 
 vi.mock("@/lib/hooks/use-campaigns", () => ({
@@ -107,6 +108,7 @@ vi.mock("@/lib/hooks/use-metadata", () => ({
 
 describe("CampaignDetailPage", () => {
     beforeEach(() => {
+        mockSearchParams = new URLSearchParams()
         mockCampaignData = {
             id: "camp1",
             name: "Test Campaign",
@@ -212,5 +214,22 @@ describe("CampaignDetailPage", () => {
         rerender(<CampaignDetailPage />)
 
         expect(screen.getByLabelText(/campaign name/i)).toHaveValue("Unsaved campaign name")
+    })
+
+    it("auto-opens the requested edit dialog once and lets the user cancel it", async () => {
+        mockCampaignData = {
+            ...mockCampaignData,
+            status: "draft",
+        }
+        mockSearchParams = new URLSearchParams("edit=1")
+
+        render(<CampaignDetailPage />)
+
+        expect(await screen.findByRole("heading", { name: "Edit Campaign" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+        await waitFor(() => {
+            expect(screen.queryByRole("heading", { name: "Edit Campaign" })).not.toBeInTheDocument()
+        })
     })
 })

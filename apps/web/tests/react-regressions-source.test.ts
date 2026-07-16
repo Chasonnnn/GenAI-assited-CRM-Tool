@@ -3140,6 +3140,14 @@ describe("React regression guards (source)", () => {
         expect(source).toContain("type CampaignEditDraftState")
         expect(source).toContain("function campaignEditDraftReducer")
         expect(pageSource).toContain("const [editDraft, dispatchEditDraft] = useReducer")
+        expect(pageSource).toContain(
+            "const [handledAutoEditRequest, setHandledAutoEditRequest] = useState<string | null>(null)"
+        )
+        expect(pageSource).toContain(
+            "handledAutoEditRequest !== autoEditRequestKey"
+        )
+        expect(pageSource).not.toContain("useEffect")
+        expect(pageSource).not.toContain("startTransition")
         expect(pageSource).not.toContain("setEditName")
         expect(pageSource).not.toContain("setEditDescription")
         expect(pageSource).not.toContain("setEditTemplateId")
