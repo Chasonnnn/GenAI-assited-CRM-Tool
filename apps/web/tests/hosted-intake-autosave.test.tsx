@@ -13,16 +13,17 @@ describe("useHostedIntakeAutosave", () => {
     })
 
     it("debounces the latest save, consumes restoration skips, and cancels on unmount", () => {
-        const skipNextSaveRef = { current: false }
         const firstSave = vi.fn()
         const latestSave = vi.fn()
+        const onSkipNextSave = vi.fn()
         const view = renderHook(
-            ({ enabled, scopeKey, trigger, onSave }) =>
+            ({ enabled, scopeKey, trigger, skipNextSave, onSave }) =>
                 useHostedIntakeAutosave({
                     enabled,
                     scopeKey,
                     trigger,
-                    skipNextSaveRef,
+                    skipNextSave,
+                    onSkipNextSave,
                     onSave,
                 }),
             {
@@ -30,6 +31,7 @@ describe("useHostedIntakeAutosave", () => {
                     enabled: false,
                     scopeKey: "event-1:session-1",
                     trigger: "empty",
+                    skipNextSave: false,
                     onSave: firstSave,
                 },
             }
@@ -39,12 +41,14 @@ describe("useHostedIntakeAutosave", () => {
             enabled: true,
             scopeKey: "event-1:session-1",
             trigger: "first answers",
+            skipNextSave: false,
             onSave: firstSave,
         })
         view.rerender({
             enabled: true,
             scopeKey: "event-1:session-1",
             trigger: "latest answers",
+            skipNextSave: false,
             onSave: latestSave,
         })
 
@@ -59,14 +63,14 @@ describe("useHostedIntakeAutosave", () => {
         })
         expect(latestSave).toHaveBeenCalledTimes(1)
 
-        skipNextSaveRef.current = true
         view.rerender({
             enabled: true,
             scopeKey: "event-1:session-1",
             trigger: "restored answers",
+            skipNextSave: true,
             onSave: latestSave,
         })
-        expect(skipNextSaveRef.current).toBe(false)
+        expect(onSkipNextSave).toHaveBeenCalledTimes(1)
         act(() => {
             vi.advanceTimersByTime(1500)
         })
@@ -76,6 +80,7 @@ describe("useHostedIntakeAutosave", () => {
             enabled: true,
             scopeKey: "event-2:session-2",
             trigger: "new session answers",
+            skipNextSave: false,
             onSave: latestSave,
         })
         view.unmount()

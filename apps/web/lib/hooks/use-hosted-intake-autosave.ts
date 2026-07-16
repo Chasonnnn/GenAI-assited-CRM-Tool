@@ -1,28 +1,31 @@
 "use client"
 
-import { useEffect, useEffectEvent, type RefObject } from "react"
+import { useEffect, useEffectEvent } from "react"
 
 export function useHostedIntakeAutosave({
     enabled,
     scopeKey,
     trigger,
-    skipNextSaveRef,
+    skipNextSave,
+    onSkipNextSave,
     onSave,
     delay = 1500,
 }: {
     enabled: boolean
     scopeKey: string
     trigger: unknown
-    skipNextSaveRef: RefObject<boolean>
+    skipNextSave: boolean
+    onSkipNextSave: () => void
     onSave: () => void | Promise<void>
     delay?: number
 }) {
     const onSaveEvent = useEffectEvent(onSave)
+    const onSkipNextSaveEvent = useEffectEvent(onSkipNextSave)
 
     useEffect(() => {
         if (!enabled) return
-        if (skipNextSaveRef.current) {
-            skipNextSaveRef.current = false
+        if (skipNextSave) {
+            onSkipNextSaveEvent()
             return
         }
 
@@ -33,5 +36,5 @@ export function useHostedIntakeAutosave({
         return () => {
             window.clearTimeout(timer)
         }
-    }, [delay, enabled, scopeKey, skipNextSaveRef, trigger])
+    }, [delay, enabled, scopeKey, skipNextSave, trigger])
 }

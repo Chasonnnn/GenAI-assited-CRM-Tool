@@ -1,9 +1,12 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render as renderWithTestingLibrary, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import PublicIntakeFormClient from '../app/intake/[slug]/page.client'
 import { ApiError } from '../lib/api'
+
+vi.unmock('@tanstack/react-query')
 
 const {
     getSharedPublicForm,
@@ -62,6 +65,22 @@ const baseForm = {
     allowed_mime_types: ['text/plain'],
     campaign_name: 'Spring Event',
     event_name: 'Austin Expo',
+}
+
+function render(ui: React.ReactElement) {
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+        },
+    })
+    return renderWithTestingLibrary(ui, {
+        wrapper: ({ children }) => (
+            <QueryClientProvider client={queryClient}>
+                {children}
+            </QueryClientProvider>
+        ),
+    })
 }
 
 describe('Shared Intake Public Page', () => {
