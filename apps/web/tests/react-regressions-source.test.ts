@@ -240,6 +240,13 @@ describe("React regression guards (source)", () => {
 
         expect(source).toContain("function aiEntityContextReducer")
         expect(source).toContain("const [entityContext, dispatchEntityContext] = useReducer(")
+        expect(source).toContain("state.entityId === action.context.entityId")
+        expect(source).toContain("const [setContext] = useState(")
+        expect(source).toContain("const [clearContext] = useState(")
+        expect(source).toContain(
+            "}, [canUseAI, clearContext, entityId, entityName, entityType, setContext])"
+        )
+        expect(source.match(/\buseEffect\(/g)).toHaveLength(1)
         expect(source).toContain("useAIToggleHotkey(canUseAI")
         expect(source).not.toContain('window.addEventListener("keydown"')
         expect(source).not.toContain("useCallback")
