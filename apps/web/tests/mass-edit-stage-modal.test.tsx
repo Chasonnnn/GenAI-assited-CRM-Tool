@@ -49,12 +49,16 @@ const STAGES: PipelineStage[] = [
     },
 ]
 
-function renderModal(baseFilters: SurrogateMassEditStageFilters = {}) {
-    render(
+function renderModal(
+    baseFilters: SurrogateMassEditStageFilters = {},
+    stages: PipelineStage[] = STAGES,
+    open = true
+) {
+    return render(
         <MassEditStageModal
-            open
+            open={open}
             onOpenChange={vi.fn()}
-            stages={STAGES}
+            stages={stages}
             baseFilters={baseFilters}
         />
     )
@@ -74,6 +78,12 @@ describe("MassEditStageModal", () => {
         mockApplyArchiveMutateAsync.mockResolvedValue({
             matched: 1,
             archived: 1,
+            failed: [],
+        })
+        mockApplyStageMutateAsync.mockResolvedValue({
+            matched: 1,
+            applied: 1,
+            pending_approval: 0,
             failed: [],
         })
     })
@@ -180,5 +190,59 @@ describe("MassEditStageModal", () => {
             filters: expect.any(Object),
             expected_total: 1,
         })
+    })
+
+    it("starts each reopened modal session with a fresh draft", () => {
+        const view = renderModal()
+
+        fireEvent.change(screen.getByLabelText("Created From"), {
+            target: { value: "2025-02-01" },
+        })
+        expect(screen.getByLabelText("Created From")).toHaveValue("2025-02-01")
+
+        view.rerender(
+            <MassEditStageModal
+                open={false}
+                onOpenChange={vi.fn()}
+                stages={STAGES}
+                baseFilters={{}}
+            />
+        )
+        view.rerender(
+            <MassEditStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={STAGES}
+                baseFilters={{}}
+            />
+        )
+
+        expect(screen.getByLabelText("Created From")).toHaveValue("")
+    })
+
+    it("uses the default stage when stages load after the modal opens", async () => {
+        const view = renderModal({}, [])
+
+        view.rerender(
+            <MassEditStageModal
+                open
+                onOpenChange={vi.fn()}
+                stages={STAGES}
+                baseFilters={{}}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Preview Matches" }))
+        await waitFor(() => expect(mockPreviewMutateAsync).toHaveBeenCalledTimes(1))
+
+        fireEvent.click(screen.getByRole("button", { name: "Apply Stage Change" }))
+        await waitFor(() => expect(mockApplyStageMutateAsync).toHaveBeenCalledTimes(1))
+
+        expect(mockApplyStageMutateAsync).toHaveBeenCalledWith(
+            expect.objectContaining({
+                stage_id: "stage-disqualified",
+                expected_total: 1,
+            })
+        )
     })
 })
