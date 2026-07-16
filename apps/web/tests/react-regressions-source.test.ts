@@ -131,6 +131,8 @@ describe("React regression guards (source)", () => {
         expect(source).not.toContain(
             "useEffect(() => {\n        if (triggerType !== \"status_changed\""
         )
+        expect(source).toContain("editingWorkflow.id === editingWorkflowId")
+        expect(source).not.toMatch(/\buseEffect\b/)
         expect(source).not.toContain("const parseServerErrors =")
         expect(source).not.toContain("const getActionValidationError =")
     })

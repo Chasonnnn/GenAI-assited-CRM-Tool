@@ -415,6 +415,75 @@ describe('AutomationPage', () => {
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
     })
 
+    it('waits for the selected workflow response before hydrating the edit draft', () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [
+                {
+                    id: 'workflow-b',
+                    name: 'Selected Workflow B',
+                    description: null,
+                    icon: 'activity',
+                    trigger_type: 'surrogate_created',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-07-01T00:00:00Z',
+                    can_edit: true,
+                },
+            ],
+            isLoading: false,
+        })
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-a',
+                name: 'Stale Workflow A',
+                description: null,
+                scope: 'personal',
+                trigger_type: 'surrogate_created',
+                trigger_config: {},
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [],
+            },
+            isLoading: false,
+        })
+
+        const view = renderAutomationPage()
+
+        fireEvent.click(
+            screen.getByRole('button', {
+                name: 'Actions for workflow Selected Workflow B',
+            }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+        mockUseWorkflow.mockReturnValue({
+            data: {
+                id: 'workflow-b',
+                name: 'Selected Workflow B',
+                description: null,
+                scope: 'personal',
+                trigger_type: 'surrogate_created',
+                trigger_config: {},
+                conditions: [],
+                condition_logic: 'AND',
+                actions: [],
+            },
+            isLoading: false,
+        })
+        view.rerender(
+            <AutomationPage
+                initialTab="workflows"
+                initialWorkflowScopeTab="personal"
+                initialCreateOpen={false}
+            />,
+        )
+
+        expect(screen.getByDisplayValue('Selected Workflow B')).toBeInTheDocument()
+        expect(screen.queryByDisplayValue('Stale Workflow A')).not.toBeInTheDocument()
+    })
+
     it('submits only the configuration for the selected trigger type', () => {
         renderAutomationPage()
 
