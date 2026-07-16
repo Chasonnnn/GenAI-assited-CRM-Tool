@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 49 **REPLACE** Effects removed; 24 **CONTAIN** call sites consolidated behind eight tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 78 production `useEffect` calls remain.
+- 50 **REPLACE** Effects removed; 24 **CONTAIN** call sites consolidated behind eight tested synchronization hooks; one baseline **CONTAIN** call site removed after proving it synchronized no external state; 77 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -59,6 +59,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Pipeline stage detail expansion is event-owned and keyed by immutable `stage_key`, preserving open panels across refreshed versions that assign new database IDs without mirroring stage arrays through an Effect.
 - Intelligent suggestion settings, templates, and rules use separate stable TanStack Query caches; fresh remounts avoid duplicate requests while editable settings and successful rule mutations retain explicit local/cache ownership.
 - The protected operations layout now owns platform identity and alert-count requests through stable TanStack Query keys, reuses fresh access data across remounts, and routes MFA or unauthenticated failures during render without fetch-and-redirect Effect choreography.
+- Dashboard filter state now records its URL-and-user provenance and reconciles browser navigation during render, preventing dashboard query hooks from issuing one stale-assignee request before the previous URL-sync Effect caught up.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
