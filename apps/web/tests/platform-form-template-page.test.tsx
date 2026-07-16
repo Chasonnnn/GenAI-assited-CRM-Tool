@@ -7,16 +7,19 @@ const mockUpdate = vi.fn()
 const mockCreate = vi.fn()
 const mockPublish = vi.fn()
 const mockDelete = vi.fn()
+const navigationState = vi.hoisted(() => ({
+    templateId: "tpl_form_1",
+}))
 
-const buildTemplateData = () => ({
-    id: "tpl_form_1",
+const buildTemplateData = (id = "tpl_form_1", name = "Surrogate Application Form") => ({
+    id,
     status: "draft",
     current_version: 1,
     published_version: 0,
     is_published_globally: true,
     target_org_ids: [],
     draft: {
-        name: "Surrogate Application Form",
+        name,
         description: null,
         schema_json: null,
         settings_json: {},
@@ -29,7 +32,7 @@ const buildTemplateData = () => ({
 let mockTemplateData = buildTemplateData()
 
 vi.mock("next/navigation", () => ({
-    useParams: () => ({ id: "tpl_form_1" }),
+    useParams: () => ({ id: navigationState.templateId }),
     useRouter: () => ({
         push: vi.fn(),
         replace: vi.fn(),
@@ -57,12 +60,32 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
 
 describe("PlatformFormTemplatePage", () => {
     beforeEach(() => {
+        navigationState.templateId = "tpl_form_1"
         mockUpdate.mockReset()
         mockCreate.mockReset()
         mockPublish.mockReset()
         mockDelete.mockReset()
         mockTemplateData = buildTemplateData()
         vi.useRealTimers()
+    })
+
+    it("waits for the routed template response before hydrating the builder draft", async () => {
+        const templateA = buildTemplateData("tpl-form-a", "Template A")
+        const templateB = buildTemplateData("tpl-form-b", "Template B")
+
+        navigationState.templateId = templateA.id
+        mockTemplateData = templateA
+        const view = render(<PlatformFormTemplatePage />)
+        expect(await screen.findByPlaceholderText("Form name...")).toHaveValue("Template A")
+
+        navigationState.templateId = templateB.id
+        mockTemplateData = templateA
+        view.rerender(<PlatformFormTemplatePage />)
+
+        mockTemplateData = templateB
+        view.rerender(<PlatformFormTemplatePage />)
+
+        expect(await screen.findByPlaceholderText("Form name...")).toHaveValue("Template B")
     })
 
     it("does not autosave stale default schema during initial hydration", async () => {

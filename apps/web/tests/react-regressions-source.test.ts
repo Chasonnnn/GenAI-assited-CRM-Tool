@@ -3107,10 +3107,18 @@ describe("React regression guards (source)", () => {
 
     it("keeps template form builder hook compiler-derived", () => {
         const source = readSource("lib/forms/use-template-form-builder-page.ts")
+        const stateSource = readSource("lib/forms/use-template-form-builder-state.ts")
 
         expect(source).not.toContain("useMemo")
         expect(source).not.toContain("useCallback")
+        expect(source).not.toMatch(/\buseEffect\b/)
         expect(source).not.toContain("useRef<Promise<void>>(Promise.resolve())")
+        expect(source).not.toContain("currentVersionRef")
+        expect(source).not.toContain("templateIdRef")
+        expect(source).not.toContain("hydratedFormRef")
+        expect(source).toContain("templateData.id === formId")
+        expect(stateSource).toContain("baselineTemplateKey: string | null")
+        expect(stateSource).toContain("templateKey: string")
     })
 
     it("keeps automation form builder hook compiler-derived", () => {
