@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import type { Route } from "next"
-import { createContext, use, useState, useRef, useEffect } from "react"
+import { createContext, use, useState, useRef } from "react"
 import { redirect, useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 import {
@@ -34,7 +34,7 @@ import {
     formatMeetingTimeForInvite,
     toLocalIsoDateTime,
 } from "../surrogate-detail-utils"
-import { trackSurrogateViewed } from "@/lib/workflow-metrics"
+import { useTrackSurrogateView } from "@/lib/hooks/use-track-surrogate-view"
 import type { SurrogateRead } from "@/lib/types/surrogate"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { Queue } from "@/lib/hooks/use-queues"
@@ -374,10 +374,7 @@ function useSurrogateDetailDataValue({
         canManageQueue
     )
 
-    useEffect(() => {
-        if (!surrogate?.id) return
-        trackSurrogateViewed(surrogate.id)
-    }, [surrogate?.id])
+    useTrackSurrogateView(surrogate?.id)
 
     useSetAIContext(
         surrogate
