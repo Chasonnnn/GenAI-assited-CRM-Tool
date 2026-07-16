@@ -4321,6 +4321,8 @@ describe("React regression guards (source)", () => {
         expect(pipelinesSource).toContain("const mappedLabels: string[] = []")
         expect(pipelinesSource).toContain("const selectedLabels: string[] = []")
         expect(pipelinesSource).toContain("const nextStages: EditableStage[] = []")
+        expect(pipelinesSource).not.toContain("useEffect")
+        expect(pipelinesSource).not.toContain("startTransition")
         expect(pipelinesSource).not.toContain(".map((value) => (value === removedStageKey ? targetStageKey ?? null : value))")
         expect(pipelinesSource).not.toContain(".filter((stage) => milestone.mapped_stage_keys.includes(stage.stageKey))")
         expect(pipelinesSource).not.toContain(".map((activeStage) => activeStage.stage_key)\n                                        .filter")
