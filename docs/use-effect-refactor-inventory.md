@@ -17,7 +17,7 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 
 ## Progress
 
-- 29 **REPLACE** Effects removed and 17 **CONTAIN** call sites consolidated behind three tested synchronization hooks; 101 production `useEffect` calls remain.
+- 32 **REPLACE** Effects removed and 18 **CONTAIN** call sites consolidated behind three tested synchronization hooks; 97 production `useEffect` calls remain.
 - `PublishDialog`: open-session edits now survive equivalent prop rerenders; close/reopen resets through mounting.
 - `AppointmentDetailDialog`: draft state is scoped to the open appointment and no longer loops or resets on fresh query objects.
 - Ticket detail: reply and ticket-edit drafts are keyed to the ticket ID rather than rehydrated from every query object.
@@ -39,6 +39,9 @@ Line numbers below identify the baseline commit. As slices land, completion evid
 - Meta form mappings combine refreshed server rules with explicit per-column overrides, preventing background refreshes from discarding unsaved mapping work.
 - Conditional input and textarea focus now uses one tested `useFocusWhen` boundary, including opt-in text selection for inline editing.
 - Transcript selection uses one named document-listener lifecycle with stable selection, Escape-key, and pointer subscriptions plus timeout cleanup.
+- Audit export polling is owned by the export query and runs only while a role-visible job is pending or processing.
+- Sidebar route sections initialize from the pathname in server HTML, while query-tab selection derives directly from search parameters.
+- MFA storage setup uses the reviewed mount boundary, and redirect-only branches prevent verified or signed-out users from seeing challenge UI.
 - Each completed slice has a red behavior test, green targeted suite, ESLint, TypeScript, diff validation, and its own conventional commit.
 
 ## Verdict rules
