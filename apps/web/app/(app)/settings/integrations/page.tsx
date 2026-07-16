@@ -1,6 +1,6 @@
 "use client"
 
-import { startTransition, useReducer, useState, useEffect, type ReactNode } from "react"
+import { useReducer, useState, type ReactNode } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -710,6 +710,26 @@ function createZapierOutboundDraftState(
 
 function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: aiSettings, isLoading } = useAISettings()
+
+    return (
+        <AIConfigurationSectionContent
+            key={aiSettings ? "loaded" : "loading"}
+            variant={variant}
+            aiSettings={aiSettings}
+            isLoading={isLoading}
+        />
+    )
+}
+
+function AIConfigurationSectionContent({
+    variant,
+    aiSettings,
+    isLoading,
+}: {
+    variant: "page" | "dialog"
+    aiSettings: ReturnType<typeof useAISettings>["data"]
+    isLoading: boolean
+}) {
     const { data: consentInfo } = useAIConsent()
     const acceptConsent = useAcceptConsent()
     const updateSettings = useUpdateAISettings()
@@ -719,53 +739,31 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
     const disconnectIntegration = useDisconnectIntegration()
     const { refetch: refetchAuth } = useAuth()
 
-    const [aiForm, setAiForm] = useState<AiConfigurationFormState>({
-        isEnabled: false,
-        provider: "gemini",
+    const [aiForm, setAiForm] = useState<AiConfigurationFormState>(() => ({
+        isEnabled: aiSettings?.is_enabled ?? false,
+        provider: aiSettings && isAiProvider(aiSettings.provider) ? aiSettings.provider : "gemini",
         apiKey: "",
-        model: "",
-        vertexProjectId: "",
-        vertexLocation: "us-central1",
-        vertexAudience: "",
-        vertexServiceAccount: "",
-        vertexUseExpress: true,
-    })
+        model: aiSettings?.model || "",
+        vertexProjectId:
+            aiSettings?.vertex_wif?.project_id ||
+            aiSettings?.vertex_api_key?.project_id ||
+            "",
+        vertexLocation:
+            aiSettings?.vertex_wif?.location ||
+            aiSettings?.vertex_api_key?.location ||
+            "us-central1",
+        vertexAudience: aiSettings?.vertex_wif?.audience || "",
+        vertexServiceAccount: aiSettings?.vertex_wif?.service_account_email || "",
+        vertexUseExpress:
+            aiSettings?.provider === "vertex_api_key"
+            && !aiSettings.vertex_api_key?.project_id
+            && !aiSettings.vertex_api_key?.location,
+    }))
     const [aiUi, setAiUi] = useState<AiConfigurationUiState>({
         keyTested: null,
         saved: false,
         editingKey: false,
     })
-
-    useEffect(() => {
-        if (!aiSettings) return
-        startTransition(() => {
-            setAiForm({
-                isEnabled: aiSettings.is_enabled,
-                provider: isAiProvider(aiSettings.provider) ? aiSettings.provider : "gemini",
-                apiKey: "",
-                model: aiSettings.model || "",
-                vertexProjectId:
-                    aiSettings.vertex_wif?.project_id ||
-                    aiSettings.vertex_api_key?.project_id ||
-                    "",
-                vertexLocation:
-                    aiSettings.vertex_wif?.location ||
-                    aiSettings.vertex_api_key?.location ||
-                    "us-central1",
-                vertexAudience: aiSettings.vertex_wif?.audience || "",
-                vertexServiceAccount: aiSettings.vertex_wif?.service_account_email || "",
-                vertexUseExpress:
-                    aiSettings.provider === "vertex_api_key"
-                    && !aiSettings.vertex_api_key?.project_id
-                    && !aiSettings.vertex_api_key?.location,
-            })
-            setAiUi((current) => ({
-                ...current,
-                keyTested: null,
-                editingKey: false,
-            }))
-        })
-    }, [aiSettings])
 
     const updateAiForm = <K extends keyof AiConfigurationFormState>(field: K, value: AiConfigurationFormState[K]) => {
         setAiForm((current) => ({ ...current, [field]: value }))
@@ -1508,18 +1506,38 @@ function AISaveButton({
 
 function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: settings, isLoading } = useResendSettings()
+
+    return (
+        <EmailConfigurationSectionContent
+            key={settings ? "loaded" : "loading"}
+            variant={variant}
+            settings={settings}
+            isLoading={isLoading}
+        />
+    )
+}
+
+function EmailConfigurationSectionContent({
+    variant,
+    settings,
+    isLoading,
+}: {
+    variant: "page" | "dialog"
+    settings: ReturnType<typeof useResendSettings>["data"]
+    isLoading: boolean
+}) {
     const updateSettings = useUpdateResendSettings()
     const testKey = useTestResendKey()
     const rotateWebhook = useRotateWebhook()
-    const [emailForm, setEmailForm] = useState<EmailConfigurationFormState>({
-        provider: "",
+    const [emailForm, setEmailForm] = useState<EmailConfigurationFormState>(() => ({
+        provider: settings?.email_provider || "resend",
         apiKey: "",
-        fromEmail: "",
-        fromName: "",
-        replyTo: "",
+        fromEmail: settings?.from_email || "",
+        fromName: settings?.from_name || "",
+        replyTo: settings?.reply_to_email || "",
         webhookSigningSecret: "",
-        defaultSender: "",
-    })
+        defaultSender: settings?.default_sender_user_id || "",
+    }))
     const [emailUi, setEmailUi] = useState<EmailConfigurationUiState>({
         keyTested: null,
         saved: false,
@@ -1527,26 +1545,6 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
         hasUserEdited: false,
     })
     const { data: eligibleSenders, isLoading: eligibleSendersLoading } = useEligibleSenders(emailForm.provider === "gmail")
-
-    useEffect(() => {
-        if (!settings || emailUi.hasUserEdited) return
-        startTransition(() => {
-            setEmailForm({
-                provider: settings.email_provider || "resend",
-                apiKey: "",
-                fromEmail: settings.from_email || "",
-                fromName: settings.from_name || "",
-                replyTo: settings.reply_to_email || "",
-                webhookSigningSecret: "",
-                defaultSender: settings.default_sender_user_id || "",
-            })
-            setEmailUi((current) => ({
-                ...current,
-                keyTested: null,
-                isEditingKey: false,
-            }))
-        })
-    }, [settings, emailUi.hasUserEdited])
 
     const updateEmailForm = <K extends keyof EmailConfigurationFormState>(
         field: K,
@@ -3941,50 +3939,52 @@ function MetaCrmDatasetMonitoringSection({ variant = "page" }: { variant?: "page
 
 function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
     const { data: pipelines } = usePipelines()
+    const { data: settings, isLoading } = useMetaCrmDatasetSettings()
+
+    return (
+        <MetaCrmDatasetSectionContent
+            key={settings && pipelines ? "loaded" : "loading"}
+            variant={variant}
+            pipelines={pipelines}
+            settings={settings}
+            isLoading={isLoading}
+        />
+    )
+}
+
+function MetaCrmDatasetSectionContent({
+    variant,
+    pipelines,
+    settings,
+    isLoading,
+}: {
+    variant: "page" | "dialog"
+    pipelines: ReturnType<typeof usePipelines>["data"]
+    settings: ReturnType<typeof useMetaCrmDatasetSettings>["data"]
+    isLoading: boolean
+}) {
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
     const stageLabelByKey = buildStageLabelByKey(pipelines)
     const getStageKeyLabel = (stageKey: string) => stageLabelByKey[stageKey] ?? "Unknown stage"
-    const { data: settings, isLoading } = useMetaCrmDatasetSettings()
     const updateSettings = useUpdateMetaCrmDatasetSettings()
     const sendOutboundTest = useMetaCrmDatasetOutboundTest()
     const isDialog = variant === "dialog"
-    const [metaForm, setMetaForm] = useState<MetaCrmDatasetFormState>({
-        datasetId: "",
+    const initialEventMapping = mergeEventMappingWithPipelineStages(
+        settings?.event_mapping || [],
+        pipelines,
+    )
+    const [metaForm, setMetaForm] = useState<MetaCrmDatasetFormState>(() => ({
+        datasetId: settings?.dataset_id || "",
         accessToken: "",
-        enabled: false,
-        crmName: "Surrogacy Force CRM",
-        sendHashedPii: false,
-        eventMapping: [],
-        testEventCode: "",
-        selectedStage: "",
+        enabled: Boolean(settings?.enabled),
+        crmName: settings?.crm_name || "Surrogacy Force CRM",
+        sendHashedPii: Boolean(settings?.send_hashed_pii),
+        eventMapping: initialEventMapping,
+        testEventCode: settings?.test_event_code || "",
+        selectedStage: initialEventMapping[0]?.stage_key || "",
         outboundTestLeadId: "",
         outboundTestFbc: "",
-    })
-
-    useEffect(() => {
-        if (!settings) return
-        const mergedEventMapping = mergeEventMappingWithPipelineStages(
-            settings.event_mapping || [],
-            pipelines,
-        )
-        startTransition(() => {
-            setMetaForm((current) => ({
-                ...current,
-                datasetId: settings.dataset_id || "",
-                accessToken: "",
-                enabled: Boolean(settings.enabled),
-                crmName: settings.crm_name || "Surrogacy Force CRM",
-                sendHashedPii: Boolean(settings.send_hashed_pii),
-                eventMapping: mergedEventMapping,
-                testEventCode: settings.test_event_code || "",
-                selectedStage:
-                    current.selectedStage
-                    && mergedEventMapping.some((item) => item.stage_key === current.selectedStage)
-                        ? current.selectedStage
-                        : mergedEventMapping[0]?.stage_key || "",
-            }))
-        })
-    }, [settings, pipelines])
+    }))
 
     const updateMetaForm = <K extends keyof MetaCrmDatasetFormState>(field: K, value: MetaCrmDatasetFormState[K]) => {
         setMetaForm((current) => ({ ...current, [field]: value }))

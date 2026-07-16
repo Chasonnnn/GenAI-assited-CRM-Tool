@@ -633,6 +633,53 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
     })
 
+    it('preserves an in-progress AI key edit when equivalent settings rerender', () => {
+        const { rerender } = render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure ai/i }))
+
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: /change key/i }))
+        const apiKeyInput = within(dialog).getByLabelText('API Key')
+        fireEvent.change(apiKeyInput, { target: { value: 'edited-secret-key' } })
+        expect(apiKeyInput).toHaveValue('edited-secret-key')
+
+        mockUseAISettingsQuery.mockImplementation(() => ({
+            data: { ...aiSettingsData },
+            isLoading: false,
+        }))
+        rerender(<IntegrationsPage />)
+
+        expect(within(screen.getByRole('dialog')).getByLabelText('API Key')).toHaveValue(
+            'edited-secret-key'
+        )
+    })
+
+    it('keeps the email configuration usable when query results have fresh identity', () => {
+        mockUseResendSettingsQuery.mockImplementation(() => ({
+            data: { ...resendSettingsData },
+            isLoading: false,
+        }))
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+
+        expect(within(screen.getByRole('dialog')).getByText('Email Configuration')).toBeInTheDocument()
+    })
+
+    it('keeps the Meta dataset configuration usable when query results have fresh identity', () => {
+        mockUseMetaCrmDatasetSettingsQuery.mockImplementation(() => ({
+            data: { ...metaCrmDatasetSettingsData },
+            isLoading: false,
+        }))
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
+
+        expect(
+            within(screen.getByRole('dialog')).getByText(/Meta Lead Ads \+ CRM Dataset/)
+        ).toBeInTheDocument()
+    })
+
     it('shows status badges on organization integration cards', () => {
         render(<IntegrationsPage />)
 
