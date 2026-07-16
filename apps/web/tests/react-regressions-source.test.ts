@@ -2098,7 +2098,9 @@ describe("React regression guards (source)", () => {
         const debounceSource = readSource("lib/hooks/use-debounced-search-commit.ts")
 
         expect(intendedParentsSource).toContain("function readIntendedParentListUrlState")
-        expect(intendedParentsSource).toContain("const searchDebounceTimerRef = useRef")
+        expect(intendedParentsSource).toContain("useDebouncedSearchCommit(currentQuery)")
+        expect(intendedParentsSource).not.toContain("searchDebounceTimerRef")
+        expect(intendedParentsSource).not.toContain("useEffect")
         expect(intendedParentsSource).not.toContain("hasSyncedSearchRef")
         expect(intendedParentsSource).not.toContain("setDebouncedSearch")
         expect(intendedParentsSource).not.toContain("[currentQuery]) // oxlint-disable-line react-doctor/exhaustive-deps")
